@@ -57,6 +57,7 @@ go_test(
         "errors_test.go",
         "handlers_artifacts_test.go",
         "handlers_config_test.go",
+        "handlers_export_test.go",
         "handlers_maze_test.go",
         "handlers_packs_test.go",
         "handlers_share_test.go",

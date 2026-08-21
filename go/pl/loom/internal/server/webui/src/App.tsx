@@ -14,6 +14,8 @@ import { DirPicker } from './components/DirPicker'
 import { SettingsPanel } from './components/settings/SettingsPanel'
 import { MazePage } from './components/maze/MazePage'
 import { CompareView } from './components/maze/CompareView'
+import { TracePage } from './components/trace/TraceView'
+import { SessionTabs } from './components/SessionTabs'
 import { ToastHost } from './components/ui/Toast'
 import { ConfirmHost } from './components/ui/Confirm'
 import { BlocksIOContext } from './components/blocks/context'
@@ -28,6 +30,7 @@ export function App({ controller }: { controller: AppController }) {
   const landingShowAddWs = useStore(controller.store, (s) => s.landingShowAddWs)
   const banner = useStore(controller.store, (s) => s.banner)
   const mainView = useStore(controller.store, (s) => s.mainView)
+  const sessionId = useStore(controller.store, (s) => s.sessionId)
   const [revealWs, setRevealWs] = useState<{ wsId: string; seq: number } | null>(null)
 
   // TranscriptView 的交互回调（稳定引用：controller 方法均为绑定箭头函数）
@@ -100,42 +103,34 @@ export function App({ controller }: { controller: AppController }) {
                   </button>
                 </div>
               </div>
-            ) : mainView === 'chat' ? (
-              <>
-                <TranscriptView
-                  controller={controller.transcript}
-                  io={transcriptIO}
-                  scrollerOut={controller.scrollerRef}
-                  empty={{
-                    hidden: !landingVisible,
-                    hint: landingHint,
-                    showAddWs: landingShowAddWs,
-                    onAddWs: () => controller.openDirPicker(),
-                  }}
-                />
-                <Composer controller={controller} />
-              </>
             ) : (
-              // Maze / trace-compare fill the main area (the chat tree
-              // stays mounted but hidden so its state survives the toggle)
               <>
-                <div style={{ display: 'none' }}>
-                  <TranscriptView
-                    controller={controller.transcript}
-                    io={transcriptIO}
-                    scrollerOut={controller.scrollerRef}
-                    empty={{
-                      hidden: !landingVisible,
-                      hint: landingHint,
-                      showAddWs: landingShowAddWs,
-                      onAddWs: () => controller.openDirPicker(),
-                    }}
-                  />
-                </div>
-                {mainView === 'maze' ? (
-                  <MazePage controller={controller} />
-                ) : (
+                {/* Session tabs: hidden on the compare page (a separate
+                    two-session context with its own chrome). */}
+                {!!sessionId && mainView !== 'compare' && <SessionTabs controller={controller} />}
+                {mainView === 'compare' ? (
                   <CompareView controller={controller} />
+                ) : (
+                  <>
+                    {/* The chat tree stays mounted but hidden on other
+                        tabs so its state survives the switch. */}
+                    <div className="chat-pane" hidden={mainView !== 'chat'}>
+                      <TranscriptView
+                        controller={controller.transcript}
+                        io={transcriptIO}
+                        scrollerOut={controller.scrollerRef}
+                        empty={{
+                          hidden: !landingVisible,
+                          hint: landingHint,
+                          showAddWs: landingShowAddWs,
+                          onAddWs: () => controller.openDirPicker(),
+                        }}
+                      />
+                      <Composer controller={controller} />
+                    </div>
+                    {mainView === 'trace' && <TracePage controller={controller} />}
+                    {mainView === 'maze' && <MazePage controller={controller} />}
+                  </>
                 )}
               </>
             )}

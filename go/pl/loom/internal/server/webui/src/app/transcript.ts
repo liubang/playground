@@ -57,7 +57,7 @@ export type BlockModel = Base &
     | { kind: 'user'; text: string; createdAt?: string; images?: UserImage[] }
     | { kind: 'assistant'; text: string; actions?: AssistantActionContext }
     | { kind: 'stream'; text: string }
-    | { kind: 'reasoning'; text: string }
+    | { kind: 'reasoning'; text: string; durationMs?: number }
     | { kind: 'thinking' }
     | {
         kind: 'tool'
@@ -121,6 +121,7 @@ export class TranscriptController {
   private streamDestroyed = false
   private streamLastRender = 0
   private reasoningId: string | null = null
+  private reasoningStartTs = '' // first delta's event time, for the thinking duration
   private thinkingId: string | null = null
   private tools = new Map<string, string>() // call_id → block id
   private approvals = new Map<string, string>() // approval_id → block id
@@ -206,6 +207,7 @@ export class TranscriptController {
     this.streamScheduled = false
     this.streamDestroyed = false
     this.reasoningId = null
+    this.reasoningStartTs = ''
     this.thinkingId = null
     this.tools.clear()
     this.approvals.clear()
@@ -473,7 +475,7 @@ export class TranscriptController {
       case 'turn.finished': {
         this.hideThinking()
         this.finalizeStream()
-        this.finalizeReasoning()
+        this.finalizeReasoning(evt.time || '')
         this.attachTurnActions()
         // 兜底展示未被 model.request_failed / runtime.fatal 覆盖的轮级
         // 失败（如持久化错误）；已展示过错误块则不重复
@@ -495,7 +497,7 @@ export class TranscriptController {
         break
       case 'model.reasoning_delta':
         this.hideThinking()
-        this.reasoningAppend((p.delta as string) || '')
+        this.reasoningAppend((p.delta as string) || '', evt.time || '')
         this.requestFollow(false)
         break
       case 'model.response_completed':
@@ -508,7 +510,7 @@ export class TranscriptController {
         } else {
           this.finalizeStream()
         }
-        this.finalizeReasoning()
+        this.finalizeReasoning(evt.time || '')
         break
       case 'model.request_failed': {
         this.hideThinking()
@@ -601,6 +603,7 @@ export class TranscriptController {
         this.hideThinking()
         this.append({ kind: 'notice', text: 'turn cancelled', warn: true })
         this.finalizeStream()
+        this.finalizeReasoning(evt.time || '')
         this.attachTurnActions()
         break
       case 'context.compacted':
@@ -621,6 +624,7 @@ export class TranscriptController {
         this.hideThinking()
         this.append({ kind: 'fatal', text: (p.message as string) || 'runtime fatal' })
         this.turnErrorShown = true
+        this.finalizeReasoning(evt.time || '')
         this.attachTurnActions()
         break
       case 'subagent.started':
@@ -738,9 +742,10 @@ export class TranscriptController {
     this.pendingStreamTs = ''
   }
 
-  private reasoningAppend(delta: string) {
+  private reasoningAppend(delta: string, ts: string) {
     if (!this.reasoningId) {
       this.reasoningId = this.append({ kind: 'reasoning', text: '' })
+      this.reasoningStartTs = ts
     }
     const id = this.reasoningId
     const cur = this.store.get().blocks.find((b) => b.id === id)
@@ -748,8 +753,16 @@ export class TranscriptController {
     this.patchBlock(id, { text })
   }
 
-  private finalizeReasoning() {
+  // Seal the reasoning block: stamp the thinking span (first delta → the
+  // terminal event) so the header can show it alongside the char count.
+  private finalizeReasoning(endTs = '') {
+    const id = this.reasoningId
     this.reasoningId = null
+    if (id && endTs && this.reasoningStartTs) {
+      const ms = Date.parse(endTs) - Date.parse(this.reasoningStartTs)
+      if (Number.isFinite(ms) && ms >= 0) this.patchBlock(id, { durationMs: ms })
+    }
+    this.reasoningStartTs = ''
   }
 
   // --- 审批 / 问答卡片生命周期 ---

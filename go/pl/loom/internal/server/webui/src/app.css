@@ -643,8 +643,8 @@ button {
 
 /* 主区域 */
 .main {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
 }
 .app-header {
@@ -745,7 +745,7 @@ button {
 }
 /* 零工作区引导态：占据主区域居中展示，引导用户添加第一个工作区 */
 .no-workspace {
-  grid-row: 2;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1193,8 +1193,11 @@ button {
 .block-artifact {
   margin: 4px 0;
 }
+/* 工具结果图片（browser 截图等）直接挂在 .block-tool 下，同样需要约束，
+   否则按原图宽度溢出对话列 */
 .block-image .inline-image,
-.block-artifact .inline-image {
+.block-artifact .inline-image,
+.block-tool .inline-image {
   max-width: min(360px, 100%);
   max-height: 360px;
   border-radius: var(--radius-md);
@@ -1202,11 +1205,13 @@ button {
   cursor: zoom-in;
 }
 .block-image .inline-image:hover,
-.block-artifact .inline-image:hover {
+.block-artifact .inline-image:hover,
+.block-tool .inline-image:hover {
   border-color: var(--muted);
 }
 .block-image .inline-image:focus-visible,
-.block-artifact .inline-image:focus-visible {
+.block-artifact .inline-image:focus-visible,
+.block-tool .inline-image:focus-visible {
   outline: 2px solid var(--accent, var(--muted));
   outline-offset: 1px;
 }
@@ -1849,6 +1854,14 @@ body.lightbox-open {
 .share-transcript {
   min-height: 0;
   min-width: 0; /* 同为 grid 子项，防御性允许横向收缩（同 share-header） */
+}
+/* 分享页内容区：页签条 + 当前视图（复用主应用 sess-tabs / chat-pane /
+   trace-page / maze-page 的 flex 布局） */
+.share-main {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 .share-error {
   text-align: center;
@@ -3312,6 +3325,9 @@ select.set-input {
   display: flex;
   flex: 1;
   min-height: 0;
+  /* Detail panel overlays instead of squeezing: opening it must not
+     re-lay the canvas (every x coordinate would recompute). */
+  position: relative;
 }
 .maze-canvas {
   flex: 1;
@@ -3517,12 +3533,18 @@ brush/pinch pointer handlers. */
   line-height: 1.5;
 }
 
-/* 详情面板 */
+/* 详情面板（覆盖在画布右侧，不挤压画布） */
 .maze-detail {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-menu);
   width: 340px;
   flex: none;
   border-left: 1px solid var(--bg2);
   background: var(--bg1);
+  box-shadow: var(--shadow-md);
   overflow-y: auto;
   padding: 10px 12px;
   outline: none;
@@ -3817,6 +3839,277 @@ brush/pinch pointer handlers. */
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* ============================== 会话页签（components/SessionTabs） ==============================
+   对话 / 轨迹 / 迷宫 三视图切换；下划线指示当前页签。 */
+
+.sess-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--bg2);
+  flex: none;
+  background: var(--bg0);
+}
+.sess-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  padding: 7px 14px 6px;
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+.sess-tab:hover {
+  color: var(--fg);
+}
+.sess-tab.is-active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 600;
+}
+
+/* chat-pane：对话页签的容器（transcript + composer），切走时整体隐藏但保持挂载 */
+.chat-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.chat-pane[hidden] {
+  display: none;
+}
+.chat-pane .transcript {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ============================== 执行轨迹列表（components/trace/TraceView） ==============================
+   单行高密度事件流：gutter 轨道按轮次分组，badge 按行为主体着色
+   （Input=绿 / Model=紫 / Tools=橙），与迷宫的判定着色正交。 */
+
+.trace-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg0);
+}
+.trace-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--bg2);
+  flex: none;
+  flex-wrap: wrap;
+}
+.trace-metrics {
+  display: inline-flex;
+  gap: 14px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.trace-toolbar-right {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 节奏条：Input/Model/Tools 三条迷你泳道，点击跳转对应轮次 */
+.trace-strip {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--bg2);
+  flex: none;
+}
+.trace-strip-labels {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  font-size: 9px;
+  color: var(--muted);
+  flex: none;
+  user-select: none;
+}
+.trace-strip-svg {
+  flex: 1;
+  height: 39px;
+  display: block;
+  cursor: pointer;
+}
+.strip-input {
+  fill: var(--info);
+}
+.strip-model {
+  fill: var(--purple);
+}
+.strip-tool {
+  fill: var(--highlight);
+}
+
+/* 事件列表 */
+.trace-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 12px 16px;
+}
+.trace-turn {
+  position: relative;
+  padding: 4px 0 8px;
+}
+/* 轮次 gutter 轨道：从首个圆点连到末尾圆点 */
+.trace-turn::before {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: 15px;
+  bottom: 15px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--bg2);
+}
+.trace-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px 3px 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.trace-row:hover {
+  background: var(--bg1);
+}
+.trace-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: 12px;
+  background: var(--muted);
+}
+.trace-dot.t-user {
+  background: var(--info);
+}
+.trace-dot.t-assistant {
+  background: var(--purple);
+}
+.trace-dot.t-tool {
+  background: var(--highlight);
+}
+.trace-dot.t-think {
+  background: var(--purple);
+  opacity: 0.5;
+}
+.trace-dot.t-error {
+  background: var(--error);
+}
+.trace-badge {
+  flex: none;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  color: var(--on-accent);
+  background: var(--bg2);
+}
+.trace-badge.t-user {
+  background: var(--info);
+}
+.trace-badge.t-assistant {
+  background: var(--purple);
+}
+.trace-badge.t-tool {
+  background: var(--highlight);
+}
+.trace-badge.t-think,
+.trace-badge.t-sys {
+  color: var(--muted);
+}
+.trace-badge.t-error {
+  background: var(--error);
+}
+.trace-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  color: var(--fg);
+}
+.trace-text.mono {
+  font-size: var(--text-xs);
+}
+.trace-toolname {
+  color: var(--primary);
+  font-weight: 600;
+}
+.trace-result {
+  color: var(--muted);
+}
+.trace-result.is-error {
+  color: var(--error);
+}
+.trace-row.is-error .trace-text {
+  color: var(--error);
+}
+.trace-row.is-warn .trace-text {
+  color: var(--warning);
+}
+.trace-dur {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.trace-caret {
+  flex: none;
+  font-size: 9px;
+  color: var(--muted);
+}
+
+/* 行内展开区 */
+.trace-expand {
+  margin: 2px 0 6px 24px;
+  padding: 8px 10px;
+  background: var(--bg1);
+  border: 1px solid var(--bg2);
+  border-radius: var(--radius-sm);
+}
+.trace-expand-block {
+  margin-bottom: 8px;
+}
+.trace-expand-head {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+.trace-expand-block pre,
+.trace-expand-pre {
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--bg0);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  margin: 0;
+}
+.trace-expand-error {
+  color: var(--error);
+  font-size: var(--text-xs);
+  margin-bottom: 4px;
 }
 
 /* 窄屏迷宫适配：必须位于迷宫基础规则之后（同优先级，后者胜出），

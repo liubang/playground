@@ -24,6 +24,7 @@ go_library(
         "channel_approver.go",
         "channel_questioner.go",
         "controller.go",
+        "export.go",
         "maze.go",
         "notify.go",
         "process_runtime.go",

@@ -31,7 +31,6 @@ export const Header = memo(function Header({
   const connDetail = useStore(controller.store, (s) => s.connDetail)
   const readOnly = useStore(controller.store, (s) => s.readOnly)
   const archived = useStore(controller.store, (s) => s.archived)
-  const mainView = useStore(controller.store, (s) => s.mainView)
   const readOnlyTitle = useStore(controller.store, (s) => s.readOnlyTitle)
   const hdrWorkspace = useStore(controller.store, (s) => s.hdrWorkspace)
   const hdrWorkspaceTitle = useStore(controller.store, (s) => s.hdrWorkspaceTitle)
@@ -110,15 +109,6 @@ export const Header = memo(function Header({
         onClick={(e) => void controller.shareSession(e.shiftKey)}
       >
         <Icon name="share" />
-      </button>
-      <button
-        id="hdr-maze"
-        className={'icon-btn' + (mainView === 'maze' ? ' is-active' : '')}
-        title={mainView === 'maze' ? '返回对话' : '执行轨迹：把这次会话的探索过程画成时间轴迷宫'}
-        hidden={!showSessionChrome}
-        onClick={() => controller.toggleMainView()}
-      >
-        <Icon name="chart-gantt" />
       </button>
       <span id="hdr-readonly" className="badge is-awaiting" hidden={!locked} title={readOnlyTitle}>
         <span className="dot" />
