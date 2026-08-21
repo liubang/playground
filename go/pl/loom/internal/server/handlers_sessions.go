@@ -248,6 +248,30 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, snap)
 }
 
+// handleExportSession serves GET /v1/sessions/{id}/export — the raw event
+// log as an NDJSON attachment (one event per line) for offline analysis
+// and cross-tool trace comparison.
+func (s *Server) handleExportSession(w http.ResponseWriter, r *http.Request) {
+	id, err := parseSessionParam(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	events, err := s.svc.ExportEvents(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-ndjson; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="loom-session-`+id.String()+`.jsonl"`)
+	enc := json.NewEncoder(w)
+	for _, evt := range events {
+		if err := enc.Encode(evt); err != nil {
+			return // client disconnected mid-stream
+		}
+	}
+}
+
 // --- turn control ---
 
 type submitPromptRequest struct {

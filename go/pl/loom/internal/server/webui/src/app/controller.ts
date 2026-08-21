@@ -84,9 +84,9 @@ export interface AppState {
   imagesDisabledReason: string
   hdrWorkspace: string // header 面包屑：当前会话所属工作区名
   hdrWorkspaceTitle: string
-  // Main-area view: chat ↔ execution-trace maze (Header trace button) ↔
-  // two-session trace compare (sidebar compare entry).
-  mainView: 'chat' | 'maze' | 'compare'
+  // Main-area view: session tabs (chat / trace list / maze) plus the
+  // two-session compare page (sidebar compare entry).
+  mainView: 'chat' | 'trace' | 'maze' | 'compare'
 }
 
 function initialState(): AppState {
@@ -141,6 +141,8 @@ export class AppController {
   readonly stream: EventStream
   // 视图层滚动容器（resync 保留滚动位置用），由 TranscriptView 挂接
   readonly scrollerRef: { el: HTMLDivElement | null } = { el: null }
+  // TraceView's scroller; maze nodes locate their step here.
+  readonly traceScrollerRef: { el: HTMLDivElement | null } = { el: null }
 
   token: string
   readonly isDesktopShell: boolean
@@ -1165,11 +1167,8 @@ export class AppController {
 
   // ---------- execution-trace maze ----------
 
-  // Chat ↔ maze main-area toggle (Header trace button). From the compare
-  // view the button lands on the maze (it is the trace entry point).
-  toggleMainView() {
-    const v = this.store.get().mainView
-    this.store.set({ mainView: v === 'chat' ? 'maze' : v === 'maze' ? 'chat' : 'maze' })
+  setMainView(v: AppState['mainView']) {
+    this.store.set({ mainView: v })
   }
 
   openCompare() {

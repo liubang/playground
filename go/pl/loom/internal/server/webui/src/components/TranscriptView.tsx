@@ -49,7 +49,7 @@ const BlockView = memo(
       case 'stream':
         return <StreamBlock text={block.text} />
       case 'reasoning':
-        return <ReasoningBlock text={block.text} />
+        return <ReasoningBlock text={block.text} durationMs={block.durationMs} />
       case 'thinking':
         return <ThinkingBlock />
       case 'tool':

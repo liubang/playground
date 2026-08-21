@@ -285,6 +285,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/sessions/{id}/transcript", s.handleTranscript)
 	mux.HandleFunc("GET /v1/sessions/{id}/snapshot", s.handleSnapshot)
 	mux.HandleFunc("GET /v1/sessions/{id}/maze", s.handleSessionMaze)
+	mux.HandleFunc("GET /v1/sessions/{id}/export", s.handleExportSession)
 	mux.HandleFunc("POST /v1/sessions/{id}/prompts", s.handleSubmitPrompt)
 	mux.HandleFunc("POST /v1/sessions/{id}/cancel", s.handleCancelTurn)
 	mux.HandleFunc("POST /v1/sessions/{id}/feedback", s.handleSubmitFeedback)

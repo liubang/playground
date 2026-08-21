@@ -7,7 +7,7 @@ import { memo, useEffect, useRef } from 'react'
 import type { AssistantActionContext, UserImage } from '../../app/transcript'
 import { isInlineImage } from '../../app/transcript'
 import type { ContextCompactedPayload } from '../../protocol/events'
-import { fmtBytes, fmtTokens } from '../../lib/format'
+import { fmtBytes, fmtDuration, fmtTokens } from '../../lib/format'
 import { Icon } from '../../lib/icons'
 import { renderMarkdown } from '../../lib/markdown'
 import { MarkdownView } from './MarkdownView'
@@ -121,10 +121,22 @@ export function ThinkingBlock() {
 
 // --- reasoning（折叠块） ---
 
-export const ReasoningBlock = memo(function ReasoningBlock({ text }: { text: string }) {
+export const ReasoningBlock = memo(function ReasoningBlock({
+  text,
+  durationMs,
+}: {
+  text: string
+  durationMs?: number
+}) {
+  // durationMs only exists for live-streamed reasoning (snapshot rebuilds
+  // carry no per-part timing).
+  const meta =
+    durationMs != null
+      ? `reasoning · ${fmtDuration(durationMs)} · ${text.length} chars`
+      : `reasoning · ${text.length} chars`
   return (
     <details className="block block-reasoning disclosure">
-      <summary>{`reasoning · ${text.length} chars`}</summary>
+      <summary>{meta}</summary>
       <div className="body">{text}</div>
     </details>
   )

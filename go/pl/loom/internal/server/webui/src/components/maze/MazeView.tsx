@@ -143,11 +143,11 @@ function normalizeMaze(d: MazeData): MazeData {
 export const MazeView = memo(function MazeView({
   data: rawData,
   compare = false,
-  onJumpToChat,
+  onLocateStep,
 }: {
   data: MazeData
   compare?: boolean
-  onJumpToChat?: (node: MazeNode) => void
+  onLocateStep?: (node: MazeNode) => void
 }) {
   const data = useMemo(() => normalizeMaze(rawData), [rawData])
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -689,7 +689,7 @@ export const MazeView = memo(function MazeView({
           <DetailPanel
             node={selected.node}
             onClose={() => setSelected(null)}
-            onJumpToChat={onJumpToChat}
+            onLocateStep={onLocateStep}
           />
         )}
       </div>
@@ -966,11 +966,11 @@ const SubLabel = memo(function SubLabel({
 const DetailPanel = memo(function DetailPanel({
   node,
   onClose,
-  onJumpToChat,
+  onLocateStep,
 }: {
   node: MazeNode
   onClose: () => void
-  onJumpToChat?: (node: MazeNode) => void
+  onLocateStep?: (node: MazeNode) => void
 }) {
   const meta = VERDICT_META[node.v] ?? VERDICT_META.ok
   return (
@@ -990,11 +990,11 @@ const DetailPanel = memo(function DetailPanel({
         {node.in_tok != null && <span>输入 {node.in_tok} tok</span>}
       </div>
       {node.why && <div className="maze-detail-why">{node.why}</div>}
-      {onJumpToChat &&
+      {onLocateStep &&
         !node.sub &&
         ((node.msg_seq != null && node.msg_seq > 0) || node.tools.length > 0) && (
-          <button type="button" className="maze-btn maze-jump" onClick={() => onJumpToChat(node)}>
-            <Icon name="turn-down" /> 在对话中定位此步骤
+          <button type="button" className="maze-btn maze-jump" onClick={() => onLocateStep(node)}>
+            <Icon name="turn-down" /> 在轨迹中定位此步骤
           </button>
         )}
       {node.rz_txt && (
