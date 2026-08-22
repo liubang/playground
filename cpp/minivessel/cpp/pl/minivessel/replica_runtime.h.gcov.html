@@ -1,0 +1,331 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - minivessel/cpp/pl/minivessel/replica_runtime.h</title>
+  <link rel="stylesheet" type="text/css" href="../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../index.html">top level</a> - <a href="index.html">minivessel/cpp/pl/minivessel</a> - replica_runtime.h<span style="font-size: 80%;"> (source / <a href="replica_runtime.h.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryMed">76.2&nbsp;%</td>
+            <td class="headerCovTableEntry">21</td>
+            <td class="headerCovTableEntry">16</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-08-19 22:54:11</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryLo">33.3&nbsp;%</td>
+            <td class="headerCovTableEntry">3</td>
+            <td class="headerCovTableEntry">1</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryLo">54.9&nbsp;%</td>
+            <td class="headerCovTableEntry">91</td>
+            <td class="headerCovTableEntry">50</td>
+          </tr>
+                  <tr><td><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : </span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : #pragma once</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : </span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : #include &lt;cstddef&gt;</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : #include &lt;cstdint&gt;</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : #include &lt;memory&gt;</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : #include &lt;mutex&gt;</span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : #include &lt;span&gt;</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : #include &lt;string&gt;</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : #include &lt;vector&gt;</span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : </span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : #include &quot;absl/status/status.h&quot;</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : #include &quot;absl/status/statusor.h&quot;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : #include &quot;cpp/pl/minivessel/shared_wal.h&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : </span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : namespace pl::minivessel {</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : </span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : enum class ApplySource : uint8_t {</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             :     kPrimaryCommit,</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             :     kWalReplay,</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : };</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : </span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : struct ApplyContext final {</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             :     ApplySource source = ApplySource::kWalReplay;</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             :     WriterEpoch writer_epoch;</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : </span>
+<span id="L34"><span class="lineNum">      34</span>                 :             :     [[nodiscard]] bool is_primary_commit() const noexcept {</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :         return source == ApplySource::kPrimaryCommit;</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :     }</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : };</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : </span>
+<span id="L39"><span class="lineNum">      39</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         140 : class ApplyResult final {</span></span>
+<span id="L40"><span class="lineNum">      40</span>                 :             : public:</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :     [[nodiscard]] static ApplyResult Applied() { return ApplyResult(true, absl::OkStatus()); }</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             :     [[nodiscard]] static ApplyResult Rejected(absl::Status reason) {</span>
+<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">           1 :         return ApplyResult(false, std::move(reason));</span></span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :     }</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             : </span>
+<span id="L46"><span class="lineNum">      46</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     [[nodiscard]] bool applied() const noexcept { return applied_; }</span></span>
+<span id="L47"><span class="lineNum">      47</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     [[nodiscard]] bool rejected() const noexcept { return !applied_; }</span></span>
+<span id="L48"><span class="lineNum">      48</span>                 :             :     [[nodiscard]] const absl::Status&amp; rejection() const noexcept { return rejection_; }</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : </span>
+<span id="L50"><span class="lineNum">      50</span>                 :             : private:</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :     ApplyResult(bool applied, absl::Status rejection)</span>
+<span id="L52"><span class="lineNum">      52</span>      [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 19 times"> + </span>]:<span class="tlaGNC">          34 :         : applied_(applied), rejection_(std::move(rejection)) {}</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :             : </span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :     bool applied_ = true;</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             :     absl::Status rejection_;</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : };</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : </span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : class ReplicatedStateMachine {</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             : public:</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :     virtual ~ReplicatedStateMachine() = default;</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :     // A non-OK StatusOr is a system failure. ApplyResult::Rejected is a deterministic business</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             :     // outcome: it advances applied LRSN and must be reproduced during replay.</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :     virtual absl::StatusOr&lt;ApplyResult&gt; apply(const LogRecord&amp; record,</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :                                               const ApplyContext&amp; context) = 0;</span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     virtual absl::StatusOr&lt;std::vector&lt;std::byte&gt;&gt; create_checkpoint() {</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaUNC">           0 :         return absl::UnimplementedError(&quot;state machine does not support checkpoints&quot;);</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :             :     }</span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaUNC">           0 :     virtual absl::Status restore_checkpoint(std::span&lt;const std::byte&gt;, Lrsn) {</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaUNC">           0 :         return absl::UnimplementedError(&quot;state machine does not support checkpoints&quot;);</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :     }</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             : };</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             : </span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : enum class RuntimeRole : uint8_t {</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             :     kStandby,</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             :     kPromoting,</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             :     kPrimary,</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :     kFailed,</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             :     kStopped,</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             : };</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             : </span>
+<span id="L81"><span class="lineNum">      81</span>   [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 2 times"> + </span> :<span class="tlaGNC tlaBgGNC">         133 : struct ReplicaStatus final {</span></span>
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaGBC" title="Branch 7 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 8 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 9 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaGBC" title="Branch 11 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 12 was not taken"> - </span><span class="tlaGBC" title="Branch 13 was taken 1 time"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 16 was not taken"> - </span><span class="tlaGBC" title="Branch 17 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 18 was not taken"> - </span> 
+<span class="lineNum">        </span>       <span class="tlaGBC" title="Branch 19 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 20 was not taken"> - </span><span class="tlaGBC" title="Branch 21 was taken 1 time"> + </span>]
+<span id="L82"><span class="lineNum">      82</span>                 :             :     RuntimeRole role = RuntimeRole::kStandby;</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             :     WriterEpoch writer_epoch;</span>
+<span id="L84"><span class="lineNum">      84</span>                 :             :     Lrsn applied_lrsn;</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             :     absl::Status last_error;</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             : };</span>
+<span id="L87"><span class="lineNum">      87</span>                 :             : </span>
+<span id="L88"><span class="lineNum">      88</span>                 :             : class RoleLifecycle {</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             : public:</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             :     virtual ~RoleLifecycle() = default;</span>
+<span id="L91"><span class="lineNum">      91</span>                 :             :     // Invoked without the runtime mutex held. Implementations may safely call runtime APIs.</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             :     virtual void on_role_change(RuntimeRole previous, const ReplicaStatus&amp; current) = 0;</span>
+<span id="L93"><span class="lineNum">      93</span>                 :             : };</span>
+<span id="L94"><span class="lineNum">      94</span>                 :             : </span>
+<span id="L95"><span class="lineNum">      95</span>   [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          52 : struct ReplicaRuntimeOptions final {</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaGBC" title="Branch 12 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 14 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span><span class="tlaGBC" title="Branch 16 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span><span class="tlaGBC" title="Branch 18 was taken 1 time"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 19 was not taken"> - </span><span class="tlaGBC" title="Branch 20 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 21 was not taken"> - </span><span class="tlaGBC" title="Branch 22 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 23 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 24 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 25 was not taken"> - </span><span class="tlaGBC" title="Branch 26 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 27 was not taken"> - </span><span class="tlaGBC" title="Branch 28 was taken 1 time"> + </span> 
+<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 29 was not taken"> - </span><span class="tlaGBC" title="Branch 30 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 31 was not taken"> - </span><span class="tlaGBC" title="Branch 32 was taken 1 time"> + </span> 
+<span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 33 was not taken"> - </span>]
+<span id="L96"><span class="lineNum">      96</span>                 :             :     std::string replica_id;</span>
+<span id="L97"><span class="lineNum">      97</span>                 :             :     AssignmentEpoch assignment_epoch;</span>
+<span id="L98"><span class="lineNum">      98</span>                 :             :     uint64_t writer_lease_timeout_ms = 30'000;</span>
+<span id="L99"><span class="lineNum">      99</span>                 :             :     size_t tail_batch_records = 128;</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             :     RoleLifecycle* role_lifecycle = nullptr;</span>
+<span id="L101"><span class="lineNum">     101</span>                 :             : };</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             : </span>
+<span id="L103"><span class="lineNum">     103</span>                 :             : struct PrimaryToken final {</span>
+<span id="L104"><span class="lineNum">     104</span>                 :             :     uint64_t runtime_generation = 0;</span>
+<span id="L105"><span class="lineNum">     105</span>                 :             :     WriterEpoch writer_epoch;</span>
+<span id="L106"><span class="lineNum">     106</span>                 :             : </span>
+<span id="L107"><span class="lineNum">     107</span>                 :             :     [[nodiscard]] bool valid() const noexcept {</span>
+<span id="L108"><span class="lineNum">     108</span>   [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 2 times"> + </span> :<span class="tlaGNC">          47 :         return runtime_generation != 0 &amp;&amp; writer_epoch.valid();</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 8 times"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaUNC" title="Branch 12 was not taken"> - </span><span class="tlaGBC" title="Branch 13 was taken 22 times"> + </span> 
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 22 times"> + </span>]
+<span id="L109"><span class="lineNum">     109</span>                 :             :     }</span>
+<span id="L110"><span class="lineNum">     110</span>                 :             :     friend bool operator==(const PrimaryToken&amp;, const PrimaryToken&amp;) = default;</span>
+<span id="L111"><span class="lineNum">     111</span>                 :             : };</span>
+<span id="L112"><span class="lineNum">     112</span>                 :             : </span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">          32 : struct CommitResult final {</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :             :     Lrsn lrsn;</span>
+<span id="L115"><span class="lineNum">     115</span>                 :             :     ApplyResult apply_result = ApplyResult::Applied();</span>
+<span id="L116"><span class="lineNum">     116</span>                 :             : };</span>
+<span id="L117"><span class="lineNum">     117</span>                 :             : </span>
+<span id="L118"><span class="lineNum">     118</span>                 :             : class ReplicaRuntime final {</span>
+<span id="L119"><span class="lineNum">     119</span>                 :             : public:</span>
+<span id="L120"><span class="lineNum">     120</span>                 :             :     class PrimarySession;</span>
+<span id="L121"><span class="lineNum">     121</span>                 :             :     class ReadGuard;</span>
+<span id="L122"><span class="lineNum">     122</span>                 :             : </span>
+<span id="L123"><span class="lineNum">     123</span>                 :             :     ReplicaRuntime(SharedWal* wal,</span>
+<span id="L124"><span class="lineNum">     124</span>                 :             :                    ReplicatedStateMachine* state_machine,</span>
+<span id="L125"><span class="lineNum">     125</span>                 :             :                    ReplicaRuntimeOptions options);</span>
+<span id="L126"><span class="lineNum">     126</span>                 :             :     ~ReplicaRuntime();</span>
+<span id="L127"><span class="lineNum">     127</span>                 :             : </span>
+<span id="L128"><span class="lineNum">     128</span>                 :             :     ReplicaRuntime(const ReplicaRuntime&amp;) = delete;</span>
+<span id="L129"><span class="lineNum">     129</span>                 :             :     ReplicaRuntime&amp; operator=(const ReplicaRuntime&amp;) = delete;</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             : </span>
+<span id="L131"><span class="lineNum">     131</span>                 :             :     absl::Status poll();</span>
+<span id="L132"><span class="lineNum">     132</span>                 :             :     absl::StatusOr&lt;PrimarySession&gt; promote_session();</span>
+<span id="L133"><span class="lineNum">     133</span>                 :             :     absl::StatusOr&lt;CommitResult&gt; submit(const PrimaryToken&amp; token,</span>
+<span id="L134"><span class="lineNum">     134</span>                 :             :                                         std::string request_id,</span>
+<span id="L135"><span class="lineNum">     135</span>                 :             :                                         std::span&lt;const std::byte&gt; payload);</span>
+<span id="L136"><span class="lineNum">     136</span>                 :             :     absl::StatusOr&lt;CommitResult&gt; checkpoint(const PrimaryToken&amp; token);</span>
+<span id="L137"><span class="lineNum">     137</span>                 :             :     absl::Status demote(const PrimaryToken&amp; token);</span>
+<span id="L138"><span class="lineNum">     138</span>                 :             :     void stop();</span>
+<span id="L139"><span class="lineNum">     139</span>                 :             :     [[nodiscard]] ReplicaStatus status() const;</span>
+<span id="L140"><span class="lineNum">     140</span>                 :             :     [[nodiscard]] ReadGuard read(PrimaryToken token = {});</span>
+<span id="L141"><span class="lineNum">     141</span>                 :             : </span>
+<span id="L142"><span class="lineNum">     142</span>                 :             : private:</span>
+<span id="L143"><span class="lineNum">     143</span>                 :             :     struct LifetimeControl final {</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             :         std::mutex mutex;</span>
+<span id="L145"><span class="lineNum">     145</span>                 :             :         ReplicaRuntime* runtime = nullptr;</span>
+<span id="L146"><span class="lineNum">     146</span>                 :             :     };</span>
+<span id="L147"><span class="lineNum">     147</span>                 :             : </span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">         203 :     struct RoleChange final {</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :             :         RuntimeRole previous;</span>
+<span id="L150"><span class="lineNum">     150</span>                 :             :         ReplicaStatus current;</span>
+<span id="L151"><span class="lineNum">     151</span>                 :             :     };</span>
+<span id="L152"><span class="lineNum">     152</span>                 :             : </span>
+<span id="L153"><span class="lineNum">     153</span>                 :             :     absl::Status catch_up_locked();</span>
+<span id="L154"><span class="lineNum">     154</span>                 :             :     absl::Status renew_writer_locked();</span>
+<span id="L155"><span class="lineNum">     155</span>                 :             :     absl::StatusOr&lt;ApplyResult&gt; apply_locked(const LogRecord&amp; record, ApplySource source);</span>
+<span id="L156"><span class="lineNum">     156</span>                 :             :     absl::Status fail_locked(absl::Status status);</span>
+<span id="L157"><span class="lineNum">     157</span>                 :             :     void set_role_locked(RuntimeRole role);</span>
+<span id="L158"><span class="lineNum">     158</span>                 :             :     [[nodiscard]] bool token_valid_locked(const PrimaryToken&amp; token) const noexcept;</span>
+<span id="L159"><span class="lineNum">     159</span>                 :             :     [[nodiscard]] std::vector&lt;RoleChange&gt; take_role_changes_locked();</span>
+<span id="L160"><span class="lineNum">     160</span>                 :             :     void notify_role_changes();</span>
+<span id="L161"><span class="lineNum">     161</span>                 :             :     absl::Status demote_locked(const PrimaryToken* token);</span>
+<span id="L162"><span class="lineNum">     162</span>                 :             :     absl::Status release_writer_locked();</span>
+<span id="L163"><span class="lineNum">     163</span>                 :             : </span>
+<span id="L164"><span class="lineNum">     164</span>                 :             :     SharedWal* wal_;</span>
+<span id="L165"><span class="lineNum">     165</span>                 :             :     ReplicatedStateMachine* state_machine_;</span>
+<span id="L166"><span class="lineNum">     166</span>                 :             :     ReplicaRuntimeOptions options_;</span>
+<span id="L167"><span class="lineNum">     167</span>                 :             :     mutable std::mutex mutex_;</span>
+<span id="L168"><span class="lineNum">     168</span>                 :             :     ReplicaStatus status_;</span>
+<span id="L169"><span class="lineNum">     169</span>                 :             :     uint64_t generation_ = 0;</span>
+<span id="L170"><span class="lineNum">     170</span>                 :             :     bool writer_held_ = false;</span>
+<span id="L171"><span class="lineNum">     171</span>                 :             :     std::vector&lt;RoleChange&gt; role_changes_;</span>
+<span id="L172"><span class="lineNum">     172</span>                 :             :     // Protected by mutex_. Exactly one caller drains callbacks; reentrant/concurrent transitions</span>
+<span id="L173"><span class="lineNum">     173</span>                 :             :     // only enqueue and are picked up by that dispatcher in transition order.</span>
+<span id="L174"><span class="lineNum">     174</span>                 :             :     bool notifying_role_changes_ = false;</span>
+<span id="L175"><span class="lineNum">     175</span>                 :             :     std::shared_ptr&lt;LifetimeControl&gt; lifetime_;</span>
+<span id="L176"><span class="lineNum">     176</span>                 :             : };</span>
+<span id="L177"><span class="lineNum">     177</span>                 :             : </span>
+<span id="L178"><span class="lineNum">     178</span>                 :             : class ReplicaRuntime::PrimarySession final {</span>
+<span id="L179"><span class="lineNum">     179</span>                 :             : public:</span>
+<span id="L180"><span class="lineNum">     180</span>                 :             :     PrimarySession() = default;</span>
+<span id="L181"><span class="lineNum">     181</span>                 :             :     PrimarySession(const PrimarySession&amp;) = delete;</span>
+<span id="L182"><span class="lineNum">     182</span>                 :             :     PrimarySession&amp; operator=(const PrimarySession&amp;) = delete;</span>
+<span id="L183"><span class="lineNum">     183</span>                 :             :     PrimarySession(PrimarySession&amp;&amp; other) noexcept;</span>
+<span id="L184"><span class="lineNum">     184</span>                 :             :     PrimarySession&amp; operator=(PrimarySession&amp;&amp; other) noexcept;</span>
+<span id="L185"><span class="lineNum">     185</span>                 :             :     ~PrimarySession();</span>
+<span id="L186"><span class="lineNum">     186</span>                 :             : </span>
+<span id="L187"><span class="lineNum">     187</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :     [[nodiscard]] const PrimaryToken&amp; token() const noexcept { return token_; }</span></span>
+<span id="L188"><span class="lineNum">     188</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           2 :     [[nodiscard]] bool valid() const noexcept { return !lifetime_.expired() &amp;&amp; token_.valid(); }</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :             :     absl::StatusOr&lt;CommitResult&gt; submit(std::string request_id, std::span&lt;const std::byte&gt; payload);</span>
+<span id="L190"><span class="lineNum">     190</span>                 :             :     absl::StatusOr&lt;CommitResult&gt; checkpoint();</span>
+<span id="L191"><span class="lineNum">     191</span>                 :             :     absl::Status demote();</span>
+<span id="L192"><span class="lineNum">     192</span>                 :             : </span>
+<span id="L193"><span class="lineNum">     193</span>                 :             : private:</span>
+<span id="L194"><span class="lineNum">     194</span>                 :             :     friend class ReplicaRuntime;</span>
+<span id="L195"><span class="lineNum">     195</span>                 :             :     PrimarySession(std::weak_ptr&lt;LifetimeControl&gt; lifetime, PrimaryToken token)</span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">          14 :         : lifetime_(std::move(lifetime)), token_(token) {}</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :             : </span>
+<span id="L198"><span class="lineNum">     198</span>                 :             :     std::weak_ptr&lt;LifetimeControl&gt; lifetime_;</span>
+<span id="L199"><span class="lineNum">     199</span>                 :             :     PrimaryToken token_;</span>
+<span id="L200"><span class="lineNum">     200</span>                 :             : };</span>
+<span id="L201"><span class="lineNum">     201</span>                 :             : </span>
+<span id="L202"><span class="lineNum">     202</span>                 :             : class ReplicaRuntime::ReadGuard final {</span>
+<span id="L203"><span class="lineNum">     203</span>                 :             : public:</span>
+<span id="L204"><span class="lineNum">     204</span>                 :             :     ReadGuard(ReadGuard&amp;&amp;) noexcept = default;</span>
+<span id="L205"><span class="lineNum">     205</span>                 :             :     ReadGuard&amp; operator=(ReadGuard&amp;&amp;) noexcept = default;</span>
+<span id="L206"><span class="lineNum">     206</span>                 :             :     ReadGuard(const ReadGuard&amp;) = delete;</span>
+<span id="L207"><span class="lineNum">     207</span>                 :             :     ReadGuard&amp; operator=(const ReadGuard&amp;) = delete;</span>
+<span id="L208"><span class="lineNum">     208</span>                 :             : </span>
+<span id="L209"><span class="lineNum">     209</span>                 :             :     [[nodiscard]] const ReplicaStatus&amp; status() const noexcept { return status_; }</span>
+<span id="L210"><span class="lineNum">     210</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     [[nodiscard]] bool token_valid() const noexcept { return token_valid_; }</span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :             :     [[nodiscard]] const ReplicatedStateMachine&amp; state_machine() const noexcept {</span>
+<span id="L212"><span class="lineNum">     212</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           2 :         return *state_machine_;</span></span>
+<span id="L213"><span class="lineNum">     213</span>                 :             :     }</span>
+<span id="L214"><span class="lineNum">     214</span>                 :             : </span>
+<span id="L215"><span class="lineNum">     215</span>                 :             : private:</span>
+<span id="L216"><span class="lineNum">     216</span>                 :             :     friend class ReplicaRuntime;</span>
+<span id="L217"><span class="lineNum">     217</span>                 :             :     ReadGuard(std::unique_lock&lt;std::mutex&gt; lock,</span>
+<span id="L218"><span class="lineNum">     218</span>                 :             :               ReplicaStatus status,</span>
+<span id="L219"><span class="lineNum">     219</span>                 :             :               bool token_valid,</span>
+<span id="L220"><span class="lineNum">     220</span>                 :             :               ReplicatedStateMachine* state_machine)</span>
+<span id="L221"><span class="lineNum">     221</span>                 :             :         : lock_(std::move(lock)),</span>
+<span id="L222"><span class="lineNum">     222</span>                 :             :           status_(std::move(status)),</span>
+<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC">           1 :           token_valid_(token_valid),</span></span>
+<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">           1 :           state_machine_(state_machine) {}</span></span>
+<span id="L225"><span class="lineNum">     225</span>                 :             : </span>
+<span id="L226"><span class="lineNum">     226</span>                 :             :     std::unique_lock&lt;std::mutex&gt; lock_;</span>
+<span id="L227"><span class="lineNum">     227</span>                 :             :     ReplicaStatus status_;</span>
+<span id="L228"><span class="lineNum">     228</span>                 :             :     bool token_valid_ = false;</span>
+<span id="L229"><span class="lineNum">     229</span>                 :             :     ReplicatedStateMachine* state_machine_ = nullptr;</span>
+<span id="L230"><span class="lineNum">     230</span>                 :             : };</span>
+<span id="L231"><span class="lineNum">     231</span>                 :             : </span>
+<span id="L232"><span class="lineNum">     232</span>                 :             : } // namespace pl::minivessel</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

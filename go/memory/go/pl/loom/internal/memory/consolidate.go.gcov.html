@@ -1,0 +1,432 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - memory/go/pl/loom/internal/memory/consolidate.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">memory/go/pl/loom/internal/memory</a> - consolidate.go<span style="font-size: 80%;"> (source / <a href="consolidate.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">91.0&nbsp;%</td>
+            <td class="headerCovTableEntry">188</td>
+            <td class="headerCovTableEntry">171</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-08-18 21:30:31</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/08/02</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : package memory</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : import (</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             :         &quot;context&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             :         &quot;fmt&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             :         &quot;io&quot;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             :         &quot;strings&quot;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             :         &quot;time&quot;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : </span>
+<span id="L27"><span class="lineNum">      27</span>                 :             :         &quot;github.com/liubang/playground/go/pl/loom/internal/domain&quot;</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : )</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : </span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : // Consolidator runs Phase 2: merges staged raw memories into MEMORY.md</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : // and regenerates memory_summary.md. This is the &quot;compaction&quot; step that</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : // keeps the memory handbook current and the summary concise.</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : type Consolidator struct {</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             :         store     *Store</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :         model     domain.Model</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :         modelName string</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : }</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : </span>
+<span id="L39"><span class="lineNum">      39</span>                 :             : // NewConsolidator creates a Phase 2 consolidator. modelName is the real</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             : // model identifier to send in API requests.</span>
+<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC tlaBgGNC">          15 : func NewConsolidator(store *Store, model domain.Model, modelName string) *Consolidator {</span></span>
+<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">          15 :         return &amp;Consolidator{store: store, model: model, modelName: modelName}</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">          15 : }</span></span>
+<span id="L44"><span class="lineNum">      44</span>                 :             : </span>
+<span id="L45"><span class="lineNum">      45</span>                 :             : // Consolidate merges new raw memories into MEMORY.md and regenerates</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             : // memory_summary.md. Returns true if any changes were made.</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : //</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : // The consolidation workflow:</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : //  1. Diff the raw_memories.md file against the last git commit</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             : //  2. If there is a diff, ask the model to merge new content into MEMORY.md</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             : //  3. Ask the model to regenerate memory_summary.md from the updated MEMORY.md</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             : //  4. Commit all changes</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             : //</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             : // If no model is available, falls back to a simple append strategy.</span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">          16 : func (c *Consolidator) Consolidate(ctx context.Context) (bool, error) {</span></span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">          16 :         // Check for new raw memories via git diff.</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">          16 :         diff, err := c.store.GitDiff(ctx)</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">          16 :         if err != nil {</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">           6 :                 return false, fmt.Errorf(&quot;memory git diff: %w&quot;, err)</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">           6 :         }</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">          10 :         if strings.TrimSpace(diff) == &quot;&quot; {</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">           7 :                 return false, nil // nothing new to consolidate</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">           7 :         }</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :             : </span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :         // Extract only the added lines from the diff — this is the new content</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             :         // that hasn't been merged yet.</span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">           3 :         newContent := extractAddedLines(diff)</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">           3 :         if strings.TrimSpace(newContent) == &quot;&quot; {</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return false, nil</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :             : </span>
+<span id="L72"><span class="lineNum">      72</span>                 :             :         // Read current state.</span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         currentMain, err := c.store.ReadMain()</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">           3 :         if err != nil {</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return false, fmt.Errorf(&quot;read MEMORY.md: %w&quot;, err)</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L77"><span class="lineNum">      77</span>                 :             : </span>
+<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         var newMain string</span></span>
+<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">           3 :         var newSummary string</span></span>
+<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">           3 : </span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">           3 :         if c.model != nil {</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">           3 :                 // Model-assisted consolidation.</span></span>
+<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">           3 :                 newMain, err = c.consolidateWithModel(ctx, currentMain, newContent)</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">           3 :                 if err != nil || strings.TrimSpace(stripMarkdownFences(newMain)) == &quot;&quot; {</span></span>
+<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">           2 :                         // Fall back to simple append on model error or empty output.</span></span>
+<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">           2 :                         // An empty output would erase the entire MEMORY.md — we must</span></span>
+<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC">           2 :                         // never allow that.</span></span>
+<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">           2 :                         newMain = appendMemory(currentMain, newContent)</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">           2 :                 } else {</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">           1 :                         // Strip potential markdown fences from model output.</span></span>
+<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">           1 :                         newMain = stripMarkdownFences(newMain)</span></span>
+<span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :             : </span>
+<span id="L94"><span class="lineNum">      94</span>                 :             :                 // Regenerate summary from the updated main.</span>
+<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">           3 :                 newSummary, err = c.generateSummary(ctx, newMain)</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">           3 :                 if err != nil || strings.TrimSpace(stripMarkdownFences(newSummary)) == &quot;&quot; {</span></span>
+<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">           2 :                         // Fall back to truncation on model error or empty output.</span></span>
+<span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC">           2 :                         newSummary = truncateToSummary(newMain)</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">           2 :                 } else {</span></span>
+<span id="L100"><span class="lineNum">     100</span>                 :<span class="tlaGNC">           1 :                         newSummary = stripMarkdownFences(newSummary)</span></span>
+<span id="L101"><span class="lineNum">     101</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         } else {</span></span>
+<span id="L103"><span class="lineNum">     103</span>                 :<span class="tlaUNC">           0 :                 // No model: simple append strategy.</span></span>
+<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaUNC">           0 :                 newMain = appendMemory(currentMain, newContent)</span></span>
+<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaUNC">           0 :                 newSummary = truncateToSummary(newMain)</span></span>
+<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L107"><span class="lineNum">     107</span>                 :             : </span>
+<span id="L108"><span class="lineNum">     108</span>                 :             :         // Scrub secrets before persisting (P3): existing MEMORY.md content may</span>
+<span id="L109"><span class="lineNum">     109</span>                 :             :         // predate transcript redaction and the model may echo it verbatim.</span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         newMain = RedactSecrets(newMain)</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">           3 :         newSummary = RedactSecrets(newSummary)</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">           3 : </span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">           3 :         // Write the updated files.</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">           3 :         if err := c.store.WriteMain(newMain); err != nil {</span></span>
+<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return false, fmt.Errorf(&quot;write MEMORY.md: %w&quot;, err)</span></span>
+<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         if err := c.store.WriteSummary(newSummary); err != nil {</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return false, fmt.Errorf(&quot;write memory_summary.md: %w&quot;, err)</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L120"><span class="lineNum">     120</span>                 :             : </span>
+<span id="L121"><span class="lineNum">     121</span>                 :             :         // Commit the changes.</span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         if err := c.store.GitCommitAll(ctx, fmt.Sprintf(&quot;memory: consolidation at %s&quot;, time.Now().UTC().Format(time.RFC3339))); err != nil {</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return false, fmt.Errorf(&quot;git commit: %w&quot;, err)</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :             : </span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         return true, nil</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :             : }</span>
+<span id="L128"><span class="lineNum">     128</span>                 :             : </span>
+<span id="L129"><span class="lineNum">     129</span>                 :             : // consolidateWithModel asks the model to merge new raw memories into</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             : // the existing MEMORY.md content.</span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">           3 : func (c *Consolidator) consolidateWithModel(ctx context.Context, currentMain, newContent string) (string, error) {</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">           3 :         systemPrompt := stageTwoSystemPrompt</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">           3 :         userPrompt := fmt.Sprintf(`Merge the new raw memories into the existing MEMORY.md.</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">           3 : </span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">           3 : ## Existing MEMORY.md</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">           3 : </span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">           3 : %s</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">           3 : </span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">           3 : ## New raw memories</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">           3 : </span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">           3 : %s</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">           3 : </span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">           3 : Produce the updated MEMORY.md following the rules in the system prompt.`, currentMain, newContent)</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">           3 : </span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">           3 :         req := domain.ModelRequest{</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">           3 :                 ModelName:   c.modelName,</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">           3 :                 Messages:    buildExtractionMessages(systemPrompt, userPrompt),</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">           3 :                 MaxTokens:   8192,</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">           3 :                 Temperature: 0.0,</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">           3 :         }</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">           3 : </span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">           3 :         stream, err := c.model.Stream(ctx, req)</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">           3 :         if err != nil {</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">           2 :                 return &quot;&quot;, fmt.Errorf(&quot;consolidation model call: %w&quot;, err)</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">           1 :         defer stream.Close()</span></span>
+<span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC">           1 : </span></span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">           1 :         var responseText strings.Builder</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaGNC">           5 :         for {</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">           5 :                 event, err := stream.Recv()</span></span>
+<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">           5 :                 if err != nil {</span></span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">           1 :                         if err == io.EOF {</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">           1 :                                 break</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :             :                         }</span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return &quot;&quot;, fmt.Errorf(&quot;consolidation stream error: %w&quot;, err)</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :             :                 }</span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC tlaBgGNC">           4 :                 if event.Kind == domain.ModelEventTextDelta {</span></span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">           1 :                         responseText.WriteString(event.TextDelta)</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :             :         }</span>
+<span id="L171"><span class="lineNum">     171</span>                 :             : </span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">           1 :         return responseText.String(), nil</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :             : }</span>
+<span id="L174"><span class="lineNum">     174</span>                 :             : </span>
+<span id="L175"><span class="lineNum">     175</span>                 :             : // generateSummary asks the model to produce a concise summary from</span>
+<span id="L176"><span class="lineNum">     176</span>                 :             : // the updated MEMORY.md.</span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">           3 : func (c *Consolidator) generateSummary(ctx context.Context, mainContent string) (string, error) {</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">           3 :         systemPrompt := summarySystemPrompt</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">           3 :         userPrompt := fmt.Sprintf(`Produce a memory_summary.md from the following MEMORY.md content.</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">           3 : The summary must be under %d tokens (approximately %d characters).</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">           3 : Focus on the most actionable, high-signal information.</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">           3 : </span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">           3 : ## MEMORY.md</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">           3 : </span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">           3 : %s`, SummaryTokenLimit, SummaryTokenLimit*4, mainContent)</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">           3 : </span></span>
+<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">           3 :         req := domain.ModelRequest{</span></span>
+<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">           3 :                 ModelName:   c.modelName,</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">           3 :                 Messages:    buildExtractionMessages(systemPrompt, userPrompt),</span></span>
+<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">           3 :                 MaxTokens:   4096,</span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">           3 :                 Temperature: 0.0,</span></span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">           3 :         }</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">           3 : </span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">           3 :         stream, err := c.model.Stream(ctx, req)</span></span>
+<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">           3 :         if err != nil {</span></span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">           2 :                 return &quot;&quot;, fmt.Errorf(&quot;summary model call: %w&quot;, err)</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC">           1 :         defer stream.Close()</span></span>
+<span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaGNC">           1 : </span></span>
+<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaGNC">           1 :         var responseText strings.Builder</span></span>
+<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC">           5 :         for {</span></span>
+<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">           5 :                 event, err := stream.Recv()</span></span>
+<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">           5 :                 if err != nil {</span></span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">           1 :                         if err == io.EOF {</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">           1 :                                 break</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :             :                         }</span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return &quot;&quot;, fmt.Errorf(&quot;summary stream error: %w&quot;, err)</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :             :                 }</span>
+<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC tlaBgGNC">           4 :                 if event.Kind == domain.ModelEventTextDelta {</span></span>
+<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaGNC">           1 :                         responseText.WriteString(event.TextDelta)</span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L212"><span class="lineNum">     212</span>                 :             :         }</span>
+<span id="L213"><span class="lineNum">     213</span>                 :             : </span>
+<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">           1 :         return responseText.String(), nil</span></span>
+<span id="L215"><span class="lineNum">     215</span>                 :             : }</span>
+<span id="L216"><span class="lineNum">     216</span>                 :             : </span>
+<span id="L217"><span class="lineNum">     217</span>                 :             : // extractAddedLines parses a unified diff and returns only the added</span>
+<span id="L218"><span class="lineNum">     218</span>                 :             : // lines (those starting with '+', excluding '+++'/'---' file headers).</span>
+<span id="L219"><span class="lineNum">     219</span>                 :             : // We only skip &quot;+++ &quot; and &quot;--- &quot; (with a trailing space) which are the</span>
+<span id="L220"><span class="lineNum">     220</span>                 :             : // unified diff file headers (e.g. &quot;--- a/file&quot;, &quot;+++ b/file&quot;). A content</span>
+<span id="L221"><span class="lineNum">     221</span>                 :             : // line like &quot;+---&quot; (a horizontal rule or YAML separator) must NOT be</span>
+<span id="L222"><span class="lineNum">     222</span>                 :             : // skipped — its text after the &quot;+&quot; is &quot;---&quot;, which has no space.</span>
+<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC">           5 : func extractAddedLines(diff string) string {</span></span>
+<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">           5 :         var b strings.Builder</span></span>
+<span id="L225"><span class="lineNum">     225</span>                 :<span class="tlaGNC">          83 :         for _, line := range strings.Split(diff, &quot;\n&quot;) {</span></span>
+<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC">          83 :                 // Skip diff file headers: &quot;+++ b/path&quot; and &quot;--- a/path&quot;.</span></span>
+<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">          83 :                 if strings.HasPrefix(line, &quot;+++ &quot;) || strings.HasPrefix(line, &quot;--- &quot;) {</span></span>
+<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">          16 :                         continue</span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :             :                 }</span>
+<span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">          67 :                 if strings.HasPrefix(line, &quot;+&quot;) &amp;&amp; !strings.HasPrefix(line, &quot;++&quot;) {</span></span>
+<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">          31 :                         b.WriteString(line[1:])</span></span>
+<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">          31 :                         b.WriteByte('\n')</span></span>
+<span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaGNC">          31 :                 }</span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :             :         }</span>
+<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC">           5 :         return b.String()</span></span>
+<span id="L236"><span class="lineNum">     236</span>                 :             : }</span>
+<span id="L237"><span class="lineNum">     237</span>                 :             : </span>
+<span id="L238"><span class="lineNum">     238</span>                 :             : // stripMarkdownFences removes surrounding markdown code fences that</span>
+<span id="L239"><span class="lineNum">     239</span>                 :             : // models sometimes add (e.g. ```markdown ... ``` or ``` ... ```).</span>
+<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">          10 : func stripMarkdownFences(s string) string {</span></span>
+<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">          10 :         s = strings.TrimSpace(s)</span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">          10 :         // Try ```markdown ... ```</span></span>
+<span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaGNC">          10 :         if strings.HasPrefix(s, &quot;```markdown&quot;) &amp;&amp; strings.HasSuffix(s, &quot;```&quot;) {</span></span>
+<span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaGNC">           1 :                 inner := strings.TrimPrefix(s, &quot;```markdown&quot;)</span></span>
+<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">           1 :                 inner = strings.TrimSuffix(inner, &quot;```&quot;)</span></span>
+<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">           1 :                 return strings.TrimSpace(inner)</span></span>
+<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L248"><span class="lineNum">     248</span>                 :             :         // Try ```md ... ```</span>
+<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">           9 :         if strings.HasPrefix(s, &quot;```md&quot;) &amp;&amp; strings.HasSuffix(s, &quot;```&quot;) {</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">           1 :                 inner := strings.TrimPrefix(s, &quot;```md&quot;)</span></span>
+<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">           1 :                 inner = strings.TrimSuffix(inner, &quot;```&quot;)</span></span>
+<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">           1 :                 return strings.TrimSpace(inner)</span></span>
+<span id="L253"><span class="lineNum">     253</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :             :         // Try generic ``` ... ```</span>
+<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC">           8 :         if strings.HasPrefix(s, &quot;```&quot;) &amp;&amp; strings.HasSuffix(s, &quot;```&quot;) {</span></span>
+<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">           2 :                 inner := s[3:]</span></span>
+<span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaGNC">           2 :                 // Skip optional language tag on first line.</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC">           2 :                 if idx := strings.IndexByte(inner, '\n'); idx &gt;= 0 {</span></span>
+<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">           2 :                         inner = inner[idx+1:]</span></span>
+<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaGNC">           2 :                 }</span></span>
+<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">           2 :                 inner = strings.TrimSuffix(inner, &quot;```&quot;)</span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">           2 :                 return strings.TrimSpace(inner)</span></span>
+<span id="L263"><span class="lineNum">     263</span>                 :             :         }</span>
+<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">           6 :         return s</span></span>
+<span id="L265"><span class="lineNum">     265</span>                 :             : }</span>
+<span id="L266"><span class="lineNum">     266</span>                 :             : </span>
+<span id="L267"><span class="lineNum">     267</span>                 :             : // appendMemory appends new content to MEMORY.md using a simple</span>
+<span id="L268"><span class="lineNum">     268</span>                 :             : // no-model strategy.</span>
+<span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaGNC">           4 : func appendMemory(currentMain, newContent string) string {</span></span>
+<span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaGNC">           4 :         var b strings.Builder</span></span>
+<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">           4 :         b.WriteString(currentMain)</span></span>
+<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">           4 :         if currentMain != &quot;&quot; &amp;&amp; !strings.HasSuffix(currentMain, &quot;\n&quot;) {</span></span>
+<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">           1 :                 b.WriteString(&quot;\n&quot;)</span></span>
+<span id="L274"><span class="lineNum">     274</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaGNC">           4 :         b.WriteString(&quot;\n---\n&quot;)</span></span>
+<span id="L276"><span class="lineNum">     276</span>                 :<span class="tlaGNC">           4 :         b.WriteString(fmt.Sprintf(&quot;## Auto-merged at %s\n\n&quot;, time.Now().UTC().Format(time.RFC3339)))</span></span>
+<span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaGNC">           4 :         b.WriteString(newContent)</span></span>
+<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaGNC">           4 :         return b.String()</span></span>
+<span id="L279"><span class="lineNum">     279</span>                 :             : }</span>
+<span id="L280"><span class="lineNum">     280</span>                 :             : </span>
+<span id="L281"><span class="lineNum">     281</span>                 :             : // truncateToSummary creates a summary by truncating the main content.</span>
+<span id="L282"><span class="lineNum">     282</span>                 :             : // This is the fallback when no model is available.</span>
+<span id="L283"><span class="lineNum">     283</span>                 :<span class="tlaGNC">           5 : func truncateToSummary(mainContent string) string {</span></span>
+<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">           5 :         if mainContent == &quot;&quot; {</span></span>
+<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaGNC">           1 :                 return &quot;&quot;</span></span>
+<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L287"><span class="lineNum">     287</span>                 :             :         // Try to use just the first section or first N chars.</span>
+<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC">           4 :         lines := strings.Split(mainContent, &quot;\n&quot;)</span></span>
+<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">           4 :         var summaryLines []string</span></span>
+<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC">         129 :         for _, line := range lines {</span></span>
+<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaGNC">         129 :                 if len(summaryLines) &gt;= 100 {</span></span>
+<span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaGNC">           1 :                         summaryLines = append(summaryLines, &quot;\n(Memory truncated; use memory_read MEMORY.md for full content)&quot;)</span></span>
+<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC">           1 :                         break</span></span>
+<span id="L294"><span class="lineNum">     294</span>                 :             :                 }</span>
+<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">         128 :                 summaryLines = append(summaryLines, line)</span></span>
+<span id="L296"><span class="lineNum">     296</span>                 :             :         }</span>
+<span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaGNC">           4 :         return strings.Join(summaryLines, &quot;\n&quot;)</span></span>
+<span id="L298"><span class="lineNum">     298</span>                 :             : }</span>
+<span id="L299"><span class="lineNum">     299</span>                 :             : </span>
+<span id="L300"><span class="lineNum">     300</span>                 :             : // stageTwoSystemPrompt is the system prompt for Phase 2 consolidation.</span>
+<span id="L301"><span class="lineNum">     301</span>                 :             : // Adapted from Codex's stage_two_system.md.</span>
+<span id="L302"><span class="lineNum">     302</span>                 :             : const stageTwoSystemPrompt = `You are a Memory Consolidation Agent. Your job: merge new raw memories into the existing MEMORY.md handbook.</span>
+<span id="L303"><span class="lineNum">     303</span>                 :             : </span>
+<span id="L304"><span class="lineNum">     304</span>                 :             : ## Goal</span>
+<span id="L305"><span class="lineNum">     305</span>                 :             : </span>
+<span id="L306"><span class="lineNum">     306</span>                 :             : Maintain a concise, well-organized memory handbook that:</span>
+<span id="L307"><span class="lineNum">     307</span>                 :             : - Preserves high-signal information from new sessions</span>
+<span id="L308"><span class="lineNum">     308</span>                 :             : - Removes redundancies and outdated entries</span>
+<span id="L309"><span class="lineNum">     309</span>                 :             : - Keeps entries categorized and searchable</span>
+<span id="L310"><span class="lineNum">     310</span>                 :             : - Stays under 32K characters total</span>
+<span id="L311"><span class="lineNum">     311</span>                 :             : </span>
+<span id="L312"><span class="lineNum">     312</span>                 :             : ## Rules</span>
+<span id="L313"><span class="lineNum">     313</span>                 :             : </span>
+<span id="L314"><span class="lineNum">     314</span>                 :             : 1. **Merge, don't just append** — integrate new info into existing sections</span>
+<span id="L315"><span class="lineNum">     315</span>                 :             : 2. **Deduplicate** — if new info contradicts or supersedes old, replace the old</span>
+<span id="L316"><span class="lineNum">     316</span>                 :             : 3. **Preserve evidence** — keep quoted preference signals and concrete facts</span>
+<span id="L317"><span class="lineNum">     317</span>                 :             : 4. **Redact secrets** — remove any API keys, passwords, or tokens</span>
+<span id="L318"><span class="lineNum">     318</span>                 :             : 5. **Structure** — use markdown headers and sections for navigability</span>
+<span id="L319"><span class="lineNum">     319</span>                 :             : </span>
+<span id="L320"><span class="lineNum">     320</span>                 :             : ## Sections to maintain</span>
+<span id="L321"><span class="lineNum">     321</span>                 :             : </span>
+<span id="L322"><span class="lineNum">     322</span>                 :             : - ### User Preferences — coding style, tool choices, communication patterns</span>
+<span id="L323"><span class="lineNum">     323</span>                 :             : - ### Project Knowledge — architecture, dependencies, build commands</span>
+<span id="L324"><span class="lineNum">     324</span>                 :             : - ### Procedures — reusable workflows, debugging steps</span>
+<span id="L325"><span class="lineNum">     325</span>                 :             : - ### Pitfalls — known issues and how to avoid them</span>
+<span id="L326"><span class="lineNum">     326</span>                 :             : - ### Environment — tool versions, platform specifics</span>
+<span id="L327"><span class="lineNum">     327</span>                 :             : </span>
+<span id="L328"><span class="lineNum">     328</span>                 :             : ## When to forget</span>
+<span id="L329"><span class="lineNum">     329</span>                 :             : </span>
+<span id="L330"><span class="lineNum">     330</span>                 :             : - Outdated information that has been explicitly superseded</span>
+<span id="L331"><span class="lineNum">     331</span>                 :             : - Highly specific one-time debugging details with no reusable value</span>
+<span id="L332"><span class="lineNum">     332</span>                 :             : - Information that is clearly wrong based on newer evidence</span>
+<span id="L333"><span class="lineNum">     333</span>                 :             : </span>
+<span id="L334"><span class="lineNum">     334</span>                 :             : Output ONLY the updated MEMORY.md content, nothing else.`</span>
+<span id="L335"><span class="lineNum">     335</span>                 :             : </span>
+<span id="L336"><span class="lineNum">     336</span>                 :             : // summarySystemPrompt is the system prompt for generating memory_summary.md.</span>
+<span id="L337"><span class="lineNum">     337</span>                 :             : const summarySystemPrompt = `You are a Memory Summary Agent. Your job: distill MEMORY.md into a concise summary.</span>
+<span id="L338"><span class="lineNum">     338</span>                 :             : </span>
+<span id="L339"><span class="lineNum">     339</span>                 :             : ## Rules</span>
+<span id="L340"><span class="lineNum">     340</span>                 :             : </span>
+<span id="L341"><span class="lineNum">     341</span>                 :             : 1. **Be concise** — the summary must fit within the token budget</span>
+<span id="L342"><span class="lineNum">     342</span>                 :             : 2. **Prioritize actionable info** — preferences and procedures over facts</span>
+<span id="L343"><span class="lineNum">     343</span>                 :             : 3. **Preserve key details** — specific tool versions, commands, and file paths</span>
+<span id="L344"><span class="lineNum">     344</span>                 :             : 4. **Redact secrets** — never include API keys, passwords, or tokens</span>
+<span id="L345"><span class="lineNum">     345</span>                 :             : 5. **Use markdown** — headers and bullet points for scanability</span>
+<span id="L346"><span class="lineNum">     346</span>                 :             : </span>
+<span id="L347"><span class="lineNum">     347</span>                 :             : Output ONLY the summary content, nothing else.`</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

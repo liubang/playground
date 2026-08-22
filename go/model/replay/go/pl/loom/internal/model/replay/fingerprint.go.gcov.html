@@ -1,0 +1,415 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - model/replay/go/pl/loom/internal/model/replay/fingerprint.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../../../index.html">top level</a> - <a href="index.html">model/replay/go/pl/loom/internal/model/replay</a> - fingerprint.go<span style="font-size: 80%;"> (source / <a href="fingerprint.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryMed">82.2&nbsp;%</td>
+            <td class="headerCovTableEntry">163</td>
+            <td class="headerCovTableEntry">134</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-08-18 21:30:31</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : package replay</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : </span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : import (</span>
+<span id="L18"><span class="lineNum">      18</span>                 :             :         &quot;crypto/sha256&quot;</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             :         &quot;encoding/hex&quot;</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             :         &quot;encoding/json&quot;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             :         &quot;fmt&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             :         &quot;regexp&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             :         &quot;sort&quot;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             :         &quot;strings&quot;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : </span>
+<span id="L26"><span class="lineNum">      26</span>                 :             :         &quot;github.com/liubang/playground/go/pl/loom/internal/domain&quot;</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : )</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : </span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : // volatileKeys are JSON object keys dropped from the fingerprint</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : // projection: their values are minted per run (message/event/artifact</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : // IDs, timestamps) and would falsely mismatch every replay. Tool call</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : // IDs are NOT volatile — replayed assistant streams carry the recorded</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : // IDs, so they stay in the projection.</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : var volatileKeys = map[string]bool{</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :         &quot;id&quot;:                  true,</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :         &quot;created_at&quot;:          true,</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             :         &quot;updated_at&quot;:          true,</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :         &quot;started_at&quot;:          true,</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :         &quot;finished_at&quot;:         true,</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :         &quot;timestamp&quot;:           true,</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :         &quot;time&quot;:                true,</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             :         &quot;sequence&quot;:            true,</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :         &quot;revision&quot;:            true,</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :         &quot;part_index&quot;:          true,</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :         &quot;artifact_id&quot;:         true,</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :         &quot;session_id&quot;:          true,</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             :         &quot;run_id&quot;:              true,</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             :         &quot;message_id&quot;:          true,</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :         &quot;event_id&quot;:            true,</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :         &quot;checkpoint_id&quot;:       true,</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :         &quot;parent_tool_call_id&quot;: true,</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             : }</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             : </span>
+<span id="L54"><span class="lineNum">      54</span>                 :             : // ScrubPath pairs an environment-dependent absolute path root (the</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             : // record run's and the replay run's temp dirs differ) with the stable</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : // token that replaces it — in fingerprints AND inside the recorded</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : // fixture itself, so a committed calls.jsonl is portable (the dsh</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : // tokenizeSessionFixtureCwd equivalent). On replay the tokens are</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             : // substituted back with the live roots before the events reach the loop.</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             : type ScrubPath struct {</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :         Prefix string</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             :         Token  string</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             : }</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             : </span>
+<span id="L65"><span class="lineNum">      65</span>                 :             : // Fingerprint derives the request identity recorded in call_start and</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             : // re-derived on replay (REPLAY_TESTING_DESIGN §4.3): a SHA-256 over the</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             : // canonical JSON of the request header (model/reasoning/limits/tools)</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             : // plus the full message content, with per-run-volatile fields stripped</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             : // and environment-dependent path roots replaced by stable tokens.</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             : //</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             : // scrubPaths are the environment-dependent path roots (workspace, loom</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             : // home, artifact dir) that legitimately differ between the record run</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : // and a replay run; each is replaced by its stable token before hashing,</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : // longest first so a nested root cannot corrupt a shorter one.</span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC tlaBgGNC">          38 : func Fingerprint(req domain.ModelRequest, scrubPaths []ScrubPath) string {</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">          38 :         data, err := json.Marshal(Projection(req, scrubPaths))</span></span>
+<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">          38 :         if err != nil {</span></span>
+<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;&quot;</span></span>
+<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC tlaBgGNC">          38 :         sum := sha256.Sum256(data)</span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">          38 :         return &quot;sha256:&quot; + hex.EncodeToString(sum[:])</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :             : }</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             : </span>
+<span id="L84"><span class="lineNum">      84</span>                 :             : // Projection is the fingerprint's canonical content view, exported so a</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             : // drift warning can show WHAT changed, not just that something did.</span>
+<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">          44 : func Projection(req domain.ModelRequest, scrubPaths []ScrubPath) map[string]any {</span></span>
+<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC">          44 :         projection := map[string]any{</span></span>
+<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">          44 :                 &quot;model_name&quot;:  req.ModelName,</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">          44 :                 &quot;reasoning&quot;:   jsonRoundTrip(req.Reasoning),</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">          44 :                 &quot;max_tokens&quot;:  req.MaxTokens,</span></span>
+<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">          44 :                 &quot;temperature&quot;: req.Temperature,</span></span>
+<span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaGNC">          44 :                 &quot;tools&quot;:       jsonRoundTrip(req.Tools),</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">          44 :                 &quot;messages&quot;:    messagesProjection(req.Messages),</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">          44 :         }</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">          44 :         if req.ResponseFormat != nil {</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 projection[&quot;response_format&quot;] = jsonRoundTrip(req.ResponseFormat)</span></span>
+<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC tlaBgGNC">          44 :         stripVolatileKeys(projection)</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">          44 :         scrubProjectionPaths(projection, scrubPaths)</span></span>
+<span id="L100"><span class="lineNum">     100</span>                 :<span class="tlaGNC">          44 :         return projection</span></span>
+<span id="L101"><span class="lineNum">     101</span>                 :             : }</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             : </span>
+<span id="L103"><span class="lineNum">     103</span>                 :             : // driftDetail pinpoints the first differing projection paths between the</span>
+<span id="L104"><span class="lineNum">     104</span>                 :             : // recorded request and the live one, so a fingerprint warning says WHAT</span>
+<span id="L105"><span class="lineNum">     105</span>                 :             : // drifted (the scrub tokens make the two sides comparable despite their</span>
+<span id="L106"><span class="lineNum">     106</span>                 :             : // different temp roots).</span>
+<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">           3 : func driftDetail(call Call, live domain.ModelRequest, scrubPaths []ScrubPath) string {</span></span>
+<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">           3 :         var recorded domain.ModelRequest</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">           3 :         if err := json.Unmarshal(call.Request, &amp;recorded); err != nil {</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;&quot;</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         var diffs []string</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">           3 :         collectProjectionDiffs(&quot;&quot;, Projection(recorded, scrubPaths), Projection(live, scrubPaths), &amp;diffs, 5)</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">           3 :         if len(diffs) == 0 {</span></span>
+<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;&quot;</span></span>
+<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         return &quot;first differences (recorded vs live):\n  &quot; + strings.Join(diffs, &quot;\n  &quot;)</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :             : }</span>
+<span id="L119"><span class="lineNum">     119</span>                 :             : </span>
+<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">          75 : func collectProjectionDiffs(path string, a, b any, out *[]string, limit int) {</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">          75 :         if len(*out) &gt;= limit {</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC tlaBgGNC">          75 :         switch an := a.(type) {</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">          25 :         case map[string]any:</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">          25 :                 bn, ok := b.(map[string]any)</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">          25 :                 if !ok {</span></span>
+<span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         *out = append(*out, fmt.Sprintf(&quot;%s: recorded is an object, live is %T&quot;, path, b))</span></span>
+<span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaUNC">           0 :                         return</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC tlaBgGNC">          25 :                 keys := map[string]bool{}</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">          62 :                 for k := range an {</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">          62 :                         keys[k] = true</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">          62 :                 }</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">          62 :                 for k := range bn {</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">          62 :                         keys[k] = true</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">          62 :                 }</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">          25 :                 sorted := make([]string, 0, len(keys))</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">          62 :                 for k := range keys {</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          62 :                         sorted = append(sorted, k)</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">          62 :                 }</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">          25 :                 sort.Strings(sorted)</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">          62 :                 for _, k := range sorted {</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">          62 :                         collectProjectionDiffs(path+&quot;.&quot;+k, an[k], bn[k], out, limit)</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">          62 :                 }</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">           9 :         case []any:</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">           9 :                 bn, ok := b.([]any)</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">           9 :                 if !ok {</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         *out = append(*out, fmt.Sprintf(&quot;%s: recorded is an array, live is %T&quot;, path, b))</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaUNC">           0 :                         return</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC tlaBgGNC">           9 :                 if len(an) != len(bn) {</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         *out = append(*out, fmt.Sprintf(&quot;%s: recorded has %d element(s), live has %d&quot;, path, len(an), len(bn)))</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaUNC">           0 :                         return</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC tlaBgGNC">          10 :                 for i := range an {</span></span>
+<span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC">          10 :                         collectProjectionDiffs(fmt.Sprintf(&quot;%s[%d]&quot;, path, i), an[i], bn[i], out, limit)</span></span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">          10 :                 }</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaGNC">          41 :         default:</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">          41 :                 if fmt.Sprintf(&quot;%v&quot;, a) != fmt.Sprintf(&quot;%v&quot;, b) {</span></span>
+<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">           3 :                         as, bs := fmt.Sprintf(&quot;%v&quot;, a), fmt.Sprintf(&quot;%v&quot;, b)</span></span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">           3 :                         if len(as) &gt; 2000 {</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 as = as[:2000] + &quot;...&quot;</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaUNC">           0 :                         }</span></span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC tlaBgGNC">           3 :                         if len(bs) &gt; 2000 {</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 bs = bs[:2000] + &quot;...&quot;</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaUNC">           0 :                         }</span></span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC tlaBgGNC">           3 :                         *out = append(*out, fmt.Sprintf(&quot;%s:\n    recorded: %s\n    live:     %s&quot;, path, as, bs))</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :             :                 }</span>
+<span id="L170"><span class="lineNum">     170</span>                 :             :         }</span>
+<span id="L171"><span class="lineNum">     171</span>                 :             : }</span>
+<span id="L172"><span class="lineNum">     172</span>                 :             : </span>
+<span id="L173"><span class="lineNum">     173</span>                 :             : // messagesProjection keeps role + parts per message; the message-level</span>
+<span id="L174"><span class="lineNum">     174</span>                 :             : // volatile fields (ID, sequence, timestamps) never enter the projection.</span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">          44 : func messagesProjection(messages []domain.Message) []any {</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">          44 :         out := make([]any, 0, len(messages))</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">          90 :         for _, msg := range messages {</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">          90 :                 out = append(out, map[string]any{</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">          90 :                         &quot;role&quot;:  string(msg.Role),</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">          90 :                         &quot;parts&quot;: jsonRoundTrip(msg.Parts),</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">          90 :                 })</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">          90 :         }</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">          44 :         return out</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :             : }</span>
+<span id="L185"><span class="lineNum">     185</span>                 :             : </span>
+<span id="L186"><span class="lineNum">     186</span>                 :             : // jsonRoundTrip converts a typed value into its plain JSON tree</span>
+<span id="L187"><span class="lineNum">     187</span>                 :             : // (map/slice/scalar) so the projection marshals canonically.</span>
+<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">         178 : func jsonRoundTrip(v any) any {</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">         178 :         data, err := json.Marshal(v)</span></span>
+<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">         178 :         if err != nil {</span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil</span></span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC tlaBgGNC">         178 :         var out any</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">         178 :         if err := json.Unmarshal(data, &amp;out); err != nil {</span></span>
+<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil</span></span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC tlaBgGNC">         178 :         return out</span></span>
+<span id="L198"><span class="lineNum">     198</span>                 :             : }</span>
+<span id="L199"><span class="lineNum">     199</span>                 :             : </span>
+<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaGNC">       17081 : func stripVolatileKeys(v any) {</span></span>
+<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC">       17081 :         switch node := v.(type) {</span></span>
+<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">        5397 :         case map[string]any:</span></span>
+<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">       14082 :                 for key, child := range node {</span></span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">       14082 :                         if volatileKeys[key] {</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">          62 :                                 delete(node, key)</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">          62 :                                 continue</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :             :                         }</span>
+<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">       14020 :                         stripVolatileKeys(child)</span></span>
+<span id="L209"><span class="lineNum">     209</span>                 :             :                 }</span>
+<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaGNC">        1174 :         case []any:</span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">        3017 :                 for _, child := range node {</span></span>
+<span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaGNC">        3017 :                         stripVolatileKeys(child)</span></span>
+<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaGNC">        3017 :                 }</span></span>
+<span id="L214"><span class="lineNum">     214</span>                 :             :         }</span>
+<span id="L215"><span class="lineNum">     215</span>                 :             : }</span>
+<span id="L216"><span class="lineNum">     216</span>                 :             : </span>
+<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">          44 : func scrubProjectionPaths(v any, scrubPaths []ScrubPath) {</span></span>
+<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaGNC">          44 :         paths := append([]ScrubPath(nil), scrubPaths...)</span></span>
+<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaGNC">          55 :         sort.Slice(paths, func(i, j int) bool { return len(paths[i].Prefix) &gt; len(paths[j].Prefix) })</span></span>
+<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC">          44 :         var walk func(any)</span></span>
+<span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaGNC">        8763 :         walk = func(node any) {</span></span>
+<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">        8763 :                 switch n := node.(type) {</span></span>
+<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC">        5397 :                 case map[string]any:</span></span>
+<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">       14020 :                         for key, child := range n {</span></span>
+<span id="L225"><span class="lineNum">     225</span>                 :<span class="tlaGNC">       14020 :                                 if s, ok := child.(string); ok {</span></span>
+<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC">        5852 :                                         n[key] = scrubString(s, paths)</span></span>
+<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">        5852 :                                         continue</span></span>
+<span id="L228"><span class="lineNum">     228</span>                 :             :                                 }</span>
+<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">        8168 :                                 walk(child)</span></span>
+<span id="L230"><span class="lineNum">     230</span>                 :             :                         }</span>
+<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">        1174 :                 case []any:</span></span>
+<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">        3017 :                         for i, child := range n {</span></span>
+<span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaGNC">        3017 :                                 if s, ok := child.(string); ok {</span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC">        2466 :                                         n[i] = scrubString(s, paths)</span></span>
+<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC">        2466 :                                         continue</span></span>
+<span id="L236"><span class="lineNum">     236</span>                 :             :                                 }</span>
+<span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaGNC">         551 :                                 walk(child)</span></span>
+<span id="L238"><span class="lineNum">     238</span>                 :             :                         }</span>
+<span id="L239"><span class="lineNum">     239</span>                 :             :                 }</span>
+<span id="L240"><span class="lineNum">     240</span>                 :             :         }</span>
+<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">          44 :         walk(v)</span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :             : }</span>
+<span id="L243"><span class="lineNum">     243</span>                 :             : </span>
+<span id="L244"><span class="lineNum">     244</span>                 :             : // loomIDTextRe matches loom-minted IDs embedded INSIDE larger strings</span>
+<span id="L245"><span class="lineNum">     245</span>                 :             : // (a sub-agent tool result renders {&quot;child_session_id&quot;:&quot;sess_...&quot;} as</span>
+<span id="L246"><span class="lineNum">     246</span>                 :             : // text). They are re-minted every run, so the fingerprint replaces each</span>
+<span id="L247"><span class="lineNum">     247</span>                 :             : // match with a fixed token — positional consistency between the record</span>
+<span id="L248"><span class="lineNum">     248</span>                 :             : // and replay runs is what matters, not identity.</span>
+<span id="L249"><span class="lineNum">     249</span>                 :             : var loomIDTextRe = regexp.MustCompile(`(sess|run|turn|msg|tc|evt|art|ckpt|ws)_[0-9a-f]{32}|ctxm_[0-9a-f]{24}`)</span>
+<span id="L250"><span class="lineNum">     250</span>                 :             : </span>
+<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">        8318 : func scrubString(s string, paths []ScrubPath) string {</span></span>
+<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">        8318 :         return ScrubVolatileText(loomIDTextRe.ReplaceAllString(ScrubPaths(s, paths), &quot;{{id}}&quot;))</span></span>
+<span id="L253"><span class="lineNum">     253</span>                 :<span class="tlaGNC">        8318 : }</span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :             : </span>
+<span id="L255"><span class="lineNum">     255</span>                 :             : // withPrivateAliases adds the macOS /private-prefixed spelling of every</span>
+<span id="L256"><span class="lineNum">     256</span>                 :             : // absolute root: t.TempDir() reports /var/... while filesystem</span>
+<span id="L257"><span class="lineNum">     257</span>                 :             : // canonicalization (EvalSymlinks inside the tools) reports</span>
+<span id="L258"><span class="lineNum">     258</span>                 :             : // /private/var/... — both spellings appear in one run's data.</span>
+<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">        8431 : func withPrivateAliases(paths []ScrubPath) []ScrubPath {</span></span>
+<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaGNC">        8431 :         out := append([]ScrubPath(nil), paths...)</span></span>
+<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">       24387 :         for _, p := range paths {</span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">       23973 :                 if strings.HasPrefix(p.Prefix, &quot;/&quot;) &amp;&amp; !strings.HasPrefix(p.Prefix, &quot;/private/&quot;) {</span></span>
+<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC">       23973 :                         out = append(out, ScrubPath{Prefix: &quot;/private&quot; + p.Prefix, Token: p.Token})</span></span>
+<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">       23973 :                 }</span></span>
+<span id="L265"><span class="lineNum">     265</span>                 :             :         }</span>
+<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaGNC">        8431 :         return out</span></span>
+<span id="L267"><span class="lineNum">     267</span>                 :             : }</span>
+<span id="L268"><span class="lineNum">     268</span>                 :             : </span>
+<span id="L269"><span class="lineNum">     269</span>                 :             : // ScrubPaths replaces every path prefix with its token (longest first).</span>
+<span id="L270"><span class="lineNum">     270</span>                 :             : // Applied to recorded fixtures at write time; Detokenize reverses it on</span>
+<span id="L271"><span class="lineNum">     271</span>                 :             : // replay. Plain substring replacement is safe on JSON text for the</span>
+<span id="L272"><span class="lineNum">     272</span>                 :             : // POSIX paths these fixtures carry (no quotes/backslashes to escape).</span>
+<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">        8431 : func ScrubPaths(s string, paths []ScrubPath) string {</span></span>
+<span id="L274"><span class="lineNum">     274</span>                 :<span class="tlaGNC">        8431 :         sorted := withPrivateAliases(paths)</span></span>
+<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaGNC">       96189 :         sort.Slice(sorted, func(i, j int) bool { return len(sorted[i].Prefix) &gt; len(sorted[j].Prefix) })</span></span>
+<span id="L276"><span class="lineNum">     276</span>                 :<span class="tlaGNC">       48321 :         for _, p := range sorted {</span></span>
+<span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaGNC">       47946 :                 if p.Prefix == &quot;&quot; || p.Token == &quot;&quot; {</span></span>
+<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         continue</span></span>
+<span id="L279"><span class="lineNum">     279</span>                 :             :                 }</span>
+<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC tlaBgGNC">       47946 :                 s = strings.ReplaceAll(s, p.Prefix, p.Token)</span></span>
+<span id="L281"><span class="lineNum">     281</span>                 :             :         }</span>
+<span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaGNC">        8431 :         return s</span></span>
+<span id="L283"><span class="lineNum">     283</span>                 :             : }</span>
+<span id="L284"><span class="lineNum">     284</span>                 :             : </span>
+<span id="L285"><span class="lineNum">     285</span>                 :             : // Detokenize reverses ScrubPaths: fixture tokens become the live run's</span>
+<span id="L286"><span class="lineNum">     286</span>                 :             : // path roots before recorded events reach the loop.</span>
+<span id="L287"><span class="lineNum">     287</span>                 :<span class="tlaGNC">         799 : func Detokenize(s string, paths []ScrubPath) string {</span></span>
+<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC">         799 :         sorted := append([]ScrubPath(nil), paths...)</span></span>
+<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">        2079 :         sort.Slice(sorted, func(i, j int) bool { return len(sorted[i].Token) &gt; len(sorted[j].Token) })</span></span>
+<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC">        2079 :         for _, p := range sorted {</span></span>
+<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaGNC">        1935 :                 if p.Prefix == &quot;&quot; || p.Token == &quot;&quot; {</span></span>
+<span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         continue</span></span>
+<span id="L293"><span class="lineNum">     293</span>                 :             :                 }</span>
+<span id="L294"><span class="lineNum">     294</span>                 :<span class="tlaGNC tlaBgGNC">        1935 :                 s = strings.ReplaceAll(s, p.Token, p.Prefix)</span></span>
+<span id="L295"><span class="lineNum">     295</span>                 :             :         }</span>
+<span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaGNC">         799 :         return s</span></span>
+<span id="L297"><span class="lineNum">     297</span>                 :             : }</span>
+<span id="L298"><span class="lineNum">     298</span>                 :             : </span>
+<span id="L299"><span class="lineNum">     299</span>                 :             : // currentDateRe matches the system prompt's dynamic date line</span>
+<span id="L300"><span class="lineNum">     300</span>                 :             : // (&quot;Current date: 2026-08-15 UTC&quot;): legitimate day-to-day drift, not a</span>
+<span id="L301"><span class="lineNum">     301</span>                 :             : // request change, so both the fingerprint and the snapshot normalizer</span>
+<span id="L302"><span class="lineNum">     302</span>                 :             : // tokenize it.</span>
+<span id="L303"><span class="lineNum">     303</span>                 :             : var currentDateRe = regexp.MustCompile(`Current date: \d{4}-\d{2}-\d{2} [A-Za-z]+`)</span>
+<span id="L304"><span class="lineNum">     304</span>                 :             : </span>
+<span id="L305"><span class="lineNum">     305</span>                 :             : // platformShellRe matches the system prompt's platform/shell line: it</span>
+<span id="L306"><span class="lineNum">     306</span>                 :             : // reflects the HOST the test runs on (the bazel sandbox strips $SHELL;</span>
+<span id="L307"><span class="lineNum">     307</span>                 :             : // CI runners differ), never the code under test.</span>
+<span id="L308"><span class="lineNum">     308</span>                 :             : var platformShellRe = regexp.MustCompile(`Platform: [^\n,]+, Shell: [^\n]+`)</span>
+<span id="L309"><span class="lineNum">     309</span>                 :             : </span>
+<span id="L310"><span class="lineNum">     310</span>                 :             : // skillsCatalogRe matches the system prompt's skills catalog section,</span>
+<span id="L311"><span class="lineNum">     311</span>                 :             : // from its heading through the catalog's fixed closing line (&quot;When a</span>
+<span id="L312"><span class="lineNum">     312</span>                 :             : // skill is missing, say so briefly and continue with the best</span>
+<span id="L313"><span class="lineNum">     313</span>                 :             : // alternative.&quot;). The catalog lists whatever skill roots the RECORDING</span>
+<span id="L314"><span class="lineNum">     314</span>                 :             : // machine had installed — machine specific (and potentially private)</span>
+<span id="L315"><span class="lineNum">     315</span>                 :             : // content that must neither enter a fingerprint nor a committed</span>
+<span id="L316"><span class="lineNum">     316</span>                 :             : // fixture: a replay machine without those roots composes a</span>
+<span id="L317"><span class="lineNum">     317</span>                 :             : // catalog-free prompt, so both sides strip the section and stay</span>
+<span id="L318"><span class="lineNum">     318</span>                 :             : // comparable. The trailing blank line goes with it, keeping the</span>
+<span id="L319"><span class="lineNum">     319</span>                 :             : // surrounding sections' spacing intact.</span>
+<span id="L320"><span class="lineNum">     320</span>                 :             : var skillsCatalogRe = regexp.MustCompile(`(?s)# Available Skills\n.*?best alternative\.\n\n`)</span>
+<span id="L321"><span class="lineNum">     321</span>                 :             : </span>
+<span id="L322"><span class="lineNum">     322</span>                 :             : // ScrubVolatileText rewrites run-volatile text that is NOT a request</span>
+<span id="L323"><span class="lineNum">     323</span>                 :             : // change: the system prompt's current-date and platform/shell lines,</span>
+<span id="L324"><span class="lineNum">     324</span>                 :             : // and the machine-local skills catalog section. Shared by the request</span>
+<span id="L325"><span class="lineNum">     325</span>                 :             : // fingerprint and the snapshot normalizer.</span>
+<span id="L326"><span class="lineNum">     326</span>                 :<span class="tlaGNC">       14237 : func ScrubVolatileText(s string) string {</span></span>
+<span id="L327"><span class="lineNum">     327</span>                 :<span class="tlaGNC">       14237 :         s = currentDateRe.ReplaceAllString(s, &quot;Current date: {{date}}&quot;)</span></span>
+<span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaGNC">       14237 :         s = platformShellRe.ReplaceAllString(s, &quot;Platform: {{platform}}, Shell: {{shell}}&quot;)</span></span>
+<span id="L329"><span class="lineNum">     329</span>                 :<span class="tlaGNC">       14237 :         return skillsCatalogRe.ReplaceAllString(s, &quot;&quot;)</span></span>
+<span id="L330"><span class="lineNum">     330</span>                 :<span class="tlaGNC">       14237 : }</span></span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

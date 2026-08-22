@@ -1,0 +1,319 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - agent/go/pl/loom/internal/agent/runaway.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">agent/go/pl/loom/internal/agent</a> - runaway.go<span style="font-size: 80%;"> (source / <a href="runaway.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">95.4&nbsp;%</td>
+            <td class="headerCovTableEntry">109</td>
+            <td class="headerCovTableEntry">104</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-08-18 21:30:31</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/07/29</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : package agent</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : import (</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             :         &quot;crypto/sha256&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             :         &quot;encoding/hex&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             :         &quot;encoding/json&quot;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             :         &quot;fmt&quot;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             :         &quot;time&quot;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : </span>
+<span id="L27"><span class="lineNum">      27</span>                 :             :         &quot;github.com/liubang/playground/go/pl/loom/internal/domain&quot;</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : )</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : </span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : // Behavior-based runaway detection (docs/CONTEXT_DESIGN.md §4.4.3). These</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : // detectors catch pathological patterns — exact-repeat loops, unbroken</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : // failure streaks, stalls — instead of punishing workload size the way</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : // turn/tool-call quotas did.</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : </span>
+<span id="L35"><span class="lineNum">      35</span>                 :             : // runawayDetector holds the behavior-based detection state for one run.</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             : // Like every other piece of loop bookkeeping it is owned by the loop</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : // goroutine: all mutations happen on the serial routing/execution path.</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : type runawayDetector struct {</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :         // lastCallSig/repeatedCallCount track consecutive identical tool calls</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :         // (repeated-call detection).</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :         lastCallSig       string</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             :         repeatedCallCount int</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :         // consecutiveExecFailures counts execution-phase tool failures in a</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :         // row (prepare failures excluded by design).</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :         consecutiveExecFailures int</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :         // seenCallSigs records every (tool, args_hash) signature executed this</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             :         // run; a first-seen signature is a progress signal (new information</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             :         // fetched), which keeps read-only research tasks from stalling out.</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :         seenCallSigs map[string]struct{}</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :         // stallTurns counts consecutive turns without any progress signal.</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :         stallTurns int</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             :         // progressThisTurn is set by any progress signal and consumed by the</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             :         // next prepare.</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :         progressThisTurn bool</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             :         // lastProgressAt anchors the stall watchdog: the ACTIVE time since</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             :         // the last progress signal. Approval waits shift it forward so user</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             :         // thinking time never counts (docs/CONTEXT_DESIGN.md §4.4.3).</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             :         lastProgressAt time.Time</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             : }</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             : </span>
+<span id="L61"><span class="lineNum">      61</span>                 :             : // resolveRunawayConfig resolves the effective thresholds: an entirely</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             : // zero struct means &quot;not configured&quot; and falls back to the defaults.</span>
+<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC tlaBgGNC">        1326 : func resolveRunawayConfig(cfg domain.RunawayConfig) domain.RunawayConfig {</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">        1326 :         if cfg == (domain.RunawayConfig{}) {</span></span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">        1112 :                 return domain.DefaultRunawayConfig()</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">        1112 :         }</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">         214 :         return cfg</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :             : }</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             : </span>
+<span id="L70"><span class="lineNum">      70</span>                 :             : // runawayConfig resolves the loop's configured thresholds.</span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">        1326 : func (l *Loop) runawayConfig() domain.RunawayConfig {</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">        1326 :         return resolveRunawayConfig(l.Runaway)</span></span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">        1326 : }</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : </span>
+<span id="L75"><span class="lineNum">      75</span>                 :             : // rawArgsHash fingerprints tool-call arguments (canonical JSON for</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             : // prepared calls, raw JSON otherwise). It deliberately does NOT use</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             : // PreparedCall.ArgsHash: that value is an HMAC signature over the call</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             : // fingerprint, which includes the unique call ID — identical arguments</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             : // would never collide (found via E2E: the repeated-call detector never</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             : // fired with real tools).</span>
+<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">         248 : func rawArgsHash(raw json.RawMessage) string {</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">         248 :         sum := sha256.Sum256(raw)</span></span>
+<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">         248 :         return hex.EncodeToString(sum[:])[:16]</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">         248 : }</span></span>
+<span id="L85"><span class="lineNum">      85</span>                 :             : </span>
+<span id="L86"><span class="lineNum">      86</span>                 :             : // callSignature identifies one logical tool action for repeat detection.</span>
+<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC">         241 : func callSignature(tool string, args json.RawMessage) string {</span></span>
+<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">         241 :         return tool + &quot;\x00&quot; + rawArgsHash(args)</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">         241 : }</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :             : </span>
+<span id="L91"><span class="lineNum">      91</span>                 :             : // trackToolCall feeds the runaway detectors with one routed tool call</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             : // (prepared or failed-to-prepare). It returns the termination reason when</span>
+<span id="L93"><span class="lineNum">      93</span>                 :             : // the repeated-call threshold is hit; the caller then closes the batch</span>
+<span id="L94"><span class="lineNum">      94</span>                 :             : // and terminates the run. The repeat just below the threshold earns a</span>
+<span id="L95"><span class="lineNum">      95</span>                 :             : // queued warning so the model gets one chance to change strategy.</span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">         241 : func (d *runawayDetector) trackToolCall(cfg domain.RunawayConfig, tool string, args json.RawMessage, notices *noticeCenter, clock domain.Clock) string {</span></span>
+<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">         241 :         sig := callSignature(tool, args)</span></span>
+<span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC">         241 :         if sig == d.lastCallSig {</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">          18 :                 d.repeatedCallCount++</span></span>
+<span id="L100"><span class="lineNum">     100</span>                 :<span class="tlaGNC">         223 :         } else {</span></span>
+<span id="L101"><span class="lineNum">     101</span>                 :<span class="tlaGNC">         223 :                 d.lastCallSig = sig</span></span>
+<span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaGNC">         223 :                 d.repeatedCallCount = 1</span></span>
+<span id="L103"><span class="lineNum">     103</span>                 :<span class="tlaGNC">         223 :         }</span></span>
+<span id="L104"><span class="lineNum">     104</span>                 :             :         // A first-seen signature is a progress signal (the model is fetching</span>
+<span id="L105"><span class="lineNum">     105</span>                 :             :         // new information or producing new effects); repeats are not.</span>
+<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">         241 :         if d.seenCallSigs == nil {</span></span>
+<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">          71 :                 d.seenCallSigs = make(map[string]struct{})</span></span>
+<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">          71 :         }</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">         241 :         if _, seen := d.seenCallSigs[sig]; !seen {</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">         223 :                 d.seenCallSigs[sig] = struct{}{}</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">         223 :                 d.markProgress(clock)</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">         223 :         }</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">         241 :         if cfg.MaxRepeatedCalls &lt;= 0 {</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;&quot;</span></span>
+<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC tlaBgGNC">         241 :         switch {</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">           3 :         case d.repeatedCallCount &gt;= cfg.MaxRepeatedCalls:</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">           3 :                 return fmt.Sprintf(&quot;runaway detected: tool %q was called with identical arguments %d times in a row&quot;, tool, d.repeatedCallCount)</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">           4 :         case d.repeatedCallCount == cfg.MaxRepeatedCalls-1 &amp;&amp; notices.fireOnce(dimensionRunaway+&quot;:&quot;+sig, 1):</span></span>
+<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">           4 :                 notices.queue(domain.BudgetNoticePayload{</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">           4 :                         Dimension: dimensionRunaway, Level: 1,</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">           4 :                         Usage: int64(d.repeatedCallCount), Limit: int64(cfg.MaxRepeatedCalls),</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">           4 :                         Message: noticeMessage(fmt.Sprintf(</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">           4 :                                 &quot;[runaway warning] Tool %q was just called with identical arguments %d times in a row. Repeating it will not produce new information — change strategy (different arguments, a different tool, or report the blocker).&quot;,</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">           4 :                                 tool, d.repeatedCallCount,</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">           4 :                         ), clock.Now()),</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">           4 :                 })</span></span>
+<span id="L128"><span class="lineNum">     128</span>                 :             :         }</span>
+<span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC">         238 :         return &quot;&quot;</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :             : }</span>
+<span id="L131"><span class="lineNum">     131</span>                 :             : </span>
+<span id="L132"><span class="lineNum">     132</span>                 :             : // trackExecResult feeds the consecutive-execution-failure detector and</span>
+<span id="L133"><span class="lineNum">     133</span>                 :             : // returns the termination reason when the streak hits the threshold.</span>
+<span id="L134"><span class="lineNum">     134</span>                 :             : // Only execution-phase outcomes count: prepare failures are the model</span>
+<span id="L135"><span class="lineNum">     135</span>                 :             : // struggling with a schema (covered by repeat detection instead), and</span>
+<span id="L136"><span class="lineNum">     136</span>                 :             : // successful calls reset the streak.</span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">         224 : func (d *runawayDetector) trackExecResult(cfg domain.RunawayConfig, result domain.ToolResult) string {</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">         224 :         if result.Status == domain.ToolStatusError {</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">           6 :                 d.consecutiveExecFailures++</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">         218 :         } else {</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">         218 :                 d.consecutiveExecFailures = 0</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">         218 :         }</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">         224 :         if cfg.MaxConsecutiveFailures &gt; 0 &amp;&amp; d.consecutiveExecFailures &gt;= cfg.MaxConsecutiveFailures {</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">           1 :                 return fmt.Sprintf(&quot;runaway detected: %d consecutive tool executions failed&quot;, d.consecutiveExecFailures)</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">         223 :         return &quot;&quot;</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :             : }</span>
+<span id="L148"><span class="lineNum">     148</span>                 :             : </span>
+<span id="L149"><span class="lineNum">     149</span>                 :             : // markProgress records a progress signal: it arms the per-turn stall</span>
+<span id="L150"><span class="lineNum">     150</span>                 :             : // counter and re-anchors the stall watchdog's active-time baseline.</span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">         403 : func (d *runawayDetector) markProgress(clock domain.Clock) {</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">         403 :         d.progressThisTurn = true</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">         403 :         d.lastProgressAt = clock.Now()</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">         403 : }</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :             : </span>
+<span id="L156"><span class="lineNum">     156</span>                 :             : // compensateSuspend shifts the stall watchdog's baseline forward by the</span>
+<span id="L157"><span class="lineNum">     157</span>                 :             : // time spent suspended (approval waits, user-interactive tools): user</span>
+<span id="L158"><span class="lineNum">     158</span>                 :             : // thinking time is not agent activity (docs/CONTEXT_DESIGN.md §4.4.3).</span>
+<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaGNC">          10 : func (d *runawayDetector) compensateSuspend(clock domain.Clock, since time.Time) {</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">          10 :         if !d.lastProgressAt.IsZero() {</span></span>
+<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">          10 :                 d.lastProgressAt = d.lastProgressAt.Add(clock.Since(since))</span></span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">          10 :         }</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :             : }</span>
+<span id="L164"><span class="lineNum">     164</span>                 :             : </span>
+<span id="L165"><span class="lineNum">     165</span>                 :             : // trackStall maintains the no-progress counter at the turn boundary</span>
+<span id="L166"><span class="lineNum">     166</span>                 :             : // (prepare). Any progress signal from the previous turn — visible text,</span>
+<span id="L167"><span class="lineNum">     167</span>                 :             : // a file change, a plan revision, or a first-seen tool signature —</span>
+<span id="L168"><span class="lineNum">     168</span>                 :             : // resets it; otherwise it grows, and every stall_warn_turns it injects a</span>
+<span id="L169"><span class="lineNum">     169</span>                 :             : // converge reminder (never a termination: wandering is corrected, not</span>
+<span id="L170"><span class="lineNum">     170</span>                 :             : // punished).</span>
+<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">         426 : func (d *runawayDetector) trackStall(cfg domain.RunawayConfig, run *Run, notices *noticeCenter) {</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">         426 :         // Anchor the watchdog baseline at the first prepare even when the</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">         426 :         // turns-based warning is disabled: the two detectors are orthogonal.</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">         426 :         if d.lastProgressAt.IsZero() {</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">         183 :                 d.lastProgressAt = run.Clock.Now()</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">         183 :         }</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">         426 :         if cfg.StallWarnTurns &lt;= 0 {</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 d.progressThisTurn = false</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaUNC">           0 :                 return</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :             :         // The first prepare has no previous turn to judge — consume the flag</span>
+<span id="L182"><span class="lineNum">     182</span>                 :             :         // without counting.</span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC tlaBgGNC">         426 :         if run.Usage.Turns &lt;= 1 {</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">         183 :                 d.progressThisTurn = false</span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">         183 :                 return</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">         183 :         }</span></span>
+<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">         243 :         if d.progressThisTurn {</span></span>
+<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">         227 :                 d.stallTurns = 0</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">         227 :         } else {</span></span>
+<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">          16 :                 d.stallTurns++</span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">          16 :         }</span></span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">         243 :         d.progressThisTurn = false</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">         243 :         // The streak keeps growing after each reminder so the level</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">         243 :         // (stallTurns/StallWarnTurns) advances — resetting it here would pin</span></span>
+<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">         243 :         // the level at 1 and fireOnce would suppress every later</span></span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">         243 :         // reminder, defeating the &quot;every stall_warn_turns&quot; contract</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">         243 :         // (REVIEW H15).</span></span>
+<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC">         243 :         if d.stallTurns &gt;= cfg.StallWarnTurns {</span></span>
+<span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaGNC">           5 :                 level := d.stallTurns / cfg.StallWarnTurns</span></span>
+<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaGNC">           5 :                 if notices.fireOnce(dimensionRunaway+&quot;:stall&quot;, level) {</span></span>
+<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC">           3 :                         run.AddBudgetNotice(domain.BudgetNoticePayload{</span></span>
+<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">           3 :                                 Dimension: dimensionRunaway, Level: level,</span></span>
+<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">           3 :                                 Usage: int64(d.stallTurns), Limit: int64(cfg.StallWarnTurns),</span></span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">           3 :                                 Message: noticeMessage(fmt.Sprintf(</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">           3 :                                         &quot;[runaway warning] The last %d turns produced no visible progress (no new information, no file changes, no plan movement). Stop re-exploring and either commit to a concrete next action or report what is blocking you.&quot;,</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">           3 :                                         d.stallTurns,</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">           3 :                                 ), run.Clock.Now()),</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">           3 :                         })</span></span>
+<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC">           3 :                 }</span></span>
+<span id="L210"><span class="lineNum">     210</span>                 :             :         }</span>
+<span id="L211"><span class="lineNum">     211</span>                 :             : }</span>
+<span id="L212"><span class="lineNum">     212</span>                 :             : </span>
+<span id="L213"><span class="lineNum">     213</span>                 :             : // stallActiveDuration reports the ACTIVE time since the last progress</span>
+<span id="L214"><span class="lineNum">     214</span>                 :             : // signal. Suspended time (approval waits) is compensated back into the</span>
+<span id="L215"><span class="lineNum">     215</span>                 :             : // baseline by awaitApproval, so user thinking time never counts</span>
+<span id="L216"><span class="lineNum">     216</span>                 :             : // (docs/CONTEXT_DESIGN.md §4.4.3). A zero baseline — no prepare has run</span>
+<span id="L217"><span class="lineNum">     217</span>                 :             : // yet — reports no stall.</span>
+<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaGNC">         412 : func (d *runawayDetector) stallActiveDuration(clock domain.Clock) time.Duration {</span></span>
+<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaGNC">         412 :         if d.lastProgressAt.IsZero() {</span></span>
+<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC">         182 :                 return 0</span></span>
+<span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaGNC">         182 :         }</span></span>
+<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">         230 :         return max(clock.Since(d.lastProgressAt), 0)</span></span>
+<span id="L223"><span class="lineNum">     223</span>                 :             : }</span>
+<span id="L224"><span class="lineNum">     224</span>                 :             : </span>
+<span id="L225"><span class="lineNum">     225</span>                 :             : // stallExpired reports whether the stall watchdog fired: the active time</span>
+<span id="L226"><span class="lineNum">     226</span>                 :             : // since the last progress signal reached StallTimeout. Evaluated at the</span>
+<span id="L227"><span class="lineNum">     227</span>                 :             : // PhasePreparing boundary alongside the budget check — long tool</span>
+<span id="L228"><span class="lineNum">     228</span>                 :             : // executions and slow model responses count as active time, which the</span>
+<span id="L229"><span class="lineNum">     229</span>                 :             : // generous default (15m) accommodates. The caller (outside an active</span>
+<span id="L230"><span class="lineNum">     230</span>                 :             : // wrap-up) then enters the soft-landing wrap-up (dimension stall)</span>
+<span id="L231"><span class="lineNum">     231</span>                 :             : // instead of letting the run spin forever.</span>
+<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">         434 : func (d *runawayDetector) stallExpired(cfg domain.RunawayConfig, clock domain.Clock) bool {</span></span>
+<span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaGNC">         434 :         return cfg.StallTimeout &gt; 0 &amp;&amp; d.stallActiveDuration(clock) &gt;= cfg.StallTimeout</span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC">         434 : }</span></span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

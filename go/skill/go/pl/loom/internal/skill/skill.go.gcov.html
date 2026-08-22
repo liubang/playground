@@ -1,0 +1,232 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - skill/go/pl/loom/internal/skill/skill.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">skill/go/pl/loom/internal/skill</a> - skill.go<span style="font-size: 80%;"> (source / <a href="skill.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">39</td>
+            <td class="headerCovTableEntry">39</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-08-18 21:30:31</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/07/26</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : // Package skill discovers, parses, and renders SKILL.md skills for the loom</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : // agent. See go/pl/loom/docs/SKILL_DESIGN.md for the full design.</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : package skill</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : </span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : import (</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             :         &quot;fmt&quot;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             :         &quot;sort&quot;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             :         &quot;sync/atomic&quot;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : )</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : </span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : // Discovery and rendering limits. Name/description semantics follow codex</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : // (core-skills/src/loader.rs): name is validated at load time, description is</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : // only required to be non-empty at load time and truncated at render time.</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : const (</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             :         // FileName is the exact skill file name (case-sensitive).</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             :         FileName = &quot;SKILL.md&quot;</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             :         // MaxNameLen bounds the skill name at load time.</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :         MaxNameLen = 64</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :         // MaxScanDepth bounds recursion below each skills root.</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             :         MaxScanDepth = 4</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :         // MaxSkillsPerRoot bounds skills discovered under one root.</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :         MaxSkillsPerRoot = 500</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :         // MaxSkillsTotal bounds skills across all roots.</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :         MaxSkillsTotal = 1000</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             :         // MaxSkillFileBytes bounds a single SKILL.md (read whole, like codex).</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :         MaxSkillFileBytes = 256 &lt;&lt; 10</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             : )</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             : </span>
+<span id="L46"><span class="lineNum">      46</span>                 :             : // Scope identifies where a skill was discovered. Repo outranks User for</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : // ordering and name-conflict resolution.</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : type Scope int</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : </span>
+<span id="L50"><span class="lineNum">      50</span>                 :             : const (</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :         ScopeRepo Scope = iota</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             :         ScopeUser</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             : )</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             : </span>
+<span id="L55"><span class="lineNum">      55</span>                 :             : // String returns the human-readable scope name.</span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC tlaBgGNC">           7 : func (s Scope) String() string {</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">           7 :         if s == ScopeRepo {</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">           2 :                 return &quot;repo&quot;</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">           5 :         return &quot;user&quot;</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :             : }</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             : </span>
+<span id="L63"><span class="lineNum">      63</span>                 :             : // Skill is one discovered SKILL.md with its parsed frontmatter metadata.</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             : type Skill struct {</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :         Name        string</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             :         Description string</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             :         // Path is the absolute, symlink-resolved path to SKILL.md.</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             :         Path string</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             :         // Dir is the absolute, symlink-resolved skill directory.</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :         Dir   string</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             :         Scope Scope</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             : }</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : </span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : // LoadIssue records a skill that failed to load without blocking the rest.</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             : type LoadIssue struct {</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             :         Path    string</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :         Message string</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             : }</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             : </span>
+<span id="L80"><span class="lineNum">      80</span>                 :             : // Catalog is an immutable snapshot of discovered skills. It is shared</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : // read-only between the prompt provider and the read_skill tool.</span>
+<span id="L82"><span class="lineNum">      82</span>                 :             : type Catalog struct {</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             :         skills []*Skill</span>
+<span id="L84"><span class="lineNum">      84</span>                 :             :         byName map[string]*Skill</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             :         issues []LoadIssue</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             : }</span>
+<span id="L87"><span class="lineNum">      87</span>                 :             : </span>
+<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">          52 : func newCatalog(skills []*Skill, issues []LoadIssue) *Catalog {</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">          52 :         sorted := append([]*Skill(nil), skills...)</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">          52 :         sort.Slice(sorted, func(i, j int) bool {</span></span>
+<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">          20 :                 if sorted[i].Scope != sorted[j].Scope {</span></span>
+<span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaGNC">           9 :                         return sorted[i].Scope &lt; sorted[j].Scope</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">           9 :                 }</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">          11 :                 return sorted[i].Name &lt; sorted[j].Name</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :             :         })</span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">          52 :         byName := make(map[string]*Skill, len(sorted))</span></span>
+<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">          62 :         for _, s := range sorted {</span></span>
+<span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC">          51 :                 byName[s.Name] = s</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">          51 :         }</span></span>
+<span id="L100"><span class="lineNum">     100</span>                 :<span class="tlaGNC">          52 :         return &amp;Catalog{skills: sorted, byName: byName, issues: issues}</span></span>
+<span id="L101"><span class="lineNum">     101</span>                 :             : }</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             : </span>
+<span id="L103"><span class="lineNum">     103</span>                 :             : // Skills returns all skills ordered by (Scope, Name).</span>
+<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaGNC">          30 : func (c *Catalog) Skills() []*Skill { return c.skills }</span></span>
+<span id="L105"><span class="lineNum">     105</span>                 :             : </span>
+<span id="L106"><span class="lineNum">     106</span>                 :             : // Issues returns the load issues collected during discovery.</span>
+<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">          30 : func (c *Catalog) Issues() []LoadIssue { return c.issues }</span></span>
+<span id="L108"><span class="lineNum">     108</span>                 :             : </span>
+<span id="L109"><span class="lineNum">     109</span>                 :             : // Find returns the skill with the given exact name, or nil.</span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">          53 : func (c *Catalog) Find(name string) *Skill { return c.byName[name] }</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :             : </span>
+<span id="L112"><span class="lineNum">     112</span>                 :             : // Names returns the sorted skill names (for error messages).</span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">           6 : func (c *Catalog) Names() []string {</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">           6 :         names := make([]string, 0, len(c.skills))</span></span>
+<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">          11 :         for _, s := range c.skills {</span></span>
+<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">          11 :                 names = append(names, s.Name)</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">          11 :         }</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">           6 :         return names</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :             : }</span>
+<span id="L120"><span class="lineNum">     120</span>                 :             : </span>
+<span id="L121"><span class="lineNum">     121</span>                 :             : // AtomicCatalog holds the latest Catalog snapshot. The prompt provider stores</span>
+<span id="L122"><span class="lineNum">     122</span>                 :             : // a fresh snapshot on every Build; read_skill resolves against the same</span>
+<span id="L123"><span class="lineNum">     123</span>                 :             : // snapshot, so the list the model saw and the tool's resolution stay</span>
+<span id="L124"><span class="lineNum">     124</span>                 :             : // consistent within a turn. The zero value holds an empty Catalog.</span>
+<span id="L125"><span class="lineNum">     125</span>                 :             : type AtomicCatalog struct {</span>
+<span id="L126"><span class="lineNum">     126</span>                 :             :         value atomic.Value // *Catalog</span>
+<span id="L127"><span class="lineNum">     127</span>                 :             : }</span>
+<span id="L128"><span class="lineNum">     128</span>                 :             : </span>
+<span id="L129"><span class="lineNum">     129</span>                 :             : // Store replaces the current snapshot. A nil catalog is treated as empty.</span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">          32 : func (a *AtomicCatalog) Store(c *Catalog) {</span></span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">          32 :         if c == nil {</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">           2 :                 c = &amp;Catalog{byName: map[string]*Skill{}}</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">          32 :         a.value.Store(c)</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :             : }</span>
+<span id="L136"><span class="lineNum">     136</span>                 :             : </span>
+<span id="L137"><span class="lineNum">     137</span>                 :             : // Get returns the current snapshot (never nil).</span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">          35 : func (a *AtomicCatalog) Get() *Catalog {</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">          35 :         if c, ok := a.value.Load().(*Catalog); ok &amp;&amp; c != nil {</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          32 :                 return c</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">          32 :         }</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">           3 :         return &amp;Catalog{byName: map[string]*Skill{}}</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :             : }</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             : </span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">          14 : func issuef(path, format string, args ...any) LoadIssue {</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">          14 :         return LoadIssue{Path: path, Message: fmt.Sprintf(format, args...)}</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">          14 : }</span></span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

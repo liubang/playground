@@ -1,0 +1,412 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - process/go/pl/loom/internal/process/shell_analyze.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">process/go/pl/loom/internal/process</a> - shell_analyze.go<span style="font-size: 80%;"> (source / <a href="shell_analyze.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryMed">86.3&nbsp;%</td>
+            <td class="headerCovTableEntry">168</td>
+            <td class="headerCovTableEntry">145</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-08-18 21:30:31</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/08/09</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : package process</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : import (</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             :         &quot;strings&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : </span>
+<span id="L23"><span class="lineNum">      23</span>                 :             :         &quot;mvdan.cc/sh/v3/syntax&quot;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : )</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : </span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : // ShellCommand is one simple command extracted from a shell script. A nil</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : // Argv marks a command whose words contain dynamic expansions (variables,</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : // substitutions, arithmetic): the program cannot be proven statically.</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : type ShellCommand struct {</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             :         Argv []string</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : }</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : </span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : // PipeEdge records one &quot;producer | consumer&quot; pair of a pipeline. Producer</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : // and Consumer are program basenames (&quot;&quot; when that side did not resolve</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             : // statically); ConsumerArgv keeps the consumer's full static argv so</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             : // pipe-into-interpreter detection can distinguish `| sh` (executes stdin)</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : // from `| python3 analyze.py` (runs a fixed script).</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : type PipeEdge struct {</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :         Producer     string</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :         Consumer     string</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :         ConsumerArgv []string</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             : }</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             : </span>
+<span id="L44"><span class="lineNum">      44</span>                 :             : // ShellAnalysis is the static classification of a `sh -c` script, built by</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             : // walking the parsed AST once. It serves three distinct policy uses:</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             : //</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : //   - danger screening: every literal command (including ones nested in</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : //     substitutions and subshells) is collected in Commands, plus the</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : //     pipeline and write-redirect shapes a naive argv scan cannot see;</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             : //   - whitelist evaluation: when Static is true, every command's argv is</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             : //     exact and may be matched against argv-prefix rules individually;</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             : //   - memory eligibility: only a Static analysis with no DynamicWrites is</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             : //     a honest basis for a standing approval.</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             : //</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             : // Execution is unaffected by the analysis — the script still runs through</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : // the shell inside the sandbox; the analysis only feeds classification.</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : type ShellAnalysis struct {</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             :         // Commands lists every simple command in the script, including those</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             :         // nested inside command substitutions and subshells.</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :         Commands []ShellCommand</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :         // Static reports that the whole script resolved statically: no</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             :         // variable expansions, substitutions, control flow, subshells,</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :         // background jobs, env-assignment prefixes, or heredocs.</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :         Static bool</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :         // Pipes lists the producer→consumer pairs of every pipeline.</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             :         Pipes []PipeEdge</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             :         // WriteRedirects lists the static targets of file-writing redirects</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             :         // (&gt;, &gt;&gt;, &gt;|, &amp;&gt;, &amp;&gt;&gt;, &gt;&amp;file).</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             :         WriteRedirects []string</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :         // DynamicWrites reports that a file-writing redirect had a dynamic</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             :         // target (e.g. &gt; &quot;$out&quot;).</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             :         DynamicWrites bool</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : }</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : </span>
+<span id="L75"><span class="lineNum">      75</span>                 :             : // AnalyzeShellArgv classifies a [&quot;sh&quot;, &quot;-c&quot;, script]-form argv. ok=false</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             : // when argv is not a shell -c invocation or the script fails to parse.</span>
+<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC tlaBgGNC">         192 : func AnalyzeShellArgv(argv []string) (ShellAnalysis, bool) {</span></span>
+<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">         192 :         if len(argv) != 3 || !IsShellProgram(argv[0]) || argv[1] != &quot;-c&quot; {</span></span>
+<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">         114 :                 return ShellAnalysis{}, false</span></span>
+<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">         114 :         }</span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">          78 :         return AnalyzeShellScript(argv[2])</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :             : }</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             : </span>
+<span id="L84"><span class="lineNum">      84</span>                 :             : // AnalyzeShellScript parses and classifies a shell script. ok=false on a</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             : // parse error or when the script contains no command at all (e.g. only</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             : // assignments) — callers keep their conservative fallback in that case.</span>
+<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC">         131 : func AnalyzeShellScript(script string) (ShellAnalysis, bool) {</span></span>
+<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">         131 :         file, err := syntax.NewParser().Parse(strings.NewReader(script), &quot;&quot;)</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">         131 :         if err != nil {</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">           2 :                 return ShellAnalysis{}, false</span></span>
+<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaGNC">         129 :         a := &amp;shellAnalyzer{analysis: ShellAnalysis{Static: true}}</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">         129 :         syntax.Walk(file, a.visit)</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">         129 :         if len(a.analysis.Commands) == 0 {</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">           4 :                 return ShellAnalysis{}, false</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">           4 :         }</span></span>
+<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">         125 :         return a.analysis, true</span></span>
+<span id="L98"><span class="lineNum">      98</span>                 :             : }</span>
+<span id="L99"><span class="lineNum">      99</span>                 :             : </span>
+<span id="L100"><span class="lineNum">     100</span>                 :             : // shellAnalyzer accumulates the classification during the AST walk.</span>
+<span id="L101"><span class="lineNum">     101</span>                 :             : type shellAnalyzer struct {</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             :         analysis ShellAnalysis</span>
+<span id="L103"><span class="lineNum">     103</span>                 :             : }</span>
+<span id="L104"><span class="lineNum">     104</span>                 :             : </span>
+<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC">        3232 : func (a *shellAnalyzer) visit(n syntax.Node) bool {</span></span>
+<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">        3232 :         switch node := n.(type) {</span></span>
+<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">         187 :         case *syntax.CallExpr:</span></span>
+<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">         187 :                 a.addCall(node)</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">          50 :         case *syntax.BinaryCmd:</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">          50 :                 if node.Op == syntax.Pipe || node.Op == syntax.PipeAll {</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">          21 :                         a.addPipe(node)</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">          21 :                 }</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">          46 :         case *syntax.Redirect:</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">          46 :                 a.addRedirect(node)</span></span>
+<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">         241 :         case *syntax.Stmt:</span></span>
+<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">         241 :                 if node.Background || node.Negated || node.Coprocess {</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">           2 :                         a.analysis.Static = false</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">           2 :                 }</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :             :         case *syntax.Subshell, *syntax.Block, *syntax.IfClause, *syntax.WhileClause,</span>
+<span id="L120"><span class="lineNum">     120</span>                 :             :                 *syntax.ForClause, *syntax.CaseClause, *syntax.TimeClause,</span>
+<span id="L121"><span class="lineNum">     121</span>                 :             :                 *syntax.TestClause, *syntax.DeclClause, *syntax.LetClause, *syntax.ArithmCmd,</span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">           4 :                 *syntax.FuncDecl:</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">           4 :                 // Control flow, grouping, and declarations hide execution shape</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">           4 :                 // from a prefix matcher; literals inside are still collected for</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">           4 :                 // the danger screen because Walk descends into them.</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">           4 :                 a.analysis.Static = false</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :             :         }</span>
+<span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaGNC">        3232 :         return true</span></span>
+<span id="L129"><span class="lineNum">     129</span>                 :             : }</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             : </span>
+<span id="L131"><span class="lineNum">     131</span>                 :             : // addCall resolves a simple command's words. A pure env-assignment</span>
+<span id="L132"><span class="lineNum">     132</span>                 :             : // statement (FOO=bar with no command) is not a command at all.</span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">         187 : func (a *shellAnalyzer) addCall(c *syntax.CallExpr) {</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">         187 :         if len(c.Assigns) &gt; 0 {</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">           3 :                 a.analysis.Static = false</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">           3 :         }</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">         187 :         if len(c.Args) == 0 {</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">           1 :                 return</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">         186 :         argv, static := resolveWords(c.Args)</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">         186 :         if !static {</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">          14 :                 a.analysis.Static = false</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">          14 :         }</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">         186 :         a.analysis.Commands = append(a.analysis.Commands, ShellCommand{Argv: argv})</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :             : }</span>
+<span id="L146"><span class="lineNum">     146</span>                 :             : </span>
+<span id="L147"><span class="lineNum">     147</span>                 :             : // addPipe records the producer→consumer pair of a pipeline. Nested</span>
+<span id="L148"><span class="lineNum">     148</span>                 :             : // pipelines (a | b | c) decompose into per-edge pairs: the producer of the</span>
+<span id="L149"><span class="lineNum">     149</span>                 :             : // outer edge is the LAST command of its left side.</span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">          21 : func (a *shellAnalyzer) addPipe(bc *syntax.BinaryCmd) {</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">          21 :         edge := PipeEdge{Producer: callProgram(lastCall(bc.X))}</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">          21 :         if first := firstCall(bc.Y); first != nil {</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">          20 :                 argv, static := resolveWords(first.Args)</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">          20 :                 if static &amp;&amp; len(argv) &gt; 0 {</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">          20 :                         edge.Consumer = programBaseName(argv[0])</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">          20 :                         edge.ConsumerArgv = argv</span></span>
+<span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC">          20 :                 }</span></span>
+<span id="L158"><span class="lineNum">     158</span>                 :             :         }</span>
+<span id="L159"><span class="lineNum">     159</span>                 :             :         // Walk visits outer pipe nodes before their nested left side, so</span>
+<span id="L160"><span class="lineNum">     160</span>                 :             :         // prepending keeps the edges in data-flow order (a|b|c records</span>
+<span id="L161"><span class="lineNum">     161</span>                 :             :         // a→b before b→c).</span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">          21 :         a.analysis.Pipes = append([]PipeEdge{edge}, a.analysis.Pipes...)</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :             : }</span>
+<span id="L164"><span class="lineNum">     164</span>                 :             : </span>
+<span id="L165"><span class="lineNum">     165</span>                 :             : // addRedirect classifies redirections. Heredocs make the script non-static</span>
+<span id="L166"><span class="lineNum">     166</span>                 :             : // (their body is arbitrary content); file-writing redirects record their</span>
+<span id="L167"><span class="lineNum">     167</span>                 :             : // target for the danger screen; input redirects and fd duplications are</span>
+<span id="L168"><span class="lineNum">     168</span>                 :             : // behavior-neutral for classification.</span>
+<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">          46 : func (a *shellAnalyzer) addRedirect(r *syntax.Redirect) {</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">          46 :         switch r.Op {</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">           1 :         case syntax.Hdoc, syntax.DashHdoc, syntax.WordHdoc:</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">           1 :                 a.analysis.Static = false</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">          39 :         case syntax.RdrOut, syntax.AppOut, syntax.RdrAll, syntax.AppAll, syntax.ClbOut:</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">          39 :                 a.addWriteTarget(r.Word)</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">           3 :         case syntax.DplOut:</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">           3 :                 // &gt;&amp;2 duplicates a descriptor; &gt;&amp;file writes a file.</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">           3 :                 if r.Word != nil &amp;&amp; !isFdWord(r.Word) {</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         a.addWriteTarget(r.Word)</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :             :         }</span>
+<span id="L181"><span class="lineNum">     181</span>                 :             : }</span>
+<span id="L182"><span class="lineNum">     182</span>                 :             : </span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC tlaBgGNC">          39 : func (a *shellAnalyzer) addWriteTarget(w *syntax.Word) {</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">          39 :         target, ok := resolveWord(w)</span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">          39 :         if !ok {</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">          23 :                 a.analysis.DynamicWrites = true</span></span>
+<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">          23 :                 a.analysis.Static = false</span></span>
+<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">          23 :                 return</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">          23 :         }</span></span>
+<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">          16 :         a.analysis.WriteRedirects = append(a.analysis.WriteRedirects, target)</span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :             : }</span>
+<span id="L192"><span class="lineNum">     192</span>                 :             : </span>
+<span id="L193"><span class="lineNum">     193</span>                 :             : // firstCall returns the first simple command of a command node, descending</span>
+<span id="L194"><span class="lineNum">     194</span>                 :             : // through statement wrappers and binary compositions.</span>
+<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">          42 : func firstCall(n syntax.Node) *syntax.CallExpr {</span></span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">          42 :         switch node := n.(type) {</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">          21 :         case *syntax.Stmt:</span></span>
+<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC">          21 :                 return firstCall(node.Cmd)</span></span>
+<span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         case *syntax.BinaryCmd:</span></span>
+<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaUNC">           0 :                 if c := firstCall(node.X); c != nil {</span></span>
+<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaUNC">           0 :                         return c</span></span>
+<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaUNC">           0 :                 return firstCall(node.Y)</span></span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC tlaBgGNC">          20 :         case *syntax.CallExpr:</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">          20 :                 return node</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :             :         }</span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">           1 :         return nil</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :             : }</span>
+<span id="L209"><span class="lineNum">     209</span>                 :             : </span>
+<span id="L210"><span class="lineNum">     210</span>                 :             : // lastCall mirrors firstCall for the rightmost command.</span>
+<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">          46 : func lastCall(n syntax.Node) *syntax.CallExpr {</span></span>
+<span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaGNC">          46 :         switch node := n.(type) {</span></span>
+<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaGNC">          23 :         case *syntax.Stmt:</span></span>
+<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">          23 :                 return lastCall(node.Cmd)</span></span>
+<span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaGNC">           2 :         case *syntax.BinaryCmd:</span></span>
+<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">           2 :                 if c := lastCall(node.Y); c != nil {</span></span>
+<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">           2 :                         return c</span></span>
+<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaGNC">           2 :                 }</span></span>
+<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return lastCall(node.X)</span></span>
+<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC tlaBgGNC">          21 :         case *syntax.CallExpr:</span></span>
+<span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaGNC">          21 :                 return node</span></span>
+<span id="L222"><span class="lineNum">     222</span>                 :             :         }</span>
+<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return nil</span></span>
+<span id="L224"><span class="lineNum">     224</span>                 :             : }</span>
+<span id="L225"><span class="lineNum">     225</span>                 :             : </span>
+<span id="L226"><span class="lineNum">     226</span>                 :             : // callProgram resolves a call's program basename (&quot;&quot; when dynamic).</span>
+<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC tlaBgGNC">          21 : func callProgram(c *syntax.CallExpr) string {</span></span>
+<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">          21 :         if c == nil || len(c.Args) == 0 {</span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;&quot;</span></span>
+<span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC tlaBgGNC">          21 :         program, ok := resolveWord(c.Args[0])</span></span>
+<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">          21 :         if !ok {</span></span>
+<span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;&quot;</span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC tlaBgGNC">          21 :         return programBaseName(program)</span></span>
+<span id="L236"><span class="lineNum">     236</span>                 :             : }</span>
+<span id="L237"><span class="lineNum">     237</span>                 :             : </span>
+<span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">          41 : func programBaseName(program string) string {</span></span>
+<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">          41 :         if idx := strings.LastIndexAny(program, `/\`); idx &gt;= 0 {</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 program = program[idx+1:]</span></span>
+<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC tlaBgGNC">          41 :         return strings.ToLower(program)</span></span>
+<span id="L243"><span class="lineNum">     243</span>                 :             : }</span>
+<span id="L244"><span class="lineNum">     244</span>                 :             : </span>
+<span id="L245"><span class="lineNum">     245</span>                 :             : // isFdWord reports whether a redirect word is a bare file descriptor</span>
+<span id="L246"><span class="lineNum">     246</span>                 :             : // number (as in &gt;&amp;2), not a file path.</span>
+<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC">           3 : func isFdWord(w *syntax.Word) bool {</span></span>
+<span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaGNC">           3 :         s, ok := resolveWord(w)</span></span>
+<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">           3 :         if !ok || s == &quot;&quot; {</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return false</span></span>
+<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         for _, r := range s {</span></span>
+<span id="L253"><span class="lineNum">     253</span>                 :<span class="tlaGNC">           3 :                 if r &lt; '0' || r &gt; '9' {</span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return false</span></span>
+<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L256"><span class="lineNum">     256</span>                 :             :         }</span>
+<span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         return true</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :             : }</span>
+<span id="L259"><span class="lineNum">     259</span>                 :             : </span>
+<span id="L260"><span class="lineNum">     260</span>                 :             : // resolveWords resolves every word of a command; ok=false when any word</span>
+<span id="L261"><span class="lineNum">     261</span>                 :             : // contains a dynamic part.</span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">         206 : func resolveWords(words []*syntax.Word) ([]string, bool) {</span></span>
+<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC">         206 :         out := make([]string, 0, len(words))</span></span>
+<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">         441 :         for _, w := range words {</span></span>
+<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaGNC">         441 :                 s, ok := resolveWord(w)</span></span>
+<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaGNC">         441 :                 if !ok {</span></span>
+<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">          14 :                         return nil, false</span></span>
+<span id="L268"><span class="lineNum">     268</span>                 :<span class="tlaGNC">          14 :                 }</span></span>
+<span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaGNC">         427 :                 out = append(out, s)</span></span>
+<span id="L270"><span class="lineNum">     270</span>                 :             :         }</span>
+<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">         192 :         return out, true</span></span>
+<span id="L272"><span class="lineNum">     272</span>                 :             : }</span>
+<span id="L273"><span class="lineNum">     273</span>                 :             : </span>
+<span id="L274"><span class="lineNum">     274</span>                 :             : // resolveWord renders a word to its static text: literals, single quotes,</span>
+<span id="L275"><span class="lineNum">     275</span>                 :             : // and double quotes containing only literals. Any expansion (parameter,</span>
+<span id="L276"><span class="lineNum">     276</span>                 :             : // command, arithmetic, process substitution, glob braces) fails the word.</span>
+<span id="L277"><span class="lineNum">     277</span>                 :             : // Globs inside literals are kept verbatim — they may expand at execution</span>
+<span id="L278"><span class="lineNum">     278</span>                 :             : // time but can never change the program or the token count, so prefix</span>
+<span id="L279"><span class="lineNum">     279</span>                 :             : // classification on the resolved argv stays sound.</span>
+<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC">         504 : func resolveWord(w *syntax.Word) (string, bool) {</span></span>
+<span id="L281"><span class="lineNum">     281</span>                 :<span class="tlaGNC">         504 :         if w == nil {</span></span>
+<span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;&quot;, false</span></span>
+<span id="L283"><span class="lineNum">     283</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC tlaBgGNC">         504 :         var b strings.Builder</span></span>
+<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaGNC">         504 :         for _, part := range w.Parts {</span></span>
+<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaGNC">         504 :                 switch p := part.(type) {</span></span>
+<span id="L287"><span class="lineNum">     287</span>                 :<span class="tlaGNC">         462 :                 case *syntax.Lit:</span></span>
+<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC">         462 :                         b.WriteString(p.Value)</span></span>
+<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">           4 :                 case *syntax.SglQuoted:</span></span>
+<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC">           4 :                         b.WriteString(p.Value)</span></span>
+<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaGNC">           2 :                 case *syntax.DblQuoted:</span></span>
+<span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaGNC">           2 :                         for _, inner := range p.Parts {</span></span>
+<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC">           2 :                                 lit, ok := inner.(*syntax.Lit)</span></span>
+<span id="L294"><span class="lineNum">     294</span>                 :<span class="tlaGNC">           2 :                                 if !ok {</span></span>
+<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">           1 :                                         return &quot;&quot;, false</span></span>
+<span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaGNC">           1 :                                 }</span></span>
+<span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaGNC">           1 :                                 b.WriteString(lit.Value)</span></span>
+<span id="L298"><span class="lineNum">     298</span>                 :             :                         }</span>
+<span id="L299"><span class="lineNum">     299</span>                 :<span class="tlaGNC">          36 :                 default:</span></span>
+<span id="L300"><span class="lineNum">     300</span>                 :<span class="tlaGNC">          36 :                         return &quot;&quot;, false</span></span>
+<span id="L301"><span class="lineNum">     301</span>                 :             :                 }</span>
+<span id="L302"><span class="lineNum">     302</span>                 :             :         }</span>
+<span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaGNC">         467 :         return b.String(), true</span></span>
+<span id="L304"><span class="lineNum">     304</span>                 :             : }</span>
+<span id="L305"><span class="lineNum">     305</span>                 :             : </span>
+<span id="L306"><span class="lineNum">     306</span>                 :             : // UnwrapSimpleShell rewrites [&quot;sh&quot;, &quot;-c&quot;, script] (or another supported</span>
+<span id="L307"><span class="lineNum">     307</span>                 :             : // shell) into the plain argv the script denotes — but only when the script</span>
+<span id="L308"><span class="lineNum">     308</span>                 :             : // is provably ONE static command: no pipes, redirections, sequencing,</span>
+<span id="L309"><span class="lineNum">     309</span>                 :             : // substitutions, control flow, or env-assignment prefixes. Execution is</span>
+<span id="L310"><span class="lineNum">     310</span>                 :             : // unaffected — the command still runs through the shell; the unwrapped</span>
+<span id="L311"><span class="lineNum">     311</span>                 :             : // argv only feeds risk classification, danger screening, and argv-prefix</span>
+<span id="L312"><span class="lineNum">     312</span>                 :             : // rule matching.</span>
+<span id="L313"><span class="lineNum">     313</span>                 :<span class="tlaGNC">         167 : func UnwrapSimpleShell(argv []string) ([]string, bool) {</span></span>
+<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">         167 :         analysis, ok := AnalyzeShellArgv(argv)</span></span>
+<span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaGNC">         167 :         if !ok || !analysis.Static {</span></span>
+<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaGNC">         135 :                 return nil, false</span></span>
+<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaGNC">         135 :         }</span></span>
+<span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaGNC">          32 :         if len(analysis.Commands) != 1 || len(analysis.Pipes) &gt; 0 ||</span></span>
+<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">          32 :                 len(analysis.WriteRedirects) &gt; 0 || analysis.DynamicWrites {</span></span>
+<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC">          17 :                 return nil, false</span></span>
+<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">          17 :         }</span></span>
+<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC">          15 :         cmd := analysis.Commands[0].Argv</span></span>
+<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">          15 :         if len(cmd) == 0 {</span></span>
+<span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, false</span></span>
+<span id="L325"><span class="lineNum">     325</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L326"><span class="lineNum">     326</span>                 :<span class="tlaGNC tlaBgGNC">          15 :         return cmd, true</span></span>
+<span id="L327"><span class="lineNum">     327</span>                 :             : }</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

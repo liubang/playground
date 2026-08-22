@@ -1,0 +1,455 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - ui/go/pl/loom/internal/ui/theme.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">ui/go/pl/loom/internal/ui</a> - theme.go<span style="font-size: 80%;"> (source / <a href="theme.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">97.5&nbsp;%</td>
+            <td class="headerCovTableEntry">201</td>
+            <td class="headerCovTableEntry">196</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-08-18 21:30:31</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/07/23</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : package ui</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : import (</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             :         &quot;fmt&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             :         &quot;math&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             :         &quot;strconv&quot;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : </span>
+<span id="L25"><span class="lineNum">      25</span>                 :             :         &quot;github.com/charmbracelet/lipgloss&quot;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : )</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : </span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : // Theme holds all visual styling for the TUI.</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : type Theme struct {</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             :         // Header</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             :         HeaderStyle lipgloss.Style</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : </span>
+<span id="L33"><span class="lineNum">      33</span>                 :             :         // Transcript blocks</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             :         UserBlock        lipgloss.Style</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :         AssistantBlock   lipgloss.Style</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :         ToolBlock        lipgloss.Style</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             :         NoticeBlock      lipgloss.Style</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :         StreamBlock      lipgloss.Style</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :         InterruptedBlock lipgloss.Style</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             : </span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :         // Status bar</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             :         StatusBarIdle  lipgloss.Style</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :         StatusBarBusy  lipgloss.Style</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :         StatusBarError lipgloss.Style</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             : </span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :         // Composer</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             :         Composer lipgloss.Style</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : </span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :         // Approval overlay</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :         ApprovalBorder   lipgloss.Style</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :         ApprovalTitle    lipgloss.Style</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             :         ApprovalKey      lipgloss.Style</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             :         ApprovalOption   lipgloss.Style</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :         ApprovalSelected lipgloss.Style</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             : </span>
+<span id="L56"><span class="lineNum">      56</span>                 :             :         // Spinner for in-progress activity (thinking, streaming, tool runs)</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             :         SpinnerStyle lipgloss.Style</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : </span>
+<span id="L59"><span class="lineNum">      59</span>                 :             :         // ReasoningBlock styles the expanded thinking content: a muted panel</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :         // background with a primary left bar, marking it as backstage material</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :         // rather than delivered output.</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             :         ReasoningBlock lipgloss.Style</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             : </span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :         // Field labels inside dialogs (dimmed, right-padded)</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :         DialogLabel lipgloss.Style</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             : </span>
+<span id="L67"><span class="lineNum">      67</span>                 :             :         // Neutral dialogs (help, session picker, command completion)</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             :         DialogBorder lipgloss.Style</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             :         DialogTitle  lipgloss.Style</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             : </span>
+<span id="L71"><span class="lineNum">      71</span>                 :             :         // NoColor marks the theme as color-free (NO_COLOR / TERM=dumb); the</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             :         // markdown renderer uses it to select glamour's ANSI-free notty style.</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             :         NoColor bool</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : </span>
+<span id="L75"><span class="lineNum">      75</span>                 :             :         // MarkdownProfile selects the glamour style for assistant markdown:</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             :         // &quot;dark&quot; (Everforest), &quot;light&quot; (glamour light), or &quot;notty&quot; (no ANSI).</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :         MarkdownProfile string</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             : </span>
+<span id="L79"><span class="lineNum">      79</span>                 :             :         // User message label (&quot;You:&quot;)</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             :         UserLabel lipgloss.Style</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : </span>
+<span id="L82"><span class="lineNum">      82</span>                 :             :         // Colors</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             :         Primary   lipgloss.Color</span>
+<span id="L84"><span class="lineNum">      84</span>                 :             :         Secondary lipgloss.Color</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             :         Success   lipgloss.Color</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             :         Warning   lipgloss.Color</span>
+<span id="L87"><span class="lineNum">      87</span>                 :             :         Error     lipgloss.Color</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             :         Muted     lipgloss.Color</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             :         Highlight lipgloss.Color</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             : </span>
+<span id="L91"><span class="lineNum">      91</span>                 :             :         // Tool status</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             :         ToolRunning  lipgloss.Style</span>
+<span id="L93"><span class="lineNum">      93</span>                 :             :         ToolSuccess  lipgloss.Style</span>
+<span id="L94"><span class="lineNum">      94</span>                 :             :         ToolError    lipgloss.Style</span>
+<span id="L95"><span class="lineNum">      95</span>                 :             :         ToolCanceled lipgloss.Style</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             : </span>
+<span id="L97"><span class="lineNum">      97</span>                 :             :         // Dim</span>
+<span id="L98"><span class="lineNum">      98</span>                 :             :         Dim lipgloss.Style</span>
+<span id="L99"><span class="lineNum">      99</span>                 :             : }</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             : </span>
+<span id="L101"><span class="lineNum">     101</span>                 :             : // palette carries the per-variant accent colors; every style is derived</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             : // from these so dark and light share one construction path.</span>
+<span id="L103"><span class="lineNum">     103</span>                 :             : type palette struct {</span>
+<span id="L104"><span class="lineNum">     104</span>                 :             :         primary   lipgloss.Color</span>
+<span id="L105"><span class="lineNum">     105</span>                 :             :         secondary lipgloss.Color</span>
+<span id="L106"><span class="lineNum">     106</span>                 :             :         success   lipgloss.Color</span>
+<span id="L107"><span class="lineNum">     107</span>                 :             :         warning   lipgloss.Color</span>
+<span id="L108"><span class="lineNum">     108</span>                 :             :         error     lipgloss.Color</span>
+<span id="L109"><span class="lineNum">     109</span>                 :             :         muted     lipgloss.Color</span>
+<span id="L110"><span class="lineNum">     110</span>                 :             :         highlight lipgloss.Color</span>
+<span id="L111"><span class="lineNum">     111</span>                 :             :         onAccent  lipgloss.Color // text drawn on accent-filled backgrounds</span>
+<span id="L112"><span class="lineNum">     112</span>                 :             :         panel     lipgloss.Color // subtle background for inset content panels</span>
+<span id="L113"><span class="lineNum">     113</span>                 :             : }</span>
+<span id="L114"><span class="lineNum">     114</span>                 :             : </span>
+<span id="L115"><span class="lineNum">     115</span>                 :             : // everforestDarkHard is the default palette (Everforest Dark Hard):</span>
+<span id="L116"><span class="lineNum">     116</span>                 :             : //</span>
+<span id="L117"><span class="lineNum">     117</span>                 :             : //      bg0 #1e2326  fg #d3c6aa  grey1 #859289</span>
+<span id="L118"><span class="lineNum">     118</span>                 :             : //      red #e67e80  orange #e69875  yellow #dbbc7f</span>
+<span id="L119"><span class="lineNum">     119</span>                 :             : //      green #a7c080  blue #7fbbb3</span>
+<span id="L120"><span class="lineNum">     120</span>                 :             : var everforestDarkHard = palette{</span>
+<span id="L121"><span class="lineNum">     121</span>                 :             :         primary:   lipgloss.Color(&quot;#7fbbb3&quot;),</span>
+<span id="L122"><span class="lineNum">     122</span>                 :             :         secondary: lipgloss.Color(&quot;#a7c080&quot;),</span>
+<span id="L123"><span class="lineNum">     123</span>                 :             :         success:   lipgloss.Color(&quot;#a7c080&quot;),</span>
+<span id="L124"><span class="lineNum">     124</span>                 :             :         warning:   lipgloss.Color(&quot;#dbbc7f&quot;),</span>
+<span id="L125"><span class="lineNum">     125</span>                 :             :         error:     lipgloss.Color(&quot;#e67e80&quot;),</span>
+<span id="L126"><span class="lineNum">     126</span>                 :             :         muted:     lipgloss.Color(&quot;#859289&quot;),</span>
+<span id="L127"><span class="lineNum">     127</span>                 :             :         highlight: lipgloss.Color(&quot;#e69875&quot;),</span>
+<span id="L128"><span class="lineNum">     128</span>                 :             :         onAccent:  lipgloss.Color(&quot;#1e2326&quot;),</span>
+<span id="L129"><span class="lineNum">     129</span>                 :             :         panel:     lipgloss.Color(&quot;#272e33&quot;),</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             : }</span>
+<span id="L131"><span class="lineNum">     131</span>                 :             : </span>
+<span id="L132"><span class="lineNum">     132</span>                 :             : // everforestLightMedium is the light counterpart (Everforest Light Medium,</span>
+<span id="L133"><span class="lineNum">     133</span>                 :             : // muted uses grey1 for better contrast on the light background):</span>
+<span id="L134"><span class="lineNum">     134</span>                 :             : //</span>
+<span id="L135"><span class="lineNum">     135</span>                 :             : //      bg0 #fdf6e3  bg1 #f4f0d9  fg #5c6a72  grey1 #939f91</span>
+<span id="L136"><span class="lineNum">     136</span>                 :             : //      red #f85552  orange #f57d26  yellow #dfa000</span>
+<span id="L137"><span class="lineNum">     137</span>                 :             : //      green #8da101  blue #3a94c5</span>
+<span id="L138"><span class="lineNum">     138</span>                 :             : var everforestLightMedium = palette{</span>
+<span id="L139"><span class="lineNum">     139</span>                 :             :         primary:   lipgloss.Color(&quot;#3a94c5&quot;),</span>
+<span id="L140"><span class="lineNum">     140</span>                 :             :         secondary: lipgloss.Color(&quot;#8da101&quot;),</span>
+<span id="L141"><span class="lineNum">     141</span>                 :             :         success:   lipgloss.Color(&quot;#8da101&quot;),</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             :         warning:   lipgloss.Color(&quot;#dfa000&quot;),</span>
+<span id="L143"><span class="lineNum">     143</span>                 :             :         error:     lipgloss.Color(&quot;#f85552&quot;),</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             :         muted:     lipgloss.Color(&quot;#939f91&quot;),</span>
+<span id="L145"><span class="lineNum">     145</span>                 :             :         highlight: lipgloss.Color(&quot;#f57d26&quot;),</span>
+<span id="L146"><span class="lineNum">     146</span>                 :             :         onAccent:  lipgloss.Color(&quot;#fdf6e3&quot;),</span>
+<span id="L147"><span class="lineNum">     147</span>                 :             :         panel:     lipgloss.Color(&quot;#f4f0d9&quot;),</span>
+<span id="L148"><span class="lineNum">     148</span>                 :             : }</span>
+<span id="L149"><span class="lineNum">     149</span>                 :             : </span>
+<span id="L150"><span class="lineNum">     150</span>                 :             : // DefaultTheme returns the default dark theme: Everforest Dark Hard, so the</span>
+<span id="L151"><span class="lineNum">     151</span>                 :             : // TUI blends into terminals using the same palette.</span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC tlaBgGNC">          66 : func DefaultTheme() *Theme {</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">          66 :         return themeFromPalette(everforestDarkHard, &quot;dark&quot;)</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">          66 : }</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :             : </span>
+<span id="L156"><span class="lineNum">     156</span>                 :             : // LightTheme returns the Everforest Light Medium theme for light-background</span>
+<span id="L157"><span class="lineNum">     157</span>                 :             : // terminals.</span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">           2 : func LightTheme() *Theme {</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaGNC">           2 :         return themeFromPalette(everforestLightMedium, &quot;light&quot;)</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">           2 : }</span></span>
+<span id="L161"><span class="lineNum">     161</span>                 :             : </span>
+<span id="L162"><span class="lineNum">     162</span>                 :             : // DetectTheme picks dark or light based on the terminal's actual background</span>
+<span id="L163"><span class="lineNum">     163</span>                 :             : // color (queried via OSC 11; detection failure falls back to dark).</span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">          60 : func DetectTheme() *Theme {</span></span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">          60 :         if lipgloss.HasDarkBackground() {</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">          60 :                 return DefaultTheme()</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">          60 :         }</span></span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return LightTheme()</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :             : }</span>
+<span id="L170"><span class="lineNum">     170</span>                 :             : </span>
+<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC tlaBgGNC">          68 : func themeFromPalette(p palette, markdownProfile string) *Theme {</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">          68 :         t := &amp;Theme{</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">          68 :                 Primary:         p.primary,</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">          68 :                 Secondary:       p.secondary,</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">          68 :                 Success:         p.success,</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">          68 :                 Warning:         p.warning,</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">          68 :                 Error:           p.error,</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">          68 :                 Muted:           p.muted,</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">          68 :                 Highlight:       p.highlight,</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">          68 :                 MarkdownProfile: markdownProfile,</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">          68 :         }</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">          68 :         t.HeaderStyle = lipgloss.NewStyle().</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">          68 :                 Bold(true).</span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">          68 :                 Foreground(p.onAccent). // text on the accent-filled statusline</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">          68 :                 Background(t.Primary).</span></span>
+<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">          68 :                 Padding(0, 1).</span></span>
+<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">          68 :                 Width(80) // will be adjusted dynamically</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">          68 :         t.UserBlock = lipgloss.NewStyle().</span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">          68 :                 Border(lipgloss.RoundedBorder(), false, false, false, true).</span></span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">          68 :                 BorderForeground(t.Primary).</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">          68 :                 PaddingLeft(1)</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">          68 :         t.AssistantBlock = lipgloss.NewStyle().</span></span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">          68 :                 PaddingLeft(1)</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC">          68 :         t.ToolBlock = lipgloss.NewStyle().</span></span>
+<span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaGNC">          68 :                 Border(lipgloss.RoundedBorder(), false, false, false, true).</span></span>
+<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaGNC">          68 :                 BorderForeground(t.Muted).</span></span>
+<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC">          68 :                 PaddingLeft(1)</span></span>
+<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">          68 :         t.NoticeBlock = lipgloss.NewStyle().</span></span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Muted).</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">          68 :                 Italic(true).</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">          68 :                 PaddingLeft(1)</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">          68 :         t.StreamBlock = lipgloss.NewStyle().</span></span>
+<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC">          68 :                 PaddingLeft(1)</span></span>
+<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">          68 :         t.InterruptedBlock = lipgloss.NewStyle().</span></span>
+<span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Warning).</span></span>
+<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaGNC">          68 :                 PaddingLeft(1)</span></span>
+<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaGNC">          68 :         t.StatusBarIdle = lipgloss.NewStyle().</span></span>
+<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Muted)</span></span>
+<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaGNC">          68 :         t.StatusBarBusy = lipgloss.NewStyle().</span></span>
+<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Secondary)</span></span>
+<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaGNC">          68 :         t.StatusBarError = lipgloss.NewStyle().</span></span>
+<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Error)</span></span>
+<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">          68 :         t.Composer = lipgloss.NewStyle().</span></span>
+<span id="L225"><span class="lineNum">     225</span>                 :<span class="tlaGNC">          68 :                 Border(lipgloss.RoundedBorder()).</span></span>
+<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC">          68 :                 BorderForeground(t.Muted).</span></span>
+<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">          68 :                 Padding(0, 1)</span></span>
+<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">          68 :         t.ApprovalBorder = lipgloss.NewStyle().</span></span>
+<span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">          68 :                 Border(lipgloss.ThickBorder()).</span></span>
+<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">          68 :                 BorderForeground(t.Warning).</span></span>
+<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">          68 :                 Padding(1, 2)</span></span>
+<span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC">          68 :         t.ApprovalTitle = lipgloss.NewStyle().</span></span>
+<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC">          68 :                 Bold(true).</span></span>
+<span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Warning)</span></span>
+<span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">          68 :         t.ApprovalKey = lipgloss.NewStyle().</span></span>
+<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">          68 :                 Bold(true).</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Primary)</span></span>
+<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">          68 :         t.ApprovalOption = lipgloss.NewStyle().</span></span>
+<span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Muted)</span></span>
+<span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">          68 :         t.ApprovalSelected = lipgloss.NewStyle().</span></span>
+<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">          68 :                 Bold(true).</span></span>
+<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC">          68 :                 Foreground(p.onAccent).</span></span>
+<span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaGNC">          68 :                 Background(t.Primary).</span></span>
+<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">          68 :                 Padding(0, 1)</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">          68 :         t.SpinnerStyle = lipgloss.NewStyle().</span></span>
+<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Secondary)</span></span>
+<span id="L253"><span class="lineNum">     253</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">          68 :         t.ReasoningBlock = lipgloss.NewStyle().</span></span>
+<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Muted).</span></span>
+<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">          68 :                 Background(p.panel).</span></span>
+<span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaGNC">          68 :                 Border(lipgloss.NormalBorder(), false, false, false, true).</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC">          68 :                 BorderForeground(t.Primary).</span></span>
+<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">          68 :                 BorderBackground(p.panel).</span></span>
+<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaGNC">          68 :                 Padding(0, 1)</span></span>
+<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">          68 :         t.DialogLabel = lipgloss.NewStyle().</span></span>
+<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Muted)</span></span>
+<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaGNC">          68 :         t.DialogBorder = lipgloss.NewStyle().</span></span>
+<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaGNC">          68 :                 Border(lipgloss.RoundedBorder()).</span></span>
+<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">          68 :                 BorderForeground(t.Muted).</span></span>
+<span id="L268"><span class="lineNum">     268</span>                 :<span class="tlaGNC">          68 :                 Padding(0, 1)</span></span>
+<span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaGNC">          68 :         t.DialogTitle = lipgloss.NewStyle().</span></span>
+<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">          68 :                 Bold(true).</span></span>
+<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Primary)</span></span>
+<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L274"><span class="lineNum">     274</span>                 :<span class="tlaGNC">          68 :         t.UserLabel = lipgloss.NewStyle().</span></span>
+<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaGNC">          68 :                 Bold(true).</span></span>
+<span id="L276"><span class="lineNum">     276</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Primary)</span></span>
+<span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaGNC">          68 :         t.ToolRunning = lipgloss.NewStyle().</span></span>
+<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Secondary).</span></span>
+<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC">          68 :                 Bold(true)</span></span>
+<span id="L281"><span class="lineNum">     281</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaGNC">          68 :         t.ToolSuccess = lipgloss.NewStyle().</span></span>
+<span id="L283"><span class="lineNum">     283</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Success)</span></span>
+<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaGNC">          68 :         t.ToolError = lipgloss.NewStyle().</span></span>
+<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Error)</span></span>
+<span id="L287"><span class="lineNum">     287</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC">          68 :         t.ToolCanceled = lipgloss.NewStyle().</span></span>
+<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Muted)</span></span>
+<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaGNC">          68 :         t.Dim = lipgloss.NewStyle().</span></span>
+<span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaGNC">          68 :                 Foreground(t.Muted)</span></span>
+<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC">          68 : </span></span>
+<span id="L294"><span class="lineNum">     294</span>                 :<span class="tlaGNC">          68 :         return t</span></span>
+<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">          68 : }</span></span>
+<span id="L296"><span class="lineNum">     296</span>                 :             : </span>
+<span id="L297"><span class="lineNum">     297</span>                 :             : // NoColorTheme returns a minimal theme without colors (for NO_COLOR / TERM=dumb).</span>
+<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaGNC">          66 : func NoColorTheme() *Theme {</span></span>
+<span id="L299"><span class="lineNum">     299</span>                 :<span class="tlaGNC">          66 :         t := &amp;Theme{NoColor: true, MarkdownProfile: &quot;notty&quot;}</span></span>
+<span id="L300"><span class="lineNum">     300</span>                 :<span class="tlaGNC">          66 :         noStyle := lipgloss.NewStyle()</span></span>
+<span id="L301"><span class="lineNum">     301</span>                 :<span class="tlaGNC">          66 :         t.HeaderStyle = noStyle.Bold(true)</span></span>
+<span id="L302"><span class="lineNum">     302</span>                 :<span class="tlaGNC">          66 :         t.UserBlock = noStyle</span></span>
+<span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaGNC">          66 :         t.AssistantBlock = noStyle</span></span>
+<span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaGNC">          66 :         t.ToolBlock = noStyle</span></span>
+<span id="L305"><span class="lineNum">     305</span>                 :<span class="tlaGNC">          66 :         t.NoticeBlock = noStyle.Italic(true)</span></span>
+<span id="L306"><span class="lineNum">     306</span>                 :<span class="tlaGNC">          66 :         t.StreamBlock = noStyle</span></span>
+<span id="L307"><span class="lineNum">     307</span>                 :<span class="tlaGNC">          66 :         t.InterruptedBlock = noStyle.Italic(true)</span></span>
+<span id="L308"><span class="lineNum">     308</span>                 :<span class="tlaGNC">          66 :         t.StatusBarIdle = noStyle</span></span>
+<span id="L309"><span class="lineNum">     309</span>                 :<span class="tlaGNC">          66 :         t.StatusBarBusy = noStyle.Bold(true)</span></span>
+<span id="L310"><span class="lineNum">     310</span>                 :<span class="tlaGNC">          66 :         t.StatusBarError = noStyle.Bold(true)</span></span>
+<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC">          66 :         t.Composer = noStyle</span></span>
+<span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC">          66 :         t.ApprovalBorder = noStyle</span></span>
+<span id="L313"><span class="lineNum">     313</span>                 :<span class="tlaGNC">          66 :         t.ApprovalTitle = noStyle.Bold(true)</span></span>
+<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">          66 :         t.ApprovalKey = noStyle.Bold(true)</span></span>
+<span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaGNC">          66 :         t.ApprovalOption = noStyle</span></span>
+<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaGNC">          66 :         t.ApprovalSelected = noStyle.Bold(true).Reverse(true)</span></span>
+<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaGNC">          66 :         t.SpinnerStyle = noStyle</span></span>
+<span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaGNC">          66 :         t.DialogLabel = noStyle</span></span>
+<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">          66 :         t.DialogBorder = noStyle</span></span>
+<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC">          66 :         t.DialogTitle = noStyle.Bold(true)</span></span>
+<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">          66 :         t.UserLabel = noStyle.Bold(true)</span></span>
+<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC">          66 :         t.ToolRunning = noStyle.Bold(true)</span></span>
+<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">          66 :         t.ToolSuccess = noStyle</span></span>
+<span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaGNC">          66 :         t.ToolError = noStyle.Bold(true)</span></span>
+<span id="L325"><span class="lineNum">     325</span>                 :<span class="tlaGNC">          66 :         t.ToolCanceled = noStyle</span></span>
+<span id="L326"><span class="lineNum">     326</span>                 :<span class="tlaGNC">          66 :         t.Dim = noStyle</span></span>
+<span id="L327"><span class="lineNum">     327</span>                 :<span class="tlaGNC">          66 :         t.ReasoningBlock = noStyle</span></span>
+<span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaGNC">          66 :         return t</span></span>
+<span id="L329"><span class="lineNum">     329</span>                 :<span class="tlaGNC">          66 : }</span></span>
+<span id="L330"><span class="lineNum">     330</span>                 :             : </span>
+<span id="L331"><span class="lineNum">     331</span>                 :             : // gradientColors interpolates n colors from a to b in RGB space, returning</span>
+<span id="L332"><span class="lineNum">     332</span>                 :             : // nil when either endpoint is not a #rrggbb color (e.g. the no-color</span>
+<span id="L333"><span class="lineNum">     333</span>                 :             : // theme), so callers can fall back to a single accent or none at all.</span>
+<span id="L334"><span class="lineNum">     334</span>                 :<span class="tlaGNC">          17 : func gradientColors(a, b lipgloss.Color, n int) []lipgloss.Color {</span></span>
+<span id="L335"><span class="lineNum">     335</span>                 :<span class="tlaGNC">          17 :         if n &lt;= 0 {</span></span>
+<span id="L336"><span class="lineNum">     336</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil</span></span>
+<span id="L337"><span class="lineNum">     337</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L338"><span class="lineNum">     338</span>                 :<span class="tlaGNC tlaBgGNC">          17 :         ra, ga, ba, okA := parseHexColor(string(a))</span></span>
+<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaGNC">          17 :         rb, gb, bb, okB := parseHexColor(string(b))</span></span>
+<span id="L340"><span class="lineNum">     340</span>                 :<span class="tlaGNC">          17 :         if !okA || !okB {</span></span>
+<span id="L341"><span class="lineNum">     341</span>                 :<span class="tlaGNC">           9 :                 return nil</span></span>
+<span id="L342"><span class="lineNum">     342</span>                 :<span class="tlaGNC">           9 :         }</span></span>
+<span id="L343"><span class="lineNum">     343</span>                 :<span class="tlaGNC">           8 :         if n == 1 {</span></span>
+<span id="L344"><span class="lineNum">     344</span>                 :<span class="tlaGNC">           1 :                 return []lipgloss.Color{a}</span></span>
+<span id="L345"><span class="lineNum">     345</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L346"><span class="lineNum">     346</span>                 :<span class="tlaGNC">           7 :         out := make([]lipgloss.Color, n)</span></span>
+<span id="L347"><span class="lineNum">     347</span>                 :<span class="tlaGNC">          42 :         for i := 0; i &lt; n; i++ {</span></span>
+<span id="L348"><span class="lineNum">     348</span>                 :<span class="tlaGNC">          42 :                 t := float64(i) / float64(n-1)</span></span>
+<span id="L349"><span class="lineNum">     349</span>                 :<span class="tlaGNC">          42 :                 out[i] = lipgloss.Color(fmt.Sprintf(&quot;#%02x%02x%02x&quot;,</span></span>
+<span id="L350"><span class="lineNum">     350</span>                 :<span class="tlaGNC">          42 :                         lerpChannel(ra, rb, t), lerpChannel(ga, gb, t), lerpChannel(ba, bb, t)))</span></span>
+<span id="L351"><span class="lineNum">     351</span>                 :<span class="tlaGNC">          42 :         }</span></span>
+<span id="L352"><span class="lineNum">     352</span>                 :<span class="tlaGNC">           7 :         return out</span></span>
+<span id="L353"><span class="lineNum">     353</span>                 :             : }</span>
+<span id="L354"><span class="lineNum">     354</span>                 :             : </span>
+<span id="L355"><span class="lineNum">     355</span>                 :<span class="tlaGNC">          34 : func parseHexColor(s string) (r, g, b int, ok bool) {</span></span>
+<span id="L356"><span class="lineNum">     356</span>                 :<span class="tlaGNC">          34 :         if len(s) != 7 || s[0] != '#' {</span></span>
+<span id="L357"><span class="lineNum">     357</span>                 :<span class="tlaGNC">          17 :                 return 0, 0, 0, false</span></span>
+<span id="L358"><span class="lineNum">     358</span>                 :<span class="tlaGNC">          17 :         }</span></span>
+<span id="L359"><span class="lineNum">     359</span>                 :<span class="tlaGNC">          17 :         rv, errR := strconv.ParseUint(s[1:3], 16, 8)</span></span>
+<span id="L360"><span class="lineNum">     360</span>                 :<span class="tlaGNC">          17 :         gv, errG := strconv.ParseUint(s[3:5], 16, 8)</span></span>
+<span id="L361"><span class="lineNum">     361</span>                 :<span class="tlaGNC">          17 :         bv, errB := strconv.ParseUint(s[5:7], 16, 8)</span></span>
+<span id="L362"><span class="lineNum">     362</span>                 :<span class="tlaGNC">          17 :         if errR != nil || errG != nil || errB != nil {</span></span>
+<span id="L363"><span class="lineNum">     363</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return 0, 0, 0, false</span></span>
+<span id="L364"><span class="lineNum">     364</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L365"><span class="lineNum">     365</span>                 :<span class="tlaGNC tlaBgGNC">          17 :         return int(rv), int(gv), int(bv), true</span></span>
+<span id="L366"><span class="lineNum">     366</span>                 :             : }</span>
+<span id="L367"><span class="lineNum">     367</span>                 :             : </span>
+<span id="L368"><span class="lineNum">     368</span>                 :<span class="tlaGNC">         126 : func lerpChannel(a, b int, t float64) int {</span></span>
+<span id="L369"><span class="lineNum">     369</span>                 :<span class="tlaGNC">         126 :         return int(math.Round(float64(a) + float64(b-a)*t))</span></span>
+<span id="L370"><span class="lineNum">     370</span>                 :<span class="tlaGNC">         126 : }</span></span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

@@ -1,0 +1,305 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - ui/go/pl/loom/internal/ui/keymap.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">ui/go/pl/loom/internal/ui</a> - keymap.go<span style="font-size: 80%;"> (source / <a href="keymap.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">97.3&nbsp;%</td>
+            <td class="headerCovTableEntry">74</td>
+            <td class="headerCovTableEntry">72</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-08-18 21:30:31</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/07/31</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : package ui</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : import (</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             :         &quot;fmt&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             :         &quot;sort&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             :         &quot;strings&quot;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : </span>
+<span id="L25"><span class="lineNum">      25</span>                 :             :         tea &quot;github.com/charmbracelet/bubbletea&quot;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : )</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : </span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : // KeyContext is the UI context a key binding is active in. Contexts are</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : // coarser than Mode: the three picker modes share ContextPicker.</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : // See docs/VIM_UI_DESIGN.md §5.</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : type KeyContext string</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : </span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : const (</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             :         ContextChat   KeyContext = &quot;chat&quot;</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :         ContextPicker KeyContext = &quot;picker&quot;</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             : )</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : </span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : // Action is a bindable abstract action. Handlers own the action's</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             : // semantics; the binding table only decides which key triggers it.</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             : type Action string</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             : </span>
+<span id="L42"><span class="lineNum">      42</span>                 :             : const (</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :         // ContextChat: global view actions. Structural keys interleaved with</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :         // composer editing (Enter, Esc, arrows, Tab, Ctrl+C/D) stay hardcoded</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :         // by design (docs/VIM_UI_DESIGN.md §5.4).</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :         ActionToggleReasoning  Action = &quot;toggle_reasoning&quot;</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             :         ActionToggleToolOutput Action = &quot;toggle_tool_output&quot;</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             :         ActionToggleAllTools   Action = &quot;toggle_all_tools&quot;</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :         ActionTogglePlan       Action = &quot;toggle_plan&quot;</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :         ActionSearchTranscript Action = &quot;search_transcript&quot;</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :         ActionViewSubagent     Action = &quot;view_subagent&quot;</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             :         ActionCopyLastReply    Action = &quot;copy_last_reply&quot;</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             :         ActionJumpToBottom     Action = &quot;jump_to_bottom&quot;</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :         ActionPasteImage       Action = &quot;paste_image&quot;</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             :         // ActionQueueFollowup submits the composer draft into the next-turn</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             :         // queue: it runs as its own turn after the busy one, instead of</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             :         // steering into it (deepseek-harness followup semantics).</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             :         ActionQueueFollowup Action = &quot;queue_followup&quot;</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             : </span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :         // ContextPicker: keys available in both finder modes (insert and</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :         // normal). Mode-specific runes (j/k/g/G/q/i in normal mode) are</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             :         // hardcoded vim semantics and stay out of the table.</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :         ActionCursorUp   Action = &quot;cursor_up&quot;</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :         ActionCursorDown Action = &quot;cursor_down&quot;</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :         ActionConfirm    Action = &quot;confirm&quot;</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             :         ActionClose      Action = &quot;close&quot;</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             : )</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             : </span>
+<span id="L69"><span class="lineNum">      69</span>                 :             : // defaultBindings lists every bindable action with its default keys, in</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             : // display order. It is the single source of truth for both the default</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             : // keymap and override validation: an action absent here is unknown to</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             : // the configuration layer.</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : var defaultBindings = map[KeyContext][]struct {</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             :         action Action</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             :         keys   []string</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             : }{</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :         ContextChat: {</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             :                 {ActionToggleReasoning, []string{&quot;ctrl+r&quot;}},</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             :                 {ActionToggleToolOutput, []string{&quot;ctrl+e&quot;}},</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             :                 {ActionToggleAllTools, []string{&quot;ctrl+o&quot;}},</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             :                 {ActionTogglePlan, []string{&quot;ctrl+t&quot;}},</span>
+<span id="L82"><span class="lineNum">      82</span>                 :             :                 {ActionSearchTranscript, []string{&quot;ctrl+f&quot;}},</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             :                 {ActionViewSubagent, []string{&quot;ctrl+g&quot;}},</span>
+<span id="L84"><span class="lineNum">      84</span>                 :             :                 {ActionCopyLastReply, []string{&quot;ctrl+y&quot;}},</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             :                 {ActionJumpToBottom, []string{&quot;ctrl+end&quot;}},</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             :                 {ActionPasteImage, []string{&quot;ctrl+v&quot;}},</span>
+<span id="L87"><span class="lineNum">      87</span>                 :             :                 {ActionQueueFollowup, []string{&quot;ctrl+n&quot;}},</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             :         },</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             :         ContextPicker: {</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             :                 {ActionCursorUp, []string{&quot;up&quot;, &quot;ctrl+k&quot;}},</span>
+<span id="L91"><span class="lineNum">      91</span>                 :             :                 {ActionCursorDown, []string{&quot;down&quot;, &quot;ctrl+j&quot;}},</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             :                 {ActionConfirm, []string{&quot;enter&quot;}},</span>
+<span id="L93"><span class="lineNum">      93</span>                 :             :                 {ActionClose, []string{&quot;esc&quot;}},</span>
+<span id="L94"><span class="lineNum">      94</span>                 :             :         },</span>
+<span id="L95"><span class="lineNum">      95</span>                 :             : }</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             : </span>
+<span id="L97"><span class="lineNum">      97</span>                 :             : // Keymap resolves keys to actions per context. The zero value is empty;</span>
+<span id="L98"><span class="lineNum">      98</span>                 :             : // use DefaultKeymap for the built-in bindings.</span>
+<span id="L99"><span class="lineNum">      99</span>                 :             : type Keymap struct {</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             :         // bindings[context][keyString] = action; keyString is bubbletea's</span>
+<span id="L101"><span class="lineNum">     101</span>                 :             :         // canonical key name (tea.KeyMsg.String()).</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             :         bindings map[KeyContext]map[string]Action</span>
+<span id="L103"><span class="lineNum">     103</span>                 :             : }</span>
+<span id="L104"><span class="lineNum">     104</span>                 :             : </span>
+<span id="L105"><span class="lineNum">     105</span>                 :             : // DefaultKeymap returns the built-in bindings, which match the</span>
+<span id="L106"><span class="lineNum">     106</span>                 :             : // pre-keymap hardcoded behavior exactly.</span>
+<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC tlaBgGNC">          76 : func DefaultKeymap() Keymap {</span></span>
+<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">          76 :         bindings := make(map[KeyContext]map[string]Action, len(defaultBindings))</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">         152 :         for ctx, entries := range defaultBindings {</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">         152 :                 bindings[ctx] = make(map[string]Action)</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">        1064 :                 for _, e := range entries {</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">        1216 :                         for _, key := range e.keys {</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">        1216 :                                 bindings[ctx][normalizeKeyName(key)] = e.action</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">        1216 :                         }</span></span>
+<span id="L115"><span class="lineNum">     115</span>                 :             :                 }</span>
+<span id="L116"><span class="lineNum">     116</span>                 :             :         }</span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">          76 :         return Keymap{bindings: bindings}</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :             : }</span>
+<span id="L119"><span class="lineNum">     119</span>                 :             : </span>
+<span id="L120"><span class="lineNum">     120</span>                 :             : // Lookup reports the action bound to msg in ctx, if any.</span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">          81 : func (k Keymap) Lookup(ctx KeyContext, msg tea.KeyMsg) (Action, bool) {</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">          81 :         keys, ok := k.bindings[ctx]</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">          81 :         if !ok {</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;&quot;, false</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC tlaBgGNC">          81 :         action, ok := keys[normalizeKeyName(msg.String())]</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">          81 :         return action, ok</span></span>
+<span id="L128"><span class="lineNum">     128</span>                 :             : }</span>
+<span id="L129"><span class="lineNum">     129</span>                 :             : </span>
+<span id="L130"><span class="lineNum">     130</span>                 :             : // WithOverrides returns a copy of the keymap with user overrides applied</span>
+<span id="L131"><span class="lineNum">     131</span>                 :             : // (docs/VIM_UI_DESIGN.md §5.2). overrides is keyed by context, then</span>
+<span id="L132"><span class="lineNum">     132</span>                 :             : // action, with the replacement key as value. Unknown contexts, unknown</span>
+<span id="L133"><span class="lineNum">     133</span>                 :             : // actions, empty keys, and conflicts with an already-bound key are</span>
+<span id="L134"><span class="lineNum">     134</span>                 :             : // ignored with a warning each; processing is deterministic (sorted by</span>
+<span id="L135"><span class="lineNum">     135</span>                 :             : // context and action) so the same input always yields the same result.</span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">          14 : func (k Keymap) WithOverrides(overrides map[string]map[string]string) (Keymap, []string) {</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">          14 :         out := Keymap{bindings: make(map[KeyContext]map[string]Action, len(k.bindings))}</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">          28 :         for ctx, keys := range k.bindings {</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">          28 :                 out.bindings[ctx] = make(map[string]Action, len(keys))</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">         224 :                 for key, action := range keys {</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">         224 :                         out.bindings[ctx][key] = action</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">         224 :                 }</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :             :         }</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             : </span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">          14 :         var warnings []string</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">          15 :         for _, ctxName := range sortedKeys(overrides) {</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">          15 :                 ctx := KeyContext(ctxName)</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">          15 :                 entries, known := defaultBindings[ctx]</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">          15 :                 if !known {</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">           1 :                         warnings = append(warnings, fmt.Sprintf(&quot;unknown keymap context %q (ignored)&quot;, ctxName))</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">           1 :                         continue</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :             :                 }</span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">          14 :                 actions := overrides[ctxName]</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">          37 :                 for _, actionName := range sortedKeys(actions) {</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">          37 :                         action := Action(actionName)</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">          37 :                         if !actionKnown(entries, action) {</span></span>
+<span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC">           1 :                                 warnings = append(warnings, fmt.Sprintf(&quot;unknown keymap action %q in context %q (ignored)&quot;, actionName, ctxName))</span></span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">           1 :                                 continue</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :             :                         }</span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">          36 :                         key := normalizeKeyName(actions[actionName])</span></span>
+<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">          36 :                         if key == &quot;&quot; {</span></span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">           1 :                                 warnings = append(warnings, fmt.Sprintf(&quot;empty key for action %q in context %q (ignored)&quot;, actionName, ctxName))</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">           1 :                                 continue</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :             :                         }</span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">          35 :                         table := out.bindings[ctx]</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">          35 :                         // A key owned by another action stays with the incumbent; the</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">          35 :                         // override is dropped and the action keeps its old binding.</span></span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">          35 :                         if owner, taken := table[key]; taken &amp;&amp; owner != action {</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">          12 :                                 warnings = append(warnings, fmt.Sprintf(</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">          12 :                                         &quot;key %q in context %q already bound to %q; override for %q ignored&quot;,</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">          12 :                                         key, ctxName, owner, actionName,</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">          12 :                                 ))</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">          12 :                                 continue</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :             :                         }</span>
+<span id="L175"><span class="lineNum">     175</span>                 :             :                         // Detach the action from its previous key(s), then bind the</span>
+<span id="L176"><span class="lineNum">     176</span>                 :             :                         // new one.</span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">         230 :                         for k2, a2 := range table {</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">         230 :                                 if a2 == action {</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">          23 :                                         delete(table, k2)</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">          23 :                                 }</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :             :                         }</span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">          23 :                         table[key] = action</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :             :                 }</span>
+<span id="L184"><span class="lineNum">     184</span>                 :             :         }</span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">          14 :         return out, warnings</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :             : }</span>
+<span id="L187"><span class="lineNum">     187</span>                 :             : </span>
+<span id="L188"><span class="lineNum">     188</span>                 :             : // normalizeKeyName canonicalizes a key name for table lookup. Modifier</span>
+<span id="L189"><span class="lineNum">     189</span>                 :             : // combinations (containing &quot;+&quot;) are lowercased so &quot;Ctrl+R&quot; and &quot;ctrl+r&quot;</span>
+<span id="L190"><span class="lineNum">     190</span>                 :             : // are the same binding; single characters keep their case because &quot;Q&quot;</span>
+<span id="L191"><span class="lineNum">     191</span>                 :             : // and &quot;q&quot; are distinct keys.</span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">        1338 : func normalizeKeyName(key string) string {</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">        1338 :         key = strings.TrimSpace(key)</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">        1338 :         if strings.Contains(key, &quot;+&quot;) {</span></span>
+<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">         971 :                 return strings.ToLower(key)</span></span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">         971 :         }</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">         367 :         return key</span></span>
+<span id="L198"><span class="lineNum">     198</span>                 :             : }</span>
+<span id="L199"><span class="lineNum">     199</span>                 :             : </span>
+<span id="L200"><span class="lineNum">     200</span>                 :             : func actionKnown(entries []struct {</span>
+<span id="L201"><span class="lineNum">     201</span>                 :             :         action Action</span>
+<span id="L202"><span class="lineNum">     202</span>                 :             :         keys   []string</span>
+<span id="L203"><span class="lineNum">     203</span>                 :             : }, action Action,</span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">          37 : ) bool {</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">         133 :         for _, e := range entries {</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">         133 :                 if e.action == action {</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">          36 :                         return true</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">          36 :                 }</span></span>
+<span id="L209"><span class="lineNum">     209</span>                 :             :         }</span>
+<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaGNC">           1 :         return false</span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :             : }</span>
+<span id="L212"><span class="lineNum">     212</span>                 :             : </span>
+<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaGNC">          28 : func sortedKeys[V any](m map[string]V) []string {</span></span>
+<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">          28 :         keys := make([]string, 0, len(m))</span></span>
+<span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaGNC">          52 :         for k := range m {</span></span>
+<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">          52 :                 keys = append(keys, k)</span></span>
+<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">          52 :         }</span></span>
+<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaGNC">          28 :         sort.Strings(keys)</span></span>
+<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaGNC">          28 :         return keys</span></span>
+<span id="L220"><span class="lineNum">     220</span>                 :             : }</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

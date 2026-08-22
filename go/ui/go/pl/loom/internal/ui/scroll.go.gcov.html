@@ -1,0 +1,190 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - ui/go/pl/loom/internal/ui/scroll.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">ui/go/pl/loom/internal/ui</a> - scroll.go<span style="font-size: 80%;"> (source / <a href="scroll.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">93.8&nbsp;%</td>
+            <td class="headerCovTableEntry">32</td>
+            <td class="headerCovTableEntry">30</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-08-18 21:30:31</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/07/31</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : package ui</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : import (</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             :         &quot;strings&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : )</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : </span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : // mouseWheelDelta is the number of lines one wheel notch scrolls</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : // (matches the bubbles/viewport default).</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : const mouseWheelDelta = 3</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : </span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : // lineView is a minimal scrollable window over a pre-split line slice.</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : // It replaces bubbles/viewport with identical scroll semantics</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : // (SetContent/SetYOffset/LineUp/LineDown/GotoBottom/AtBottom clamping)</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : // but a cheap View: bubbles re-renders every visible line through</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : // lipgloss's Width/Height/MaxWidth reflow machinery on *every frame*,</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : // which is O(visible lines × cell processing) at up to 60fps. lineView</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : // splits content once per rebuild (syncTranscript) and View only slices,</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             : // truncates, and pads.</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             : type lineView struct {</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             :         lines   []string</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :         YOffset int</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :         Width   int</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :         Height  int</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             : }</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             : </span>
+<span id="L43"><span class="lineNum">      43</span>                 :             : // SetContent replaces the content, normalizing line endings. The scroll</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             : // offset is preserved unless it now points past the end (matching</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             : // bubbles' SetContent).</span>
+<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC tlaBgGNC">          19 : func (v *lineView) SetContent(s string) {</span></span>
+<span id="L47"><span class="lineNum">      47</span>                 :<span class="tlaGNC">          19 :         s = strings.ReplaceAll(s, &quot;\r\n&quot;, &quot;\n&quot;)</span></span>
+<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">          19 :         v.lines = strings.Split(s, &quot;\n&quot;)</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">          19 :         if v.YOffset &gt; len(v.lines)-1 {</span></span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">           1 :                 v.GotoBottom()</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :             : }</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             : </span>
+<span id="L54"><span class="lineNum">      54</span>                 :             : // SetLines replaces the content with a pre-split line slice, preserving</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             : // the scroll offset like SetContent. The incremental transcript sync</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : // splices line slices directly and hands them over here — no join, no</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : // re-split.</span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">         278 : func (v *lineView) SetLines(lines []string) {</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">         278 :         v.lines = lines</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">         278 :         if v.YOffset &gt; len(v.lines)-1 {</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 v.GotoBottom()</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :             : }</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             : </span>
+<span id="L65"><span class="lineNum">      65</span>                 :             : // TotalLineCount returns the number of content lines.</span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC tlaBgGNC">          10 : func (v lineView) TotalLineCount() int { return len(v.lines) }</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :             : </span>
+<span id="L68"><span class="lineNum">      68</span>                 :             : // maxYOffset is the largest legal scroll offset: the last line at the</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             : // bottom of the window, or 0 when the content fits entirely.</span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">         436 : func (v lineView) maxYOffset() int { return max(0, len(v.lines)-v.Height) }</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :             : </span>
+<span id="L72"><span class="lineNum">      72</span>                 :             : // AtBottom reports whether the view is pinned to the content tail.</span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">          63 : func (v lineView) AtBottom() bool { return v.YOffset &gt;= v.maxYOffset() }</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : </span>
+<span id="L75"><span class="lineNum">      75</span>                 :             : // SetYOffset sets the scroll offset, clamped to the legal range.</span>
+<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">          37 : func (v *lineView) SetYOffset(n int) { v.YOffset = min(max(n, 0), v.maxYOffset()) }</span></span>
+<span id="L77"><span class="lineNum">      77</span>                 :             : </span>
+<span id="L78"><span class="lineNum">      78</span>                 :             : // LineUp scrolls n lines toward the top (clamped).</span>
+<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">           9 : func (v *lineView) LineUp(n int) { v.SetYOffset(v.YOffset - n) }</span></span>
+<span id="L80"><span class="lineNum">      80</span>                 :             : </span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : // LineDown scrolls n lines toward the bottom (clamped).</span>
+<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">          22 : func (v *lineView) LineDown(n int) { v.SetYOffset(v.YOffset + n) }</span></span>
+<span id="L83"><span class="lineNum">      83</span>                 :             : </span>
+<span id="L84"><span class="lineNum">      84</span>                 :             : // GotoBottom pins the view to the content tail.</span>
+<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">         301 : func (v *lineView) GotoBottom() { v.YOffset = v.maxYOffset() }</span></span>
+<span id="L86"><span class="lineNum">      86</span>                 :             : </span>
+<span id="L87"><span class="lineNum">      87</span>                 :             : // View renders the visible window: the Height lines starting at YOffset,</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             : // each truncated to the view width (a long line must never soft-wrap and</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             : // desync the inline renderer), padded with blanks to exactly Height</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             : // lines so the frame height is stable regardless of content length.</span>
+<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">          37 : func (v lineView) View() string {</span></span>
+<span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaGNC">          37 :         if v.Height &lt;= 0 || len(v.lines) == 0 {</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">           2 :                 return &quot;&quot;</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">          35 :         top := min(max(v.YOffset, 0), v.maxYOffset())</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">          35 :         bottom := min(top+v.Height, len(v.lines))</span></span>
+<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">          35 :         out := make([]string, 0, v.Height)</span></span>
+<span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC">         143 :         for _, line := range v.lines[top:bottom] {</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">         143 :                 out = append(out, truncateANSI(line, v.Width))</span></span>
+<span id="L100"><span class="lineNum">     100</span>                 :<span class="tlaGNC">         143 :         }</span></span>
+<span id="L101"><span class="lineNum">     101</span>                 :<span class="tlaGNC">         838 :         for len(out) &lt; v.Height {</span></span>
+<span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaGNC">         838 :                 out = append(out, &quot;&quot;)</span></span>
+<span id="L103"><span class="lineNum">     103</span>                 :<span class="tlaGNC">         838 :         }</span></span>
+<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaGNC">          35 :         return strings.Join(out, &quot;\n&quot;)</span></span>
+<span id="L105"><span class="lineNum">     105</span>                 :             : }</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

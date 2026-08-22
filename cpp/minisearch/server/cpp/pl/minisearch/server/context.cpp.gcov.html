@@ -1,0 +1,219 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - minisearch/server/cpp/pl/minisearch/server/context.cpp</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">minisearch/server/cpp/pl/minisearch/server</a> - context.cpp<span style="font-size: 80%;"> (source / <a href="context.cpp.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryLo">56.4&nbsp;%</td>
+            <td class="headerCovTableEntry">55</td>
+            <td class="headerCovTableEntry">31</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-08-19 22:54:11</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryLo">71.4&nbsp;%</td>
+            <td class="headerCovTableEntry">7</td>
+            <td class="headerCovTableEntry">5</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryLo">24.0&nbsp;%</td>
+            <td class="headerCovTableEntry">100</td>
+            <td class="headerCovTableEntry">24</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/08/17</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : #include &quot;cpp/pl/minisearch/server/context.h&quot;</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : #include &lt;filesystem&gt;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : #include &lt;mutex&gt;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : </span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : #include &quot;cpp/pl/minisearch/core/schema.h&quot;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : </span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : namespace pl::minisearch::server {</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : </span>
+<span id="L27"><span class="lineNum">      27</span>                 :<span class="tlaGNC tlaBgGNC">          24 : TenantContext::TenantContext(std::string data_dir, std::string index_type)</span></span>
+<span id="L28"><span class="lineNum">      28</span>                 :<span class="tlaGNC">          24 :     : data_dir_(std::move(data_dir)), index_type_(std::move(index_type)) {}</span></span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : </span>
+<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC">          77 : std::shared_ptr&lt;CollectionRegistry&gt; TenantContext::Registry(const std::string&amp; tenant) {</span></span>
+<span id="L31"><span class="lineNum">      31</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 77 times"> + </span>]:<span class="tlaGNC">          77 :     if (!core::IsValidResourceName(tenant)) {</span></span>
+<span id="L32"><span class="lineNum">      32</span>                 :             :         return nullptr;</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             :     }</span>
+<span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaGNC">          77 :     std::lock_guard&lt;std::mutex&gt; lock(mu_);</span></span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :     auto it = registries_.find(tenant);</span>
+<span id="L36"><span class="lineNum">      36</span>         [<span class="tlaGBC" title="Branch 0 was taken 60 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 17 times"> + </span>]:<span class="tlaGNC">          77 :     if (it != registries_.end()) {</span></span>
+<span id="L37"><span class="lineNum">      37</span>                 :             :         return it-&gt;second;</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :     }</span>
+<span id="L39"><span class="lineNum">      39</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 17 times"> + </span>]:<span class="tlaGNC">          17 :     std::unique_ptr&lt;storage::CheckpointStore&gt; store;</span></span>
+<span id="L40"><span class="lineNum">      40</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 17 times"> + </span>]:<span class="tlaGNC">          17 :     if (!data_dir_.empty()) {</span></span>
+<span id="L41"><span class="lineNum">      41</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC tlaBgUNC">           0 :         store = std::make_unique&lt;storage::CheckpointStore&gt;(data_dir_ + &quot;/&quot; + tenant);</span></span>
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span>]
+<span id="L42"><span class="lineNum">      42</span>                 :             :     }</span>
+<span id="L43"><span class="lineNum">      43</span>         [<span class="tlaGBC" title="Branch 0 was taken 17 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          17 :     auto registry = std::make_shared&lt;CollectionRegistry&gt;(std::move(store), index_type_);</span></span>
+<span id="L44"><span class="lineNum">      44</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 17 times"> + </span>]:<span class="tlaGNC">          17 :     if (!data_dir_.empty()) {</span></span>
+<span id="L45"><span class="lineNum">      45</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         registry-&gt;LoadFromDisk();</span></span>
+<span id="L46"><span class="lineNum">      46</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC">           0 :         registry-&gt;StartCheckpointLoop(std::make_shared&lt;std::atomic&lt;bool&gt;&gt;(false));</span></span>
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span>]
+<span id="L47"><span class="lineNum">      47</span>                 :             :     }</span>
+<span id="L48"><span class="lineNum">      48</span>         [<span class="tlaGBC" title="Branch 0 was taken 17 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          17 :     registries_[tenant] = registry;</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :     return registry;</span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">          17 : }</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :             : </span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaUNC tlaBgUNC">           0 : bool TenantContext::DropTenant(const std::string&amp; tenant) {</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaUNC">           0 :     std::lock_guard&lt;std::mutex&gt; lock(mu_);</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :     // registry 摘除后由引用计数决定析构时机：in-flight 请求持有的</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             :     // shared_ptr 使其（含 checkpoint 线程与 store）存活到请求结束。</span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaUNC">           0 :     const bool had = registries_.erase(tenant) &gt; 0;</span></span>
+<span id="L57"><span class="lineNum">      57</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (!had || data_dir_.empty()) {</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :             :         return had;</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             :     }</span>
+<span id="L60"><span class="lineNum">      60</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC">           0 :     storage::CheckpointStore store(data_dir_ + &quot;/&quot; + tenant);</span></span>
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span>]
+<span id="L61"><span class="lineNum">      61</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :     for (const auto&amp; name : store.ListCollections()) {</span></span>
+<span id="L62"><span class="lineNum">      62</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         store.Drop(name);</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaUNC">           0 :     }</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :     // 删除租户目录本身，避免重启后空目录被当成已存在租户重新加载</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :     std::error_code ec;</span>
+<span id="L66"><span class="lineNum">      66</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC">           0 :     std::filesystem::remove_all(data_dir_ + &quot;/&quot; + tenant, ec);</span></span>
+<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span><span class="tlaUNC" title="Branch 6 was not executed"> # </span><span class="tlaUNC" title="Branch 7 was not executed"> # </span>]
+<span id="L67"><span class="lineNum">      67</span>                 :             :     return true;</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             : }</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             : </span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC tlaBgGNC">           3 : bool TenantContext::HasTenant(const std::string&amp; tenant) const {</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">           3 :     std::lock_guard&lt;std::mutex&gt; lock(mu_);</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">           3 :     return registries_.count(tenant) &gt; 0;</span></span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : }</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : </span>
+<span id="L75"><span class="lineNum">      75</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           4 : CollectionRegistry::MoveResult TenantContext::MoveCollection(const std::string&amp; src,</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :             :                                                              const std::string&amp; dst,</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :                                                              const std::string&amp; name) {</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             :     CollectionRegistry::MoveResult result;</span>
+<span id="L79"><span class="lineNum">      79</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           4 :     if (src == dst) {</span></span>
+<span id="L80"><span class="lineNum">      80</span>                 :             :         result.error = &quot;source and target tenant are the same&quot;;</span>
+<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">           1 :         return result;</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :             :     }</span>
+<span id="L83"><span class="lineNum">      83</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     auto srcRegistry = Registry(src);</span></span>
+<span id="L84"><span class="lineNum">      84</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :     auto dstRegistry = Registry(dst);</span></span>
+<span id="L85"><span class="lineNum">      85</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :     if (srcRegistry == nullptr || dstRegistry == nullptr) {</span></span>
+<span id="L86"><span class="lineNum">      86</span>                 :             :         result.error = &quot;invalid tenant name&quot;;</span>
+<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return result;</span></span>
+<span id="L88"><span class="lineNum">      88</span>                 :             :     }</span>
+<span id="L89"><span class="lineNum">      89</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           3 :     return srcRegistry-&gt;MoveTo(*dstRegistry, name);</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :             : }</span>
+<span id="L91"><span class="lineNum">      91</span>                 :             : </span>
+<span id="L92"><span class="lineNum">      92</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 : size_t TenantContext::LoadExistingTenants() {</span></span>
+<span id="L93"><span class="lineNum">      93</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (data_dir_.empty()) {</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :             :         return 0;</span>
+<span id="L95"><span class="lineNum">      95</span>                 :             :     }</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             :     namespace fs = std::filesystem;</span>
+<span id="L97"><span class="lineNum">      97</span>                 :             :     std::error_code ec;</span>
+<span id="L98"><span class="lineNum">      98</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (!fs::is_directory(data_dir_, ec)) {</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :             :         return 0;</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             :     }</span>
+<span id="L101"><span class="lineNum">     101</span>                 :             :     size_t loaded = 0;</span>
+<span id="L102"><span class="lineNum">     102</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :     for (const auto&amp; entry : fs::directory_iterator(data_dir_, ec)) {</span></span>
+<span id="L103"><span class="lineNum">     103</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         if (!entry.is_directory()) {</span></span>
+<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaUNC">           0 :             continue;</span></span>
+<span id="L105"><span class="lineNum">     105</span>                 :             :         }</span>
+<span id="L106"><span class="lineNum">     106</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :         const std::string name = entry.path().filename().string();</span></span>
+<span id="L107"><span class="lineNum">     107</span>                 :             :         // auth/ 存放 console 用户与 key，不是租户</span>
+<span id="L108"><span class="lineNum">     108</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         if (name == &quot;auth&quot;) {</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :             :             continue;</span>
+<span id="L110"><span class="lineNum">     110</span>                 :             :         }</span>
+<span id="L111"><span class="lineNum">     111</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :         if (Registry(name) != nullptr) {</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaUNC">           0 :             ++loaded;</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :             :         }</span>
+<span id="L114"><span class="lineNum">     114</span>                 :             :     }</span>
+<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaUNC">           0 :     return loaded;</span></span>
+<span id="L116"><span class="lineNum">     116</span>                 :             : }</span>
+<span id="L117"><span class="lineNum">     117</span>                 :             : </span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC tlaBgGNC">           1 : std::vector&lt;TenantContext::TenantInfo&gt; TenantContext::Tenants() const {</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">           1 :     std::lock_guard&lt;std::mutex&gt; lock(mu_);</span></span>
+<span id="L120"><span class="lineNum">     120</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     std::vector&lt;TenantInfo&gt; out;</span></span>
+<span id="L121"><span class="lineNum">     121</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     out.reserve(registries_.size());</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :             :     // 锁序固定为 context -&gt; registry（registry 不会回调 context），无死锁。</span>
+<span id="L123"><span class="lineNum">     123</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           2 :     for (const auto&amp; [name, registry] : registries_) {</span></span>
+<span id="L124"><span class="lineNum">     124</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         const auto stats = registry-&gt;GetStats();</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">           1 :         out.push_back({name, stats.collections, stats.active_documents, stats.top_level_documents});</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :             :     }</span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">           1 :     return out;</span></span>
+<span id="L128"><span class="lineNum">     128</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           1 : }</span></span>
+<span id="L129"><span class="lineNum">     129</span>                 :             : </span>
+<span id="L130"><span class="lineNum">     130</span>                 :             : } // namespace pl::minisearch::server</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

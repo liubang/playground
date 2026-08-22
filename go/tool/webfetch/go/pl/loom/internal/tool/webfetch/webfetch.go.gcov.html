@@ -1,0 +1,671 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - tool/webfetch/go/pl/loom/internal/tool/webfetch/webfetch.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../../../index.html">top level</a> - <a href="index.html">tool/webfetch/go/pl/loom/internal/tool/webfetch</a> - webfetch.go<span style="font-size: 80%;"> (source / <a href="webfetch.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryMed">82.3&nbsp;%</td>
+            <td class="headerCovTableEntry">379</td>
+            <td class="headerCovTableEntry">312</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-08-18 21:30:31</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/07/24</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : // Package webfetch implements the web_fetch tool: read-only HTTP/HTTPS GET</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : // with SSRF protection, redirect bounding, size caps, HTML-to-markdown</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : // conversion, artifact overflow, and a short-lived response cache.</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : package webfetch</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : </span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : import (</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             :         &quot;context&quot;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             :         &quot;encoding/json&quot;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             :         &quot;errors&quot;</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             :         &quot;fmt&quot;</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             :         &quot;io&quot;</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             :         &quot;mime&quot;</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             :         &quot;net&quot;</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             :         &quot;net/http&quot;</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             :         &quot;net/netip&quot;</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             :         &quot;net/url&quot;</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             :         &quot;strings&quot;</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :         &quot;time&quot;</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :         &quot;unicode/utf8&quot;</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : </span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :         &quot;github.com/liubang/playground/go/pl/loom/internal/domain&quot;</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :         &quot;github.com/liubang/playground/go/pl/loom/internal/tool/toolkit&quot;</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             : )</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             : </span>
+<span id="L42"><span class="lineNum">      42</span>                 :             : const (</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :         defaultTimeoutMs    = 20000</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :         maxTimeoutMs        = 60000</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :         minMaxBytes         = 1024</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :         defaultMaxBytes     = 256 &lt;&lt; 10</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             :         maxOutputBytes      = 1 &lt;&lt; 20</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             :         hardFetchByteCap    = 10 &lt;&lt; 20</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :         maxRedirects        = 5</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :         dialTimeout         = 10 * time.Second</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :         userAgent           = &quot;loom-webfetch/0.1 (+https://github.com/liubang/playground)&quot;</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             :         cacheTTL            = 15 * time.Minute</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             :         cacheMaxEntries     = 64</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :         cacheMaxBodyBytes   = 1 &lt;&lt; 20</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             :         truncateBoundaryGap = 1024</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : )</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : </span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : var (</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             :         errBlockedAddress   = errors.New(&quot;destination address blocked by network policy&quot;)</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :         errTooManyRedirects = errors.New(&quot;too many redirects&quot;)</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :         errRedirectScheme   = errors.New(&quot;redirect to unsupported scheme&quot;)</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             :         errRedirectUserinfo = errors.New(&quot;redirect to URL with userinfo&quot;)</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             : )</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             : </span>
+<span id="L65"><span class="lineNum">      65</span>                 :             : type fetchArgs struct {</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             :         URL          string `json:&quot;url&quot;`</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             :         Format       string `json:&quot;format,omitempty&quot;`</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             :         MaxBytes     int    `json:&quot;max_bytes,omitempty&quot;`</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             :         TimeoutMs    int    `json:&quot;timeout_ms,omitempty&quot;`</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :         AllowPrivate bool   `json:&quot;allow_private,omitempty&quot;`</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             : }</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             : </span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : type fetchOutput struct {</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             :         URL         string              `json:&quot;url&quot;`</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             :         FinalURL    string              `json:&quot;final_url&quot;`</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             :         Status      int                 `json:&quot;status&quot;`</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :         ContentType string              `json:&quot;content_type&quot;`</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             :         Format      string              `json:&quot;format&quot;`</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             :         Bytes       int                 `json:&quot;bytes&quot;`</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             :         Truncated   bool                `json:&quot;truncated&quot;`</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             :         Cache       string              `json:&quot;cache&quot;`</span>
+<span id="L82"><span class="lineNum">      82</span>                 :             :         FetchedAt   time.Time           `json:&quot;fetched_at&quot;`</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             :         Content     string              `json:&quot;content&quot;`</span>
+<span id="L84"><span class="lineNum">      84</span>                 :             :         Artifact    *domain.ArtifactRef `json:&quot;artifact,omitempty&quot;`</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             : }</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             : </span>
+<span id="L87"><span class="lineNum">      87</span>                 :             : // WebFetchTool fetches web resources over HTTP(S) GET. A nil artifact store</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             : // disables overflow externalization (truncated content is then lost).</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             : type WebFetchTool struct {</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             :         base      baseTool</span>
+<span id="L91"><span class="lineNum">      91</span>                 :             :         artifacts domain.ArtifactStore</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             :         cache     *responseCache</span>
+<span id="L93"><span class="lineNum">      93</span>                 :             :         resolver  *net.Resolver</span>
+<span id="L94"><span class="lineNum">      94</span>                 :             :         now       func() time.Time</span>
+<span id="L95"><span class="lineNum">      95</span>                 :             : }</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             : </span>
+<span id="L97"><span class="lineNum">      97</span>                 :             : // NewWebFetchTool creates the web_fetch tool.</span>
+<span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC tlaBgGNC">          64 : func NewWebFetchTool(artifacts domain.ArtifactStore) (*WebFetchTool, error) {</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">          64 :         base, err := newBaseTool(domain.ToolDefinition{</span></span>
+<span id="L100"><span class="lineNum">     100</span>                 :<span class="tlaGNC">          64 :                 Name: &quot;web_fetch&quot;,</span></span>
+<span id="L101"><span class="lineNum">     101</span>                 :<span class="tlaGNC">          64 :                 Description: &quot;Fetch a web page or text resource via HTTP/HTTPS GET and return its content. &quot; +</span></span>
+<span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaGNC">          64 :                         &quot;Use it to look up information on the web (documentation, articles, public data such as weather or exchange rates): &quot; +</span></span>
+<span id="L103"><span class="lineNum">     103</span>                 :<span class="tlaGNC">          64 :                         &quot;it has direct network access and is NOT subject to the run_cmd sandbox restrictions. &quot; +</span></span>
+<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaGNC">          64 :                         &quot;You MUST use it when the answer depends on temporally unstable information (news, prices, weather, library/tool versions, current docs) or when the user explicitly asks to look something up. &quot; +</span></span>
+<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC">          64 :                         &quot;HTML is converted to markdown by default; use format=text for plain text or format=raw for the untouched body. &quot; +</span></span>
+<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">          64 :                         &quot;Private/loopback/link-local destinations are blocked unless allow_private=true. &quot; +</span></span>
+<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">          64 :                         &quot;Successful responses are cached for 15 minutes; large content is truncated with the full text stored as an artifact.&quot;,</span></span>
+<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">          64 :                 InputSchema:  json.RawMessage(`{&quot;type&quot;:&quot;object&quot;,&quot;additionalProperties&quot;:false,&quot;properties&quot;:{&quot;url&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:2048},&quot;format&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;enum&quot;:[&quot;markdown&quot;,&quot;text&quot;,&quot;raw&quot;]},&quot;max_bytes&quot;:{&quot;type&quot;:&quot;integer&quot;,&quot;minimum&quot;:1024,&quot;maximum&quot;:1048576},&quot;timeout_ms&quot;:{&quot;type&quot;:&quot;integer&quot;,&quot;minimum&quot;:1000,&quot;maximum&quot;:60000},&quot;allow_private&quot;:{&quot;type&quot;:&quot;boolean&quot;}},&quot;required&quot;:[&quot;url&quot;]}`),</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">          64 :                 OutputSchema: json.RawMessage(`{&quot;type&quot;:&quot;object&quot;,&quot;properties&quot;:{&quot;url&quot;:{&quot;type&quot;:&quot;string&quot;},&quot;final_url&quot;:{&quot;type&quot;:&quot;string&quot;},&quot;status&quot;:{&quot;type&quot;:&quot;integer&quot;},&quot;content_type&quot;:{&quot;type&quot;:&quot;string&quot;},&quot;format&quot;:{&quot;type&quot;:&quot;string&quot;},&quot;bytes&quot;:{&quot;type&quot;:&quot;integer&quot;},&quot;truncated&quot;:{&quot;type&quot;:&quot;boolean&quot;},&quot;cache&quot;:{&quot;type&quot;:&quot;string&quot;},&quot;fetched_at&quot;:{&quot;type&quot;:&quot;string&quot;},&quot;content&quot;:{&quot;type&quot;:&quot;string&quot;},&quot;artifact&quot;:{&quot;type&quot;:&quot;object&quot;}},&quot;required&quot;:[&quot;url&quot;,&quot;final_url&quot;,&quot;status&quot;,&quot;content_type&quot;,&quot;format&quot;,&quot;bytes&quot;,&quot;truncated&quot;,&quot;cache&quot;,&quot;fetched_at&quot;,&quot;content&quot;]}`),</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">          64 :                 Capabilities: []domain.Capability{domain.CapNetworkConnect},</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">          64 :                 Source:       domain.ToolSourceBuiltin,</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">          64 :         })</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">          64 :         if err != nil {</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
+<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC tlaBgGNC">          64 :         return &amp;WebFetchTool{</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">          64 :                 base:      base,</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">          64 :                 artifacts: artifacts,</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">          64 :                 cache:     newResponseCache(cacheMaxEntries, cacheMaxBodyBytes, cacheTTL, nil),</span></span>
+<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">          64 :                 resolver:  net.DefaultResolver,</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">          64 :                 now:       time.Now,</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">          64 :         }, nil</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :             : }</span>
+<span id="L124"><span class="lineNum">     124</span>                 :             : </span>
+<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">          58 : func (t *WebFetchTool) Definition() domain.ToolDefinition {</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">          58 :         return t.base.Def</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">          58 : }</span></span>
+<span id="L128"><span class="lineNum">     128</span>                 :             : </span>
+<span id="L129"><span class="lineNum">     129</span>                 :             : // ConcurrentSafe implements domain.ConcurrentSafely: fetches are</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             : // independent, the response cache is mutex-protected, and artifact</span>
+<span id="L131"><span class="lineNum">     131</span>                 :             : // staging uses per-call private files.</span>
+<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaUNC tlaBgUNC">           0 : func (t *WebFetchTool) ConcurrentSafe() bool { return true }</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :             : </span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC tlaBgGNC">          24 : func (t *WebFetchTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">          24 :         args, err := toolkit.DecodeStrict[fetchArgs](call.Arguments)</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">          24 :         if err != nil {</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">           1 :                 return domain.PreparedCall{}, err</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">          23 :         args, err = validateFetchArgs(args)</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          23 :         if err != nil {</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.PreparedCall{}, err</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :             : </span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC tlaBgGNC">          23 :         canonical, err := json.Marshal(args)</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">          23 :         if err != nil {</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, &quot;failed to encode canonical arguments&quot;, domain.WithCause(err))</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC tlaBgGNC">          23 :         approvalDesc := fmt.Sprintf(&quot;Fetch %s (GET)&quot;, args.URL)</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">          23 :         // Extract the canonical host for the typed URLRequest (signed by the</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">          23 :         // fingerprint below), so the policy layer evaluates domain rules from</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">          23 :         // the typed field instead of re-parsing the arguments</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">          23 :         // (docs/BROWSER_DESIGN.md §5.3). Only http/https URLs reach here</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">          23 :         // (validateFetchArgs rejects other schemes).</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">          23 :         var urlReq *domain.URLRequest</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">          23 :         if host, ok := domain.HostFromURL(args.URL); ok {</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">          23 :                 urlReq = &amp;domain.URLRequest{Host: host}</span></span>
+<span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC">          23 :         }</span></span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">          23 :         return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{ApprovalDesc: approvalDesc, URLRequest: urlReq})</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :             : }</span>
+<span id="L160"><span class="lineNum">     160</span>                 :             : </span>
+<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">          22 : func (t *WebFetchTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {</span></span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">          22 :         startedAt := time.Now()</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">          22 :         if err := t.base.VerifyPreparedCall(prepared); err != nil {</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">           1 :                 return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)</span></span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">          21 :         args, err := toolkit.DecodeStrict[fetchArgs](prepared.Call.Arguments)</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">          21 :         if err != nil {</span></span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :             : </span>
+<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC tlaBgGNC">          21 :         cacheKey := args.URL + &quot;\x1f&quot; + args.Format</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">          21 :         if entry, ok := t.cache.Get(cacheKey); ok {</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">           1 :                 return toolkit.SuccessResult(prepared.Call.ID, startedAt, t.buildOutput(ctx, args, entry, &quot;hit&quot;))</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :             : </span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">          20 :         entry, err := t.fetch(ctx, args)</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">          20 :         if err != nil {</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">           8 :                 return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">           8 :         }</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">          12 :         if entry.Status &gt;= 200 &amp;&amp; entry.Status &lt; 300 &amp;&amp; !entry.noStore {</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">          10 :                 t.cache.Put(cacheKey, entry.cachedResponse, len(entry.Body))</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">          10 :         }</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">          12 :         return toolkit.SuccessResult(prepared.Call.ID, startedAt, t.buildOutput(ctx, args, entry.cachedResponse, &quot;miss&quot;))</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :             : }</span>
+<span id="L185"><span class="lineNum">     185</span>                 :             : </span>
+<span id="L186"><span class="lineNum">     186</span>                 :             : // validateFetchArgs normalizes and validates the call. It is side-effect-free:</span>
+<span id="L187"><span class="lineNum">     187</span>                 :             : // only lexical URL checks plus a literal-IP private-address pre-check (DNS</span>
+<span id="L188"><span class="lineNum">     188</span>                 :             : // names are verified at dial time in Execute).</span>
+<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">          36 : func validateFetchArgs(args fetchArgs) (fetchArgs, error) {</span></span>
+<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">          36 :         if args.Format == &quot;&quot; {</span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">          32 :                 args.Format = &quot;markdown&quot;</span></span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">          32 :         }</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">          36 :         switch args.Format {</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">          35 :         case &quot;markdown&quot;, &quot;text&quot;, &quot;raw&quot;:</span></span>
+<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">           1 :         default:</span></span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">           1 :                 return fetchArgs{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf(&quot;format must be one of markdown, text, raw; got %q&quot;, args.Format))</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :             :         }</span>
+<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC">          35 :         if args.MaxBytes == 0 {</span></span>
+<span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaGNC">          31 :                 args.MaxBytes = defaultMaxBytes</span></span>
+<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaGNC">          31 :         }</span></span>
+<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC">          35 :         if args.MaxBytes &lt; minMaxBytes || args.MaxBytes &gt; maxOutputBytes {</span></span>
+<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">           2 :                 return fetchArgs{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf(&quot;max_bytes must be between %d and %d&quot;, minMaxBytes, maxOutputBytes))</span></span>
+<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">          33 :         if args.TimeoutMs == 0 {</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">          32 :                 args.TimeoutMs = defaultTimeoutMs</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">          32 :         }</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">          33 :         if args.TimeoutMs &lt; 1000 || args.TimeoutMs &gt; maxTimeoutMs {</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">           1 :                 return fetchArgs{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf(&quot;timeout_ms must be between 1000 and %d&quot;, maxTimeoutMs))</span></span>
+<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L210"><span class="lineNum">     210</span>                 :             : </span>
+<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">          32 :         u, err := url.Parse(strings.TrimSpace(args.URL))</span></span>
+<span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaGNC">          32 :         if err != nil {</span></span>
+<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return fetchArgs{}, domain.NewError(domain.ErrInvalidInput, &quot;url is not a valid URL&quot;, domain.WithCause(err))</span></span>
+<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaGNC tlaBgGNC">          32 :         if u.Scheme != &quot;http&quot; &amp;&amp; u.Scheme != &quot;https&quot; {</span></span>
+<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">           1 :                 return fetchArgs{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf(&quot;url scheme must be http or https; got %q&quot;, u.Scheme))</span></span>
+<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaGNC">          31 :         if u.User != nil {</span></span>
+<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaGNC">           1 :                 return fetchArgs{}, domain.NewError(domain.ErrInvalidInput, &quot;url must not contain userinfo&quot;)</span></span>
+<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaGNC">          30 :         host := u.Hostname()</span></span>
+<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">          30 :         if host == &quot;&quot; {</span></span>
+<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC">           1 :                 return fetchArgs{}, domain.NewError(domain.ErrInvalidInput, &quot;url must include a host&quot;)</span></span>
+<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L225"><span class="lineNum">     225</span>                 :<span class="tlaGNC">          29 :         if ip, parseErr := netip.ParseAddr(strings.TrimSuffix(strings.TrimPrefix(host, &quot;[&quot;), &quot;]&quot;)); parseErr == nil {</span></span>
+<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC">          24 :                 if !args.AllowPrivate &amp;&amp; !isPublicIP(ip) {</span></span>
+<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">           3 :                         return fetchArgs{}, domain.NewError(domain.ErrSecurity, fmt.Sprintf(&quot;destination %s is a private, loopback, or otherwise special address; set allow_private=true to override&quot;, host))</span></span>
+<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">           3 :                 }</span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :             :         }</span>
+<span id="L230"><span class="lineNum">     230</span>                 :             :         // Fragments are client-side only; strip for a canonical cache key.</span>
+<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">          26 :         u.Fragment = &quot;&quot;</span></span>
+<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">          26 :         u.RawFragment = &quot;&quot;</span></span>
+<span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaGNC">          26 :         args.URL = u.String()</span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC">          26 :         return args, nil</span></span>
+<span id="L235"><span class="lineNum">     235</span>                 :             : }</span>
+<span id="L236"><span class="lineNum">     236</span>                 :             : </span>
+<span id="L237"><span class="lineNum">     237</span>                 :             : type fetchOutcome struct {</span>
+<span id="L238"><span class="lineNum">     238</span>                 :             :         cachedResponse</span>
+<span id="L239"><span class="lineNum">     239</span>                 :             :         noStore bool</span>
+<span id="L240"><span class="lineNum">     240</span>                 :             : }</span>
+<span id="L241"><span class="lineNum">     241</span>                 :             : </span>
+<span id="L242"><span class="lineNum">     242</span>                 :             : // fetch performs the HTTP GET with a dial-time IP guard. The guard checks</span>
+<span id="L243"><span class="lineNum">     243</span>                 :             : // every resolved address immediately before connecting and pins the first</span>
+<span id="L244"><span class="lineNum">     244</span>                 :             : // checked address for the connection, which closes the DNS-rebinding window</span>
+<span id="L245"><span class="lineNum">     245</span>                 :             : // and covers every redirect hop.</span>
+<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">          20 : func (t *WebFetchTool) fetch(ctx context.Context, args fetchArgs) (fetchOutcome, error) {</span></span>
+<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC">          20 :         transport := &amp;http.Transport{</span></span>
+<span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaGNC">          20 :                 DialContext:         GuardedDialFunc(t.resolver, args.AllowPrivate),</span></span>
+<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">          20 :                 TLSHandshakeTimeout: dialTimeout,</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">          20 :                 ForceAttemptHTTP2:   true,</span></span>
+<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">          20 :         }</span></span>
+<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">          20 :         client := &amp;http.Client{</span></span>
+<span id="L253"><span class="lineNum">     253</span>                 :<span class="tlaGNC">          20 :                 Transport: transport,</span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">          20 :                 Timeout:   time.Duration(args.TimeoutMs) * time.Millisecond,</span></span>
+<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC">          20 :                 CheckRedirect: func(req *http.Request, via []*http.Request) error {</span></span>
+<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">           7 :                         if len(via) &gt;= maxRedirects {</span></span>
+<span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaGNC">           1 :                                 return errTooManyRedirects</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC">           1 :                         }</span></span>
+<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">           6 :                         if req.URL.Scheme != &quot;http&quot; &amp;&amp; req.URL.Scheme != &quot;https&quot; {</span></span>
+<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 return errRedirectScheme</span></span>
+<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaUNC">           0 :                         }</span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC tlaBgGNC">           6 :                         if req.URL.User != nil {</span></span>
+<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 return errRedirectUserinfo</span></span>
+<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaUNC">           0 :                         }</span></span>
+<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaGNC tlaBgGNC">           6 :                         return nil</span></span>
+<span id="L266"><span class="lineNum">     266</span>                 :             :                 },</span>
+<span id="L267"><span class="lineNum">     267</span>                 :             :         }</span>
+<span id="L268"><span class="lineNum">     268</span>                 :<span class="tlaGNC">          20 :         defer transport.CloseIdleConnections()</span></span>
+<span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaGNC">          20 : </span></span>
+<span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaGNC">          20 :         req, err := http.NewRequestWithContext(ctx, http.MethodGet, args.URL, nil)</span></span>
+<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">          20 :         if err != nil {</span></span>
+<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return fetchOutcome{}, domain.NewError(domain.ErrInvalidInput, &quot;failed to build request&quot;, domain.WithCause(err))</span></span>
+<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L274"><span class="lineNum">     274</span>                 :<span class="tlaGNC tlaBgGNC">          20 :         req.Header.Set(&quot;User-Agent&quot;, userAgent)</span></span>
+<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaGNC">          20 :         req.Header.Set(&quot;Accept&quot;, &quot;text/html,application/xhtml+xml,text/*,application/json,application/xml;q=0.9,*/*;q=0.1&quot;)</span></span>
+<span id="L276"><span class="lineNum">     276</span>                 :<span class="tlaGNC">          20 : </span></span>
+<span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaGNC">          20 :         resp, err := client.Do(req)</span></span>
+<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaGNC">          20 :         if err != nil {</span></span>
+<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">           2 :                 return fetchOutcome{}, mapRequestError(err)</span></span>
+<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L281"><span class="lineNum">     281</span>                 :<span class="tlaGNC">          18 :         defer resp.Body.Close()</span></span>
+<span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaGNC">          18 : </span></span>
+<span id="L283"><span class="lineNum">     283</span>                 :<span class="tlaGNC">          18 :         finalURL := resp.Request.URL.String()</span></span>
+<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">          18 :         if resp.StatusCode &gt;= 400 {</span></span>
+<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaGNC">           5 :                 return fetchOutcome{}, httpStatusError(resp.StatusCode, finalURL)</span></span>
+<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaGNC">           5 :         }</span></span>
+<span id="L287"><span class="lineNum">     287</span>                 :             : </span>
+<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC">          13 :         data, readErr := io.ReadAll(io.LimitReader(resp.Body, hardFetchByteCap+1))</span></span>
+<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">          13 :         if readErr != nil {</span></span>
+<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return fetchOutcome{}, domain.NewError(domain.ErrUnavailable, &quot;failed to read response body&quot;, domain.WithCause(readErr), domain.WithRetryable(true))</span></span>
+<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         if len(data) &gt; hardFetchByteCap {</span></span>
+<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 data = data[:hardFetchByteCap]</span></span>
+<span id="L294"><span class="lineNum">     294</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L295"><span class="lineNum">     295</span>                 :             : </span>
+<span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         contentType := resp.Header.Get(&quot;Content-Type&quot;)</span></span>
+<span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaGNC">          13 :         mediaType, charset := parseContentType(contentType, data)</span></span>
+<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaGNC">          13 :         body, err := convertBody(mediaType, charset, data, resp.Request.URL, args.Format)</span></span>
+<span id="L299"><span class="lineNum">     299</span>                 :<span class="tlaGNC">          13 :         if err != nil {</span></span>
+<span id="L300"><span class="lineNum">     300</span>                 :<span class="tlaGNC">           1 :                 return fetchOutcome{}, err</span></span>
+<span id="L301"><span class="lineNum">     301</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L302"><span class="lineNum">     302</span>                 :             : </span>
+<span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaGNC">          12 :         return fetchOutcome{</span></span>
+<span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaGNC">          12 :                 cachedResponse: cachedResponse{</span></span>
+<span id="L305"><span class="lineNum">     305</span>                 :<span class="tlaGNC">          12 :                         FinalURL:    finalURL,</span></span>
+<span id="L306"><span class="lineNum">     306</span>                 :<span class="tlaGNC">          12 :                         Status:      resp.StatusCode,</span></span>
+<span id="L307"><span class="lineNum">     307</span>                 :<span class="tlaGNC">          12 :                         ContentType: mediaType,</span></span>
+<span id="L308"><span class="lineNum">     308</span>                 :<span class="tlaGNC">          12 :                         FetchedAt:   t.now().UTC(),</span></span>
+<span id="L309"><span class="lineNum">     309</span>                 :<span class="tlaGNC">          12 :                         Body:        body,</span></span>
+<span id="L310"><span class="lineNum">     310</span>                 :<span class="tlaGNC">          12 :                 },</span></span>
+<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC">          12 :                 noStore: strings.Contains(strings.ToLower(resp.Header.Get(&quot;Cache-Control&quot;)), &quot;no-store&quot;),</span></span>
+<span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC">          12 :         }, nil</span></span>
+<span id="L313"><span class="lineNum">     313</span>                 :             : }</span>
+<span id="L314"><span class="lineNum">     314</span>                 :             : </span>
+<span id="L315"><span class="lineNum">     315</span>                 :             : // lookupFunc resolves a host to IP addresses. It is abstracted from</span>
+<span id="L316"><span class="lineNum">     316</span>                 :             : // *net.Resolver so tests can inject canned DNS answers.</span>
+<span id="L317"><span class="lineNum">     317</span>                 :             : type lookupFunc func(ctx context.Context, host string) ([]net.IPAddr, error)</span>
+<span id="L318"><span class="lineNum">     318</span>                 :             : </span>
+<span id="L319"><span class="lineNum">     319</span>                 :             : // GuardedDialFunc returns a DialContext that resolves the host, applies the</span>
+<span id="L320"><span class="lineNum">     320</span>                 :             : // IP policy to every answer, then dials the first accepted address directly</span>
+<span id="L321"><span class="lineNum">     321</span>                 :             : // so the checked answer is the one actually used. Exported so other tools</span>
+<span id="L322"><span class="lineNum">     322</span>                 :             : // (websearch, etc.) can share the same SSRF guard.</span>
+<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">          21 : func GuardedDialFunc(resolver *net.Resolver, allowPrivate bool) func(ctx context.Context, network, addr string) (net.Conn, error) {</span></span>
+<span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaGNC">          21 :         return guardedDialFunc(resolver.LookupIPAddr, allowPrivate)</span></span>
+<span id="L325"><span class="lineNum">     325</span>                 :<span class="tlaGNC">          21 : }</span></span>
+<span id="L326"><span class="lineNum">     326</span>                 :             : </span>
+<span id="L327"><span class="lineNum">     327</span>                 :<span class="tlaGNC">          24 : func guardedDialFunc(lookup lookupFunc, allowPrivate bool) func(ctx context.Context, network, addr string) (net.Conn, error) {</span></span>
+<span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaGNC">          24 :         return func(ctx context.Context, network, addr string) (net.Conn, error) {</span></span>
+<span id="L329"><span class="lineNum">     329</span>                 :<span class="tlaGNC">          24 :                 host, port, err := net.SplitHostPort(addr)</span></span>
+<span id="L330"><span class="lineNum">     330</span>                 :<span class="tlaGNC">          24 :                 if err != nil {</span></span>
+<span id="L331"><span class="lineNum">     331</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return nil, err</span></span>
+<span id="L332"><span class="lineNum">     332</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L333"><span class="lineNum">     333</span>                 :<span class="tlaGNC tlaBgGNC">          24 :                 ips, err := lookup(ctx, host)</span></span>
+<span id="L334"><span class="lineNum">     334</span>                 :<span class="tlaGNC">          24 :                 if err != nil {</span></span>
+<span id="L335"><span class="lineNum">     335</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return nil, fmt.Errorf(&quot;dns lookup failed for %s: %w&quot;, host, err)</span></span>
+<span id="L336"><span class="lineNum">     336</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L337"><span class="lineNum">     337</span>                 :<span class="tlaGNC tlaBgGNC">          24 :                 if len(ips) == 0 {</span></span>
+<span id="L338"><span class="lineNum">     338</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return nil, fmt.Errorf(&quot;dns lookup returned no addresses for %s&quot;, host)</span></span>
+<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L340"><span class="lineNum">     340</span>                 :<span class="tlaGNC tlaBgGNC">          26 :                 for _, ipa := range ips {</span></span>
+<span id="L341"><span class="lineNum">     341</span>                 :<span class="tlaGNC">          26 :                         ip, ok := netip.AddrFromSlice(ipa.IP)</span></span>
+<span id="L342"><span class="lineNum">     342</span>                 :<span class="tlaGNC">          26 :                         if !ok {</span></span>
+<span id="L343"><span class="lineNum">     343</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 return nil, fmt.Errorf(&quot;dns lookup returned an invalid address for %s&quot;, host)</span></span>
+<span id="L344"><span class="lineNum">     344</span>                 :<span class="tlaUNC">           0 :                         }</span></span>
+<span id="L345"><span class="lineNum">     345</span>                 :<span class="tlaGNC tlaBgGNC">          26 :                         if allowPrivate || IsPublicIP(ip.Unmap()) || isFakeIPAddr(ip.Unmap()) {</span></span>
+<span id="L346"><span class="lineNum">     346</span>                 :<span class="tlaGNC">          23 :                                 continue</span></span>
+<span id="L347"><span class="lineNum">     347</span>                 :             :                         }</span>
+<span id="L348"><span class="lineNum">     348</span>                 :<span class="tlaGNC">           3 :                         return nil, fmt.Errorf(&quot;%w: %s resolves to %s&quot;, errBlockedAddress, host, ip.Unmap())</span></span>
+<span id="L349"><span class="lineNum">     349</span>                 :             :                 }</span>
+<span id="L350"><span class="lineNum">     350</span>                 :<span class="tlaGNC">          21 :                 dialer := &amp;net.Dialer{Timeout: dialTimeout}</span></span>
+<span id="L351"><span class="lineNum">     351</span>                 :<span class="tlaGNC">          21 :                 var lastErr error</span></span>
+<span id="L352"><span class="lineNum">     352</span>                 :<span class="tlaGNC">          22 :                 for _, ipa := range ips {</span></span>
+<span id="L353"><span class="lineNum">     353</span>                 :<span class="tlaGNC">          22 :                         conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ipa.IP.String(), port))</span></span>
+<span id="L354"><span class="lineNum">     354</span>                 :<span class="tlaGNC">          22 :                         if err == nil {</span></span>
+<span id="L355"><span class="lineNum">     355</span>                 :<span class="tlaGNC">          20 :                                 return conn, nil</span></span>
+<span id="L356"><span class="lineNum">     356</span>                 :<span class="tlaGNC">          20 :                         }</span></span>
+<span id="L357"><span class="lineNum">     357</span>                 :<span class="tlaGNC">           2 :                         lastErr = err</span></span>
+<span id="L358"><span class="lineNum">     358</span>                 :             :                 }</span>
+<span id="L359"><span class="lineNum">     359</span>                 :<span class="tlaGNC">           1 :                 return nil, lastErr</span></span>
+<span id="L360"><span class="lineNum">     360</span>                 :             :         }</span>
+<span id="L361"><span class="lineNum">     361</span>                 :             : }</span>
+<span id="L362"><span class="lineNum">     362</span>                 :             : </span>
+<span id="L363"><span class="lineNum">     363</span>                 :             : // isFakeIPAddr reports whether ip is inside 198.18.0.0/15. TUN-mode proxies</span>
+<span id="L364"><span class="lineNum">     364</span>                 :             : // (Clash/sing-box &quot;fake-ip&quot; DNS) answer every hostname with an address from</span>
+<span id="L365"><span class="lineNum">     365</span>                 :             : // this benchmarking range: the answer carries no routing information, and</span>
+<span id="L366"><span class="lineNum">     366</span>                 :             : // dialing it is intercepted by the TUN device, which resolves and reaches</span>
+<span id="L367"><span class="lineNum">     367</span>                 :             : // the real destination through the proxy. Blocking it would break all</span>
+<span id="L368"><span class="lineNum">     368</span>                 :             : // name-based egress on such machines without buying SSRF protection — the</span>
+<span id="L369"><span class="lineNum">     369</span>                 :             : // proxy, not this process, resolves the real address, and a spoofed fake-ip</span>
+<span id="L370"><span class="lineNum">     370</span>                 :             : // answer has no route outside the TUN device anyway.</span>
+<span id="L371"><span class="lineNum">     371</span>                 :<span class="tlaGNC">          10 : func isFakeIPAddr(ip netip.Addr) bool {</span></span>
+<span id="L372"><span class="lineNum">     372</span>                 :<span class="tlaGNC">          10 :         if !ip.Is4() {</span></span>
+<span id="L373"><span class="lineNum">     373</span>                 :<span class="tlaGNC">           2 :                 return false</span></span>
+<span id="L374"><span class="lineNum">     374</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L375"><span class="lineNum">     375</span>                 :<span class="tlaGNC">           8 :         b := ip.As4()</span></span>
+<span id="L376"><span class="lineNum">     376</span>                 :<span class="tlaGNC">           8 :         return b[0] == 198 &amp;&amp; b[1]&amp;0xFE == 18</span></span>
+<span id="L377"><span class="lineNum">     377</span>                 :             : }</span>
+<span id="L378"><span class="lineNum">     378</span>                 :             : </span>
+<span id="L379"><span class="lineNum">     379</span>                 :             : // buildOutput applies the output byte budget to a (possibly cached) body and</span>
+<span id="L380"><span class="lineNum">     380</span>                 :             : // externalizes the full text into an artifact when truncation drops content.</span>
+<span id="L381"><span class="lineNum">     381</span>                 :<span class="tlaGNC">          13 : func (t *WebFetchTool) buildOutput(ctx context.Context, args fetchArgs, entry cachedResponse, cacheState string) fetchOutput {</span></span>
+<span id="L382"><span class="lineNum">     382</span>                 :<span class="tlaGNC">          13 :         out := fetchOutput{</span></span>
+<span id="L383"><span class="lineNum">     383</span>                 :<span class="tlaGNC">          13 :                 URL:         args.URL,</span></span>
+<span id="L384"><span class="lineNum">     384</span>                 :<span class="tlaGNC">          13 :                 FinalURL:    entry.FinalURL,</span></span>
+<span id="L385"><span class="lineNum">     385</span>                 :<span class="tlaGNC">          13 :                 Status:      entry.Status,</span></span>
+<span id="L386"><span class="lineNum">     386</span>                 :<span class="tlaGNC">          13 :                 ContentType: entry.ContentType,</span></span>
+<span id="L387"><span class="lineNum">     387</span>                 :<span class="tlaGNC">          13 :                 Format:      args.Format,</span></span>
+<span id="L388"><span class="lineNum">     388</span>                 :<span class="tlaGNC">          13 :                 Bytes:       len(entry.Body),</span></span>
+<span id="L389"><span class="lineNum">     389</span>                 :<span class="tlaGNC">          13 :                 Cache:       cacheState,</span></span>
+<span id="L390"><span class="lineNum">     390</span>                 :<span class="tlaGNC">          13 :                 FetchedAt:   entry.FetchedAt,</span></span>
+<span id="L391"><span class="lineNum">     391</span>                 :<span class="tlaGNC">          13 :         }</span></span>
+<span id="L392"><span class="lineNum">     392</span>                 :<span class="tlaGNC">          13 :         content := entry.Body</span></span>
+<span id="L393"><span class="lineNum">     393</span>                 :<span class="tlaGNC">          13 :         if len(content) &gt; args.MaxBytes {</span></span>
+<span id="L394"><span class="lineNum">     394</span>                 :<span class="tlaGNC">           2 :                 content = truncateAtBoundary(content, args.MaxBytes)</span></span>
+<span id="L395"><span class="lineNum">     395</span>                 :<span class="tlaGNC">           2 :                 out.Truncated = true</span></span>
+<span id="L396"><span class="lineNum">     396</span>                 :<span class="tlaGNC">           2 :                 out.Artifact = t.storeOverflow(ctx, entry.Body)</span></span>
+<span id="L397"><span class="lineNum">     397</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L398"><span class="lineNum">     398</span>                 :<span class="tlaGNC">          13 :         out.Content = content</span></span>
+<span id="L399"><span class="lineNum">     399</span>                 :<span class="tlaGNC">          13 :         return out</span></span>
+<span id="L400"><span class="lineNum">     400</span>                 :             : }</span>
+<span id="L401"><span class="lineNum">     401</span>                 :             : </span>
+<span id="L402"><span class="lineNum">     402</span>                 :<span class="tlaGNC">           2 : func (t *WebFetchTool) storeOverflow(ctx context.Context, full string) *domain.ArtifactRef {</span></span>
+<span id="L403"><span class="lineNum">     403</span>                 :<span class="tlaGNC">           2 :         if t.artifacts == nil {</span></span>
+<span id="L404"><span class="lineNum">     404</span>                 :<span class="tlaGNC">           1 :                 return nil</span></span>
+<span id="L405"><span class="lineNum">     405</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L406"><span class="lineNum">     406</span>                 :<span class="tlaGNC">           1 :         stage, err := t.artifacts.Begin(ctx)</span></span>
+<span id="L407"><span class="lineNum">     407</span>                 :<span class="tlaGNC">           1 :         if err != nil {</span></span>
+<span id="L408"><span class="lineNum">     408</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil</span></span>
+<span id="L409"><span class="lineNum">     409</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L410"><span class="lineNum">     410</span>                 :<span class="tlaGNC tlaBgGNC">           1 :         if _, err := stage.Write([]byte(full)); err != nil {</span></span>
+<span id="L411"><span class="lineNum">     411</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 _ = stage.Abort()</span></span>
+<span id="L412"><span class="lineNum">     412</span>                 :<span class="tlaUNC">           0 :                 return nil</span></span>
+<span id="L413"><span class="lineNum">     413</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L414"><span class="lineNum">     414</span>                 :<span class="tlaGNC tlaBgGNC">           1 :         ref, err := stage.Commit(ctx)</span></span>
+<span id="L415"><span class="lineNum">     415</span>                 :<span class="tlaGNC">           1 :         if err != nil {</span></span>
+<span id="L416"><span class="lineNum">     416</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil</span></span>
+<span id="L417"><span class="lineNum">     417</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L418"><span class="lineNum">     418</span>                 :<span class="tlaGNC tlaBgGNC">           1 :         return &amp;ref</span></span>
+<span id="L419"><span class="lineNum">     419</span>                 :             : }</span>
+<span id="L420"><span class="lineNum">     420</span>                 :             : </span>
+<span id="L421"><span class="lineNum">     421</span>                 :<span class="tlaGNC">           5 : func truncateAtBoundary(s string, max int) string {</span></span>
+<span id="L422"><span class="lineNum">     422</span>                 :<span class="tlaGNC">           5 :         if len(s) &lt;= max {</span></span>
+<span id="L423"><span class="lineNum">     423</span>                 :<span class="tlaGNC">           1 :                 return s</span></span>
+<span id="L424"><span class="lineNum">     424</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L425"><span class="lineNum">     425</span>                 :<span class="tlaGNC">           4 :         cut := s[:max]</span></span>
+<span id="L426"><span class="lineNum">     426</span>                 :<span class="tlaGNC">           4 :         // Prefer ending at a line boundary when one is near the cut point.</span></span>
+<span id="L427"><span class="lineNum">     427</span>                 :<span class="tlaGNC">           4 :         if idx := strings.LastIndexByte(cut, '\n'); idx &gt;= 0 &amp;&amp; max-idx &lt;= truncateBoundaryGap {</span></span>
+<span id="L428"><span class="lineNum">     428</span>                 :<span class="tlaGNC">           2 :                 cut = cut[:idx]</span></span>
+<span id="L429"><span class="lineNum">     429</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L430"><span class="lineNum">     430</span>                 :             :         // Never split a multi-byte UTF-8 character: the byte-level cut can land</span>
+<span id="L431"><span class="lineNum">     431</span>                 :             :         // inside a rune (e.g. 3-byte CJK), which json.Marshal would silently</span>
+<span id="L432"><span class="lineNum">     432</span>                 :             :         // rewrite to U+FFFD.</span>
+<span id="L433"><span class="lineNum">     433</span>                 :<span class="tlaGNC">           4 :         for len(cut) &gt; 0 &amp;&amp; !utf8.ValidString(cut) {</span></span>
+<span id="L434"><span class="lineNum">     434</span>                 :<span class="tlaGNC">           1 :                 cut = cut[:len(cut)-1]</span></span>
+<span id="L435"><span class="lineNum">     435</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L436"><span class="lineNum">     436</span>                 :<span class="tlaGNC">           4 :         return cut</span></span>
+<span id="L437"><span class="lineNum">     437</span>                 :             : }</span>
+<span id="L438"><span class="lineNum">     438</span>                 :             : </span>
+<span id="L439"><span class="lineNum">     439</span>                 :<span class="tlaGNC">          13 : func parseContentType(header string, data []byte) (mediaType, charset string) {</span></span>
+<span id="L440"><span class="lineNum">     440</span>                 :<span class="tlaGNC">          13 :         mediaType, params, err := mime.ParseMediaType(header)</span></span>
+<span id="L441"><span class="lineNum">     441</span>                 :<span class="tlaGNC">          13 :         if err != nil || mediaType == &quot;&quot; {</span></span>
+<span id="L442"><span class="lineNum">     442</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 sample := data</span></span>
+<span id="L443"><span class="lineNum">     443</span>                 :<span class="tlaUNC">           0 :                 if len(sample) &gt; 512 {</span></span>
+<span id="L444"><span class="lineNum">     444</span>                 :<span class="tlaUNC">           0 :                         sample = sample[:512]</span></span>
+<span id="L445"><span class="lineNum">     445</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L446"><span class="lineNum">     446</span>                 :<span class="tlaUNC">           0 :                 mediaType, _, _ = mime.ParseMediaType(http.DetectContentType(sample))</span></span>
+<span id="L447"><span class="lineNum">     447</span>                 :<span class="tlaUNC">           0 :                 return mediaType, &quot;utf-8&quot;</span></span>
+<span id="L448"><span class="lineNum">     448</span>                 :             :         }</span>
+<span id="L449"><span class="lineNum">     449</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         return strings.ToLower(mediaType), strings.ToLower(params[&quot;charset&quot;])</span></span>
+<span id="L450"><span class="lineNum">     450</span>                 :             : }</span>
+<span id="L451"><span class="lineNum">     451</span>                 :             : </span>
+<span id="L452"><span class="lineNum">     452</span>                 :             : // convertBody renders the response body per content type and requested</span>
+<span id="L453"><span class="lineNum">     453</span>                 :             : // format. Non-HTML text types ignore format except that raw always yields</span>
+<span id="L454"><span class="lineNum">     454</span>                 :             : // the untouched body.</span>
+<span id="L455"><span class="lineNum">     455</span>                 :<span class="tlaGNC">          13 : func convertBody(mediaType, charset string, data []byte, finalURL *url.URL, format string) (string, error) {</span></span>
+<span id="L456"><span class="lineNum">     456</span>                 :<span class="tlaGNC">          13 :         if format == &quot;raw&quot; {</span></span>
+<span id="L457"><span class="lineNum">     457</span>                 :<span class="tlaGNC">           1 :                 if !utf8.Valid(data) {</span></span>
+<span id="L458"><span class="lineNum">     458</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return &quot;&quot;, unsupportedContentError(mediaType, len(data), &quot;body is not valid UTF-8&quot;)</span></span>
+<span id="L459"><span class="lineNum">     459</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L460"><span class="lineNum">     460</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                 return string(data), nil</span></span>
+<span id="L461"><span class="lineNum">     461</span>                 :             :         }</span>
+<span id="L462"><span class="lineNum">     462</span>                 :             : </span>
+<span id="L463"><span class="lineNum">     463</span>                 :<span class="tlaGNC">          12 :         switch {</span></span>
+<span id="L464"><span class="lineNum">     464</span>                 :<span class="tlaGNC">           2 :         case mediaType == &quot;text/html&quot; || mediaType == &quot;application/xhtml+xml&quot;:</span></span>
+<span id="L465"><span class="lineNum">     465</span>                 :<span class="tlaGNC">           2 :                 if !utf8.Valid(data) {</span></span>
+<span id="L466"><span class="lineNum">     466</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return &quot;&quot;, unsupportedContentError(mediaType, len(data), &quot;body is not valid UTF-8&quot;)</span></span>
+<span id="L467"><span class="lineNum">     467</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L468"><span class="lineNum">     468</span>                 :<span class="tlaGNC tlaBgGNC">           2 :                 if format == &quot;text&quot; {</span></span>
+<span id="L469"><span class="lineNum">     469</span>                 :<span class="tlaGNC">           1 :                         return htmlToText(string(data))</span></span>
+<span id="L470"><span class="lineNum">     470</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L471"><span class="lineNum">     471</span>                 :<span class="tlaGNC">           1 :                 return htmlToMarkdown(string(data), finalURL)</span></span>
+<span id="L472"><span class="lineNum">     472</span>                 :<span class="tlaGNC">           9 :         case isTextual(mediaType):</span></span>
+<span id="L473"><span class="lineNum">     473</span>                 :<span class="tlaGNC">           9 :                 if charset != &quot;&quot; &amp;&amp; charset != &quot;utf-8&quot; &amp;&amp; charset != &quot;us-ascii&quot; {</span></span>
+<span id="L474"><span class="lineNum">     474</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return &quot;&quot;, unsupportedContentError(mediaType, len(data), fmt.Sprintf(&quot;unsupported charset %q (only utf-8 is handled)&quot;, charset))</span></span>
+<span id="L475"><span class="lineNum">     475</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L476"><span class="lineNum">     476</span>                 :<span class="tlaGNC tlaBgGNC">           9 :                 if !utf8.Valid(data) {</span></span>
+<span id="L477"><span class="lineNum">     477</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return &quot;&quot;, unsupportedContentError(mediaType, len(data), &quot;body is not valid UTF-8&quot;)</span></span>
+<span id="L478"><span class="lineNum">     478</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L479"><span class="lineNum">     479</span>                 :<span class="tlaGNC tlaBgGNC">           9 :                 return string(data), nil</span></span>
+<span id="L480"><span class="lineNum">     480</span>                 :<span class="tlaGNC">           1 :         default:</span></span>
+<span id="L481"><span class="lineNum">     481</span>                 :<span class="tlaGNC">           1 :                 return &quot;&quot;, unsupportedContentError(mediaType, len(data), &quot;&quot;)</span></span>
+<span id="L482"><span class="lineNum">     482</span>                 :             :         }</span>
+<span id="L483"><span class="lineNum">     483</span>                 :             : }</span>
+<span id="L484"><span class="lineNum">     484</span>                 :             : </span>
+<span id="L485"><span class="lineNum">     485</span>                 :<span class="tlaGNC">          10 : func isTextual(mediaType string) bool {</span></span>
+<span id="L486"><span class="lineNum">     486</span>                 :<span class="tlaGNC">          10 :         if strings.HasPrefix(mediaType, &quot;text/&quot;) {</span></span>
+<span id="L487"><span class="lineNum">     487</span>                 :<span class="tlaGNC">           8 :                 return true</span></span>
+<span id="L488"><span class="lineNum">     488</span>                 :<span class="tlaGNC">           8 :         }</span></span>
+<span id="L489"><span class="lineNum">     489</span>                 :<span class="tlaGNC">           2 :         switch mediaType {</span></span>
+<span id="L490"><span class="lineNum">     490</span>                 :             :         case &quot;application/json&quot;, &quot;application/xml&quot;, &quot;application/javascript&quot;,</span>
+<span id="L491"><span class="lineNum">     491</span>                 :             :                 &quot;application/x-javascript&quot;, &quot;application/yaml&quot;, &quot;application/x-yaml&quot;,</span>
+<span id="L492"><span class="lineNum">     492</span>                 :<span class="tlaGNC">           1 :                 &quot;application/toml&quot;, &quot;application/x-ndjson&quot;, &quot;image/svg+xml&quot;:</span></span>
+<span id="L493"><span class="lineNum">     493</span>                 :<span class="tlaGNC">           1 :                 return true</span></span>
+<span id="L494"><span class="lineNum">     494</span>                 :             :         }</span>
+<span id="L495"><span class="lineNum">     495</span>                 :<span class="tlaGNC">           1 :         return strings.HasSuffix(mediaType, &quot;+json&quot;) || strings.HasSuffix(mediaType, &quot;+xml&quot;)</span></span>
+<span id="L496"><span class="lineNum">     496</span>                 :             : }</span>
+<span id="L497"><span class="lineNum">     497</span>                 :             : </span>
+<span id="L498"><span class="lineNum">     498</span>                 :<span class="tlaGNC">           1 : func unsupportedContentError(mediaType string, size int, detail string) error {</span></span>
+<span id="L499"><span class="lineNum">     499</span>                 :<span class="tlaGNC">           1 :         msg := fmt.Sprintf(&quot;unsupported content type %q (%d bytes)&quot;, mediaType, size)</span></span>
+<span id="L500"><span class="lineNum">     500</span>                 :<span class="tlaGNC">           1 :         if detail != &quot;&quot; {</span></span>
+<span id="L501"><span class="lineNum">     501</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 msg += &quot;: &quot; + detail</span></span>
+<span id="L502"><span class="lineNum">     502</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L503"><span class="lineNum">     503</span>                 :<span class="tlaGNC tlaBgGNC">           1 :         return domain.NewError(domain.ErrInvalidInput, msg)</span></span>
+<span id="L504"><span class="lineNum">     504</span>                 :             : }</span>
+<span id="L505"><span class="lineNum">     505</span>                 :             : </span>
+<span id="L506"><span class="lineNum">     506</span>                 :<span class="tlaGNC">           5 : func httpStatusError(status int, finalURL string) error {</span></span>
+<span id="L507"><span class="lineNum">     507</span>                 :<span class="tlaGNC">           5 :         msg := fmt.Sprintf(&quot;request failed with status %d (%s)&quot;, status, finalURL)</span></span>
+<span id="L508"><span class="lineNum">     508</span>                 :<span class="tlaGNC">           5 :         switch {</span></span>
+<span id="L509"><span class="lineNum">     509</span>                 :<span class="tlaGNC">           1 :         case status == http.StatusTooManyRequests:</span></span>
+<span id="L510"><span class="lineNum">     510</span>                 :<span class="tlaGNC">           1 :                 return domain.NewError(domain.ErrRateLimited, msg, domain.WithRetryable(true))</span></span>
+<span id="L511"><span class="lineNum">     511</span>                 :<span class="tlaGNC">           2 :         case status == http.StatusRequestTimeout || status &gt;= 500:</span></span>
+<span id="L512"><span class="lineNum">     512</span>                 :<span class="tlaGNC">           2 :                 return domain.NewError(domain.ErrUnavailable, msg, domain.WithRetryable(true))</span></span>
+<span id="L513"><span class="lineNum">     513</span>                 :<span class="tlaGNC">           2 :         default:</span></span>
+<span id="L514"><span class="lineNum">     514</span>                 :<span class="tlaGNC">           2 :                 return domain.NewError(domain.ErrUnavailable, msg)</span></span>
+<span id="L515"><span class="lineNum">     515</span>                 :             :         }</span>
+<span id="L516"><span class="lineNum">     516</span>                 :             : }</span>
+<span id="L517"><span class="lineNum">     517</span>                 :             : </span>
+<span id="L518"><span class="lineNum">     518</span>                 :<span class="tlaGNC">           2 : func mapRequestError(err error) error {</span></span>
+<span id="L519"><span class="lineNum">     519</span>                 :<span class="tlaGNC">           2 :         switch {</span></span>
+<span id="L520"><span class="lineNum">     520</span>                 :<span class="tlaGNC">           1 :         case errors.Is(err, errBlockedAddress):</span></span>
+<span id="L521"><span class="lineNum">     521</span>                 :<span class="tlaGNC">           1 :                 return domain.NewError(domain.ErrSecurity, &quot;destination resolves to a blocked (private or special) address; set allow_private=true to override&quot;, domain.WithCause(err))</span></span>
+<span id="L522"><span class="lineNum">     522</span>                 :<span class="tlaGNC">           1 :         case errors.Is(err, errTooManyRedirects):</span></span>
+<span id="L523"><span class="lineNum">     523</span>                 :<span class="tlaGNC">           1 :                 return domain.NewError(domain.ErrUnavailable, fmt.Sprintf(&quot;too many redirects (limit %d)&quot;, maxRedirects))</span></span>
+<span id="L524"><span class="lineNum">     524</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         case errors.Is(err, errRedirectScheme):</span></span>
+<span id="L525"><span class="lineNum">     525</span>                 :<span class="tlaUNC">           0 :                 return domain.NewError(domain.ErrUnavailable, &quot;redirect target uses an unsupported scheme&quot;)</span></span>
+<span id="L526"><span class="lineNum">     526</span>                 :<span class="tlaUNC">           0 :         case errors.Is(err, errRedirectUserinfo):</span></span>
+<span id="L527"><span class="lineNum">     527</span>                 :<span class="tlaUNC">           0 :                 return domain.NewError(domain.ErrUnavailable, &quot;redirect target must not contain userinfo&quot;)</span></span>
+<span id="L528"><span class="lineNum">     528</span>                 :<span class="tlaUNC">           0 :         case errors.Is(err, context.DeadlineExceeded):</span></span>
+<span id="L529"><span class="lineNum">     529</span>                 :<span class="tlaUNC">           0 :                 return domain.NewError(domain.ErrTimeout, &quot;request timed out&quot;, domain.WithRetryable(true), domain.WithCause(err))</span></span>
+<span id="L530"><span class="lineNum">     530</span>                 :<span class="tlaUNC">           0 :         case errors.Is(err, context.Canceled):</span></span>
+<span id="L531"><span class="lineNum">     531</span>                 :<span class="tlaUNC">           0 :                 return err</span></span>
+<span id="L532"><span class="lineNum">     532</span>                 :             :         }</span>
+<span id="L533"><span class="lineNum">     533</span>                 :<span class="tlaUNC">           0 :         var urlErr *url.Error</span></span>
+<span id="L534"><span class="lineNum">     534</span>                 :<span class="tlaUNC">           0 :         if errors.As(err, &amp;urlErr) &amp;&amp; urlErr.Timeout() {</span></span>
+<span id="L535"><span class="lineNum">     535</span>                 :<span class="tlaUNC">           0 :                 return domain.NewError(domain.ErrTimeout, &quot;request timed out&quot;, domain.WithRetryable(true), domain.WithCause(err))</span></span>
+<span id="L536"><span class="lineNum">     536</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L537"><span class="lineNum">     537</span>                 :<span class="tlaUNC">           0 :         return domain.NewError(domain.ErrUnavailable, &quot;request failed&quot;, domain.WithCause(err), domain.WithRetryable(true))</span></span>
+<span id="L538"><span class="lineNum">     538</span>                 :             : }</span>
+<span id="L539"><span class="lineNum">     539</span>                 :             : </span>
+<span id="L540"><span class="lineNum">     540</span>                 :             : // isPublicIP reports whether the address is a globally routable unicast IP.</span>
+<span id="L541"><span class="lineNum">     541</span>                 :             : // Loopback, private (RFC1918/ULA), link-local, multicast, unspecified,</span>
+<span id="L542"><span class="lineNum">     542</span>                 :             : // broadcast, CGNAT, benchmarking, documentation, and reserved ranges are all</span>
+<span id="L543"><span class="lineNum">     543</span>                 :             : // treated as non-public.</span>
+<span id="L544"><span class="lineNum">     544</span>                 :<span class="tlaGNC tlaBgGNC">          29 : func isPublicIP(ip netip.Addr) bool {</span></span>
+<span id="L545"><span class="lineNum">     545</span>                 :<span class="tlaGNC">          29 :         return IsPublicIP(ip)</span></span>
+<span id="L546"><span class="lineNum">     546</span>                 :<span class="tlaGNC">          29 : }</span></span>
+<span id="L547"><span class="lineNum">     547</span>                 :             : </span>
+<span id="L548"><span class="lineNum">     548</span>                 :             : // IsPublicIP reports whether the address is a globally routable unicast IP.</span>
+<span id="L549"><span class="lineNum">     549</span>                 :             : // Exported so other tools (websearch, etc.) can share the same SSRF guard.</span>
+<span id="L550"><span class="lineNum">     550</span>                 :<span class="tlaGNC">          34 : func IsPublicIP(ip netip.Addr) bool {</span></span>
+<span id="L551"><span class="lineNum">     551</span>                 :<span class="tlaGNC">          34 :         if !ip.IsValid() {</span></span>
+<span id="L552"><span class="lineNum">     552</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return false</span></span>
+<span id="L553"><span class="lineNum">     553</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L554"><span class="lineNum">     554</span>                 :<span class="tlaGNC tlaBgGNC">          34 :         if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||</span></span>
+<span id="L555"><span class="lineNum">     555</span>                 :<span class="tlaGNC">          34 :                 ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {</span></span>
+<span id="L556"><span class="lineNum">     556</span>                 :<span class="tlaGNC">          16 :                 return false</span></span>
+<span id="L557"><span class="lineNum">     557</span>                 :<span class="tlaGNC">          16 :         }</span></span>
+<span id="L558"><span class="lineNum">     558</span>                 :<span class="tlaGNC">          18 :         if ip.Is4() &amp;&amp; ip.As4() == [4]byte{255, 255, 255, 255} {</span></span>
+<span id="L559"><span class="lineNum">     559</span>                 :<span class="tlaGNC">           1 :                 return false</span></span>
+<span id="L560"><span class="lineNum">     560</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L561"><span class="lineNum">     561</span>                 :<span class="tlaGNC">          17 :         if ip.Is4() {</span></span>
+<span id="L562"><span class="lineNum">     562</span>                 :<span class="tlaGNC">          15 :                 b := ip.As4()</span></span>
+<span id="L563"><span class="lineNum">     563</span>                 :<span class="tlaGNC">          15 :                 switch {</span></span>
+<span id="L564"><span class="lineNum">     564</span>                 :<span class="tlaGNC">           3 :                 case b[0] == 100 &amp;&amp; b[1]&amp;0xC0 == 0x40: // CGNAT 100.64.0.0/10</span></span>
+<span id="L565"><span class="lineNum">     565</span>                 :<span class="tlaGNC">           3 :                         return false</span></span>
+<span id="L566"><span class="lineNum">     566</span>                 :<span class="tlaGNC">           3 :                 case b[0] == 198 &amp;&amp; b[1]&amp;0xFE == 18: // benchmarking 198.18.0.0/15</span></span>
+<span id="L567"><span class="lineNum">     567</span>                 :<span class="tlaGNC">           3 :                         return false</span></span>
+<span id="L568"><span class="lineNum">     568</span>                 :<span class="tlaGNC">           1 :                 case b[0] == 192 &amp;&amp; b[1] == 0 &amp;&amp; b[2] == 0: // IETF protocol assignments 192.0.0.0/24</span></span>
+<span id="L569"><span class="lineNum">     569</span>                 :<span class="tlaGNC">           1 :                         return false</span></span>
+<span id="L570"><span class="lineNum">     570</span>                 :<span class="tlaGNC">           1 :                 case b[0] == 192 &amp;&amp; b[1] == 0 &amp;&amp; b[2] == 2: // documentation TEST-NET-1</span></span>
+<span id="L571"><span class="lineNum">     571</span>                 :<span class="tlaGNC">           1 :                         return false</span></span>
+<span id="L572"><span class="lineNum">     572</span>                 :<span class="tlaGNC">           1 :                 case b[0] == 198 &amp;&amp; b[1] == 51 &amp;&amp; b[2] == 100: // documentation TEST-NET-2</span></span>
+<span id="L573"><span class="lineNum">     573</span>                 :<span class="tlaGNC">           1 :                         return false</span></span>
+<span id="L574"><span class="lineNum">     574</span>                 :<span class="tlaGNC">           1 :                 case b[0] == 203 &amp;&amp; b[1] == 0 &amp;&amp; b[2] == 113: // documentation TEST-NET-3</span></span>
+<span id="L575"><span class="lineNum">     575</span>                 :<span class="tlaGNC">           1 :                         return false</span></span>
+<span id="L576"><span class="lineNum">     576</span>                 :<span class="tlaGNC">           1 :                 case b[0]&amp;0xF0 == 240: // reserved 240.0.0.0/4</span></span>
+<span id="L577"><span class="lineNum">     577</span>                 :<span class="tlaGNC">           1 :                         return false</span></span>
+<span id="L578"><span class="lineNum">     578</span>                 :             :                 }</span>
+<span id="L579"><span class="lineNum">     579</span>                 :<span class="tlaGNC">           4 :                 return true</span></span>
+<span id="L580"><span class="lineNum">     580</span>                 :             :         }</span>
+<span id="L581"><span class="lineNum">     581</span>                 :             :         // IPv6 documentation prefix 2001:db8::/32.</span>
+<span id="L582"><span class="lineNum">     582</span>                 :<span class="tlaGNC">           2 :         if b := ip.As16(); b[0] == 0x20 &amp;&amp; b[1] == 0x01 &amp;&amp; b[2] == 0x0d &amp;&amp; b[3] == 0xb8 {</span></span>
+<span id="L583"><span class="lineNum">     583</span>                 :<span class="tlaGNC">           1 :                 return false</span></span>
+<span id="L584"><span class="lineNum">     584</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L585"><span class="lineNum">     585</span>                 :<span class="tlaGNC">           1 :         return true</span></span>
+<span id="L586"><span class="lineNum">     586</span>                 :             : }</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

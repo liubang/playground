@@ -1,0 +1,264 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - permission/go/pl/loom/internal/permission/memory.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">permission/go/pl/loom/internal/permission</a> - memory.go<span style="font-size: 80%;"> (source / <a href="memory.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">93.1&nbsp;%</td>
+            <td class="headerCovTableEntry">58</td>
+            <td class="headerCovTableEntry">54</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-08-18 21:30:31</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/08/17</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : // Memory shape derivation for interactive &quot;allow always&quot; approvals.</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : //</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : // The app layer's RuleApprover needs to derive a categorical memory from an</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : // approved call so later matching calls can be auto-approved. The shape of</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : // that memory depends on the TYPE of request the call carries — not the</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : // tool NAME:</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : //</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : //   - ExecRequest (run_cmd, exec_session) → argv-prefix memory with a grant.</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : //   - URLRequest (web_fetch, browser navigate) → exact-host domain memory.</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : //   - WriteRequest outside the roots (write, edit) → writable-directory</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : //     path memory.</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : //   - Neither (generate_image, web_search, MCP tools) → tool-name memory.</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : //</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : // This file is the single place that maps a PreparedCall to a MemoryShape,</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : // so the app layer never switches on tool names and adding a new tool with</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : // an existing request type is automatically covered.</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : </span>
+<span id="L35"><span class="lineNum">      35</span>                 :             : package permission</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             : </span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : import (</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :         &quot;path/filepath&quot;</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :         &quot;strings&quot;</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             : </span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :         &quot;github.com/liubang/playground/go/pl/loom/internal/domain&quot;</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             : )</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             : </span>
+<span id="L44"><span class="lineNum">      44</span>                 :             : // TrustUnsandboxed is the trust-flavor value for L2 full-trust memory</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             : // (explicit user opt-in for escalated calls). The app layer's</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             : // ApprovalRuleHint.Trust uses the same string.</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : const TrustUnsandboxed = &quot;unsandboxed&quot;</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : </span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : // MemoryKind identifies the categorical shape of a remembered approval.</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             : type MemoryKind int</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             : </span>
+<span id="L52"><span class="lineNum">      52</span>                 :             : const (</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             :         // MemoryNone means the call cannot be remembered categorically</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :         // (dynamic shells, eval forms, destructive programs, unmappable URLs).</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             :         MemoryNone MemoryKind = iota</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             :         // MemoryArgv means the call carries an ExecRequest and is remembered</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             :         // by argv prefix with a capability grant (run_cmd, exec_session).</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             :         MemoryArgv</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             :         // MemoryHost means the call carries a URLRequest and is remembered</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :         // by exact host (web_fetch, browser navigate).</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :         MemoryHost</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             :         // MemoryPath means the call carries a boundary-crossing WriteRequest</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :         // and is remembered by writable directory (write, edit): approving</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :         // &quot;always allow&quot; whitelists the target's PARENT DIRECTORY, so later</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :         // writes anywhere under it stop prompting.</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             :         MemoryPath</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             :         // MemoryTool means the call carries no typed request and is remembered</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             :         // by tool name (generate_image, web_search, MCP tools).</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             :         MemoryTool</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             : )</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             : </span>
+<span id="L72"><span class="lineNum">      72</span>                 :             : // MemoryShape describes the categorical memory derivable from an approved</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : // call. Kind=MemoryNone means the call must stay per-call.</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : type MemoryShape struct {</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             :         Kind     MemoryKind</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             :         Info     RunCmdCall // valid when Kind=MemoryArgv</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :         Host     string     // valid when Kind=MemoryHost</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             :         Dir      string     // valid when Kind=MemoryPath (canonical absolute dir)</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             :         ToolName string     // valid when Kind=MemoryTool (canonical, normalized)</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             : }</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : </span>
+<span id="L82"><span class="lineNum">      82</span>                 :             : // DeriveMemoryShape inspects a prepared call's typed request fields to</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             : // determine which categorical memory shape applies, WITHOUT switching on</span>
+<span id="L84"><span class="lineNum">      84</span>                 :             : // the tool name. The typed ExecRequest and URLRequest (signed by the</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             : // producing tool during Prepare) are authoritative; raw-argument parsing</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             : // is the fallback for calls constructed outside Prepare (tests, approval</span>
+<span id="L87"><span class="lineNum">      87</span>                 :             : // UI boundary).</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             : //</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             : // This is the single function the app layer calls to derive &quot;allow always&quot;</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             : // memory, replacing the per-tool switch that used to live in</span>
+<span id="L91"><span class="lineNum">      91</span>                 :             : // rule_approver.go.</span>
+<span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaGNC tlaBgGNC">          93 : func DeriveMemoryShape(call domain.PreparedCall) MemoryShape {</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">          93 :         // ExecRequest: argv-prefix memory (run_cmd, exec_session, ...).</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">          93 :         info, ok := ExecInfoOf(call)</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">          93 :         if ok {</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">          49 :                 // DeriveRunCmdPrefixes determines whether the argv is</span></span>
+<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">          49 :                 // persistable — dynamic shells, eval forms, and heredocs are</span></span>
+<span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC">          49 :                 // not. The app layer still needs the trust/escalation gate,</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">          49 :                 // but the shape selection is: if it parses as exec, it's</span></span>
+<span id="L100"><span class="lineNum">     100</span>                 :<span class="tlaGNC">          49 :                 // MemoryArgv (DeriveRunCmdPrefixes will report !ok inside the</span></span>
+<span id="L101"><span class="lineNum">     101</span>                 :<span class="tlaGNC">          49 :                 // app layer for the non-persistable subset).</span></span>
+<span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaGNC">          49 :                 return MemoryShape{Kind: MemoryArgv, Info: info}</span></span>
+<span id="L103"><span class="lineNum">     103</span>                 :<span class="tlaGNC">          49 :         }</span></span>
+<span id="L104"><span class="lineNum">     104</span>                 :             : </span>
+<span id="L105"><span class="lineNum">     105</span>                 :             :         // URLRequest: exact-host domain memory (web_fetch, browser navigate).</span>
+<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">          44 :         urlInfo, ok := URLInfoOf(call)</span></span>
+<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">          44 :         if ok {</span></span>
+<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">           6 :                 return MemoryShape{Kind: MemoryHost, Host: urlInfo.Host}</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">           6 :         }</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :             : </span>
+<span id="L111"><span class="lineNum">     111</span>                 :             :         // WriteRequest outside the roots: writable-directory path memory</span>
+<span id="L112"><span class="lineNum">     112</span>                 :             :         // (write, edit). Workspace-confined writes never reach an approval,</span>
+<span id="L113"><span class="lineNum">     113</span>                 :             :         // so they never arrive here.</span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">          38 :         if writeInfo, ok := WriteInfoOf(call); ok {</span></span>
+<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">           2 :                 return MemoryShape{Kind: MemoryPath, Dir: filepath.Dir(writeInfo.Path)}</span></span>
+<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :             : </span>
+<span id="L118"><span class="lineNum">     118</span>                 :             :         // No typed request: tool-name memory (only eligible tools).</span>
+<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">          36 :         canonical, eligible := ToolMemoryEligible(call.Call.Name)</span></span>
+<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">          36 :         if !eligible {</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">          30 :                 return MemoryShape{Kind: MemoryNone}</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">          30 :         }</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">           6 :         return MemoryShape{Kind: MemoryTool, ToolName: canonical}</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :             : }</span>
+<span id="L125"><span class="lineNum">     125</span>                 :             : </span>
+<span id="L126"><span class="lineNum">     126</span>                 :             : // PreviewLabel renders the display form of the memory shape for the</span>
+<span id="L127"><span class="lineNum">     127</span>                 :             : // approval overlay's &quot;allow always&quot; option. ok=false means the call</span>
+<span id="L128"><span class="lineNum">     128</span>                 :             : // cannot be remembered.</span>
+<span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC">          39 : func (s MemoryShape) PreviewLabel() (label string, grant domain.ExecGrant, ok bool) {</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">          39 :         switch s.Kind {</span></span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">          17 :         case MemoryArgv:</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">          17 :                 prefixes, derivable := DeriveRunCmdPrefixes(s.Info)</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">          17 :                 if !derivable {</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">           6 :                         return &quot;&quot;, domain.ExecGrant{}, false</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">           6 :                 }</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">          11 :                 labels := make([]string, 0, len(prefixes))</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">          14 :                 for _, prefix := range prefixes {</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">          14 :                         labels = append(labels, strings.Join(prefix, &quot; &quot;))</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">          14 :                 }</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          11 :                 return strings.Join(labels, &quot; &amp;&amp; &quot;), DeriveRememberGrant(s.Info, &quot;&quot;), true</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :             : </span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">           3 :         case MemoryHost:</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">           3 :                 if s.Host == &quot;&quot; {</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">           1 :                         return &quot;&quot;, domain.ExecGrant{}, false</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">           2 :                 return s.Host, domain.ExecGrant{}, true</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :             : </span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">           1 :         case MemoryPath:</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">           1 :                 if s.Dir == &quot;&quot; {</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return &quot;&quot;, domain.ExecGrant{}, false</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                 return s.Dir, domain.ExecGrant{}, true</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :             : </span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">           3 :         case MemoryTool:</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">           3 :                 if s.ToolName == &quot;&quot; {</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return &quot;&quot;, domain.ExecGrant{}, false</span></span>
+<span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC tlaBgGNC">           3 :                 return s.ToolName, domain.ExecGrant{}, true</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :             : </span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">          15 :         default:</span></span>
+<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">          15 :                 return &quot;&quot;, domain.ExecGrant{}, false</span></span>
+<span id="L162"><span class="lineNum">     162</span>                 :             :         }</span>
+<span id="L163"><span class="lineNum">     163</span>                 :             : }</span>
+<span id="L164"><span class="lineNum">     164</span>                 :             : </span>
+<span id="L165"><span class="lineNum">     165</span>                 :             : // DeriveRememberGrant computes the grant a remembered rule should carry</span>
+<span id="L166"><span class="lineNum">     166</span>                 :             : // for the given call and user-chosen trust flavor. This is a re-export of</span>
+<span id="L167"><span class="lineNum">     167</span>                 :             : // the logic previously embedded in the app layer, moved here so the</span>
+<span id="L168"><span class="lineNum">     168</span>                 :             : // MemoryShape owns the full memory derivation.</span>
+<span id="L169"><span class="lineNum">     169</span>                 :             : //</span>
+<span id="L170"><span class="lineNum">     170</span>                 :             : //   - trust=unsandboxed on an escalated call → L2 full trust (explicit</span>
+<span id="L171"><span class="lineNum">     171</span>                 :             : //     user opt-in only; the ONLY rememberable flavor for escalations).</span>
+<span id="L172"><span class="lineNum">     172</span>                 :             : //   - otherwise → exactly the declared capabilities (network, gui_open);</span>
+<span id="L173"><span class="lineNum">     173</span>                 :             : //     zero grant when nothing was declared.</span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">          24 : func DeriveRememberGrant(info RunCmdCall, trust string) domain.ExecGrant {</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">          24 :         if trust == TrustUnsandboxed &amp;&amp; info.Escalated {</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">           2 :                 return domain.ExecGrant{Unsandboxed: true}</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">          22 :         return DeclaredGrant(info)</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :             : }</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>
