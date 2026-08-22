@@ -293,27 +293,45 @@ export const MazeView = memo(function MazeView({
   const pointersRef = useRef(new Map<number, number>()) // pointerId → clientX
   const pinchRef = useRef<{ d: number; mid: number } | null>(null)
 
+  // Capture must NOT happen on pointerdown: while captured, the trailing
+  // click retargets to the canvas and node onClick handlers never fire.
+  // Defer capture until the gesture proves to be a brush/pan/pinch.
+  const capturePointer = (e: React.PointerEvent) => {
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      // Synthetic events in tests: capture is a best-effort robustness
+      // aid, never worth breaking the gesture.
+    }
+  }
+
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return
       suppressClickRef.current = false
-      try {
-        e.currentTarget.setPointerCapture(e.pointerId)
-      } catch {
-        // Unknown pointer id (synthetic events in tests): capture is a
-        // best-effort robustness aid, never worth breaking the gesture.
-      }
       pointersRef.current.set(e.pointerId, e.clientX)
       if (pointersRef.current.size === 2) {
         // Second finger down: abandon any brush/pan, switch to pinch.
+        // Unambiguous gesture intent — capture both fingers now.
         dragRef.current = null
         setBrush(null)
         setPanning(false)
+        capturePointer(e)
+        const firstId = [...pointersRef.current.keys()][0]
+        if (firstId !== undefined && firstId !== e.pointerId) {
+          try {
+            e.currentTarget.setPointerCapture(firstId)
+          } catch {
+            /* best-effort, see capturePointer */
+          }
+        }
         const [a, b] = [...pointersRef.current.values()]
         pinchRef.current = { d: Math.abs(b - a), mid: (a + b) / 2 }
         return
       }
       if (e.pointerType === 'mouse' && e.shiftKey) {
+        // Shift-drag pans: unambiguous drag intent, capture immediately.
+        capturePointer(e)
         dragRef.current = { mode: 'pan', x: e.clientX, win: [dStart, dEnd] }
         setPanning(true)
         return
@@ -385,6 +403,7 @@ export const MazeView = memo(function MazeView({
       if (!drag.active && Math.abs(x1 - drag.x0) < 4) return
       if (!drag.active) {
         drag.active = true
+        capturePointer(e) // drag proven: keep the gesture ours off-canvas
         setHover(null) // don't leave a tooltip stuck under the selection
       }
       setBrush({ x0: drag.x0, x1 })
