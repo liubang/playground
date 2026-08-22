@@ -99,6 +99,10 @@ type ReasoningContent struct {
 	// Redacted marks a provider-redacted thinking block: Text is empty and
 	// Signature holds the opaque redacted payload to echo back.
 	Redacted bool `json:"redacted,omitempty"`
+	// DurationMs is the wall time spent on this thinking block (first delta →
+	// reasoning_end). Zero for redacted blocks and transcripts persisted before
+	// this field existed.
+	DurationMs int64 `json:"duration_ms,omitempty"`
 }
 
 // ImageContent carries one image for a vision-capable model: the media

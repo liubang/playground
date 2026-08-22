@@ -585,6 +585,14 @@ func (b *Bootstrap) ReloadPolicy(ctx context.Context) error {
 	return nil
 }
 
+// CurrentApprovalMode returns the active baseline approval mode; safe for
+// concurrent use with SetApprovalMode/ReloadPolicy.
+func (b *Bootstrap) CurrentApprovalMode() permission.ApprovalMode {
+	b.policyMu.RLock()
+	defer b.policyMu.RUnlock()
+	return b.approvalMode
+}
+
 // SetApprovalMode updates the baseline approval mode and rebuilds the
 // decider chain so subsequent evaluations use it (config hot-reload).
 func (b *Bootstrap) SetApprovalMode(ctx context.Context, mode permission.ApprovalMode) error {

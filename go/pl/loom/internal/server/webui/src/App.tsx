@@ -1,5 +1,6 @@
-// App.tsx — 应用外壳：gate / 主界面（侧栏 + 顶行 + 消息流 + composer +
-// 状态栏）+ 全局浮层（toast / confirm / 设置 / 目录浏览 / banner）。
+// App.tsx — app shell: gate / main UI (sidebar + top bar + message stream +
+// composer + status bar) + global overlays (toast / confirm / settings /
+// directory browser / banner).
 
 import { useMemo, useState } from 'react'
 import type { AppController } from './app/controller'
@@ -11,6 +12,7 @@ import { TranscriptView, type TranscriptViewIO } from './components/TranscriptVi
 import { Composer } from './components/Composer'
 import { StatusBar } from './components/StatusBar'
 import { DirPicker } from './components/DirPicker'
+import { RightPanel } from './components/panel/RightPanel'
 import { SettingsPanel } from './components/settings/SettingsPanel'
 import { MazePage } from './components/maze/MazePage'
 import { CompareView } from './components/maze/CompareView'
@@ -30,10 +32,12 @@ export function App({ controller }: { controller: AppController }) {
   const landingShowAddWs = useStore(controller.store, (s) => s.landingShowAddWs)
   const banner = useStore(controller.store, (s) => s.banner)
   const mainView = useStore(controller.store, (s) => s.mainView)
+  const rightPanelOpen = useStore(controller.store, (s) => s.rightPanelOpen)
   const sessionId = useStore(controller.store, (s) => s.sessionId)
   const [revealWs, setRevealWs] = useState<{ wsId: string; seq: number } | null>(null)
 
-  // TranscriptView 的交互回调（稳定引用：controller 方法均为绑定箭头函数）
+  // TranscriptView interaction callbacks (stable references: controller methods
+  // are all bound arrow functions)
   const transcriptIO = useMemo<TranscriptViewIO>(
     () => ({
       onResolveApproval: (approvalId, decision, always) =>
@@ -49,8 +53,9 @@ export function App({ controller }: { controller: AppController }) {
   const blocksIO = useMemo(() => ({ fetchArtifactURL: controller.fetchArtifactURL }), [controller])
 
   if (view === 'boot') {
-    // 鉴权校验中：什么都不渲染（旧版 index.html 里 gate/app 均 hidden 的等价行为，
-    // 避免持有效 token 刷新时闪现登录框）
+    // Auth check in progress: render nothing (equivalent to the old index.html
+    // keeping both gate/app hidden — avoids flashing the login box when
+    // refreshing with a valid token)
     return null
   }
 
@@ -66,8 +71,16 @@ export function App({ controller }: { controller: AppController }) {
 
   return (
     <BlocksIOContext.Provider value={blocksIO}>
-      <div id="app" className={'shell' + (sidebarCollapsed ? ' sidebar-collapsed' : '')}>
-        {/* 窄屏抽屉遮罩：仅断点内显示，点击收起抽屉 */}
+      <div
+        id="app"
+        className={
+          'shell' +
+          (sidebarCollapsed ? ' sidebar-collapsed' : '') +
+          (rightPanelOpen ? ' panel-open' : '')
+        }
+      >
+        {/* Narrow-screen drawer backdrop: visible only within the breakpoint;
+            clicking it collapses the drawer */}
         <div
           className="sidebar-backdrop"
           aria-hidden="true"
@@ -84,7 +97,8 @@ export function App({ controller }: { controller: AppController }) {
                 setRevealWs((prev) => ({ wsId, seq: (prev?.seq || 0) + 1 }))
               }
             />
-            {/* 零工作区引导态：无任何工作区时占据主区域 */}
+            {/* Zero-workspace onboarding state: fills the main area when no
+                workspace exists */}
             {noWorkspace ? (
               <div id="no-workspace" className="no-workspace">
                 <div className="no-workspace-card">
@@ -135,6 +149,13 @@ export function App({ controller }: { controller: AppController }) {
               </>
             )}
           </main>
+          {/* Right workspace panel (changes/file tree): docked right of the session
+              area, collapsible */}
+          {rightPanelOpen && !noWorkspace && (
+            <aside className="right-panel">
+              <RightPanel controller={controller} />
+            </aside>
+          )}
         </div>
 
         <div id="banner" className="banner" hidden={!banner}>

@@ -23,7 +23,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MazeData, MazeLane, MazeNode, MazeTool, MazeVerdict } from '../../protocol/types'
 import { axisTicks, buildFoldedAxis, formatDur, type FoldedAxis } from './axis'
 import { Icon } from '../../lib/icons'
-import { copyText } from '../../lib/format'
+import { copyText, fmtDuration } from '../../lib/format'
 
 // --- layout constants ---
 const LANE_HEADER_H = 34 // lane header (model / title / stats)
@@ -115,7 +115,8 @@ function fitLabel(s: string, budget: number): string {
 
 function tokLabel(n: MazeNode): string {
   const parts: string[] = []
-  if (n.rz_tok != null) parts.push(`推理 ${n.rz_tok} tok`)
+  if (n.rz_ms != null && n.rz_ms > 0) parts.push(`推理 ${fmtDuration(n.rz_ms)}`)
+  if (n.rz_tok != null) parts.push(`${n.rz_tok} tok`)
   else if (n.rz > 0) parts.push(`${n.rz} 段推理`)
   if (n.out_tok != null) parts.push(`输出 ${n.out_tok} tok`)
   return parts.join(' · ')
@@ -611,6 +612,7 @@ export const MazeView = memo(function MazeView({
                   <text x={svgW - PAD_X} y={top + 16} textAnchor="end" className="maze-lane-stats">
                     {st.steps} 步 · {st.tools} 工具 · {st.detours} 支路 · {formatDur(st.t)}
                     {st.out_tok > 0 ? ` · ${st.in_tok + st.out_tok} tok` : ''}
+                    {st.rz_ms ? ` · 推理 ${fmtDuration(st.rz_ms)}` : ''}
                   </text>
                   {/* main line */}
                   <line
@@ -1018,7 +1020,9 @@ const DetailPanel = memo(function DetailPanel({
         )}
       {node.rz_txt && (
         <details className="maze-detail-rz">
-          <summary>思考摘要（{node.rz} 段）</summary>
+          <summary>
+            思考摘要（{node.rz} 段{node.rz_ms ? ` · ${fmtDuration(node.rz_ms)}` : ''}）
+          </summary>
           <p>{node.rz_txt}</p>
         </details>
       )}

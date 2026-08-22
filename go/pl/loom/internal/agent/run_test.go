@@ -1506,6 +1506,63 @@ func (m *streamStepModel) Stream(_ context.Context, _ domain.ModelRequest) (doma
 // a retryable-marked stream error keeps its classification through the
 // aggregator so the loop can wait-and-retry; an unmarked one stays a
 // plain terminal failure.
+// Reasoning blocks seal with their wall-clock span, so reloaded transcripts
+// can show it (the WebUI's "thought for Xs" on reopened sessions).
+func TestStreamAggregatorReasoningDuration(t *testing.T) {
+	base := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
+	clock := domain.NewFakeClock(base)
+	agg := NewStreamAggregator(clock, StreamHooks{})
+
+	mustApply := func(evt domain.ModelEvent) {
+		t.Helper()
+		if err := agg.Apply(evt); err != nil {
+			t.Fatalf("Apply(%s): %v", evt.Kind, err)
+		}
+	}
+	mustApply(domain.ModelEvent{Kind: domain.ModelEventReasoningStart})
+	clock.Advance(1500 * time.Millisecond)
+	mustApply(domain.ModelEvent{Kind: domain.ModelEventReasoningDelta, ReasoningDelta: "deep"})
+	mustApply(domain.ModelEvent{Kind: domain.ModelEventReasoningEnd})
+	mustApply(domain.ModelEvent{Kind: domain.ModelEventTextDelta, TextDelta: "answer"})
+	mustApply(domain.ModelEvent{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopEndTurn})
+
+	msg, _, _, _, err := agg.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if len(msg.Parts) != 2 || msg.Parts[0].Reasoning == nil {
+		t.Fatalf("parts = %+v, want reasoning + text", msg.Parts)
+	}
+	if got := msg.Parts[0].Reasoning.DurationMs; got != 1500 {
+		t.Fatalf("DurationMs = %d, want 1500", got)
+	}
+
+	// Providers that skip reasoning_start still get the span anchored at the
+	// first delta.
+	clock2 := domain.NewFakeClock(base)
+	agg2 := NewStreamAggregator(clock2, StreamHooks{})
+	if err := agg2.Apply(domain.ModelEvent{Kind: domain.ModelEventReasoningDelta, ReasoningDelta: "x"}); err != nil {
+		t.Fatalf("Apply(delta): %v", err)
+	}
+	clock2.Advance(800 * time.Millisecond)
+	if err := agg2.Apply(domain.ModelEvent{Kind: domain.ModelEventReasoningEnd}); err != nil {
+		t.Fatalf("Apply(end): %v", err)
+	}
+	if err := agg2.Apply(domain.ModelEvent{Kind: domain.ModelEventTextDelta, TextDelta: "ok"}); err != nil {
+		t.Fatalf("Apply(text): %v", err)
+	}
+	if err := agg2.Apply(domain.ModelEvent{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopEndTurn}); err != nil {
+		t.Fatalf("Apply(response_end): %v", err)
+	}
+	msg2, _, _, _, err := agg2.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if got := msg2.Parts[0].Reasoning.DurationMs; got != 800 {
+		t.Fatalf("DurationMs without reasoning_start = %d, want 800", got)
+	}
+}
+
 func TestStreamAggregatorStreamErrorClassification(t *testing.T) {
 	agg := NewStreamAggregator(domain.RealClock{}, StreamHooks{})
 	err := agg.Apply(domain.ModelEvent{Kind: domain.ModelEventStreamError, Error: "stream read failed: connection reset", Retryable: true})

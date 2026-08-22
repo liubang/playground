@@ -1,8 +1,10 @@
-// api.ts — REST 封装（docs/WEB_DESIGN.md §3.4）。
-// 统一：Bearer header、wire 错误模型解析、401 全局回 gate、幂等键。
-// 逻辑与旧 static/js/api.js 一一对应，仅补类型。
+// api.ts — REST wrapper (docs/WEB_DESIGN.md §3.4).
+// Uniform: Bearer header, wire error-model parsing, global 401 → gate redirect,
+// idempotency keys.
+// Logic is one-to-one with the old static/js/api.js; only types were added.
 
 import type {
+  ApprovalMode,
   ConfigEnvelope,
   DirBrowseResult,
   EnvironmentReport,
@@ -20,6 +22,11 @@ import type {
   SkillListResult,
   Snapshot,
   Workspace,
+  WorkspaceFileContent,
+  WorkspaceFileList,
+  WorkspaceFileSearchResult,
+  WorkspaceGitDiff,
+  WorkspaceGitStatus,
 } from './types'
 
 export class ApiError extends Error {
@@ -81,32 +88,37 @@ export function createApi({ getToken, onUnauthorized }: ApiOptions) {
   return {
     metaVersion: () => req<{ version?: string }>('GET', '/v1/meta/version'),
     metaModels: () => req<ModelCatalog>('GET', '/v1/meta/models'),
-    // 工具链/PATH 运行时报告（设置面板「开发环境」卡片）
+    // Toolchain/PATH runtime report (the settings panel's Dev Environment card)
     metaEnvironment: () => req<EnvironmentReport>('GET', '/v1/meta/environment'),
-    // 配置（设置面板）：GET 返回 {path, exists, revision, config}（密钥已脱敏）；
-    // PUT 携带 revision 乐观锁，409 config_conflict 表示文件被外部修改
+    // Config (settings panel): GET returns {path, exists, revision, config}
+    // (secrets redacted); PUT carries a revision optimistic lock — 409
+    // config_conflict means the file was modified externally
     getConfig: () => req<ConfigEnvelope>('GET', '/v1/config'),
     putConfig: (revision: string, config: Record<string, unknown>) =>
       req<PutConfigResult>('PUT', '/v1/config', { revision, config }),
-    // 按需查看单个已存密钥的明文（GET 只下发掩码）；ref = {kind, name, field}
+    // Reveal one stored secret's plaintext on demand (GET only sends masks);
+    // ref = {kind, name, field}
     revealSecret: (ref: SecretRef) => req<{ value?: string }>('POST', '/v1/config/reveal', ref),
-    // 聚合所有工作区的 skill 目录（设置面板 Skills tab）
+    // Aggregates skill directories across all workspaces (settings panel Skills tab)
     listSkills: () => req<SkillListResult>('GET', '/v1/skills'),
-    // 按名称禁用/启用：写入 config 的 skills.disabled 并热应用（按名称跨
-    // 工作区生效）；响应携带最新 {revision, disabled, applied}
+    // Disable/enable by name: writes to config's skills.disabled and hot-applies
+    // (name-based, effective across workspaces); the response carries the latest
+    // {revision, disabled, applied}
     setSkillDisabled: (name: string, disabled: boolean) =>
       req<{ revision?: string; disabled?: string[] }>(
         'PUT',
         `/v1/skills/${encodeURIComponent(name)}/disabled`,
         { disabled },
       ),
-    // 按 SKILL.md 路径从磁盘删除整个 skill 目录（服务端限定在发现根目录内，不可恢复）
+    // Delete a whole skill directory from disk by its SKILL.md path (server
+    // restricts this to discovery roots; unrecoverable)
     deleteSkill: (path: string) => req('DELETE', '/v1/skills', { path }),
-    // MCP 服务器实时状态与重连（设置面板）
+    // MCP server live status and reconnect (settings panel)
     listMcpServers: () => req<{ servers?: McpServerStatus[] }>('GET', '/v1/mcp/servers'),
     reconnectMcpServer: (name: string) =>
       req<McpServerStatus>('POST', `/v1/mcp/servers/${encodeURIComponent(name)}/reconnect`, {}),
-    // 规则包（设置面板）：列出内置包与安装状态；安装/卸载写入用户规则目录并热重载
+    // Rule packs (settings panel): list built-in packs and install status;
+    // install/uninstall write to the user rules directory and hot-reload
     listRulePacks: () => req<{ packs?: RulePack[] }>('GET', '/v1/rules/packs'),
     installRulePack: (id: string) =>
       req('PUT', `/v1/rules/packs/${encodeURIComponent(id)}/install`, {}),
@@ -116,27 +128,64 @@ export function createApi({ getToken, onUnauthorized }: ApiOptions) {
         'GET',
         `/v1/sessions?limit=${limit}${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}${archived ? '&archived=1' : ''}${workspaceId ? '&workspace_id=' + encodeURIComponent(workspaceId) : ''}`,
       ),
-    // workspaces（docs/WORKSPACE_DESIGN.md §8.1）
+    // workspaces (docs/WORKSPACE_DESIGN.md §8.1)
     listWorkspaces: () => req<{ workspaces?: Workspace[] }>('GET', '/v1/workspaces'),
     registerWorkspace: (rootPath: string, name: string) =>
       req<{ workspace: Workspace }>('POST', '/v1/workspaces', { root_path: rootPath, name }),
-    // 删除工作区：级联删除其下全部会话（存活会话被关闭，不可恢复）；磁盘
-    // 目录不动。默认工作区不可删（409 workspace_in_use）
+    // Delete workspace: cascades to all its sessions (live sessions are closed;
+    // unrecoverable); the on-disk directory is left untouched. The default
+    // workspace cannot be deleted (409 workspace_in_use)
     deleteWorkspace: (id: string) => req('DELETE', `/v1/workspaces/${id}`),
     browseDirectories: (path: string) =>
       req<DirBrowseResult>('GET', `/v1/files/browse?path=${encodeURIComponent(path || '')}`),
+    // Workspace right panel: file tree / file preview / git changes / diff (all
+    // confined to the workspace root)
+    listWorkspaceFiles: (id: string, path: string, showAll = false) =>
+      req<WorkspaceFileList>(
+        'GET',
+        `/v1/workspaces/${id}/files?path=${encodeURIComponent(path)}${showAll ? '&all=1' : ''}`,
+      ),
+    readWorkspaceFile: (id: string, path: string) =>
+      req<WorkspaceFileContent>(
+        'GET',
+        `/v1/workspaces/${id}/file?path=${encodeURIComponent(path)}`,
+      ),
+    workspaceGitStatus: (id: string) =>
+      req<WorkspaceGitStatus>('GET', `/v1/workspaces/${id}/git/status`),
+    workspaceGitDiff: (id: string, path: string, staged = false) =>
+      req<WorkspaceGitDiff>(
+        'GET',
+        `/v1/workspaces/${id}/git/diff?path=${encodeURIComponent(path)}${staged ? '&staged=1' : ''}`,
+      ),
+    // Composer @ completion: fuzzy file search within the workspace
+    searchWorkspaceFiles: (id: string, q: string) =>
+      req<WorkspaceFileSearchResult>(
+        'GET',
+        `/v1/workspaces/${id}/files/search?q=${encodeURIComponent(q)}`,
+      ),
+    // Approval-mode quick toggle: workspace-level override, effective next turn,
+    // not persisted
+    setWorkspaceApprovalMode: (id: string, mode: ApprovalMode) =>
+      req<{ mode?: string }>('POST', `/v1/workspaces/${id}/approval-mode`, { mode }),
+    // Effective approval mode (live override or config default); pages re-read
+    // this after session opens so a reload never misreports an earlier switch
+    getWorkspaceApprovalMode: (id: string) =>
+      req<{ mode?: string }>('GET', `/v1/workspaces/${id}/approval-mode`),
     archiveSession: (id: string, archived: boolean) =>
       req('POST', `/v1/sessions/${id}/archive`, { archived }),
     deleteSession: (id: string) => req('DELETE', `/v1/sessions/${id}`),
-    // 分享链接：创建幂等（重复调用返回同一 token）；撤销后原链接立即失效
+    // Share links: creation is idempotent (repeat calls return the same token);
+    // revoking invalidates the original link immediately
     shareSession: (id: string) => req<ShareCreateResult>('POST', `/v1/sessions/${id}/share`),
     revokeShare: (id: string) => req('DELETE', `/v1/sessions/${id}/share`),
-    // 局域网分享监听（桌面端）：开关写穿到 share.enabled 并热应用
-    // （即时生效且持久）；无 ShareManager 的 server（loom serve）返回 404
+    // LAN share listener (desktop): the toggle writes through to share.enabled
+    // and hot-applies (immediate and persistent); servers without a ShareManager
+    // (loom serve) return 404
     getShareEndpoint: () => req<ShareEndpoint>('GET', '/v1/share/endpoint'),
     setShareEndpoint: (enabled: boolean) =>
       req<{ endpoint?: ShareEndpoint }>('POST', '/v1/share/endpoint', { enabled }),
-    // 用户反馈：对某一轮（run）投 赞=1/踩=0，落为 Langfuse BOOLEAN 分数
+    // User feedback: thumbs-up=1 / thumbs-down=0 for a turn (run), recorded as a
+    // Langfuse BOOLEAN score
     submitFeedback: (id: string, runId: string, value: 0 | 1, comment = '') =>
       req('POST', `/v1/sessions/${id}/feedback`, { run_id: runId, value, comment }),
     // createSession / resumeSession share POST /v1/sessions. createSession

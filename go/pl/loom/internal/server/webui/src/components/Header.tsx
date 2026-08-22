@@ -1,5 +1,6 @@
-// Header.tsx — 应用顶行：侧栏开关 / 主题 / 设置 / 工作区面包屑 /
-// session id 复制 / 分享 / 只读徽标 / 会话状态徽标 / 连接徽标。
+// Header.tsx — app top bar: sidebar toggle / theme / settings / workspace
+// breadcrumb / session id copy / share / read-only badge / session state badge /
+// connection badge.
 
 import { memo } from 'react'
 import type { AppController } from '../app/controller'
@@ -34,6 +35,7 @@ export const Header = memo(function Header({
   const readOnlyTitle = useStore(controller.store, (s) => s.readOnlyTitle)
   const hdrWorkspace = useStore(controller.store, (s) => s.hdrWorkspace)
   const hdrWorkspaceTitle = useStore(controller.store, (s) => s.hdrWorkspaceTitle)
+  const rightPanelOpen = useStore(controller.store, (s) => s.rightPanelOpen)
   const noWorkspace = useStore(controller.store, (s) => s.noWorkspace)
   const landingVisible = useStore(controller.store, (s) => s.landingVisible)
 
@@ -123,6 +125,15 @@ export const Header = memo(function Header({
         <span className="dot" />
         <span className="txt">{connText}</span>
       </span>
+      <button
+        id="hdr-panel"
+        className={'icon-btn' + (rightPanelOpen ? ' is-active' : '')}
+        title={rightPanelOpen ? '收起工作区面板' : '展开工作区面板（变更 / 文件）'}
+        hidden={noWorkspace}
+        onClick={() => controller.toggleRightPanel()}
+      >
+        <Icon name="panel-right" />
+      </button>
     </header>
   )
 })

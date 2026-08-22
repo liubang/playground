@@ -1,27 +1,29 @@
-// Composer.tsx — 输入框（IME 安全、自适应高度、steer 态、取消、图片附件）
-// + 模型/reasoning 切换器。
+// Composer.tsx — input box (IME-safe, auto-growing height, steer state, cancel,
+// image attachments) + model/reasoning pickers.
 //
-// 图片附件三条入口：剪贴板粘贴（paste）、拖入 composer（drop）、附件按钮
-// 选择文件。图片在客户端经 canvas 压缩（最长边 MAX_DIM）后以 base64 随
-// prompt 一并提交；GIF/小图保留原始字节。与旧 components/composer.js 对应。
+// Three image-attachment entries: clipboard paste, drop onto the composer, and
+// the attach button. Images are canvas-compressed client-side (longest edge
+// MAX_DIM) and submitted as base64 with the prompt; GIFs/small images keep their
+// original bytes. Mirrors the old components/composer.js.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { AppController } from '../app/controller'
 import { useStore } from '../store/store'
-import { Icon } from '../lib/icons'
+import { Icon, type IconName } from '../lib/icons'
 import { CtxGauge } from './CtxGauge'
 import { PlanPanel } from './blocks/PlanPanel'
 import { toast } from './ui/Toast'
 
-// MAX_ATTACHMENTS 与后端 maxImageAttachments 对齐。
+// MAX_ATTACHMENTS matches the backend maxImageAttachments.
 const MAX_ATTACHMENTS = 5
-// 单张原图上限（压缩前），与 TUI 的 maxImageLoadBytes 一致。
+// Per-image source size cap (pre-compression); same as the TUI's maxImageLoadBytes.
 const MAX_SOURCE_BYTES = 20 * 1024 * 1024
-// 导出最长边：视觉模型推荐的分辨率上限，同时把 base64 体积压在 body 限制内。
+// Exported longest edge: the resolution cap recommended for vision models; also
+// keeps the base64 payload within the body size limit.
 const MAX_DIM = 1568
 
-// blobToBase64 读取 Blob 为不含 "data:" 前缀的 base64 字符串。
+// blobToBase64 reads a Blob into a base64 string without the "data:" prefix.
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader()
@@ -37,7 +39,7 @@ function blobToBase64(blob: Blob): Promise<string> {
 interface Attachment {
   name: string
   mediaType: string
-  data: string // base64（无 data: 前缀）
+  data: string // base64 (no data: prefix)
   previewUrl: string
 }
 
@@ -49,10 +51,34 @@ const REASONING_OPTIONS = [
   { value: 'high', label: 'High' },
 ]
 
+// Quick toggle for the approval baseline (same source as the settings panel's
+// approval.mode; this one is a workspace-level override that takes effect next
+// turn and is never persisted). Capsule: the default mode (standard) shows only
+// the shield icon — the normal state demands no attention; non-default modes
+// expand a short name with an amber warning.
+const APPROVAL_OPTIONS = [
+  { value: 'on-request', short: 'standard', hint: '默认：工作区内读写免审批，越界/危险才询问' },
+  {
+    value: 'unless-dangerous',
+    short: 'relaxed',
+    hint: '黑名单：仅危险命令与出沙箱提权弹审批',
+  },
+  { value: 'never', short: 'auto', hint: '无人值守：危险直接拒绝，永不等待审批' },
+]
+
 function fmtCtx(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(0) + 'M'
   if (n >= 1000) return (n / 1000).toFixed(0) + 'k'
   return String(n)
+}
+
+// AcItem is one autocomplete candidate: icon + main line + sub line + the text
+// inserted on accept.
+interface AcItem {
+  icon: IconName
+  main: string
+  sub: string
+  insert: string
 }
 
 export function Composer({ controller }: { controller: AppController }) {
@@ -63,21 +89,31 @@ export function Composer({ controller }: { controller: AppController }) {
   const imagesDisabledReason = useStore(controller.store, (s) => s.imagesDisabledReason)
   const curModelRef = useStore(controller.store, (s) => s.curModelRef)
   const curReasoning = useStore(controller.store, (s) => s.curReasoning)
-  const reasoningOverridden = useStore(controller.store, (s) => s.reasoningOverridden)
+  const approvalMode = useStore(controller.store, (s) => s.approvalMode)
   const models = useStore(controller.store, (s) => s.models)
   const plan = useStore(controller.store, (s) => s.plan)
 
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [focused, setFocused] = useState(false)
-  const [picker, setPicker] = useState<'' | 'model' | 'reasoning'>('')
+  const [picker, setPicker] = useState<'' | 'model' | 'reasoning' | 'approval'>('')
   const taRef = useRef<HTMLTextAreaElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const composingRef = useRef(false)
   const [dragover, setDragover] = useState(false)
 
-  // 草稿同步：controller 侧按会话暂存/还原
+  // --- Autocomplete: @ file refs (workspace fuzzy search) and / skills (line start only) ---
+  const [ac, setAc] = useState<null | { kind: 'file' | 'skill'; start: number; query: string }>(
+    null,
+  )
+  const [acItems, setAcItems] = useState<AcItem[]>([])
+  const [acSel, setAcSel] = useState(0)
+  const skillsCache = useRef<AcItem[] | null>(null)
+  const acTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const acSeq = useRef(0)
+
+  // Draft sync: the controller stashes/restores text per session
   useEffect(() => {
     controller.composerText = text
   }, [text, controller])
@@ -85,7 +121,7 @@ export function Composer({ controller }: { controller: AppController }) {
     controller.onComposerRestore = (t: string) => {
       setText(t)
       if (!t) {
-        // 清空时同时释放附件（提交成功路径）
+        // Clearing also releases attachments (submit-success path)
         for (const a of attachmentsRef.current) URL.revokeObjectURL(a.previewUrl)
         attachmentsRef.current = []
         setAttachments([])
@@ -96,13 +132,116 @@ export function Composer({ controller }: { controller: AppController }) {
     }
   }, [controller])
 
-  // 自适应高度
+  // Auto-growing height
   useEffect(() => {
     const ta = taRef.current
     if (!ta) return
     ta.style.height = 'auto'
     ta.style.height = Math.min(200, ta.scrollHeight) + 'px'
   }, [text])
+
+  // Trigger detection: @ must follow line start/whitespace (avoids emails); / only at input start
+  useEffect(() => {
+    const ta = taRef.current
+    if (!ta || locked) {
+      setAc(null)
+      return
+    }
+    const upto = text.slice(0, ta.selectionStart ?? text.length)
+    const at = /(?:^|\s)@([^\s@]*)$/.exec(upto)
+    if (at) {
+      setAc({ kind: 'file', start: upto.length - at[1].length - 1, query: at[1] })
+      return
+    }
+    const slash = /^\/([^\s/]*)$/.exec(upto)
+    if (slash) {
+      setAc({ kind: 'skill', start: 0, query: slash[1] })
+      return
+    }
+    setAc(null)
+  }, [text, locked])
+
+  // Completion data: skill list filtered client-side (cached once); files via
+  // server-side fuzzy search (debounced)
+  useEffect(() => {
+    setAcSel(0)
+    if (!ac) {
+      setAcItems([])
+      return
+    }
+    const seq = ++acSeq.current
+    if (ac.kind === 'skill') {
+      const applySkills = (items: AcItem[]) => {
+        const q = ac.query.toLowerCase()
+        setAcItems(items.filter((i) => i.main.toLowerCase().includes(q)).slice(0, 8))
+      }
+      if (skillsCache.current) {
+        applySkills(skillsCache.current)
+        return
+      }
+      controller.api
+        .listSkills()
+        .then((res) => {
+          const items: AcItem[] = []
+          for (const g of res.groups || []) {
+            for (const sk of g.skills || []) {
+              if (sk.disabled) continue
+              items.push({
+                icon: 'puzzle-piece',
+                main: sk.name,
+                sub: sk.description || '',
+                insert: '/' + sk.name + ' ',
+              })
+            }
+          }
+          skillsCache.current = items
+          if (acSeq.current === seq) applySkills(items)
+        })
+        .catch(() => {})
+      return
+    }
+    if (acTimer.current) clearTimeout(acTimer.current)
+    acTimer.current = setTimeout(() => {
+      const wsId = controller.currentWorkspaceId()
+      if (!wsId) return
+      controller.api
+        .searchWorkspaceFiles(wsId, ac.query)
+        .then((res) => {
+          if (acSeq.current !== seq) return
+          setAcItems(
+            (res.matches || []).slice(0, 8).map((m) => ({
+              icon: m.kind === 'dir' ? 'folder' : 'file',
+              main: m.name,
+              sub: m.path,
+              insert: '@' + m.path + (m.kind === 'dir' ? '/' : ' '),
+            })),
+          )
+        })
+        .catch(() => {
+          if (acSeq.current === seq) setAcItems([])
+        })
+    }, 150)
+  }, [ac]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Accept completion: replace the trigger token with the insert value and move
+  // the caret to its end; directories end with / so drilling can continue.
+  // pos is clamped to ac.start — if the caret moved out of the token without a
+  // text change, an unclamped splice would duplicate the middle segment.
+  const acceptAc = (item: AcItem) => {
+    if (!ac) return
+    const ta = taRef.current
+    const pos = Math.max(ac.start, ta ? (ta.selectionStart ?? text.length) : text.length)
+    setText(text.slice(0, ac.start) + item.insert + text.slice(pos))
+    setAc(null)
+    const caret = ac.start + item.insert.length
+    requestAnimationFrame(() => {
+      const t = taRef.current
+      if (t) {
+        t.focus()
+        t.setSelectionRange(caret, caret)
+      }
+    })
+  }
 
   const onError = useCallback((msg: string) => toast(msg), [])
   const attachmentsRef = useRef<Attachment[]>([])
@@ -162,10 +301,10 @@ export function Composer({ controller }: { controller: AppController }) {
     [imagesEnabled, imagesDisabledReason, onError],
   )
 
-  // followup=true：排入下一轮队列（turn 结束后接力为下一轮的 prompt），
-  // 而不是注入当前 turn。
+  // followup=true: queue for the next turn (becomes the next turn's prompt once
+  // this turn ends) instead of steering the current turn.
   const submit = (followup = false) => {
-    if (locked) return // 只读会话：不允许追问
+    if (locked) return // read-only session: no follow-ups allowed
     const t = text.trim()
     if (!t && attachments.length === 0) return
     void controller.submitPrompt(
@@ -175,29 +314,24 @@ export function Composer({ controller }: { controller: AppController }) {
     )
   }
 
-  // placeholder 随焦点切换：聚焦时显示按键提示，失焦时显示引导文案。
+  // Placeholder switches with focus: shortest key hints when focused, guidance
+  // copy when blurred. Full shortcut docs live in the send button tooltip — the
+  // input area's most valuable real estate is no place for a manual.
   let placeholder: string
   if (locked) {
     placeholder = readOnlyLabel || '只读'
   } else if (focused) {
     placeholder = busy
-      ? 'Enter to steer the running turn · Ctrl+Enter to queue for the next turn · Shift+Enter for newline'
-      : 'Enter to send · Shift+Enter for newline · paste/drop images'
+      ? 'Enter to steer · Ctrl+Enter to queue · Shift+Enter for newline'
+      : 'Enter to send · Shift+Enter for newline'
   } else {
-    placeholder = busy ? 'Steer this turn… (Ctrl+Enter queues for next turn)' : 'Message loom…'
+    placeholder = busy ? 'Steer this turn…' : 'Message loom…'
   }
 
-  const reasoningLabel = (() => {
-    const e = curReasoning || 'default'
-    const map: Record<string, string> = {
-      default: 'reasoning',
-      off: 'reasoning: off',
-      low: 'reasoning: low',
-      medium: 'reasoning: medium',
-      high: 'reasoning: high',
-    }
-    return map[e] || 'reasoning'
-  })()
+  // Reasoning capsule: default state shows the entry name; non-default shows
+  // only the level value (prefix/asterisk would be noise). Non-default tint
+  // (is-on) makes "not on the default level" scannable.
+  const reasoningLabel = curReasoning && curReasoning !== 'default' ? curReasoning : 'reasoning'
 
   return (
     <div className="composer">
@@ -261,6 +395,33 @@ export function Composer({ controller }: { controller: AppController }) {
             composingRef.current = false
           }}
           onKeyDown={(e) => {
+            // While the completion menu is open, navigation/confirm keys take priority —
+            // but never during IME composition (Enter/Arrows belong to the IME
+            // candidate window, e.g. typing pinyin after @).
+            if (ac && !e.nativeEvent.isComposing && !composingRef.current) {
+              if (e.key === 'Escape') {
+                e.preventDefault()
+                setAc(null)
+                return
+              }
+              if (acItems.length > 0) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault()
+                  setAcSel((v) => (v + 1) % acItems.length)
+                  return
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault()
+                  setAcSel((v) => (v - 1 + acItems.length) % acItems.length)
+                  return
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  e.preventDefault()
+                  acceptAc(acItems[acSel])
+                  return
+                }
+              }
+            }
             if (
               e.key === 'Enter' &&
               !e.shiftKey &&
@@ -268,7 +429,7 @@ export function Composer({ controller }: { controller: AppController }) {
               !e.nativeEvent.isComposing
             ) {
               e.preventDefault()
-              // Ctrl/Cmd+Enter：排队到下一轮；普通 Enter：steer 当前轮 / 直接发送
+              // Ctrl/Cmd+Enter: queue for next turn; plain Enter: steer current turn / send
               submit(e.ctrlKey || e.metaKey)
             }
           }}
@@ -281,13 +442,16 @@ export function Composer({ controller }: { controller: AppController }) {
                 if (f) files.push(f)
               }
             }
-            if (files.length === 0) return // 纯文本粘贴走默认行为
+            if (files.length === 0) return // plain-text paste: keep default behavior
             const hasText = (e.clipboardData.getData('text/plain') || '').length > 0
-            if (!hasText) e.preventDefault() // 纯图片：阻止插入文件名噪声
+            if (!hasText) e.preventDefault() // image-only: block filename noise insertion
             void addFiles(files)
           }}
           onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onBlur={() => {
+            setFocused(false)
+            setAc(null)
+          }}
         />
         <div className="composer-bar">
           <div className="composer-tools">
@@ -313,7 +477,7 @@ export function Composer({ controller }: { controller: AppController }) {
               hidden
               onChange={(e) => {
                 void addFiles([...(e.target.files || [])])
-                e.target.value = '' // 允许重复选择同一文件
+                e.target.value = '' // allow re-selecting the same file
               }}
             />
             <button
@@ -330,41 +494,61 @@ export function Composer({ controller }: { controller: AppController }) {
             </button>
             <button
               id="reasoning-btn"
-              className={'picker-btn' + (picker === 'reasoning' ? ' is-active' : '')}
-              title="设置 reasoning"
+              className={
+                'picker-btn' +
+                (picker === 'reasoning' ? ' is-active' : '') +
+                (curReasoning && curReasoning !== 'default' ? ' is-on' : '')
+              }
+              title={`设置 reasoning（当前：${curReasoning || 'default'}）`}
               disabled={locked}
               onClick={() => setPicker(picker === 'reasoning' ? '' : 'reasoning')}
             >
-              <span className="picker-label">
-                {reasoningLabel}
-                {reasoningOverridden && curReasoning && curReasoning !== 'default' && (
-                  <Icon name="star" />
-                )}
-              </span>
+              <span className="picker-label">{reasoningLabel}</span>
               <span className="picker-caret">
                 <Icon name="caret-down" />
               </span>
             </button>
+            <button
+              id="approval-btn"
+              className={
+                'picker-btn' +
+                (picker === 'approval' ? ' is-active' : '') +
+                (approvalMode && approvalMode !== 'on-request' ? ' is-warn' : '')
+              }
+              title="切换审批基线模式（工作区级，下一轮生效）"
+              disabled={locked}
+              onClick={() => setPicker(picker === 'approval' ? '' : 'approval')}
+            >
+              <Icon name="shield-halved" />
+              {/* Zero text in the normal state: standard demands no attention;
+                  non-default modes expand a short name + caret */}
+              {approvalMode && approvalMode !== 'on-request' && (
+                <>
+                  <span className="picker-label">
+                    {APPROVAL_OPTIONS.find((o) => o.value === approvalMode)?.short || approvalMode}
+                  </span>
+                  <span className="picker-caret">
+                    <Icon name="caret-down" />
+                  </span>
+                </>
+              )}
+            </button>
           </div>
           <div className="composer-actions">
             <CtxGauge controller={controller} />
-            <button
-              id="cancel-btn"
-              className="icon-btn-circle btn-danger"
-              title="cancel turn"
-              hidden={!busy}
-              onClick={controller.cancelTurn}
-            >
-              <Icon name="stop" />
-            </button>
+            {/* send/stop are one two-state button: while busy the primary button
+                becomes cancel (same spot, same shape — avoids the hierarchy mess
+                of a red stop + teal send side by side) */}
             <button
               id="send-btn"
-              className="send-btn"
-              title="发送 (Enter)"
+              className={'send-btn' + (busy ? ' is-stop' : '')}
+              title={
+                busy ? '取消当前 turn' : '发送 (Enter) · Ctrl+Enter 排队下一轮 · Shift+Enter 换行'
+              }
               disabled={locked}
-              onClick={() => submit()}
+              onClick={() => (busy ? controller.cancelTurn() : submit())}
             >
-              <Icon name="arrow-up" />
+              <Icon name={busy ? 'stop' : 'arrow-up'} />
             </button>
           </div>
         </div>
@@ -392,12 +576,47 @@ export function Composer({ controller }: { controller: AppController }) {
           />
         </PickerMenu>
       )}
+      {picker === 'approval' && (
+        <PickerMenu anchorId="approval-btn" onClose={() => setPicker('')}>
+          <ApprovalMenu
+            current={approvalMode || 'on-request'}
+            onPick={(mode) => {
+              setPicker('')
+              if (mode !== (approvalMode || 'on-request')) void controller.pickApprovalMode(mode)
+            }}
+          />
+        </PickerMenu>
+      )}
+      {/* Autocomplete popover: shares PickerMenu with the pickers (anchored above the composer) */}
+      {ac && acItems.length > 0 && (
+        <PickerMenu anchorId="composer-box" onClose={() => setAc(null)}>
+          {acItems.map((it, i) => (
+            <button
+              key={it.insert}
+              type="button"
+              className={'menu-item ac-item' + (i === acSel ? ' is-active' : '')}
+              onMouseDown={(e) => {
+                e.preventDefault() // keep textarea focus
+                acceptAc(it)
+              }}
+              onMouseEnter={() => setAcSel(i)}
+            >
+              <span className="ac-icon">
+                <Icon name={it.icon} />
+              </span>
+              <span className="ac-main">{it.main}</span>
+              <span className="ac-sub">{it.sub}</span>
+            </button>
+          ))}
+        </PickerMenu>
+      )}
     </div>
   )
 }
 
-// PickerMenu — 模型/reasoning 共用浮层：锚定到触发按钮上方（composer 在
-// 视口底部，向下会被裁剪）；外部点击 / Esc / 窗口失焦关闭。
+// PickerMenu — shared popover for model/reasoning/approval: anchored above the
+// trigger button (the composer sits at the viewport bottom, so opening downward
+// would be clipped); closes on outside click / Esc / window blur.
 function PickerMenu({
   anchorId,
   onClose,
@@ -486,7 +705,8 @@ function ModelMenu({
                 {mo.context_window ? (
                   <span className="ctx">{fmtCtx(mo.context_window)}</span>
                 ) : null}
-                {/* ✓ 槽位始终占位（未选中留空），保持所有行右侧对齐 */}
+                {/* The ✓ slot always occupies space (empty when unselected) so all
+                    rows stay right-aligned */}
                 <span className="check">{ref === currentRef && <Icon name="check" />}</span>
               </button>
             )
@@ -510,6 +730,25 @@ function ReasoningMenu({ current, onPick }: { current: string; onPick: (effort: 
         >
           {opt.label}
           <span className="check">{opt.value === eff && <Icon name="check" />}</span>
+        </button>
+      ))}
+    </>
+  )
+}
+
+function ApprovalMenu({ current, onPick }: { current: string; onPick: (mode: string) => void }) {
+  return (
+    <>
+      {APPROVAL_OPTIONS.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          className={'menu-item menu-item-hint' + (opt.value === current ? ' is-active' : '')}
+          onClick={() => onPick(opt.value)}
+        >
+          {opt.short} · {opt.value}
+          <span className="check">{opt.value === current && <Icon name="check" />}</span>
+          <span className="menu-item-desc">{opt.hint}</span>
         </button>
       ))}
     </>

@@ -276,6 +276,15 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/workspaces", s.handleRegisterWorkspace)
 	mux.HandleFunc("GET /v1/workspaces/{id}", s.handleGetWorkspace)
 	mux.HandleFunc("DELETE /v1/workspaces/{id}", s.handleDeleteWorkspace)
+	// Workspace explorer (WebUI right panel): workspace-confined file
+	// tree/preview, git worktree status/diff, approval-mode quick switch.
+	mux.HandleFunc("GET /v1/workspaces/{id}/files", s.handleListWorkspaceFiles)
+	mux.HandleFunc("GET /v1/workspaces/{id}/files/search", s.handleSearchWorkspaceFiles)
+	mux.HandleFunc("GET /v1/workspaces/{id}/file", s.handleReadWorkspaceFile)
+	mux.HandleFunc("GET /v1/workspaces/{id}/git/status", s.handleWorkspaceGitStatus)
+	mux.HandleFunc("GET /v1/workspaces/{id}/git/diff", s.handleWorkspaceGitDiff)
+	mux.HandleFunc("GET /v1/workspaces/{id}/approval-mode", s.handleGetWorkspaceApprovalMode)
+	mux.HandleFunc("POST /v1/workspaces/{id}/approval-mode", s.handleSetWorkspaceApprovalMode)
 	mux.HandleFunc("GET /v1/files/browse", s.handleBrowseDirectories)
 	mux.HandleFunc("GET /v1/sessions", s.handleListSessions)
 	mux.HandleFunc("POST /v1/sessions", s.handleCreateSession)

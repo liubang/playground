@@ -31,6 +31,7 @@ go_library(
         "handlers_sessions.go",
         "handlers_share.go",
         "handlers_skills.go",
+        "handlers_workspace_explorer.go",
         "handlers_workspaces.go",
         "lock.go",
         "server.go",
@@ -47,6 +48,7 @@ go_library(
         "//go/pl/loom/internal/runtimeevent",
         "//go/pl/loom/internal/server/web",
         "//go/pl/loom/internal/skill:skill_lib",
+        "//go/pl/loom/internal/workspace:workspace_lib",
         "@org_golang_x_sys//unix",
     ],
 )
@@ -62,6 +64,7 @@ go_test(
         "handlers_packs_test.go",
         "handlers_share_test.go",
         "handlers_skills_test.go",
+        "handlers_workspace_explorer_test.go",
         "middleware_test.go",
         "server_test.go",
         "share_manager_test.go",

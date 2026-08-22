@@ -1,19 +1,53 @@
-// ToolBlock.tsx — 工具块渲染器（与旧 blocks.js toolBlock 一一对应）。
-// 实时事件的 preview 是有界摘要，完整内容经 fetchToolOutput 按需取；
-// snapshot 重建路径有 full_text，用不到。
+// ToolBlock.tsx — tool block renderer (one-to-one with the old blocks.js toolBlock).
+// The live event's preview is a bounded excerpt; full content is fetched on demand
+// via fetchToolOutput. The snapshot rebuild path has full_text and never needs it.
 
 import { memo, useState } from 'react'
 import type { ToolCompletion } from '../../app/transcript'
 import { fmtDuration, copyText } from '../../lib/format'
-import { Icon } from '../../lib/icons'
+import { Icon, type IconName } from '../../lib/icons'
 import { DiffView } from './DiffView'
 import { ArtifactBlock, InlineImage } from './images'
 
-// st → [图标, 文案]；注意 className 用 err（CSS 类）而 status 文本用 error
+// st → [icon, label]; note className uses err (CSS class) while the status text uses error
 const TOOL_STATUS: Record<string, ['check' | 'xmark' | 'ban', string]> = {
   ok: ['check', 'ok'],
   err: ['xmark', 'error'],
   canceled: ['ban', 'canceled'],
+}
+
+// Tool kind → [icon, plain-language verb]: the header row shows verb + target
+// (what the agent is doing at a glance); the raw toolName goes into the tooltip
+// for debugging. MCP tools take the mcp__ prefix branch.
+const TOOL_META: Record<string, [IconName, string]> = {
+  read_file: ['eye', 'read'],
+  list_dir: ['folder-open', 'list'],
+  glob: ['magnifying-glass', 'glob'],
+  search: ['magnifying-glass', 'search'],
+  search_text: ['magnifying-glass', 'search'],
+  edit: ['pen-to-square', 'edit'],
+  write: ['file', 'write'],
+  run_cmd: ['terminal', 'run'],
+  exec_session: ['terminal', 'exec'],
+  write_stdin: ['terminal', 'stdin'],
+  delegate_task: ['robot', 'delegate'],
+  update_plan: ['square-check', 'plan'],
+  update_goal: ['star', 'goal'],
+  view_image: ['image', 'view image'],
+  present_image: ['image', 'image'],
+  generate_image: ['image', 'generate image'],
+  web_fetch: ['download', 'fetch'],
+  web_search: ['magnifying-glass', 'web search'],
+  kb_search: ['database', 'kb search'],
+  kb_read: ['database', 'kb read'],
+  read_skill: ['puzzle-piece', 'skill'],
+}
+
+function toolMeta(toolName: string): [IconName, string] {
+  const meta = TOOL_META[toolName]
+  if (meta) return meta
+  if (toolName.startsWith('mcp__')) return ['plug', toolName.slice(5) || 'mcp']
+  return ['gear', toolName || 'tool']
 }
 
 export interface ToolBlockProps {
@@ -21,9 +55,9 @@ export interface ToolBlockProps {
   toolName: string
   target?: string
   diff?: string
-  diffSuppressed?: boolean // 审批期间 diff 移入审批卡片展示
+  diffSuppressed?: boolean // during approval the diff moves into the approval card
   completion?: ToolCompletion
-  // fetchToolOutput: 复制完整输出用（实时路径 preview 有界）
+  // fetchToolOutput: for copying the full output (the live path's preview is bounded)
   fetchToolOutput?: () => Promise<string>
 }
 
@@ -61,15 +95,20 @@ export const ToolBlock = memo(function ToolBlock({
   const getFullText = async (): Promise<string> => {
     if (completion?.full_text) return completion.full_text
     if (fetchToolOutput) return fetchToolOutput()
-    return completion?.preview || '' // server 取不到时兜底复制摘要
+    return completion?.preview || '' // fall back to copying the excerpt when the server is unreachable
   }
 
+  const [icon, verb] = toolMeta(toolName)
   return (
     <div className="block block-tool" data-call-id={callId || undefined}>
       <div className="tool-head">
-        <span className="tool-name mono">{toolName || 'tool'}</span>
+        <span className="tool-kind" title={toolName || 'tool'}>
+          <Icon name={icon} />
+        </span>
+        <span className="tool-name mono">{verb}</span>
         {target && (
-          // CSS 省略号截断后，原生 tooltip 与点击展开（换行显示）都能看完整内容。
+          // After CSS ellipsis truncation, both the native tooltip and click-to-expand
+          // (wrapped display) reveal the full content.
           <span
             className={'tool-target mono' + (targetExpanded ? ' expanded' : '')}
             title={target}
@@ -90,10 +129,11 @@ export const ToolBlock = memo(function ToolBlock({
         <div className="tool-error">{completion.error_message || completion.error}</div>
       )}
       {completion?.preview && <ToolOutput preview={completion.preview} getFullText={getFullText} />}
-      {/* 渲染工具结果中的图片：内联 base64 优先（同步可用、无需鉴权二次
-          请求），仅当没有内联图片时才走 artifact 路径。artifact 不一定是
-          图片（run_cmd 的 stdout artifact 是文本），由 ArtifactBlock 按
-          媒体类型分发渲染。 */}
+      {/* Render images from tool results: inline base64 first (synchronously
+          available, no second authenticated request); the artifact path is used
+          only when there are no inline images. An artifact is not necessarily an
+          image (run_cmd's stdout artifact is text) — ArtifactBlock dispatches by
+          media type. */}
       {completion &&
         ((completion.images || []).length > 0
           ? (completion.images || []).map((img, i) => (
@@ -107,8 +147,9 @@ export const ToolBlock = memo(function ToolBlock({
   )
 })
 
-// 工具输出区：默认折叠，展开显示有界 preview（截断以 "\n…" 结尾标记）；
-// copy 按钮始终复制完整输出。
+// Tool output area: collapsed by default; expanding shows the bounded preview
+// (truncation marked by a trailing "\n…"); the copy button always copies the
+// full output.
 function ToolOutput({
   preview,
   getFullText,
@@ -129,7 +170,7 @@ function ToolOutput({
           className="tool-copy"
           title="复制完整输出"
           onClick={async (e) => {
-            e.preventDefault() // 不触发 details 展开/收起
+            e.preventDefault() // don't toggle the details disclosure
             e.stopPropagation()
             try {
               const text = await getFullText()
