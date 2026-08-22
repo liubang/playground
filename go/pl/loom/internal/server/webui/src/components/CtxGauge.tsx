@@ -1,17 +1,19 @@
-// CtxGauge.tsx — composer 旁的 context 占用环（ring gauge）。
-// 数据源：snapshot.window/occupancy（首屏）+ context.usage 事件（均经
-// AppController 投影进 store）。occupancy 与后端压缩触发器同口径，前端不做
-// 任何本地推算。渐进披露：<60% 安静 muted；≥60% warning；≥ compact
-// trigger 比例 error + 呼吸动画。
+// CtxGauge.tsx — context occupancy ring gauge next to the composer.
+// Data sources: snapshot.window/occupancy (first paint) + context.usage events
+// (both projected into the store by AppController). occupancy uses the same
+// measure as the backend compaction trigger; the frontend does no local
+// estimation. Progressive disclosure: muted below 60%; warning at ≥60%; error +
+// breathing animation at ≥ the compact-trigger ratio.
 
 import { memo } from 'react'
 import type { AppController } from '../app/controller'
 import { useStore } from '../store/store'
 import { fmtTokens } from '../lib/format'
 
-// 压缩触发比例兜底：仅当服务端未给 compact_trigger 时用于着色分级。
+// Fallback compact-trigger ratio: used for color grading only when the server
+// provides no compact_trigger.
 const DEFAULT_TRIGGER_RATIO = 0.8
-// 第一档 notice level（domain 默认 notice_levels[0]）
+// First notice level (domain default notice_levels[0])
 const WARM_RATIO = 0.6
 
 const R = 7
@@ -67,7 +69,10 @@ export const CtxGauge = memo(function CtxGauge({ controller }: { controller: App
           }}
         />
       </svg>
-      <span className="ctx-gauge-pct">{pct + '%'}</span>
+      {/* The number appears on demand: below the warm level only the ring shows
+          (the number would be noise); it lights up once the level is reached —
+          its very appearance is the signal. Full numbers in the title tooltip. */}
+      <span className="ctx-gauge-pct">{ratio >= WARM_RATIO ? pct + '%' : ''}</span>
     </span>
   )
 })

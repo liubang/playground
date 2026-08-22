@@ -1,7 +1,7 @@
-// blocks.tsx — transcript 基础块渲染器（user/assistant/stream/reasoning/
-// thinking/notice/resolved/fatal/interrupted/compact）。
-// 铁律：一切模型/工具文本只走 textContent；markdown 渲染唯一入口是
-// MarkdownView（marked → DOMPurify）。
+// blocks.tsx — base transcript block renderers (user/assistant/stream/reasoning/
+// thinking/notice/resolved/fatal/interrupted/compact).
+// Iron rule: all model/tool text goes through textContent only; MarkdownView
+// (marked → DOMPurify) is the sole markdown rendering entry.
 
 import { memo, useEffect, useRef } from 'react'
 import type { AssistantActionContext, UserImage } from '../../app/transcript'
@@ -14,7 +14,30 @@ import { MarkdownView } from './MarkdownView'
 import { MessageActions } from './MessageActions'
 import { ArtifactImage, InlineImage } from './images'
 
-// --- user：右侧气泡，无标签；操作行在气泡下方右对齐 ---
+// --- user: right-side bubble, no label; action row right-aligned below the bubble ---
+
+// Mirrors the server-side app.LoomContextMark: the context block appended on
+// submit after resolving @file and /skill refs. The bubble shows only the user's
+// original text; injected content collapses into a chip (this is exactly what
+// the model sees).
+const LOOM_CONTEXT_MARK = '<loom-context>'
+
+function LoomContextChip({ ctx }: { ctx: string }) {
+  const files =
+    (ctx.match(/<file path=/g) || []).length + (ctx.match(/<directory path=/g) || []).length
+  const skills = (ctx.match(/<skill name=/g) || []).length
+  const parts: string[] = []
+  if (files) parts.push(`${files} 个文件/目录`)
+  if (skills) parts.push(`${skills} 个技能`)
+  return (
+    <details className="user-ctx disclosure">
+      <summary>
+        <Icon name="file" /> 已注入{parts.join(' · ') || '引用内容'}（模型上下文）
+      </summary>
+      <pre className="user-ctx-body mono">{ctx}</pre>
+    </details>
+  )
+}
 
 export const UserBlock = memo(function UserBlock({
   text,
@@ -25,6 +48,9 @@ export const UserBlock = memo(function UserBlock({
   createdAt?: string
   images?: UserImage[]
 }) {
+  const ctxIdx = text.indexOf(LOOM_CONTEXT_MARK)
+  const main = ctxIdx < 0 ? text : text.slice(0, ctxIdx).trimEnd()
+  const ctx = ctxIdx < 0 ? '' : text.slice(ctxIdx)
   return (
     <div className="block block-user">
       <div className="user-bubble">
@@ -39,15 +65,17 @@ export const UserBlock = memo(function UserBlock({
             )}
           </div>
         )}
-        {(text || !images || images.length === 0) && <div className="user-text">{text}</div>}
+        {(main || !images || images.length === 0) && <div className="user-text">{main}</div>}
+        {ctx && <LoomContextChip ctx={ctx} />}
       </div>
       <MessageActions role="user" createdAt={createdAt} getText={() => text} />
     </div>
   )
 })
 
-// --- assistant（完成态，markdown 渲染）：操作行由 transcript 在轮结束时
-// 一次性挂到末段（actions 字段），避免中间段出现又消失的闪烁 ---
+// --- assistant (final state, markdown rendered): the transcript attaches the
+// action row to the last segment once at turn end (actions field), avoiding the
+// flicker of it appearing on and disappearing from intermediate segments ---
 
 export const AssistantBlock = memo(function AssistantBlock({
   text,
@@ -77,16 +105,18 @@ export const AssistantBlock = memo(function AssistantBlock({
   )
 })
 
-// --- stream（进行中草稿，markdown 实时渲染） ---
-// 渲染节流在 controller 侧（60ms + rAF），组件只负责把当前 buffer 渲染出来。
-// 光标：末节点是段落/列表项时嵌入其中（DOM 侧 effect 完成）。
+// --- stream (in-progress draft, live markdown rendering) ---
+// Render throttling lives in the controller (60ms + rAF); the component only
+// renders the current buffer. Cursor: embedded into the last node when it is a
+// paragraph/list item (done by the DOM-side effect).
 
 export const StreamBlock = memo(function StreamBlock({ text }: { text: string }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const md = ref.current
     if (!md) return
-    // 光标跟随渲染内容末尾：末节点是段落/列表项时嵌入其中，避免独占一行
+    // Cursor follows the end of rendered content: embedded into the last node
+    // when it is a paragraph/list item so it doesn't take its own line
     const cursor = document.createElement('span')
     cursor.className = 'stream-cursor'
     cursor.textContent = '▍'
@@ -100,14 +130,14 @@ export const StreamBlock = memo(function StreamBlock({ text }: { text: string })
       <div
         ref={ref}
         className="md"
-        // sanitize 管线见 lib/markdown.ts（全应用唯一 innerHTML 入口）
+        // Sanitize pipeline: see lib/markdown.ts (the app's only innerHTML entry)
         dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }}
       />
     </div>
   )
 })
 
-// --- thinking（等待模型首个 token / 工具间等待的三点动画） ---
+// --- thinking (three-dot animation while awaiting the model's first token / between tools) ---
 
 export function ThinkingBlock() {
   return (
@@ -119,24 +149,60 @@ export function ThinkingBlock() {
   )
 }
 
-// --- reasoning（折叠块） ---
+// --- reasoning (collapsible block) ---
 
+// Takes the first/last non-empty line as the summary (finished) or streaming tail
+// preview (in progress), truncated to ~96 chars.
+function reasoningExcerpt(text: string, fromEnd: boolean): string {
+  const lines = (text || '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+  if (!lines.length) return ''
+  const line = fromEnd ? lines[lines.length - 1] : lines[0]
+  return line.length > 96 ? line.slice(0, 96) + '…' : line
+}
+
+// Collapsed line: while streaming, "thinking… + tail-line preview" (opens the
+// black box so drift is caught early); once finished, "thought for Xs + first-line
+// summary" (history stays scannable). Char counts have no scan value — dropped.
+// active requires both live and no finalized duration: live residue leaked by any
+// path (dropped events / reconnects / provider quirks) never makes a finalized
+// block keep pulsing or recoloring — a hard view-layer guarantee.
 export const ReasoningBlock = memo(function ReasoningBlock({
   text,
   durationMs,
+  live,
 }: {
   text: string
   durationMs?: number
+  live?: boolean
 }) {
-  // durationMs only exists for live-streamed reasoning (snapshot rebuilds
-  // carry no per-part timing).
-  const meta =
-    durationMs != null
-      ? `reasoning · ${fmtDuration(durationMs)} · ${text.length} chars`
-      : `reasoning · ${text.length} chars`
+  const active = !!live && durationMs == null
+  const head = active
+    ? 'thinking…'
+    : durationMs != null
+      ? `thought for ${fmtDuration(durationMs)}`
+      : 'reasoning'
+  const summary = !active ? reasoningExcerpt(text, false) : ''
+  const tail = active ? reasoningExcerpt(text, true) : ''
   return (
-    <details className="block block-reasoning disclosure">
-      <summary>{meta}</summary>
+    <details className={'block block-reasoning disclosure' + (active ? ' is-live' : '')}>
+      <summary>
+        <Icon name="lightbulb" />
+        {/* key=text.length: each delta remounts the element, refilling the bounded
+            pulse; once deltas stop the animation drains naturally and can never
+            flash forever */}
+        <span className="r-head" key={text.length}>
+          {head}
+        </span>
+        {summary && <span className="r-summary">{summary}</span>}
+      </summary>
+      {tail && (
+        <div className="reasoning-tail" key={text.length}>
+          {tail}
+        </div>
+      )}
       <div className="body">{text}</div>
     </details>
   )
@@ -148,7 +214,7 @@ export function NoticeBlock({ text, warn }: { text: string; warn?: boolean }) {
   return <div className={'notice' + (warn ? ' is-warn' : '')}>{text}</div>
 }
 
-// resolved 收编 notice（审批被处理后的占位）
+// resolved supersedes notice (placeholder once an approval has been handled)
 export function ResolvedNotice({ ok, actor, what }: { ok: boolean; actor: string; what: string }) {
   return (
     <div className="resolved">
@@ -167,13 +233,15 @@ export function FatalBlock({ text }: { text: string }) {
   return <div className="block block-fatal">{text}</div>
 }
 
-// 中断块：warning 色的持久块（区别于 fatal 的 error 红），用于历史重建时
-// 渲染 status === 'interrupted' 的 assistant 消息（模型流中途失败的残段）。
+// Interrupted block: a persistent warning-colored block (distinct from fatal's
+// error red) that renders assistant messages with status === 'interrupted'
+// (truncated remnants of a failed model stream) during history rebuilds.
 export function InterruptedBlock({ text }: { text: string }) {
   return <div className="block block-interrupted">{text}</div>
 }
 
-// context.compacted 明细卡片：压缩前后估值 + 触发原因 + 各级动作明细。
+// context.compacted detail card: before/after estimates + trigger reason +
+// per-level action details.
 export const CompactBlock = memo(function CompactBlock({
   payload: p,
 }: {

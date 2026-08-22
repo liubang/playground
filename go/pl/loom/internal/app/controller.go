@@ -1233,6 +1233,12 @@ func (c *Controller) handleSubmitPrompt(cmd controllerCommand) {
 		c.publishDurable(sessionID, runID, turnCounter, runtimeevent.KindPlanUpdated, domain.Plan{Items: []domain.PlanItem{}})
 	}
 
+	// Resolve @file references and the leading /skill trigger: content is
+	// injected into the model context here rather than discovered by the model.
+	// The enriched prompt persists with the user message, so the transcript
+	// matches what the model saw.
+	cmd.Prompt = enrichPromptWithReferences(c.bootstrap, cmd.Prompt, c.logger)
+
 	// Publish turn started event
 	// Note: the envelope runID here is the PREVIOUS turn's (zero on the
 	// first turn) — the new run is only created later in executeTurn.

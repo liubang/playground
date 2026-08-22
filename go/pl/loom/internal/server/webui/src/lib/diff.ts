@@ -1,12 +1,16 @@
-// diff.ts — unified diff 解析（渲染见 components/blocks/DiffView.tsx）。
-// 行内代码按文件扩展名做语法高亮：hljs 输出经 markdown.ts 的 sanitizeHtml
-// 白名单过滤后才进 DOM；未知语言/高亮失败一律回退纯文本。
-// 解析逻辑与旧 static/js/diff.js 一一对应。
+// diff.ts — unified diff parsing (rendering: see components/blocks/DiffView.tsx).
+// Inline code is syntax-highlighted by file extension: hljs output enters the
+// DOM only after passing markdown.ts's sanitizeHtml whitelist; unknown languages
+// or highlight failures fall back to plain text.
+// Parsing logic is one-to-one with the old static/js/diff.js.
 
-// --- 历史重建：从 tool_call 参数本地重算 diff（端口自 render/diff.go） ---
-// diff 只存在于实时 tool.prepared/approval 事件载荷，不落盘；snapshot 重建
-// 时用同一套算法从 edit/write 参数恢复（write=纯新增免 LCS；edit 双侧 LCS，
-// 输入上限 400 行/侧与 Go 版一致）。不截断输出（ToolDiffUnbounded 语义）。
+// --- History rebuild: recompute diffs locally from tool_call args (ported from
+// render/diff.go) ---
+// Diffs exist only in the live tool.prepared/approval event payloads and are
+// never persisted; snapshot rebuilds recover them from edit/write args using
+// the same algorithm (write = pure addition, no LCS; edit = two-sided LCS with
+// a 400-line-per-side input cap, same as the Go version). Output is not
+// truncated (ToolDiffUnbounded semantics).
 
 const DIFF_MAX_INPUT_LINES = 400
 
@@ -24,7 +28,8 @@ interface DiffOp {
   line: string
 }
 
-// lcsDiff 计算行级 diff（LCS 动态规划，与 Go 版同算法同回朔方向）。
+// lcsDiff computes a line-level diff (LCS dynamic programming; same algorithm
+// and backtrack direction as the Go version).
 function lcsDiff(oldLines: string[], newLines: string[]): DiffOp[] {
   const n = oldLines.length
   const m = newLines.length
@@ -56,7 +61,8 @@ function lcsDiff(oldLines: string[], newLines: string[]): DiffOp[] {
   return ops
 }
 
-// diffTexts 渲染紧凑行 diff：变更行保留上下各 1 行上下文，未变更段折叠为 "…"。
+// diffTexts renders a compact line diff: changed lines keep 1 line of context
+// above and below; unchanged runs collapse into "…".
 function diffTexts(oldText: string, newText: string): string {
   if (oldText === newText) return ''
   let ops: DiffOp[]
@@ -92,8 +98,9 @@ function diffTexts(oldText: string, newText: string): string {
   return out.join('\n')
 }
 
-// diffForToolCall 从 edit/write 的调用参数重建展示用 diff（含 +++ 文件头，
-// 供文件名展示与语法高亮语言探测）；其他工具或无意义输入返回 ""。
+// diffForToolCall rebuilds a display diff from edit/write call args (with a +++
+// file header for filename display and highlight-language detection); other
+// tools or meaningless input return "".
 export function diffForToolCall(toolName: string, args: unknown): string {
   if (!args || typeof args !== 'object') return ''
   const a = args as Record<string, unknown>
@@ -108,7 +115,8 @@ export function diffForToolCall(toolName: string, args: unknown): string {
   return path + text
 }
 
-// 扩展名 → highlight.js 语言（仅列 common 包内置语言；未命中即不高亮）。
+// Extension → highlight.js language (only languages bundled in the common
+// package; no match means no highlighting).
 const EXT_TO_LANG: Record<string, string> = {
   go: 'go',
   rs: 'rust',
@@ -155,12 +163,13 @@ const EXT_TO_LANG: Record<string, string> = {
   diff: 'diff',
 }
 
-function langFromPath(p: string): string {
+export function langFromPath(p: string): string {
   const m = /\.([A-Za-z0-9]+)$/.exec(p || '')
   return m ? EXT_TO_LANG[m[1].toLowerCase()] || '' : ''
 }
 
-// --- 解析（渲染数据模型；Lines 不匹配的按 context 处理，容错） ---
+// --- Parsing (render data model; lines that don't match are treated as context —
+// lenient) ---
 
 export type DiffLineKind = 'hunk' | 'add' | 'del' | 'ctx'
 
@@ -220,5 +229,6 @@ export function parseDiff(diffText: string): ParsedDiff {
   return out
 }
 
-// 超过 DIFF_COLLAPSE_LINES 的 diff 折叠为 details（内容完整保留，展开可见）。
+// Diffs longer than DIFF_COLLAPSE_LINES collapse into a details element (content
+// fully preserved, visible when expanded).
 export const DIFF_COLLAPSE_LINES = 30

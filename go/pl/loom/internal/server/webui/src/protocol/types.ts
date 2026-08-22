@@ -1,9 +1,9 @@
-// types.ts — REST/snapshot 的 wire 类型（与 Go 侧 internal/server 的
-// JSON 响应一一对应；字段名保持 wire 上的 snake_case）。
+// types.ts — wire types for REST/snapshot (one-to-one with the JSON responses
+// of the Go-side internal/server; field names keep the wire's snake_case).
 
 import type { ArtifactRef, FailurePayload, Plan, SessionState, TokenUsage } from './events'
 
-// --- snapshot 消息历史 ---
+// --- snapshot message history ---
 
 export interface ToolCall {
   id?: string
@@ -30,7 +30,7 @@ export interface ToolResult {
 export interface MessagePart {
   kind?: 'text' | 'reasoning' | 'tool_call' | 'tool_result' | 'image' | 'artifact_ref' | string
   text?: string
-  reasoning?: { text?: string }
+  reasoning?: { text?: string; duration_ms?: number }
   tool_call?: ToolCall
   tool_result?: ToolResult
   image?: { media_type: string; data: string }
@@ -80,7 +80,7 @@ export interface Snapshot {
   plan?: Plan | null
 }
 
-// --- 会话/工作区 ---
+// --- sessions/workspaces ---
 
 export interface SessionSummary {
   id: string
@@ -98,9 +98,10 @@ export interface Workspace {
   name?: string
   root_path?: string
   session_count?: number
+  is_default?: boolean
 }
 
-// --- 模型目录 ---
+// --- model catalog ---
 
 export interface ModelEntry {
   provider: string
@@ -114,7 +115,7 @@ export interface ModelCatalog {
   default?: string
 }
 
-// --- 目录浏览 ---
+// --- directory browsing ---
 
 export interface DirEntry {
   name: string
@@ -128,7 +129,72 @@ export interface DirBrowseResult {
   entries?: DirEntry[]
 }
 
-// --- 配置（设置面板） ---
+// --- config (settings panel) ---
+
+// --- workspace file browsing / git changes (right panel) ---
+
+export interface WorkspaceFileEntry {
+  name: string
+  path: string // workspace-relative path
+  kind: 'dir' | 'file' | string
+  size?: number
+  mod_time?: string
+}
+
+export interface WorkspaceFileList {
+  path: string
+  entries?: WorkspaceFileEntry[]
+  truncated?: boolean
+}
+
+export interface WorkspaceFileContent {
+  path: string
+  size: number
+  truncated?: boolean
+  binary?: boolean
+  content?: string
+}
+
+export type ApprovalMode = 'on-request' | 'unless-dangerous' | 'never'
+
+export interface GitFileEntry {
+  path: string
+  status?: string // M/A/D/R/T (tracked files) or U (untracked)
+  staged?: boolean
+  unstaged?: boolean
+  adds?: number
+  dels?: number
+  no_stat?: boolean // binary or untracked: no line stats
+}
+
+export interface WorkspaceGitStatus {
+  is_git?: boolean
+  branch?: string
+  files?: GitFileEntry[]
+  adds?: number
+  dels?: number
+}
+
+export interface WorkspaceGitDiff {
+  path: string
+  diff?: string
+  truncated?: boolean
+  untracked?: boolean
+  is_dir?: boolean // untracked directory: no meaningful diff
+}
+
+// composer @ file completion
+export interface WorkspaceFileMatch {
+  path: string
+  name: string
+  kind: 'dir' | 'file' | string
+}
+
+export interface WorkspaceFileSearchResult {
+  query: string
+  matches?: WorkspaceFileMatch[]
+  truncated?: boolean
+}
 
 export interface ConfigEnvelope {
   path: string
@@ -192,7 +258,7 @@ export interface McpServerStatus {
   tools?: McpTool[]
 }
 
-// --- 规则包 ---
+// --- rule packs ---
 
 export interface RulePack {
   id: string
@@ -204,7 +270,7 @@ export interface RulePack {
   installed?: boolean
 }
 
-// --- 环境报告（设置-系统-开发环境） ---
+// --- environment report (settings-system-dev environment) ---
 
 export interface EnvTool {
   name: string
@@ -224,7 +290,7 @@ export interface EnvironmentReport {
   effective_path?: string
 }
 
-// --- 分享 ---
+// --- sharing ---
 
 export interface ShareEndpoint {
   enabled?: boolean
@@ -244,7 +310,7 @@ export interface SharedView {
   messages?: Message[]
 }
 
-// --- 其他响应 ---
+// --- other responses ---
 
 export interface SetModelResult {
   Window?: ContextWindow
@@ -286,6 +352,7 @@ export interface MazeNode {
   tools: MazeTool[]
   rz: number // reasoning block count
   rz_txt?: string // reasoning excerpt
+  rz_ms?: number // summed reasoning wall-clock span (ms)
   in_tok?: number | null
   rz_tok?: number | null
   out_tok?: number | null
@@ -303,6 +370,7 @@ export interface MazeStats {
   steps: number
   tools: number
   rz: number
+  rz_ms?: number
   in_tok: number
   rz_tok: number
   out_tok: number

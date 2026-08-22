@@ -1,7 +1,8 @@
-// Sidebar.tsx — 工作区树形侧栏（docs/WORKSPACE_DESIGN.md §11.3）。
-// 顶层是每个工作区一个可折叠的文件夹节点，组内是该工作区的会话；
-// 会话条目保留子 agent 层级缩进与悬停操作（归档/删除）。
-// 与旧 components/sidebar.js 一一对应。
+// Sidebar.tsx — workspace tree sidebar (docs/WORKSPACE_DESIGN.md §11.3).
+// Top level: one collapsible folder node per workspace, with that workspace's
+// sessions inside the group; session items keep sub-agent hierarchy indentation
+// and hover actions (archive/delete).
+// One-to-one with the old components/sidebar.js.
 
 import { memo, useEffect, useRef, useState } from 'react'
 import type { AppController } from '../app/controller'
@@ -42,7 +43,8 @@ export const Sidebar = memo(function Sidebar({
   const mainView = useStore(controller.store, (s) => s.mainView)
   const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed)
   const listRef = useRef<HTMLDivElement>(null)
-  // 首次挂载：把最近活跃工作区设为视觉焦点（展开它、收起其他组）
+  // First mount: make the most recently active workspace the visual focus
+  // (expand it, collapse the other groups)
   const focusedOnce = useRef(false)
 
   const toggleCollapse = (wsId: string) => {
@@ -55,7 +57,8 @@ export const Sidebar = memo(function Sidebar({
     })
   }
 
-  // 启动焦点：desktop 每次启动都是新的页面会话，折叠态不带入。
+  // Startup focus: desktop starts a fresh page session every launch, so the
+  // collapsed state is not carried over.
   useEffect(() => {
     if (focusedOnce.current || sessions.length === 0) return
     focusedOnce.current = true
@@ -69,9 +72,11 @@ export const Sidebar = memo(function Sidebar({
     })
   }, [sessions, workspaces, controller])
 
-  // 用户主动打开会话：所在组被折叠时展开该组，并把条目滚动到可视区域——
-  // 主动选中的会话必须看得见。轮询刷新后的重设不滚动也不动折叠态（用户
-  // 主动折叠包含当前会话的组是合法选择）。
+  // User-initiated session open: expand the containing group if collapsed and
+  // scroll the item into view — an explicitly selected session must be visible.
+  // Re-selecting after a polling refresh neither scrolls nor touches the
+  // collapsed state (deliberately collapsing the group containing the current
+  // session is a legitimate choice).
   const lastActiveRef = useRef<string | null>(null)
   useEffect(() => {
     if (!activeId || lastActiveRef.current === activeId) return
@@ -90,7 +95,8 @@ export const Sidebar = memo(function Sidebar({
     })
   }, [activeId, sessions])
 
-  // 面包屑定位：展开指定工作区组并把它与组内当前会话滚动进可视区域
+  // Breadcrumb reveal: expand the given workspace group and scroll it — plus the
+  // current session inside it — into view
   const lastRevealSeq = useRef(0)
   useEffect(() => {
     if (!revealWs || revealWs.seq === lastRevealSeq.current) return
@@ -111,14 +117,15 @@ export const Sidebar = memo(function Sidebar({
     })
   }, [revealWs])
 
-  // 分组：workspace_id（"" = 默认/历史）→ [sessions]
+  // Grouping: workspace_id ("" = default/legacy) → [sessions]
   const byWs = new Map<string, SessionSummary[]>()
   for (const s of sessions) {
     const k = s.workspace_id || ''
     if (!byWs.has(k)) byWs.set(k, [])
     byWs.get(k)!.push(s)
   }
-  // 工作区顺序：已注册 workspaces（newest first），再补上有会话但未注册的。
+  // Workspace order: registered workspaces (newest first), then any that have
+  // sessions but are not registered.
   const ordered = workspaces.map((w) => w.id)
   for (const k of byWs.keys()) {
     if (!ordered.includes(k)) ordered.push(k)
@@ -144,7 +151,7 @@ export const Sidebar = memo(function Sidebar({
         ref={listRef}
         onScroll={() => {
           const list = listRef.current
-          // 会话列表瀑布流：滚动接近底部时加载下一页
+          // Session-list waterfall: load the next page when scrolled near the bottom
           if (list && list.scrollHeight - list.scrollTop - list.clientHeight < 120) {
             void controller.loadMoreSessions()
           }
@@ -153,7 +160,8 @@ export const Sidebar = memo(function Sidebar({
         {ordered.map((wsId) => {
           const ws = workspaces.find((w) => w.id === wsId)
           const wsSessions = byWs.get(wsId) || []
-          // 归档视图是只读历史：跳过无归档会话的工作区组。
+          // The archived view is read-only history: skip workspace groups with no
+          // archived sessions.
           if (showArchived && wsSessions.length === 0) return null
           return (
             <WorkspaceGroup
@@ -221,15 +229,18 @@ const WorkspaceGroup = memo(function WorkspaceGroup({
   onToggle: () => void
   controller: AppController
 }) {
-  // wsId 非空但查无实体 = 所属工作区已被删除。级联删除落地前的历史数据
-  // 可能留下这种悬空会话，仍归入只读的「已删除的工作区」分组展示。
+  // A non-empty wsId with no matching entity = the owning workspace was deleted.
+  // Historical data from before cascading deletes shipped may leave such dangling
+  // sessions; they still render under the read-only "deleted workspace" group.
   const name = ws ? ws.name : wsId ? '已删除的工作区' : '默认工作区'
-  // 组内待审批会话数（折叠时唯一可见的求救信号）与当前会话归属标记。
+  // Count of sessions awaiting approval in the group (the only distress signal
+  // visible while collapsed) and the current-session membership flag.
   const attnCount = sessions.filter((s) => s.state === 'awaiting_approval').length
   const hasActive = sessions.some((s) => s.id === activeId)
 
-  // 组内会话层级：子 agent 会话缩进挂在父会话下方，父会话不在组内时按
-  // 顶层渲染（分页边界兜底）。
+  // In-group session hierarchy: sub-agent sessions render indented under their
+  // parent; a session whose parent is not in the group renders at top level
+  // (fallback for pagination boundaries).
   const childrenOf = new Map<string, SessionSummary[]>()
   const tops: SessionSummary[] = []
   for (const s of sessions) {
@@ -259,9 +270,9 @@ const WorkspaceGroup = memo(function WorkspaceGroup({
         <span className="ws-caret">
           <Icon name={collapsed ? 'caret-right' : 'caret-down'} />
         </span>
-        <span className="ws-icon">
-          <Icon name={collapsed ? 'folder' : 'folder-open'} />
-        </span>
+        {/* No folder icon: a whole column of same-color high-saturation icons is
+            the main source of the "template look"; the caret already conveys the
+            collapsed state */}
         <span className="ws-name" title={ws?.root_path || undefined}>
           {name}
         </span>
@@ -271,7 +282,8 @@ const WorkspaceGroup = memo(function WorkspaceGroup({
             {String(attnCount)}
           </span>
         )}
-        {/* 新建/删除入口只在活跃视图显示（归档视图是只读历史） */}
+        {/* New/delete entries only show in the active view (the archived view is
+            read-only history) */}
         {!archivedView && (
           <>
             <button
@@ -351,8 +363,9 @@ const SessionItem = memo(function SessionItem({
           <Icon name="robot" />
         </span>
       )}
-      {/* live 状态灯：awaiting_approval 用琥珀色呼吸灯（最需要抢注意力），
-          running/cancelling 用绿色；其余状态不显示，保持列表安静。 */}
+      {/* Live status dot: awaiting_approval gets an amber breathing light (needs
+          attention the most), running/cancelling get green; other states show
+          nothing, keeping the list quiet. */}
       {showDot && (
         <span
           className={'st-dot ' + (st === 'awaiting_approval' ? 'is-attn' : 'is-run')}
@@ -361,7 +374,8 @@ const SessionItem = memo(function SessionItem({
       )}
       <span className="t">{s.title || shortId(s.id)}</span>
       <span className="rt">{relTime(s.created_at)}</span>
-      {/* 悬停操作：归档/取消归档 + 删除（不占常态宽度，hover 时替换时间戳） */}
+      {/* Hover actions: archive/unarchive + delete (take no resting width; they
+          replace the timestamp on hover) */}
       <span className="acts">
         <button
           type="button"

@@ -1,12 +1,12 @@
-/* Loom Web SPA — 全部样式（docs/WEB_DESIGN.md §6）。
-   单一文件、令牌先行：组件只允许消费本文件的 CSS 变量。
-   布局参考：左侧栏 + 居中对话列 + 底部 composer。
-   默认深色，用户消息为右侧气泡。 */
+/* Loom Web SPA — all styles (docs/WEB_DESIGN.md §6).
+   Single file, tokens first: components may only consume the CSS variables defined here.
+   Layout: left sidebar + centered conversation column + bottom composer.
+   Dark by default; user messages are right-aligned bubbles. */
 
-/* ============================== 设计令牌（§6.1） ============================== */
+/* ============================== Design tokens (§6.1) ============================== */
 :root,
 [data-theme='dark'] {
-  /* 默认深色 */
+  /* Dark by default */
   --bg0: #1e2326;
   --bg1: #272e33;
   --bg2: #2e383c;
@@ -27,7 +27,7 @@
   color-scheme: dark;
 }
 [data-theme='light'] {
-  /* Everforest Light Medium（muted 用 grey1 提升次级文字对比度） */
+  /* Everforest Light Medium (muted uses grey1 for better secondary-text contrast) */
   --bg0: #fdf6e3;
   --bg1: #f4f0d9;
   --bg2: #efebd4;
@@ -48,7 +48,7 @@
   color-scheme: light;
 }
 
-/* ============================== 基础 ============================== */
+/* ============================== Base ============================== */
 * {
   box-sizing: border-box;
   margin: 0;
@@ -80,20 +80,20 @@ body {
   --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   --font-mono:
     ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
-  /* 字号刻度 */
+  /* Font-size scale */
   --text-xs: 11.5px;
   --text-sm: 12.5px;
   --text-md: 13px;
   --text-lg: 14.5px;
-  /* 圆角刻度 */
+  /* Border-radius scale */
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
   --radius-full: 999px;
-  /* 对话列宽（transcript/composer/plan 面板共用） */
+  /* Conversation column width (shared by transcript/composer/plan panel) */
   --content-width: 960px;
-  /* 层叠刻度：follow 按钮 < 窄屏抽屉 < 下拉菜单 < 确认弹窗 < toast */
+  /* Stacking scale: follow button < narrow drawer < dropdown menu < confirm modal < toast */
   --z-follow: 10;
   --z-drawer: 55;
   --z-menu: 60;
@@ -106,8 +106,8 @@ pre,
   font-family: var(--font-mono);
 }
 
-/* ============================== 图标基类（js/icons.js，FA solid 内联 SVG） ============================== */
-/* fill=currentColor 继承文字颜色；1em 继承上下文字号，跨平台渲染一致。 */
+/* ============================== Icon base class (js/icons.js, FA solid inline SVG) ============================== */
+/* fill=currentColor inherits text color; 1em inherits the surrounding font size for consistent cross-platform rendering. */
 .icon {
   width: 1em;
   height: 1em;
@@ -116,7 +116,7 @@ pre,
   vertical-align: -0.125em;
   flex: none;
 }
-/* 场景微调：星标覆盖标记、plan 状态图标等需要比 1em 更收敛的尺寸/间距 */
+/* Per-context tweaks: star overlay mark, plan status icons, etc. need tighter size/spacing than 1em */
 .picker-label .icon {
   font-size: 10px;
   margin-left: 4px;
@@ -138,8 +138,7 @@ pre,
   align-items: center;
   justify-content: center;
 }
-.ws-node .ws-caret,
-.ws-node .ws-icon {
+.ws-node .ws-caret {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -162,7 +161,7 @@ button {
   display: none !important;
 }
 
-/* ============================== 按钮 ============================== */
+/* ============================== Buttons ============================== */
 .btn {
   border-radius: var(--radius-sm);
   padding: 7px 14px;
@@ -201,8 +200,8 @@ button {
   cursor: not-allowed;
 }
 
-/* ============================== 折叠块（details 通用） ============================== */
-/* reasoning / tool-output / plan-panel 共用；组件只补字号等增量样式。 */
+/* ============================== Disclosure blocks (generic details) ============================== */
+/* Shared by reasoning / tool-output / plan-panel; components only add incremental styles like font size. */
 .disclosure summary {
   display: flex;
   align-items: center;
@@ -226,7 +225,7 @@ button {
   color: var(--fg);
 }
 
-/* ============================== 徽标 ============================== */
+/* ============================== Badges ============================== */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -291,7 +290,7 @@ button {
   }
 }
 
-/* ============================== Token 引导页 ============================== */
+/* ============================== Token gate page ============================== */
 .gate-wrap {
   min-height: 100vh;
   display: grid;
@@ -342,10 +341,10 @@ button {
   margin: -6px 0 10px;
 }
 
-/* ============================== App 壳 ============================== */
+/* ============================== App shell ============================== */
 .shell {
   height: 100vh;
-  height: 100dvh; /* 移动端动态视口高，随浏览器工具栏伸缩 */
+  height: 100dvh; /* Mobile dynamic viewport height; tracks the browser toolbar */
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto auto;
   background: var(--bg0);
@@ -361,12 +360,12 @@ button {
 .shell.sidebar-collapsed .sidebar {
   display: none;
 }
-/* 窄屏抽屉遮罩：桌面端隐藏且不占 grid 行（.shell 直接子节点） */
+/* Narrow-screen drawer backdrop: hidden on desktop and takes no grid row (direct child of .shell) */
 .sidebar-backdrop {
   display: none;
 }
 
-/* 侧栏 */
+/* Sidebar */
 .sidebar {
   background: var(--bg1);
   border-right: 1px solid var(--bg2);
@@ -431,7 +430,7 @@ button {
   color: var(--muted);
   white-space: nowrap;
 }
-/* 子 agent 会话：缩进 + 左侧层级导线 */
+/* Sub-agent sessions: indent + left hierarchy guide line */
 .sess-item .child-mark {
   flex: none;
   color: var(--muted);
@@ -443,8 +442,8 @@ button {
   border-left: 1px solid var(--bg2);
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
-/* 会话条目状态灯：live 状态常显指示；awaiting_approval 琥珀色呼吸灯
-   （最需要抢注意力），running/cancelling 绿色。复用 badge 的 pulse 动画。 */
+/* Session item status dot: solid for live; awaiting_approval pulses amber
+   (needs the most attention), running/cancelling green. Reuses the badge pulse animation. */
 .sess-item .st-dot {
   flex: none;
   width: 7px;
@@ -459,7 +458,7 @@ button {
   background: var(--warning);
   animation: pulse 1.6s ease-in-out infinite;
 }
-/* 悬停操作（归档/删除）：平时隐藏，hover 时替换时间戳位置 */
+/* Hover actions (archive/delete): hidden by default; on hover they replace the timestamp */
 .sess-item .acts {
   display: none;
   align-items: center;
@@ -519,7 +518,7 @@ button {
   color: var(--primary);
 }
 
-/* 工作区树形侧栏：顶层是工作区文件夹节点，组内是该工作区的会话 */
+/* Workspace tree sidebar: top level is workspace folder nodes; each group holds that workspace's sessions */
 .ws-bar {
   display: flex;
   align-items: center;
@@ -564,11 +563,6 @@ button {
   color: var(--muted);
   font-size: 11px;
 }
-.ws-node .ws-icon {
-  flex: none;
-  color: var(--primary);
-  font-size: 12px;
-}
 .ws-node .ws-name {
   flex: 1;
   min-width: 0;
@@ -610,11 +604,11 @@ button {
   color: var(--error);
   background: var(--bg1);
 }
-/* 组内含当前会话：名字着色，折叠时也能定位归属 */
+/* Group containing the active session: name is colored so ownership stays locatable when collapsed */
 .ws-node.has-active .ws-name {
   color: var(--primary);
 }
-/* 待审批徽标：折叠/展开都显示，琥珀底计数（折叠时这是唯一的求救信号） */
+/* Pending-approval badge: shown collapsed or expanded, amber count (the only distress signal when collapsed) */
 .ws-node .ws-attn {
   flex: none;
   font-size: var(--text-xs);
@@ -626,14 +620,18 @@ button {
   padding: 3px 6px;
   animation: pulse 1.6s ease-in-out infinite;
 }
-/* 组内会话：左侧层级导线 + 缩进，与子 agent 缩进叠加 */
+/* Sessions in a group: hierarchy guide hidden by default, appears on group hover (VSCode tree
+   indent-guide interaction — always-on guides are pure visual noise); stacks with sub-agent indent */
 .ws-sessions {
   margin: 0 0 4px 9px;
   padding-left: 9px;
-  border-left: 1px solid var(--bg2);
+  border-left: 1px solid transparent;
   display: flex;
   flex-direction: column;
   gap: 1px;
+}
+.ws-group:hover .ws-sessions {
+  border-left-color: var(--bg2);
 }
 .ws-empty {
   padding: 4px 10px;
@@ -641,7 +639,7 @@ button {
   font-size: var(--text-xs);
 }
 
-/* 主区域 */
+/* Main area */
 .main {
   display: flex;
   flex-direction: column;
@@ -665,8 +663,8 @@ button {
   padding: 2px 4px;
   border-radius: 4px;
 }
-/* 当前会话的工作区面包屑（hdr-session 前缀）：点击在侧栏定位所属工作区；
-   超长截断，title 见全路径 */
+/* Workspace breadcrumb for the current session (hdr-session prefix): click to locate its workspace in the sidebar;
+   truncates when too long, full path via title */
 .app-header .hdr-ws {
   background: none;
   border: none;
@@ -692,7 +690,7 @@ button {
 .app-header .spacer {
   flex: 1;
 }
-/* 幽灵图标按钮：透明底，hover 才淡入背景；全局可用（头部/侧栏/弹窗） */
+/* Ghost icon button: transparent background fades in on hover; usable globally (header/sidebar/modals) */
 .icon-btn {
   background: none;
   border: none;
@@ -719,8 +717,9 @@ button {
 /* transcript */
 .transcript {
   overflow-y: auto;
-  /* 兜底：子元素任何残留横向溢出裁掉，不冒泡成页面级横向滚动条；
-     超宽代码/表格/diff 均有各自的 overflow-x 滚动容器，不受影响。 */
+  /* Backstop: clip any residual horizontal overflow from children so it never bubbles up
+     into a page-level horizontal scrollbar; wide code/tables/diffs each have their own
+     overflow-x scroll container and are unaffected. */
   overflow-x: hidden;
   position: relative;
 }
@@ -743,7 +742,7 @@ button {
   color: var(--primary);
   margin-bottom: 8px;
 }
-/* 零工作区引导态：占据主区域居中展示，引导用户添加第一个工作区 */
+/* Zero-workspace onboarding: centered in the main area, prompting the user to add their first workspace */
 .no-workspace {
   flex: 1;
   display: flex;
@@ -778,7 +777,7 @@ button {
   bottom: 12px;
   margin: 0 auto;
   display: block;
-  z-index: var(--z-follow); /* 压过 .block 的 fadein transform 层叠上下文 */
+  z-index: var(--z-follow); /* Stays above the fadein transform stacking context of .block */
   background: var(--bg1);
   color: var(--fg);
   border: 1px solid var(--bg2);
@@ -788,7 +787,7 @@ button {
   box-shadow: var(--shadow-sm);
 }
 
-/* ============================== 块（§6.3） ============================== */
+/* ============================== Blocks (§6.3) ============================== */
 .block {
   animation: fadein 0.12s ease;
 }
@@ -803,8 +802,8 @@ button {
   }
 }
 
-/* user 消息：右侧气泡（容器无背景，气泡样式在 .user-bubble 上，
-   操作行/时间显示在气泡下方，不占气泡内部空间） */
+/* User message: right-aligned bubble (container has no background; bubble styling lives on .user-bubble,
+   actions/time sit below the bubble and take no space inside it) */
 .block-user {
   align-self: flex-end;
   max-width: 72%;
@@ -824,7 +823,7 @@ button {
   line-height: 1.6;
 }
 
-/* 气泡内的图片附件：文字上方纵向排列，点击放大（灯箱） */
+/* Image attachments inside the bubble: stacked vertically above the text, click to zoom (lightbox) */
 .user-bubble .user-images {
   display: flex;
   flex-direction: column;
@@ -849,17 +848,18 @@ button {
   outline-offset: 1px;
 }
 
-/* assistant：左侧纯文本，无标签 */
+/* Assistant: left-aligned plain text, no label */
 .block-assistant {
   align-self: stretch;
-  min-width: 0; /* flex 列容器内允许收缩，长内容不撑破内容列 */
+  min-width: 0; /* Allow shrink inside the flex column so long content doesn't break the content column */
 }
 .block-assistant .md {
   font-size: var(--text-lg);
   line-height: 1.7;
 }
-/* 长 URL / 无空格 token 在词间断行，不撑破内容列（移动端防页面级横向滚动条）。
-   pre 内 white-space: pre 不受影响，超宽代码仍走 pre 自身的横向滚动。 */
+/* Break long URLs / spaceless tokens between words so they don't break the content column
+   (prevents page-level horizontal scroll on mobile). white-space: pre inside pre is unaffected;
+   wide code still scrolls within pre's own horizontal scroller. */
 .md {
   overflow-wrap: break-word;
 }
@@ -867,7 +867,7 @@ button {
   overflow-wrap: anywhere;
 }
 
-/* markdown 渲染区 */
+/* Markdown render area */
 .md h1,
 .md h2,
 .md h3,
@@ -909,8 +909,8 @@ button {
   padding: 0;
   color: var(--fg);
 }
-/* 表格：display:block + max-width:100% 使超宽表格在列宽内横向滚动，
-   与 transcript 内容列对齐，而不是溢出整个会话区。 */
+/* Tables: display:block + max-width:100% makes wide tables scroll horizontally within the column,
+   aligned with the transcript content column instead of overflowing the whole session area. */
 .md table {
   display: block;
   max-width: 100%;
@@ -944,7 +944,7 @@ button {
   margin: 14px 0;
 }
 
-/* stream 草稿光标（草稿为 markdown 实时渲染，光标跟随渲染内容末尾） */
+/* Stream draft cursor (draft is live-rendered markdown; cursor follows the end of rendered content) */
 .stream-cursor {
   display: inline-block;
   color: var(--primary);
@@ -956,8 +956,8 @@ button {
   }
 }
 
-/* 消息操作行：复制 / 点赞 / 踩 + 时间。
-   对话结束后常显——既是反馈/复制入口，也是该条消息已结束的标志。 */
+/* Message action row: copy / thumbs up / thumbs down + time.
+   Always visible after the turn ends — both a feedback/copy entry and a marker that this message is finished. */
 .msg-actions {
   display: flex;
   align-items: center;
@@ -1015,7 +1015,7 @@ button {
   fill: var(--error);
 }
 
-/* user 气泡：操作行右对齐于气泡下方，时间在左、复制在右 */
+/* User bubble: action row right-aligned below the bubble, time on the left, copy on the right */
 .block-user .msg-actions {
   justify-content: flex-end;
 }
@@ -1024,7 +1024,7 @@ button {
   margin-right: 4px;
 }
 
-/* 消息时间：常显短格式（8月6日 14:34），悬浮由原生 title 给完整时间 */
+/* Message time: always shown in short format (Aug 6 14:34); native title tooltip gives the full time on hover */
 .msg-time-tip {
   margin-left: auto;
   padding-left: 6px;
@@ -1035,7 +1035,7 @@ button {
   opacity: 0.7;
 }
 
-/* thinking：等待模型输出的三点动画 */
+/* Thinking: three-dot animation while waiting for model output */
 .block-thinking {
   display: flex;
   align-items: center;
@@ -1069,26 +1069,74 @@ button {
   }
 }
 
-/* reasoning 折叠块 */
+/* Reasoning disclosure block: de-carded (no background, no side bar); subdued typography inline with
+   the text flow conveys "supplementary info", avoiding the visual fatigue of templated card stacking */
 .block-reasoning {
-  background: var(--bg1);
-  border-left: 3px solid var(--primary);
-  border-radius: 0 8px 8px 0;
-  padding: 8px 14px;
+  border-radius: 0;
+  padding: 3px 2px;
   color: var(--muted);
   font-size: var(--text-md);
 }
 .block-reasoning summary {
   font-size: var(--text-sm);
+  gap: 6px;
+}
+.block-reasoning summary .icon {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* While streaming: bulb lights up + header breathes, reinforcing the "thinking" semantics.
+   The pulse is bounded (3 iterations ≈5s): the animation means "delta activity just happened",
+   not "live forever" — even if the live state gets stuck via any leak path, the pulse stops on its own;
+   the component re-mounts the element with key=text.length after each delta to retrigger it. */
+.block-reasoning.is-live summary .icon {
+  color: var(--primary);
+}
+.block-reasoning.is-live .r-head {
+  animation: pulse 1.6s ease-in-out 3;
+}
+.block-reasoning .r-head {
+  flex: none;
+  font-weight: 500;
+}
+/* First-line summary in the done state: italic, ellipsized — instantly recognizable when scanning history */
+.block-reasoning .r-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: italic;
+}
+/* Streaming tail preview: shows the last line while collapsed, hidden when expanded */
+.block-reasoning .reasoning-tail {
+  margin-top: 4px;
+  margin-left: 24px;
+  font-size: 12px;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: pulse 1.6s ease-in-out 3;
+}
+.block-reasoning[open] .reasoning-tail {
+  display: none;
 }
 .block-reasoning .body {
-  margin-top: 8px;
+  margin-top: 6px;
+  margin-left: 5px;
+  padding-left: 12px;
+  border-left: 1px solid var(--bg2);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+  font-size: var(--text-sm);
+  /* Keep long reasoning from blowing up the transcript flow: height cap + internal scroll */
+  max-height: 320px;
+  overflow-y: auto;
 }
 
-/* tool 块：卡片式 */
+/* Tool block: card style */
 .block-tool {
   background: var(--bg1);
   border: 1px solid var(--bg2);
@@ -1115,7 +1163,7 @@ button {
   min-width: 0;
   cursor: pointer;
 }
-/* 点击 target 展开：换行显示完整内容（长命令等），再次点击收起。 */
+/* Click target to expand: wraps to show full content (long commands etc.); click again to collapse. */
 .block-tool .tool-target.expanded {
   white-space: pre-wrap;
   word-break: break-all;
@@ -1188,13 +1236,13 @@ button {
   overflow-wrap: anywhere;
 }
 
-/* image 块（内联图片 / artifact 引用图片）：缩略展示，点击放大（灯箱） */
+/* Image blocks (inline images / artifact-referenced images): thumbnail display, click to zoom (lightbox) */
 .block-image,
 .block-artifact {
   margin: 4px 0;
 }
-/* 工具结果图片（browser 截图等）直接挂在 .block-tool 下，同样需要约束，
-   否则按原图宽度溢出对话列 */
+/* Tool-result images (browser screenshots etc.) hang directly under .block-tool and need the same
+   constraint, otherwise they overflow the conversation column at native width */
 .block-image .inline-image,
 .block-artifact .inline-image,
 .block-tool .inline-image {
@@ -1216,7 +1264,7 @@ button {
   outline-offset: 1px;
 }
 
-/* 非图片 artifact（run_cmd stdout 等文本输出）：可展开预览 + 下载 */
+/* Non-image artifacts (text output like run_cmd stdout): expandable preview + download */
 .artifact-file summary {
   font-size: 12px;
 }
@@ -1249,7 +1297,7 @@ button {
   overflow-y: auto;
 }
 
-/* 图片灯箱：点击遮罩或 ESC 关闭；打开期间锁定页面滚动 */
+/* Image lightbox: click backdrop or ESC to close; page scroll locked while open */
 .lightbox {
   position: fixed;
   inset: 0;
@@ -1325,7 +1373,7 @@ body.lightbox-open {
   background: var(--bg1);
 }
 
-/* 审批卡片 */
+/* Approval card */
 .card-approval {
   border: 2px solid var(--warning);
   border-radius: var(--radius-md);
@@ -1382,7 +1430,7 @@ body.lightbox-open {
   opacity: 0.75;
 }
 
-/* 问答卡片 */
+/* Question card */
 .card-question {
   border: 2px solid var(--primary);
   border-radius: var(--radius-md);
@@ -1482,7 +1530,7 @@ body.lightbox-open {
   color: var(--error);
 }
 
-/* ============================== plan 面板 ============================== */
+/* ============================== Plan panel ============================== */
 .plan-panel {
   max-width: var(--content-width);
   margin: 0 auto 10px;
@@ -1557,11 +1605,12 @@ body.lightbox-open {
   background: var(--bg1);
   border: 1px solid var(--bg2);
   border-radius: var(--radius-xl);
-  padding: 4px 4px 0;
+  padding: 6px 6px 0;
   overflow: hidden;
 }
 .composer-box:focus-within {
-  border-color: var(--muted);
+  /* Focus feedback upgraded from bg2→muted to translucent primary: "input focused" is more perceptible */
+  border-color: color-mix(in srgb, var(--primary) 45%, transparent);
 }
 .composer textarea {
   width: 100%;
@@ -1580,7 +1629,11 @@ body.lightbox-open {
 .composer textarea:focus {
   outline: none;
 }
-/* 只读会话（子 agent）：输入区降透明度，禁用态可感知 */
+/* Placeholder one notch dimmer than muted: hint text must not compete with real content */
+.composer textarea::placeholder {
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+/* Read-only sessions (sub-agent): input area dimmed so the disabled state is perceptible */
 .composer textarea:disabled {
   cursor: not-allowed;
 }
@@ -1591,7 +1644,14 @@ body.lightbox-open {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 8px 6px;
+  /* Top divider separates the capsule row into a "toolbar"; negative margins stretch the line to full box width */
+  margin: 2px -6px 0;
+  padding: 8px 10px 8px;
+  border-top: 1px solid var(--bg2);
+}
+/* Attachment icon brightened from muted for discoverability (the raw color is nearly invisible on bg1) */
+.composer-tools > .icon-btn {
+  color: color-mix(in srgb, var(--fg) 55%, transparent);
 }
 .composer-tools {
   display: flex;
@@ -1606,7 +1666,7 @@ body.lightbox-open {
   gap: 8px;
 }
 
-/* picker 按钮 */
+/* Picker button */
 .picker-btn {
   display: inline-flex;
   align-items: center;
@@ -1630,12 +1690,16 @@ body.lightbox-open {
   border-color: var(--primary);
   color: var(--primary);
 }
+/* Non-default level (reasoning etc.): text color hint only, border unchanged */
+.picker-btn.is-on {
+  color: var(--primary);
+}
 .picker-caret {
   font-size: 10px;
   color: var(--muted);
 }
 
-/* 发送按钮：深色圆形 */
+/* Send button: dark circle */
 .send-btn {
   width: 32px;
   height: 32px;
@@ -1654,8 +1718,12 @@ body.lightbox-open {
 .send-btn:hover {
   filter: brightness(1.1);
 }
+/* Send becomes stop while busy: same position and shape, only the semantic color changes */
+.send-btn.is-stop {
+  background: var(--error);
+}
 
-/* 图片附件条：粘贴/拖拽/选择图片后的缩略图预览 */
+/* Image attachment strip: thumbnail previews after paste/drag/pick */
 .attach-strip {
   display: flex;
   gap: 8px;
@@ -1700,7 +1768,7 @@ body.lightbox-open {
 .attach-remove:focus-visible {
   opacity: 1;
 }
-/* 拖拽图片进入 composer 的高亮态 */
+/* Highlight state when dragging images into the composer */
 .composer-box.is-dragover {
   border-color: var(--primary);
 }
@@ -1708,23 +1776,8 @@ body.lightbox-open {
   opacity: 0.4;
   cursor: not-allowed;
 }
-.icon-btn-circle {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  flex: none;
-  background: transparent;
-  border: 1px solid var(--error);
-  color: var(--error);
-  font-size: 12px;
-  display: grid;
-  place-items: center;
-}
-.icon-btn-circle:hover {
-  background: color-mix(in srgb, var(--error) 12%, transparent);
-}
 
-/* ============================== 下拉菜单 ============================== */
+/* ============================== Dropdown menu ============================== */
 .menu {
   position: fixed;
   z-index: var(--z-menu);
@@ -1789,9 +1842,9 @@ body.lightbox-open {
   color: var(--muted);
   margin-left: auto;
 }
-/* 多模态角标（模型选择器中支持图片输入的模型）：有 ctx 时贴着模型名
-   （ctx 自带 margin-left:auto 右推），无 ctx 时角标自身右推（此时它是
-   check 槽位前的最后一个元素）。 */
+/* Multimodal badge (models supporting image input in the model picker): sits next to the model name
+   when ctx is present (ctx right-pushes itself via margin-left:auto); without ctx the badge pushes
+   itself right (it is then the last element before the check slot). */
 .menu .menu-item .mod {
   font-size: 11px;
   color: var(--muted);
@@ -1802,11 +1855,11 @@ body.lightbox-open {
   margin-left: auto;
 }
 
-/* ============================== 分享页（/share/{token} 只读） ============================== */
+/* ============================== Share page (/share/{token} read-only) ============================== */
 .share-body {
   height: 100vh;
-  height: 100dvh; /* 移动端动态视口高，随浏览器工具栏伸缩，避免内容被遮挡 */
-  overflow-x: clip; /* 兜底：分享页永不出现横向滚动条 */
+  height: 100dvh; /* Mobile dynamic viewport height; tracks the browser toolbar so content isn't covered */
+  overflow-x: clip; /* Backstop: the share page never gets a horizontal scrollbar */
 }
 /* The grid lives on #root: body has a single React root child, so rows on
    body never mapped to header/content/footer (the footer floated mid-page
@@ -1822,9 +1875,9 @@ body.lightbox-open {
   align-items: center;
   gap: 10px;
   padding: 0 20px;
-  /* grid 子项的自动最小尺寸 = min-content：标题 nowrap 的全宽会把 share-body
-     的隐式列轨道撑出视口（页面级横向滚动条的真实来源）。显式 min-width: 0
-     让轨道可收缩，标题再由自身 ellipsis 截断。 */
+  /* A grid item's automatic minimum size is min-content: the full nowrap title width would push
+     share-body's implicit column track past the viewport (the real source of page-level horizontal
+     scroll). Explicit min-width: 0 lets the track shrink; the title then truncates via its own ellipsis. */
   min-width: 0;
   min-height: 44px;
   background: var(--bg0);
@@ -1844,7 +1897,7 @@ body.lightbox-open {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  min-width: 0; /* flex 内可收缩，长标题截断而非挤破头部 */
+  min-width: 0; /* Shrinkable inside flex: long titles truncate instead of breaking the header */
 }
 .share-meta {
   flex: none;
@@ -1853,10 +1906,10 @@ body.lightbox-open {
 }
 .share-transcript {
   min-height: 0;
-  min-width: 0; /* 同为 grid 子项，防御性允许横向收缩（同 share-header） */
+  min-width: 0; /* Also a grid item; defensively allow horizontal shrink (same as share-header) */
 }
-/* 分享页内容区：页签条 + 当前视图（复用主应用 sess-tabs / chat-pane /
-   trace-page / maze-page 的 flex 布局） */
+/* Share page content area: tab bar + current view (reuses the main app's sess-tabs / chat-pane /
+   trace-page / maze-page flex layouts) */
 .share-main {
   min-height: 0;
   min-width: 0;
@@ -1885,7 +1938,7 @@ body.lightbox-open {
 .share-top {
   position: fixed;
   right: 20px;
-  bottom: 56px; /* 压在 footer 上方 */
+  bottom: 56px; /* Sits above the footer */
   z-index: var(--z-follow);
   display: inline-flex;
   align-items: center;
@@ -1927,7 +1980,7 @@ body.lightbox-open {
   flex: 1;
 }
 
-/* ctx 占用环（composer 右侧，渐进披露：默认安静，随水位变色） */
+/* Context usage ring (right of the composer; progressive disclosure: quiet by default, color shifts with the level) */
 .ctx-gauge {
   display: inline-flex;
   align-items: center;
@@ -1977,7 +2030,7 @@ body.lightbox-open {
   }
 }
 
-/* context.compacted 明细卡片 */
+/* context.compacted detail card */
 .notice.compact {
   font-style: normal;
 }
@@ -2019,7 +2072,7 @@ body.lightbox-open {
   background: color-mix(in srgb, var(--highlight) 12%, transparent);
 }
 
-/* ============================== 确认弹窗 ============================== */
+/* ============================== Confirm modal ============================== */
 .modal-wrap {
   position: fixed;
   inset: 0;
@@ -2056,7 +2109,7 @@ body.lightbox-open {
   gap: 10px;
 }
 
-/* 目录浏览弹窗（添加工作区） */
+/* Directory browser modal (add workspace) */
 .dir-modal {
   width: min(520px, 92vw);
 }
@@ -2066,7 +2119,7 @@ body.lightbox-open {
   gap: 4px;
   margin-bottom: 10px;
 }
-/* 面包屑：路径拆段，每段可点直接跳任意上级；当前段高亮不可点 */
+/* Breadcrumbs: path split into clickable segments jumping to any ancestor; current segment highlighted, not clickable */
 .dir-crumbs {
   flex: 1;
   min-width: 0;
@@ -2163,8 +2216,8 @@ body.lightbox-open {
   border-color: var(--muted);
 }
 
-/* ============================== highlight.js 令牌映射 ============================== */
-/* hljs 输出 span 类别 → 调色板变量；深浅主题自动适配。 */
+/* ============================== highlight.js token mapping ============================== */
+/* hljs output span classes → palette variables; adapts to dark/light themes automatically. */
 .hljs-comment,
 .hljs-quote {
   color: var(--muted);
@@ -2216,8 +2269,8 @@ body.lightbox-open {
   font-weight: 700;
 }
 
-/* ============================== 设置面板 ============================== */
-/* 左侧 tab 导航 + 右侧表单区；控件样式限定在 .settings 内，不影响全局 */
+/* ============================== Settings panel ============================== */
+/* Left tab nav + right form area; control styles are scoped to .settings and don't leak globally */
 .settings-wrap {
   position: fixed;
   inset: 0;
@@ -2289,8 +2342,8 @@ body.lightbox-open {
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
-/* 导航图标跟随文字色（muted → hover fg → active primary 由基类 currentColor 继承），
-统一 1em 宽度保证不同 viewBox 的图标左对齐 */
+/* Nav icons follow the text color (muted → hover fg → active primary via the base class's currentColor);
+a uniform 1em width keeps icons with different viewBoxes left-aligned */
 .settings-tab .icon {
   opacity: 0.85;
 }
@@ -2324,8 +2377,8 @@ body.lightbox-open {
 .settings-foot .spacer {
   flex: 1;
 }
-/* 消息条位于按钮组左侧（spacer 之后）：限宽 + 右对齐贴住按钮，
-长文本截断，完整内容经 title 悬停可见 */
+/* Message bar sits left of the button group (after the spacer): width-capped + right-aligned against the buttons;
+long text truncates, full content visible via title on hover */
 .settings-msg {
   font-size: var(--text-sm);
   color: var(--muted);
@@ -2344,20 +2397,20 @@ body.lightbox-open {
   outline-offset: 1px;
 }
 
-/* 表单区 */
+/* Form area */
 .set-sec {
   margin-bottom: 22px;
 }
-/* 表单小节的卡片化变体：标题提级（反超字段标签的字号与亮度）+ 微浮起
-   卡片，与 providers/MCP/workspaces 的 .set-card 语言统一；含卡片的
-   小节（层级导航、工作区）不加此变体，避免双重边框。 */
+/* Carded variant of a form section: elevated title (larger and brighter than field labels) + slightly
+   raised card, unified with the .set-card language of providers/MCP/workspaces; sections that already
+   contain cards (hierarchy nav, workspaces) skip this variant to avoid double borders. */
 .set-sec-card {
   position: relative;
   background: color-mix(in srgb, var(--bg1) 55%, transparent);
   border: 1px solid var(--bg2);
   border-radius: var(--radius-md);
   padding: 14px 16px 4px;
-  margin-top: 10px; /* 给浮起的标题留位 */
+  margin-top: 10px; /* Reserve space for the floating title */
   margin-bottom: 14px;
 }
 .set-sec-title {
@@ -2366,9 +2419,9 @@ body.lightbox-open {
   color: var(--fg);
   margin-bottom: 10px;
 }
-/* 卡片小节的标题浮在边框左上角（fieldset/legend 式）：面板底色盖住
-   边框形成「开口」。带刷新按钮的小节（环境/规则包）只浮标题，
-   刷新按钮留在卡片内右上角，避免按钮压在边框线上。 */
+/* Card-section title floats on the top-left border (fieldset/legend style): the panel background covers
+   the border to form a "gap". Sections with a refresh button (environment/rule packs) float only the
+   title; the refresh button stays in the card's top-right corner so it doesn't sit on the border line. */
 .set-sec-card > .set-sec-title,
 .set-sec-card > .set-skills-bar .set-sec-title {
   position: absolute;
@@ -2382,13 +2435,13 @@ body.lightbox-open {
 .set-sec-card > .set-skills-bar {
   justify-content: flex-end;
 }
-/* 表单里的下拉不撑满整行：短选项全宽显得笨重；label 自带省略 */
+/* Form dropdowns don't span the full row: full width looks bulky for short options; the label ellipsizes itself */
 .set-input.sel {
   width: auto;
   min-width: 220px;
   max-width: 360px;
 }
-/* 长说明默认一行截断，点击展开/收起（与 skill-desc 同一交互语言） */
+/* Long descriptions clamp to one line by default, click to expand/collapse (same interaction language as skill-desc) */
 .set-tip.is-clamp {
   display: -webkit-box;
   -webkit-line-clamp: 1;
@@ -2434,7 +2487,7 @@ body.lightbox-open {
   outline: 1px solid var(--primary);
   border-color: var(--primary);
 }
-/* 必填标记（标签后的红色星号）与保存校验失败的控件高亮 */
+/* Required marker (red asterisk after the label) and highlight for controls failing save validation */
 .set-req {
   color: var(--error);
   font-weight: 600;
@@ -2480,7 +2533,7 @@ select.set-input {
   flex: none;
 }
 
-/* 卡片列表（providers / models / mcp / workspaces） */
+/* Card list (providers / models / mcp / workspaces) */
 .set-cards {
   display: flex;
   flex-direction: column;
@@ -2548,7 +2601,7 @@ select.set-input {
   padding-top: 8px;
 }
 
-/* MCP 服务器实时状态徽标（设置面板卡片头部） */
+/* MCP server live-status badge (settings panel card header) */
 .mcp-status {
   flex: none;
   font-size: var(--text-xs);
@@ -2567,7 +2620,7 @@ select.set-input {
 .mcp-reconnect {
   flex: none;
 }
-/* 异步动作反馈：进行中旋转 + 成功闪烁 + 居中加载 */
+/* Async action feedback: spin while running + flash on success + centered loading */
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -2608,7 +2661,7 @@ select.set-input {
   animation: none;
 }
 
-/* 已注册工具小节（MCP 详情页表单上方，只读；限高内部滚动） */
+/* Registered tools section (above the MCP detail form, read-only; height-capped with internal scroll) */
 .mcp-tools-sec {
   margin-bottom: 14px;
 }
@@ -2651,7 +2704,7 @@ select.set-input {
   overflow: visible;
 }
 
-/* 悬浮提示（tooltip.js，全局接管 title 属性；视觉对齐 .menu/.sel-pop） */
+/* Tooltip (tooltip.js; globally takes over the title attribute; visuals aligned with .menu/.sel-pop) */
 .tip {
   position: fixed;
   z-index: calc(var(--z-toasts) + 1);
@@ -2669,7 +2722,7 @@ select.set-input {
   animation: fadein 0.12s ease;
 }
 
-/* 自绘下拉（select.js，替代原生 select；浮层视觉对齐 .menu） */
+/* Custom dropdown (select.js; replaces native select; popover visuals aligned with .menu) */
 .sel {
   display: flex;
   align-items: center;
@@ -2739,7 +2792,7 @@ select.set-input {
   color: var(--primary);
 }
 
-/* 层级导航（模型 / MCP tab：概览 → 详情，见 settings.js set-hier） */
+/* Hierarchical navigation (models / MCP tab: overview → detail; see settings.js set-hier) */
 .set-nav {
   display: flex;
   align-items: center;
@@ -2758,7 +2811,7 @@ select.set-input {
   white-space: nowrap;
 }
 
-/* 概览行摘要（名称 + 元信息 + 展开箭头），详情态让位给名称输入框 */
+/* Overview row summary (name + meta + expand caret); in detail state it yields to the name input */
 .set-card-summary {
   flex: 1;
   min-width: 0;
@@ -2810,7 +2863,7 @@ select.set-input {
   color: var(--primary);
 }
 
-/* 行态 ↔ 详情态切换：行态只留头部摘要，详情态只留当前卡片 */
+/* Row ↔ detail state switch: rows keep only the header summary, detail keeps only the current card */
 .set-hier .set-card > .set-card-head > .set-input {
   display: none;
 }
@@ -2839,7 +2892,7 @@ select.set-input {
   display: none;
 }
 
-/* 模型子卡（provider 详情内）：默认行态，展开（第三级）后只留当前模型 */
+/* Model sub-cards (inside provider detail): rows by default; once expanded (third level) only the current model remains */
 .set-hier .set-models > .set-card > .set-card-body {
   display: none;
 }
@@ -2867,11 +2920,11 @@ select.set-input {
 .set-hier .set-card.is-model-detail .set-models > .set-card:not(.is-open) {
   display: none;
 }
-/* 模型详情（第三级）下 provider 头仅作上下文标识，不提供删除父级入口 */
+/* In model detail (third level) the provider header is context only — no entry to delete the parent */
 .set-hier .set-card.is-model-detail > .set-card-head > .set-card-del {
   display: none;
 }
-/* 同时 provider 名只读（JS 置 readOnly），视觉上退化为纯文本而非输入框 */
+/* The provider name is also read-only (JS sets readOnly) and visually degrades to plain text, not an input */
 .set-hier .set-card.is-model-detail > .set-card-head > .set-input[readonly] {
   border-color: transparent;
   background: transparent;
@@ -2884,7 +2937,7 @@ select.set-input {
   outline: none;
 }
 
-/* Skills tab（配置 + 聚合发现视图） */
+/* Skills tab (config + aggregated discovery view) */
 .set-skills-bar {
   display: flex;
   align-items: center;
@@ -2966,7 +3019,7 @@ select.set-input {
 .set-skills-error {
   color: var(--error);
 }
-/* skill 行内操作：禁用/启用 + 删除（与卡片头的删除按钮同一交互语言） */
+/* Skill inline actions: disable/enable + delete (same interaction language as the card-header delete button) */
 .skill-actions {
   margin-left: auto;
   display: flex;
@@ -2988,8 +3041,8 @@ select.set-input {
   border-color: color-mix(in srgb, var(--warning) 40%, transparent);
 }
 
-/* 规则包卡片：命令 chips + 风险徽标（权限 tab）。pack 卡片没有浮起
-   标题，不需要 set-sec-card 的 legend 留位；简介默认两行截断可点击展开 */
+/* Rule pack cards: command chips + risk badge (permissions tab). Pack cards have no floating
+   title, so they don't need set-sec-card's legend spacing; the summary clamps to two lines and expands on click */
 .pack-card {
   margin-top: 0;
   margin-bottom: 10px;
@@ -3023,7 +3076,7 @@ select.set-input {
   white-space: nowrap;
 }
 
-/* 系统 tab：开发环境卡片（工具链/PATH 运行时报告） */
+/* System tab: dev environment card (toolchain/PATH runtime report) */
 .set-env-sub {
   margin: 10px 0 4px;
   font-size: var(--text-sm);
@@ -3077,18 +3130,20 @@ select.set-input {
   line-height: 1.5;
 }
 
-/* 桌面端（loom-desktop，mac.TitleBarHidden，无 toolbar）：无原生标题栏，
-   红绿灯悬浮在窗口左上角标准位（中心线距窗口顶 14px，横向约占 12–66px）。
-   顶行统一收紧为 28px：侧栏展开时灯落在 .ws-bar 行内，折叠时落在
-   .app-header 行内，两种状态下行内容中心线均为 14px，与灯严格同高。
-   顶行兼作窗口拖动区（Wails --wails-draggable），按钮等交互控件排除拖动。 */
+/* Desktop (loom-desktop, mac.TitleBarHidden, no toolbar): no native title bar; the traffic lights
+   float at the standard top-left spot (center line 14px from the window top, spanning ~12–66px).
+   Top rows are uniformly tightened to 28px: with the sidebar open the lights land inside the .ws-bar
+   row, collapsed they land inside the .app-header row; in both states the row content center line is
+   14px, exactly level with the lights. Top rows double as the window drag region
+   (Wails --wails-draggable); buttons and other interactive controls opt out of dragging. */
 .is-desktop .sidebar {
   padding-top: 0;
 }
-/* 顶行是纯 window chrome（灯 + 操作图标）：隐藏「工作区」分节文字，避免被
-   误读为窗口标题，与折叠态顶行（灯 + ≡ ☾ ⚙ ·）语义保持一致。
-   「+」右对齐到侧栏右缘，平时隐藏、悬停侧栏（或键盘聚焦）时浮现——与
-   工作区行 hover 才显示「新建/删除」的交互语言一致，顶行平时只剩灯。 */
+/* The top row is pure window chrome (lights + action icons): the "Workspaces" section label is hidden
+   so it isn't misread as the window title, matching the collapsed top row (lights + ≡ ☾ ⚙ ·).
+   "+" right-aligns to the sidebar's right edge, hidden by default and revealed on sidebar hover
+   (or keyboard focus) — same interaction language as workspace rows showing "new/delete" only on
+   hover; normally the top row shows just the lights. */
 .is-desktop .ws-bar-title {
   display: none;
 }
@@ -3116,13 +3171,13 @@ select.set-input {
 .is-desktop .app-header button {
   --wails-draggable: no-drag;
 }
-/* 侧栏折叠时红绿灯落在头部左侧，头部整体右移让位 */
+/* With the sidebar collapsed the traffic lights land on the header's left; the whole header shifts right to make room */
 .is-desktop .shell.sidebar-collapsed .app-header {
   padding-left: 76px;
 }
-/* 窗口失焦时系统会把红绿灯绘成非激活态（透明标题栏下呈黑色圆点，AppKit
-   绘制，web 层无法改色）；让两行顶栏内容同步变淡，呈现一致的原生
-   「非激活窗口」观感（main.js 在 blur/focus 时切换 is-inactive） */
+/* When the window loses focus the system redraws the traffic lights as inactive (black dots under a
+   transparent title bar, drawn by AppKit — the web layer can't recolor them); both top rows fade in
+   sync for a consistent native "inactive window" look (main.js toggles is-inactive on blur/focus) */
 .is-desktop .app-header,
 .is-desktop .ws-bar {
   transition: opacity 0.15s ease;
@@ -3132,7 +3187,7 @@ select.set-input {
   opacity: 0.45;
 }
 
-/* 窄屏：侧栏改为抽屉式 overlay（☰ 开关；选中会话后自动收起） */
+/* Narrow screens: sidebar becomes a drawer overlay (☰ toggle; auto-collapses after picking a session) */
 @media (max-width: 767px) {
   .app-body {
     grid-template-columns: minmax(0, 1fr);
@@ -3146,14 +3201,14 @@ select.set-input {
     transition: transform 0.15s ease;
     box-shadow: var(--shadow-md);
   }
-  /* 覆盖桌面折叠规则的 display:none，抽屉改由 transform 隐藏 */
+  /* Override the desktop collapse rule's display:none; the drawer is hidden via transform instead */
   .shell.sidebar-collapsed .sidebar {
     display: flex;
   }
   .shell:not(.sidebar-collapsed) .sidebar {
     transform: none;
   }
-  /* 抽屉遮罩：窄屏抽屉展开时压暗内容、点击收起 */
+  /* Drawer backdrop: dims content while the narrow-screen drawer is open; click to dismiss */
   .shell:not(.sidebar-collapsed) .sidebar-backdrop {
     display: block;
     position: fixed;
@@ -3167,7 +3222,7 @@ select.set-input {
     max-width: none;
   }
 
-  /* 头部：收紧间距，隐藏工作区面包屑（侧栏里可看） */
+  /* Header: tightened spacing, workspace breadcrumb hidden (visible in the sidebar) */
   .app-header {
     padding: 0 8px;
     gap: 6px;
@@ -3176,12 +3231,12 @@ select.set-input {
     display: none;
   }
 
-  /* 触摸目标：图标按钮从 ~28px 放大到接近 44pt */
+  /* Touch targets: icon buttons enlarged from ~28px to near 44pt */
   .icon-btn {
     padding: 8px 10px;
   }
 
-  /* composer / 状态栏：收紧边距 + 底部安全区（刘海屏 home 条） */
+  /* Composer / statusbar: tightened margins + bottom safe area (notch home indicator) */
   .composer {
     padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
   }
@@ -3192,8 +3247,8 @@ select.set-input {
     overflow-x: auto;
   }
 
-  /* 分享页窄屏适配：收紧边距、气泡放宽、隐藏次要元信息，
-     把有限宽度让给会话内容 */
+  /* Share page narrow-screen adaptation: tighter margins, wider bubbles, secondary meta hidden —
+     yield the limited width to conversation content */
   .share-body .transcript-inner {
     padding: 16px 12px 12px;
     gap: 14px;
@@ -3210,8 +3265,8 @@ select.set-input {
   }
 }
 
-/* ============================== 执行轨迹迷宫（components/maze/） ==============================
-   主干胶囊条 + 支路虚线弧的时间轴图；判定色全部走设计令牌。 */
+/* ============================== Execution trace maze (components/maze/) ==============================
+   Timeline of mainline capsule bars + branch dashed arcs; verdict colors all come from design tokens. */
 
 .maze-wrap {
   display: flex;
@@ -3351,7 +3406,7 @@ brush/pinch pointer handlers. */
   user-select: none;
 }
 
-/* 判定色（节点胶囊/子条/徽标共用） */
+/* Verdict colors (shared by node capsules / sub-bars / badges) */
 .maze-node rect,
 .maze-parbar {
   fill: var(--primary);
@@ -3446,7 +3501,7 @@ brush/pinch pointer handlers. */
   fill: var(--muted);
   font-size: var(--text-xs);
 }
-/* lane 身份色：对比模式下标题圆点 + 主干线染色，与头部选择器色点呼应 */
+/* Lane identity colors: in compare mode the title dot + mainline tint echo the header picker dots */
 .maze-lane-dot.lane-1 {
   fill: var(--primary);
 }
@@ -3487,7 +3542,7 @@ brush/pinch pointer handlers. */
   font-size: 10px;
 }
 
-/* 框选放大选区（Grafana 式 brush） */
+/* Drag-select zoom region (Grafana-style brush) */
 .maze-brush {
   position: absolute;
   z-index: var(--z-menu);
@@ -3510,7 +3565,7 @@ brush/pinch pointer handlers. */
   white-space: nowrap;
 }
 
-/* 悬停卡 */
+/* Hover card */
 .maze-tip {
   position: absolute;
   z-index: var(--z-menu);
@@ -3533,7 +3588,7 @@ brush/pinch pointer handlers. */
   line-height: 1.5;
 }
 
-/* 详情面板（覆盖在画布右侧，不挤压画布） */
+/* Detail panel (overlays the right side of the canvas without squeezing it) */
 .maze-detail {
   position: absolute;
   top: 0;
@@ -3700,7 +3755,7 @@ brush/pinch pointer handlers. */
   color: var(--purple);
 }
 
-/* 支路盘点 */
+/* Branch audit */
 .maze-audit {
   flex: none;
   border-top: 1px solid var(--bg2);
@@ -3737,7 +3792,7 @@ brush/pinch pointer handlers. */
   background: var(--bg2);
 }
 
-/* 轨迹视图容器（主区域切换）与对比视图 */
+/* Trace view container (main-area switching) and compare view */
 .maze-page {
   display: flex;
   flex-direction: column;
@@ -3819,7 +3874,7 @@ brush/pinch pointer handlers. */
 .compare-close {
   justify-self: end;
 }
-/* lane 身份色点（选择器前 / 盘点表头）：l1 主色、l2 紫色，与画布一致 */
+/* Lane identity dots (before pickers / audit table header): l1 primary, l2 purple, matching the canvas */
 .lane-dot {
   display: inline-block;
   width: 8px;
@@ -3841,8 +3896,8 @@ brush/pinch pointer handlers. */
   flex-direction: column;
 }
 
-/* ============================== 会话页签（components/SessionTabs） ==============================
-   对话 / 轨迹 / 迷宫 三视图切换；下划线指示当前页签。 */
+/* ============================== Session tabs (components/SessionTabs) ==============================
+   Switch between Chat / Trace / Maze views; an underline marks the active tab. */
 
 .sess-tabs {
   display: flex;
@@ -3871,7 +3926,7 @@ brush/pinch pointer handlers. */
   font-weight: 600;
 }
 
-/* chat-pane：对话页签的容器（transcript + composer），切走时整体隐藏但保持挂载 */
+/* chat-pane: container of the Chat tab (transcript + composer); hidden as a whole when switched away but stays mounted */
 .chat-pane {
   flex: 1;
   min-height: 0;
@@ -3886,9 +3941,9 @@ brush/pinch pointer handlers. */
   min-height: 0;
 }
 
-/* ============================== 执行轨迹列表（components/trace/TraceView） ==============================
-   单行高密度事件流：gutter 轨道按轮次分组，badge 按行为主体着色
-   （Input=绿 / Model=紫 / Tools=橙），与迷宫的判定着色正交。 */
+/* ============================== Execution trace list (components/trace/TraceView) ==============================
+   Single-line high-density event stream: gutter rails group by turn, badges color by actor
+   (Input=green / Model=purple / Tools=orange), orthogonal to the maze's verdict coloring. */
 
 .trace-page {
   flex: 1;
@@ -3920,7 +3975,7 @@ brush/pinch pointer handlers. */
   gap: 10px;
 }
 
-/* 节奏条：Input/Model/Tools 三条迷你泳道，点击跳转对应轮次 */
+/* Rhythm strip: three mini swimlanes for Input/Model/Tools; click to jump to the matching turn */
 .trace-strip {
   display: flex;
   align-items: stretch;
@@ -3954,7 +4009,7 @@ brush/pinch pointer handlers. */
   fill: var(--highlight);
 }
 
-/* 事件列表 */
+/* Event list */
 .trace-list {
   flex: 1;
   min-height: 0;
@@ -3965,7 +4020,7 @@ brush/pinch pointer handlers. */
   position: relative;
   padding: 4px 0 8px;
 }
-/* 轮次 gutter 轨道：从首个圆点连到末尾圆点 */
+/* Turn gutter rail: connects the first dot to the last */
 .trace-turn::before {
   content: '';
   position: absolute;
@@ -4077,7 +4132,7 @@ brush/pinch pointer handlers. */
   color: var(--muted);
 }
 
-/* 行内展开区 */
+/* Inline expansion area */
 .trace-expand {
   margin: 2px 0 6px 24px;
   padding: 8px 10px;
@@ -4112,10 +4167,10 @@ brush/pinch pointer handlers. */
   margin-bottom: 4px;
 }
 
-/* 窄屏迷宫适配：必须位于迷宫基础规则之后（同优先级，后者胜出），
-   所以单独一个断点块放在本节末尾 */
+/* Narrow-screen maze adaptation: must come after the maze base rules (equal specificity, later wins),
+   hence its own breakpoint block at the end of this section */
 @media (max-width: 767px) {
-  /* 详情面板从 340px 侧栏改为全屏 overlay */
+  /* Detail panel changes from a 340px sidebar to a full-screen overlay */
   .maze-detail {
     position: fixed;
     inset: 0;
@@ -4145,4 +4200,335 @@ brush/pinch pointer handlers. */
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* ============================== Right workspace panel (changes / file tree) ============================== */
+/* Three-column grid: opening the panel appends a 360px right column; when closed the aside isn't rendered, so no reset rules needed */
+.shell.panel-open .app-body {
+  grid-template-columns: 288px minmax(0, 1fr) 360px;
+}
+.shell.panel-open.sidebar-collapsed .app-body {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+.right-panel {
+  background: var(--bg1);
+  border-left: 1px solid var(--bg2);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.rp {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+.rp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--bg2);
+  flex: none;
+}
+.rp-tabs {
+  flex: 1;
+  display: flex;
+  gap: 2px;
+  background: var(--bg2);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+.rp-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.rp-tab.is-active {
+  background: var(--bg1);
+  color: var(--fg);
+}
+.rp-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 8px;
+}
+.rp-empty {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  padding: 18px 10px;
+  text-align: center;
+}
+.rp-subhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px 8px;
+  flex: none;
+}
+.rp-branch {
+  font-size: 12px;
+  color: var(--fg);
+  background: var(--bg2);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rp-subhead .gf-stats {
+  flex: 1;
+  text-align: right;
+}
+/* Git changed-file cards */
+.gf {
+  border: 1px solid var(--bg2);
+  border-radius: var(--radius-md);
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+.gf.is-open {
+  border-color: var(--muted);
+}
+.gf-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--fg);
+  padding: 7px 10px;
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--text-sm);
+}
+.gf-row:hover {
+  background: var(--bg2);
+}
+.gf-badge {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.gf-badge.st-m {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
+}
+.gf-badge.st-a,
+.gf-badge.st-u {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+}
+.gf-badge.st-d {
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 15%, transparent);
+}
+.gf-badge.st-r,
+.gf-badge.st-t {
+  color: var(--purple);
+  background: color-mix(in srgb, var(--purple) 15%, transparent);
+}
+.gf-path {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.gf-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gf-dir {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gf-stats {
+  flex: none;
+  font-size: 11px;
+  display: inline-flex;
+  gap: 6px;
+}
+.st-add {
+  color: var(--success);
+}
+.st-del {
+  color: var(--error);
+}
+.gf-diff {
+  border-top: 1px solid var(--bg2);
+}
+.gf-diff .diff .d-body {
+  max-height: 320px;
+  overflow-y: auto;
+}
+/* File tree */
+.ft-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--fg);
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  text-align: left;
+  border-radius: var(--radius-sm);
+}
+.ft-row:hover {
+  background: var(--bg2);
+}
+.ft-row .icon {
+  color: var(--muted);
+  flex: none;
+  font-size: 13px;
+}
+.ft-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ft-loading {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 4px 24px;
+}
+/* File preview */
+.rp-body.fp {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.fp-path {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fp-code {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  background: var(--bg2);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre;
+}
+/* Narrow screens: the panel degrades to a right drawer, taking no grid column */
+@media (max-width: 767px) {
+  .shell.panel-open .app-body,
+  .shell.panel-open.sidebar-collapsed .app-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .right-panel {
+    position: fixed;
+    inset: 0 0 0 auto;
+    width: min(360px, 92vw);
+    z-index: var(--z-drawer);
+    box-shadow: var(--shadow-md);
+  }
+}
+
+/* ============================== Tool-block kind icons / approval picker ============================== */
+.tool-kind {
+  color: var(--muted);
+  flex: none;
+  display: inline-flex;
+  font-size: 12px;
+}
+/* Non-default approval modes always show a warning color: prevents forgetting a switch to permissive/unattended */
+.picker-btn.is-warn {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+.picker-btn.is-warn.is-active {
+  border-color: var(--primary);
+}
+/* Approval-mode menu item: first line name + ✓, second line description */
+.menu .menu-item.menu-item-hint {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.menu .menu-item.menu-item-hint .check {
+  margin-left: auto;
+}
+.menu .menu-item .menu-item-desc {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* ============================== Composer input completion (@ files / / skills) ============================== */
+.menu .menu-item.ac-item {
+  gap: 8px;
+}
+.menu .menu-item .ac-icon {
+  flex: none;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 12px;
+}
+.menu .menu-item .ac-main {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menu .menu-item .ac-sub {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Injected-context chip inside the user bubble (server-resolved results of @file / /skill) */
+.user-ctx {
+  margin-top: 6px;
+  font-size: 12px;
+}
+.user-ctx summary {
+  gap: 6px;
+}
+.user-ctx summary .icon {
+  font-size: 11px;
+}
+.user-ctx-body {
+  margin-top: 6px;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 11px;
+  line-height: 1.5;
 }

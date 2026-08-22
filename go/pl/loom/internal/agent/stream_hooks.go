@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
@@ -63,8 +64,12 @@ type StreamAggregator struct {
 	// reasoningBlocks and are persisted as transcript parts.
 	reasoning       string
 	reasoningBlocks []domain.ReasoningContent
-	tools           map[int]*streamToolCall
-	seenIDs         map[string]struct{}
+	// reasoningStart is when the open block's first delta arrived; sealed
+	// into the block's DurationMs at reasoning_end so the transcript can
+	// show the thinking span after reloads.
+	reasoningStart time.Time
+	tools          map[int]*streamToolCall
+	seenIDs        map[string]struct{}
 	// idTaken reports whether a tool call id already appears in the
 	// transcript (installed via WithIDRewrite); rewritten records every
 	// collision rewrite (original → replacement) for observability.
@@ -148,12 +153,19 @@ func (a *StreamAggregator) Apply(evt domain.ModelEvent) error {
 		// A new block begins; interleaved thinking produces several blocks
 		// per response, each sealed independently at reasoning_end.
 		a.reasoning = ""
+		a.reasoningStart = a.clock.Now()
 	case domain.ModelEventReasoningEnd:
 		if a.reasoning != "" || evt.ReasoningSignature != "" || evt.ReasoningRedacted {
+			var dur int64
+			if !a.reasoningStart.IsZero() {
+				dur = max(a.clock.Since(a.reasoningStart).Milliseconds(), 0)
+				a.reasoningStart = time.Time{}
+			}
 			a.reasoningBlocks = append(a.reasoningBlocks, domain.ReasoningContent{
-				Text:      a.reasoning,
-				Signature: evt.ReasoningSignature,
-				Redacted:  evt.ReasoningRedacted,
+				Text:       a.reasoning,
+				Signature:  evt.ReasoningSignature,
+				Redacted:   evt.ReasoningRedacted,
+				DurationMs: dur,
 			})
 		}
 		a.reasoning = ""
@@ -163,6 +175,10 @@ func (a *StreamAggregator) Apply(evt domain.ModelEvent) error {
 			a.hooks.OnTextDelta(evt.TextDelta)
 		}
 	case domain.ModelEventReasoningDelta:
+		// Providers that skip reasoning_start still get a timing anchor.
+		if a.reasoningStart.IsZero() {
+			a.reasoningStart = a.clock.Now()
+		}
 		a.reasoning += evt.ReasoningDelta
 		if a.hooks.OnReasoningDelta != nil {
 			a.hooks.OnReasoningDelta(evt.ReasoningDelta)

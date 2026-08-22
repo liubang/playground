@@ -1,12 +1,14 @@
-// controller.ts — 应用控制器（框架无关）：启动编排、会话生命周期、SSE 事件
-// 分批调度、连接健康、模型/reasoning 切换、工作区管理、分享、反馈。
-// 逻辑与旧 static/js/main.js 一一对应；DOM 操作全部改为 AppState 状态投影，
-// React 视图层订阅渲染。
+// controller.ts — framework-agnostic app controller: boot orchestration, session
+// lifecycle, batched SSE event dispatch, connection health, model/reasoning
+// switching, workspace management, sharing, feedback.
+// Logic mirrors the legacy static/js/main.js; all DOM manipulation is replaced by
+// AppState projection, rendered by the subscribing React view layer.
 
 import { createApi, ApiError, type Api } from '../protocol/api'
 import { EventStream, type ConnState } from '../protocol/sse'
 import type { RuntimeEvent, Plan, SessionState, TokenUsage } from '../protocol/events'
 import type {
+  ApprovalMode,
   ContextWindow,
   ModelEntry,
   SessionSummary,
@@ -23,19 +25,26 @@ import { confirmDialog } from '../components/ui/Confirm'
 export const TOKEN_KEY = 'loom_token'
 const THEME_KEY = 'loom_theme'
 const SIDEBAR_KEY = 'loom_sidebar_collapsed'
-// 反馈投票本地态：key 带 session+run，存 "up"/"down"。仅作 UI 恢复用，
-// 真源在 Langfuse（score id 幂等覆盖，重投不产生重复分数）。
+const RIGHT_PANEL_KEY = 'loom_right_panel'
+const RIGHT_PANEL_TAB_KEY = 'loom_right_panel_tab'
+// Local feedback vote state: key carries session+run, value is "up"/"down".
+// For UI restore only; Langfuse is the source of truth (score id is idempotent,
+// re-voting overwrites instead of duplicating).
 const fbKey = (sessionId: string, runId: string) => `loom_fb_${sessionId}_${runId}`
 
 const SESSION_PAGE_SIZE = 30
-// SSE 事件分批渲染：重连追帧时事件成突发到达（几百上千条），逐事件同步
-// 处理会把主线程连成多秒长任务。排队 + rAF 合帧、每帧最多 EVENTS_PER_FRAME
-// 条：帧间让出主线程，追帧进度可见且界面保持响应。
+// Batched SSE event rendering: catch-up after reconnect delivers events in
+// bursts (hundreds to thousands); handling each synchronously would chain the
+// main thread into multi-second long tasks. Queue + rAF batching, at most
+// EVENTS_PER_FRAME per frame: yields the main thread between frames, keeps
+// catch-up progress visible and the UI responsive.
 const EVENTS_PER_FRAME = 120
-// 重连徽标防抖：从 live 切入 connecting/reconnecting 时延迟 400ms 显示——
-// 瞬态断流在延迟期内恢复 live 就完全不打断视觉。
+// Reconnect badge debounce: delay 400ms before showing connecting/reconnecting
+// after leaving live — transient drops that recover within the delay never
+// disturb the visuals.
 const CONN_BADGE_DELAY_MS = 400
-// 断连强提示：连续失败达到阈值（退避序列约 15s+）或进入 dead 终态时升 banner。
+// Disconnect escalation: raise a banner once consecutive failures hit the
+// threshold (backoff sequence ~15s+) or the connection enters the dead state.
 const CONN_WARN_ATTEMPTS = 5
 
 export interface BannerState {
@@ -44,10 +53,11 @@ export interface BannerState {
 }
 
 export interface AppState {
-  // boot：初始/鉴权校验中（什么都不渲染，避免有效 token 刷新时闪现 gate）
+  // boot: initial / auth check in progress (render nothing, so a valid-token
+  // reload doesn't flash the gate)
   view: 'boot' | 'gate' | 'app'
   gateError: string
-  gateLocked: boolean // 桌面端 401：进程内凭证失效，只提示重启
+  gateLocked: boolean // desktop 401: in-process credential lost; only recourse is restart
   theme: 'dark' | 'light'
   sidebarCollapsed: boolean
   sessionId: string | null
@@ -59,8 +69,8 @@ export interface AppState {
   sessions: SessionSummary[]
   showArchived: boolean
   workspaces: Workspace[]
-  noWorkspace: boolean // 零工作区引导态
-  landingHint: string // 落地页文案
+  noWorkspace: boolean // zero-workspace onboarding state
+  landingHint: string // landing page copy
   landingShowAddWs: boolean
   landingVisible: boolean
   models: ModelEntry[]
@@ -82,11 +92,20 @@ export interface AppState {
   dirPickerOpen: boolean
   imagesEnabled: boolean
   imagesDisabledReason: string
-  hdrWorkspace: string // header 面包屑：当前会话所属工作区名
+  hdrWorkspace: string // header breadcrumb: workspace name of the current session
   hdrWorkspaceTitle: string
   // Main-area view: session tabs (chat / trace list / maze) plus the
   // two-session compare page (sidebar compare entry).
   mainView: 'chat' | 'trace' | 'maze' | 'compare'
+  // Right workspace panel (changes / file tree): collapse preference is
+  // persisted; gitStamp is the changes-list invalidation signal — bumped on
+  // tool.completed / turn.finished, prompting the panel to refetch git status.
+  rightPanelOpen: boolean
+  rightPanelTab: 'changes' | 'files'
+  gitStamp: number
+  // Baseline approval mode (quick switch in composer; initial value from
+  // config approval.mode)
+  approvalMode: string
 }
 
 function initialState(): AppState {
@@ -131,6 +150,10 @@ function initialState(): AppState {
     hdrWorkspace: '',
     hdrWorkspaceTitle: '',
     mainView: 'chat',
+    rightPanelOpen: false,
+    rightPanelTab: 'changes',
+    gitStamp: 0,
+    approvalMode: 'on-request',
   }
 }
 
@@ -139,7 +162,8 @@ export class AppController {
   readonly transcript: TranscriptController
   readonly api: Api
   readonly stream: EventStream
-  // 视图层滚动容器（resync 保留滚动位置用），由 TranscriptView 挂接
+  // View-layer scroll container (for preserving scroll position on resync),
+  // attached by TranscriptView
   readonly scrollerRef: { el: HTMLDivElement | null } = { el: null }
   // TraceView's scroller; maze nodes locate their step here.
   readonly traceScrollerRef: { el: HTMLDivElement | null } = { el: null }
@@ -149,30 +173,35 @@ export class AppController {
   private sessCursor = ''
   private sessLoading = false
   private sessSig = ''
-  private lastSubmit: { fp: string; key: string } | null = null // 幂等重发
+  private lastSubmit: { fp: string; key: string } | null = null // idempotent resend
   private eventQueue: RuntimeEvent[] = []
   private eventFlushScheduled = false
-  // 事件水位：snapshot 的 event_seq 是服务端投影水印，序号 ≤ 它的事件效果
-  // 已包含在快照里。重挂流后迟到的旧帧必然 ≤ 水位，直接丢弃，避免在重建
-  // 后的 transcript 上重复渲染（同一命令两份 output 的 bug 来源）。
+  // Event watermark: snapshot's event_seq is the server-side projection
+  // watermark; effects of events with seq ≤ it are already in the snapshot.
+  // Late frames arriving after reattach are necessarily ≤ the watermark — drop
+  // them to avoid double-rendering on the rebuilt transcript (source of the
+  // duplicate-output-per-command bug).
   private eventFloor = 0
   private connBadgeTimer: ReturnType<typeof setTimeout> | null = null
   private connPending: { state: ConnState; detail?: string } | null = null
   private connShownState: ConnState | '' = ''
   private drainPoll: ReturnType<typeof setInterval> | null = null
-  // composer 草稿按会话隔离：切走前暂存当前输入文本，切回时还原。
+  // Composer drafts are per-session: stash the current input before switching
+  // away, restore on switch back.
   private composerDrafts = new Map<string, string>()
-  // artifact 内容寻址缓存（blob URL），切会话时整体释放
+  // Content-addressed artifact cache (blob URLs); released wholesale on session switch
   private artifactURLCache = new Map<string, ArtifactEntry>()
-  // composer 草稿的当前文本（视图层受控组件回写，供草稿暂存）
+  // Current composer draft text (written back by the controlled view component,
+  // for draft stashing)
   composerText = ''
   onComposerRestore: ((text: string) => void) | null = null
 
   constructor() {
     this.token = sessionStorage.getItem(TOKEN_KEY) || ''
-    // Desktop shell bootstrap (docs/DESKTOP_DESIGN.md §4.2)：内嵌 token 经
-    // <meta name="loom-token"> 或 URL fragment 传入；原生 message bridge
-    // 只在桌面 webview 存在，且页面刷新后仍可据此识别桌面壳。
+    // Desktop shell bootstrap (docs/DESKTOP_DESIGN.md §4.2): the embedded token
+    // arrives via <meta name="loom-token"> or the URL fragment; the native
+    // message bridge exists only in the desktop webview and still identifies
+    // the desktop shell after a page reload.
     const embeddedToken =
       document.querySelector('meta[name="loom-token"]')?.getAttribute('content') ||
       '' ||
@@ -204,15 +233,16 @@ export class AppController {
         }),
       answerQuestion: (questionId, answer) =>
         this.api.answerQuestion(this.store.get().sessionId || '', questionId, answer),
-      // 反馈投票：成功才写 localStorage（块内选中态由视图维护）；tracing
-      // 未开启 / run 无 trace 时后端返回错误码，抛回让块内回滚。
+      // Feedback vote: write localStorage only on success (in-block selection
+      // state is maintained by the view); when tracing is off / the run has no
+      // trace the backend returns an error code — rethrow so the block rolls back.
       sendFeedback: async (runId, value) => {
         const sid = this.store.get().sessionId || ''
         await this.api.submitFeedback(sid, runId, value)
         try {
           localStorage.setItem(fbKey(sid, runId), value === 1 ? 'up' : 'down')
         } catch {
-          /* 隐私模式等：忽略 */
+          /* private mode etc.: ignore */
         }
       },
       getFeedback: (runId) => {
@@ -241,10 +271,10 @@ export class AppController {
     })
   }
 
-  // ---------- theme / sidebar 折叠 ----------
+  // ---------- theme / sidebar collapse ----------
 
   initTheme() {
-    // 默认深色（用户偏好）；仅当显式存了 "light" 才用浅色。
+    // Dark by default (user preference); light only when explicitly stored.
     const saved = sessionStorage.getItem(THEME_KEY)
     const dark = saved !== 'light'
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
@@ -260,7 +290,8 @@ export class AppController {
   }
 
   initSidebarToggle() {
-    // 窄屏（抽屉模式）默认折叠；桌面端读取持久化偏好
+    // Narrow screens (drawer mode) default to collapsed; desktop reads the
+    // persisted preference
     const stored = localStorage.getItem(SIDEBAR_KEY)
     const collapsed =
       stored === '1' || (stored === null && window.matchMedia('(max-width: 767px)').matches)
@@ -273,20 +304,120 @@ export class AppController {
     localStorage.setItem(SIDEBAR_KEY, now ? '1' : '0')
   }
 
-  // 窄屏抽屉模式下，选中会话后自动收起抽屉（不写入持久化偏好）
+  // In narrow-screen drawer mode, auto-collapse the drawer after picking a
+  // session (does not touch the persisted preference)
   private collapseSidebarIfNarrow() {
     if (window.matchMedia('(max-width: 767px)').matches) {
       this.store.set({ sidebarCollapsed: true })
     }
   }
 
-  // 窄屏抽屉：点遮罩收起（不写入持久化偏好，与桌面端折叠互不影响）
+  // Narrow-screen drawer: collapse on backdrop tap (does not touch the
+  // persisted preference; independent of desktop collapse)
   dismissSidebarDrawer() {
     this.store.set({ sidebarCollapsed: true })
   }
 
   expandSidebar() {
     this.store.set({ sidebarCollapsed: false })
+  }
+
+  // ---------- right workspace panel ----------
+
+  initRightPanel() {
+    // Collapsed by default; force-collapsed on narrow screens (drawer mode is
+    // too cramped)
+    const open =
+      localStorage.getItem(RIGHT_PANEL_KEY) === '1' &&
+      !window.matchMedia('(max-width: 767px)').matches
+    const tab = localStorage.getItem(RIGHT_PANEL_TAB_KEY) === 'files' ? 'files' : 'changes'
+    this.store.set({ rightPanelOpen: open, rightPanelTab: tab })
+  }
+
+  toggleRightPanel() {
+    const now = !this.store.get().rightPanelOpen
+    this.store.set({ rightPanelOpen: now })
+    localStorage.setItem(RIGHT_PANEL_KEY, now ? '1' : '0')
+  }
+
+  setRightPanelTab(tab: 'changes' | 'files') {
+    this.store.set({ rightPanelTab: tab })
+    localStorage.setItem(RIGHT_PANEL_TAB_KEY, tab)
+  }
+
+  // Changes-list invalidation signal: git is the source of truth; transcript
+  // events only trigger refetches. Trailing-edge debounce — a long agent turn
+  // completes dozens of tools, and each completion would otherwise spawn a git
+  // status round (three git subprocesses server-side) plus tree refetches.
+  private gitStampTimer: ReturnType<typeof setTimeout> | null = null
+
+  private bumpGitStamp() {
+    if (this.gitStampTimer) clearTimeout(this.gitStampTimer)
+    this.gitStampTimer = setTimeout(() => {
+      this.gitStampTimer = null
+      this.store.set({ gitStamp: this.store.get().gitStamp + 1 })
+    }, 500)
+  }
+
+  // Workspace bound to the right panel: the current session's workspace,
+  // falling back to the default workspace when no session is open.
+  currentWorkspaceId(): string {
+    const s = this.store.get()
+    const sess = s.sessions.find((x) => x.id === s.sessionId)
+    if (sess && sess.workspace_id) return sess.workspace_id
+    const def = s.workspaces.find((w) => w.is_default) || s.workspaces[0]
+    return def ? def.id : ''
+  }
+
+  // ---------- approval mode quick switch ----------
+
+  // Initial value comes from config approval.mode (the settings panel's single
+  // source of truth); afterwards tracked locally by pickApprovalMode (override
+  // is not persisted — restart/hot reload falls back to config).
+  private async loadApprovalMode() {
+    try {
+      const env = await this.api.getConfig()
+      const cfg = (env.config || {}) as Record<string, unknown>
+      const nested = cfg.approval as Record<string, unknown> | undefined
+      const mode =
+        (nested && typeof nested.mode === 'string' && nested.mode) ||
+        (typeof cfg['approval.mode'] === 'string' ? (cfg['approval.mode'] as string) : '') ||
+        'on-request'
+      this.store.set({ approvalMode: mode })
+    } catch (e) {
+      if ((e as ApiError).status !== 401) console.warn('load approval mode:', e)
+    }
+  }
+
+  // Re-read the workspace's effective approval mode (live override or config
+  // default): after a session open/reload the page must not misreport an
+  // override set earlier in the process.
+  refreshApprovalMode = async () => {
+    const wsId = this.currentWorkspaceId()
+    if (!wsId) return
+    try {
+      const r = await this.api.getWorkspaceApprovalMode(wsId)
+      if (r.mode) this.store.set({ approvalMode: r.mode })
+    } catch (e) {
+      if ((e as ApiError).status !== 401) console.warn('approval mode:', e)
+    }
+  }
+
+  async pickApprovalMode(mode: string) {
+    const wsId = this.currentWorkspaceId()
+    if (!wsId) {
+      toast('先添加一个工作区')
+      return
+    }
+    try {
+      await this.api.setWorkspaceApprovalMode(wsId, mode as ApprovalMode)
+      this.store.set({ approvalMode: mode })
+      // Policy is captured at run construction: no effect on the currently
+      // running turn
+      toast(`审批模式：${mode}（下一轮生效，不写入配置）`, true)
+    } catch (e) {
+      if ((e as ApiError).status !== 401) toast('切换审批模式失败: ' + (e as Error).message)
+    }
   }
 
   // ---------- gate / boot ----------
@@ -300,8 +431,9 @@ export class AppController {
     sessionStorage.removeItem(TOKEN_KEY)
     this.token = ''
     if (this.isDesktopShell) {
-      // 桌面端的 token 是进程内随机值，用户没有任何可粘贴的凭证；401 意味着
-      // 进程状态异常，唯一出路是重启应用（docs/DESKTOP_DESIGN.md §4.2）。
+      // The desktop token is an in-process random value; the user has no
+      // credential to paste. A 401 means abnormal process state — the only
+      // recourse is restarting the app (docs/DESKTOP_DESIGN.md §4.2).
       this.store.set({
         view: 'gate',
         gateError: '桌面端鉴权状态丢失，请重启应用',
@@ -322,20 +454,24 @@ export class AppController {
   async boot() {
     this.initTheme()
     this.initSidebarToggle()
-    // 页面恢复可见 / 从 BFCache 还原 / 网络恢复时主动探活重连：看门狗定时器
-    // 随页面一起被系统挂起（App Nap / 窗口遮挡），不主动戳永远不会发现断连。
+    this.initRightPanel()
+    // Proactively probe and reconnect when the page becomes visible again /
+    // restores from BFCache / the network recovers: watchdog timers are
+    // suspended with the page (App Nap / window occlusion), so without poking
+    // we'd never notice the drop.
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) this.stream.ensureLive()
     })
     window.addEventListener('pageshow', () => this.stream.ensureLive())
-    // 窗口重获焦点时同时刷新会话列表：其他会话的审批/运行状态可能已在
-    // 后台变化，轮询间隔内靠这次主动刷新补齐。
+    // Also refresh the session list when the window regains focus: other
+    // sessions' approval/run state may have changed in the background; this
+    // active refresh covers the gap between polls.
     window.addEventListener('focus', () => {
       this.stream.ensureLive()
       void this.refreshSessions()
     })
     window.addEventListener('online', () => this.stream.ensureLive())
-    // 侧栏轮询（页面可见时，5s）
+    // Sidebar polling (while page is visible, 5s)
     setInterval(() => {
       if (document.visibilityState === 'visible' && this.store.get().view === 'app') {
         void this.refreshSessions()
@@ -353,20 +489,23 @@ export class AppController {
     try {
       const meta = await this.api.metaVersion()
       this.store.set({ version: meta.version || '' })
-      // 加载模型目录（picker 数据源；modalities 随目录下发，刷新附件入口）
+      // Load the model catalog (picker data source; modalities ship with the
+      // catalog and drive the attachment entry)
       await this.refreshModelCatalog()
+      void this.loadApprovalMode()
       this.store.set({ view: 'app' })
       await this.loadWorkspaces()
       await this.refreshSessions()
-      // 首入落地页：不自动打开会话（自动恢复要拉起整个 controller 运行时，
-      // 且多工作区场景下「最新会话」大概率不是用户当下想做的）
+      // First entry lands on the landing page: don't auto-open a session
+      // (auto-restore would spin up the whole controller runtime, and with
+      // multiple workspaces the "latest session" is rarely what the user wants)
       this.showLandingState()
     } catch (e) {
       if ((e as ApiError).status !== 401) this.showGate('connect failed: ' + (e as Error).message)
     }
   }
 
-  // ---------- 连接徽标 / banner ----------
+  // ---------- connection badge / banner ----------
 
   private renderConnBadge(state: ConnState | '', detail?: string) {
     this.connShownState = state
@@ -403,7 +542,7 @@ export class AppController {
       this.store.set({ banner: null })
       return
     }
-    if (state === 'draining') return // onDraining 已升 banner
+    if (state === 'draining') return // onDraining already raised the banner
     if (state === 'dead') {
       this.showConnBanner(`连接已断开：${detail || 'disconnected'}`)
     } else if (typeof attempt === 'number' && attempt >= CONN_WARN_ATTEMPTS) {
@@ -411,8 +550,9 @@ export class AppController {
     }
   }
 
-  // draining 自愈：优雅停机后服务通常很快以新实例回归（桌面端重启、部署
-  // 滚动）。慢速轮询版本端点，可达即 resync。
+  // Drain self-healing: after a graceful shutdown the service usually returns
+  // quickly as a new instance (desktop restart, rolling deploy). Slowly poll
+  // the version endpoint; resync once reachable.
   private startDrainRecovery() {
     if (this.drainPoll) return
     this.drainPoll = setInterval(() => {
@@ -421,7 +561,7 @@ export class AppController {
           await this.api.metaVersion()
           void this.resync('drain_recovered')
         } catch {
-          /* 仍未恢复：下一轮再试 */
+          /* still down: retry next tick */
         }
       })()
     }, 10_000)
@@ -438,14 +578,15 @@ export class AppController {
     this.store.set({ banner: { text, draining: false } })
   }
 
-  // ---------- 会话状态 ----------
+  // ---------- session state ----------
 
   private setSessionState(state: SessionState | '') {
     const busy = state === 'running' || state === 'awaiting_approval' || state === 'cancelling'
     this.store.set({ sessionState: state, busy })
   }
 
-  // 只读模式有两个来源：子 agent 会话（snap.delegated）与已归档会话。
+  // Read-only mode has two sources: sub-agent sessions (snap.delegated) and
+  // archived sessions.
   private updateComposerLock() {
     const s = this.store.get()
     const locked = s.readOnly || s.archived
@@ -456,7 +597,7 @@ export class AppController {
           ? '会话已归档 · 只读（在侧栏归档视图中取消归档后可继续）'
           : '',
     })
-    void locked // readOnlyLabel 为 '' 即未锁定（视图层据此判态）
+    void locked // readOnlyLabel === '' means unlocked (the view keys off this)
   }
 
   private setReadOnly(snap: Snapshot) {
@@ -467,16 +608,17 @@ export class AppController {
     this.updateComposerLock()
   }
 
-  // setArchived 切换当前会话的归档只读态。
+  // setArchived toggles the archived read-only state of the current session.
   setArchived(archived: boolean) {
     this.store.set({ archived })
     this.updateComposerLock()
   }
 
-  // ---------- artifact / 工具输出 ----------
+  // ---------- artifact / tool output ----------
 
-  // artifact 加载：fetch 拉取后生成 blob URL（artifact 是内容寻址的不可变
-  // blob，按 id+size 缓存避免 snapshot/实时两条路径重复下载）。
+  // Artifact loading: fetch then mint a blob URL (artifacts are content-
+  // addressed immutable blobs; cache by id+size so the snapshot and live paths
+  // don't download twice).
   fetchArtifactURL = async (id: string, size: number): Promise<ArtifactEntry> => {
     const key = `${id}:${size}`
     const cached = this.artifactURLCache.get(key)
@@ -495,14 +637,15 @@ export class AppController {
     return entry
   }
 
-  // 切会话时释放全部 artifact blob URL，避免频繁带图会话里缓存无界增长。
+  // Release all artifact blob URLs on session switch, so the cache can't grow
+  // unbounded across image-heavy sessions.
   private clearArtifactURLCache() {
     for (const entry of this.artifactURLCache.values()) URL.revokeObjectURL(entry.url)
     this.artifactURLCache.clear()
   }
 
-  // 复制完整工具输出：实时 tool.completed 事件只带有界 preview，
-  // 完整内容从 snapshot 消息历史里按 call_id 取。
+  // Copy full tool output: live tool.completed events carry only a bounded
+  // preview; the full content comes from the snapshot message history by call_id.
   fetchToolOutput = async (callId: string): Promise<string> => {
     const sid = this.store.get().sessionId
     if (!sid || !callId) throw new Error('no active session')
@@ -523,15 +666,16 @@ export class AppController {
     throw new Error('tool result not found in session history')
   }
 
-  // ---------- model / reasoning 状态同步 ----------
+  // ---------- model / reasoning state sync ----------
 
   modelLabel(ref: string): string {
-    // 只显示 model 名（去掉 provider 前缀），更紧凑
+    // Show only the model name (drop the provider prefix) — more compact
     return ref ? ref.split('/').pop() || 'model' : 'model'
   }
 
-  // refreshModelCatalog 重新拉取模型目录并同步所有消费方。桌面壳没有 F5，
-  // 设置保存热应用后必须就地刷新，否则 modalities 等改动在界面上不可见。
+  // refreshModelCatalog refetches the model catalog and syncs all consumers.
+  // The desktop shell has no F5, so after settings hot-apply we must refresh
+  // in place, otherwise changes like modalities never surface in the UI.
   refreshModelCatalog = async () => {
     try {
       const cat = await this.api.metaModels()
@@ -542,9 +686,10 @@ export class AppController {
     }
   }
 
-  // syncAttachCapability 按当前模型声明的 modalities 门控 composer 的图片
-  // 附件入口。目录里查不到当前模型（配置过期等）时保持放行，由服务端
-  // 提交门禁兜底报错。
+  // syncAttachCapability gates the composer's image attachment entry on the
+  // current model's declared modalities. If the current model is missing from
+  // the catalog (stale config etc.), keep it enabled — the server-side submit
+  // gate reports the error.
   private syncAttachCapability() {
     const s = this.store.get()
     const entry = s.models.find((m) => m.provider + '/' + m.name === s.curModelRef)
@@ -585,12 +730,15 @@ export class AppController {
     }
     try {
       const r = await this.api.setModel(sid, ref)
-      // 直接采用 picker 的 ref：它与列表项的 currentRef 比较同源，必然匹配。
-      // （SetModelResult 无 JSON tag，响应键是大写的 Cur/Meta，拼读易错。）
+      // Adopt the picker's ref directly: it shares provenance with the
+      // currentRef comparison in list items, so it always matches.
+      // (SetModelResult has no JSON tags; response keys are capitalized
+      // Cur/Meta, easy to misread.)
       this.store.set({ curModelRef: ref })
       this.syncAttachCapability()
-      // 模型切换后窗口阈值变化：按服务端推导的新窗口投影重设占用环，
-      // occupancy 等下一次 context.usage / snapshot 刷新
+      // Window thresholds change on model switch: reset the occupancy ring
+      // from the server-derived new window projection; occupancy itself
+      // refreshes on the next context.usage / snapshot
       this.store.set({ window: r.Window || r.window || null })
       toast('模型已切换为 ' + this.modelLabel(ref), true)
     } catch (e) {
@@ -606,8 +754,9 @@ export class AppController {
     }
     try {
       const r = await this.api.setReasoning(sid, effort)
-      // 同上：SetReasoningResult 响应键是大写 Effective/Overridden；effort
-      // 来自 picker 固定选项集，直接采用。
+      // Same as above: SetReasoningResult response keys are capitalized
+      // Effective/Overridden; effort comes from the picker's fixed option set,
+      // adopt it directly.
       this.store.set({
         curReasoning: effort,
         reasoningOverridden: r.Overridden ?? r.overridden ?? effort !== 'default',
@@ -620,8 +769,9 @@ export class AppController {
 
   // ---------- session loading ----------
 
-  // 会话列表签名：轮询时数据无变化则跳过重渲染，避免每 5s 重建视图
-  // 打断侧栏悬停操作（归档/删除按钮）。视图（活跃/归档）参与签名。
+  // Session list signature: skip re-render when polling shows no change, so
+  // rebuilding the view every 5s doesn't interrupt sidebar hover actions
+  // (archive/delete buttons). The view (active/archived) joins the signature.
   private sessionListSig(list: SessionSummary[]): string {
     return (
       this.store.get().showArchived +
@@ -630,8 +780,9 @@ export class AppController {
     )
   }
 
-  // 工作区签名：注册/删除一个（空）工作区不会改变会话列表，必须让工作区
-  // 集合本身参与 refreshSessions 的跳过判断。
+  // Workspace signature: registering/deleting an (empty) workspace doesn't
+  // change the session list, so the workspace set itself must join
+  // refreshSessions' skip check.
   private workspacesSig(list: Workspace[]): string {
     return (list || [])
       .map((w) => `${w.id}:${w.name || ''}:${w.root_path || ''}:${w.session_count}`)
@@ -660,7 +811,7 @@ export class AppController {
     }
   }
 
-  // 瀑布流：滚动接近底部时拉取下一页。
+  // Infinite scroll: fetch the next page when scrolling near the bottom.
   loadMoreSessions = async () => {
     if (this.sessLoading || !this.sessCursor) return
     this.sessLoading = true
@@ -691,7 +842,7 @@ export class AppController {
     void this.refreshSessions()
   }
 
-  // 归档 / 取消归档 / 删除会话（侧栏条目操作）
+  // Archive / unarchive / delete a session (sidebar entry actions)
   onSessionAction = async (id: string, action: 'archive' | 'unarchive' | 'delete') => {
     try {
       if (action === 'delete') {
@@ -705,7 +856,8 @@ export class AppController {
         if (!ok) return
         await this.api.deleteSession(id)
         if (id === this.store.get().sessionId) {
-          // 删的是当前打开的会话：断开流、回空态（只读态一并复位）
+          // Deleted the currently open session: detach the stream, return to
+          // the empty state (read-only state resets too)
           this.stream.detach()
           this.store.set({ sessionId: null, archived: false, readOnly: false })
           this.updateComposerLock()
@@ -718,7 +870,8 @@ export class AppController {
       } else {
         await this.api.archiveSession(id, action === 'archive')
         toast(action === 'archive' ? '已归档' : '已取消归档', true)
-        // 归档/取消归档的是当前打开的会话：同步输入区只读态
+        // Archived/unarchived the currently open session: sync the composer
+        // read-only state
         if (id === this.store.get().sessionId) this.setArchived(action === 'archive')
       }
     } catch (e) {
@@ -727,7 +880,8 @@ export class AppController {
     await this.refreshSessions()
   }
 
-  // composer 草稿按会话隔离：切走前暂存当前输入文本，切回时还原。
+  // Composer drafts are per-session: stash the current input before switching
+  // away, restore on switch back.
   private stashComposerDraft() {
     const sid = this.store.get().sessionId
     if (!sid) return
@@ -743,16 +897,18 @@ export class AppController {
   }
 
   openSession = async (id: string, { archived = false }: { archived?: boolean } = {}) => {
-    // 同会话重开 = resync（断流恢复/手动重试）：保留滚动位置，不拽回底部。
+    // Reopening the same session = resync (stream recovery / manual retry):
+    // keep the scroll position, don't yank back to the bottom.
     const isResync = this.store.get().sessionId === id
-    // 归档只读态：立即刷新锁态——snapshot/resume 失败时输入区也不能残留
-    // 上一个会话的状态。
+    // Archived read-only state: refresh the lock immediately — if snapshot/
+    // resume fails, the composer must not retain the previous session's state.
     this.store.set({ archived })
     this.updateComposerLock()
     this.stashComposerDraft()
     this.clearArtifactURLCache()
     this.stream.detach()
-    // detach 后追帧队列里残留的都是旧会话/旧快照之前的事件，snapshot 已覆盖，直接丢弃。
+    // After detach, anything left in the catch-up queue predates the old
+    // session/snapshot; the new snapshot covers it — safe to drop.
     this.eventQueue.length = 0
     this.store.set({ sessionId: id, landingVisible: false })
     this.restoreComposerDraft(id)
@@ -764,14 +920,15 @@ export class AppController {
       snap = await this.api.snapshot(id)
     } catch (e) {
       if ((e as ApiError).status === 404) {
-        // 非 live：先 resume 再取快照
+        // Not live: resume first, then fetch the snapshot
         await this.api.resumeSession(id)
         snap = await this.api.snapshot(id)
       } else {
         throw e
       }
     }
-    // resync 保留滚动：视图层在 DOM 重建后恢复 scrollTop
+    // Preserve scroll on resync: the view layer restores scrollTop after the
+    // DOM rebuild
     if (isResync && this.scrollerRef.el) {
       const top = this.scrollerRef.el.scrollTop
       this.transcript.store.update((s) => {
@@ -786,28 +943,32 @@ export class AppController {
     this.store.set({
       usage: snap.usage,
       turnCount: snap.turn_count || 0,
-      // ctx 占用环：window 阈值与 occupancy 均由服务端投影（与压缩触发器
-      // 同口径），前端不做本地推算
+      // ctx occupancy ring: both the window threshold and occupancy are
+      // server-side projections (same accounting as the compaction trigger);
+      // the frontend does no local estimation
       window: snap.window && snap.window.effective ? (snap.window as ContextWindow) : null,
       occupancy: snap.occupancy || 0,
     })
-    // attach 前再清一次追帧队列：快照拉取期间旧连接 dispatched 的残余事件
-    // 要么已被快照覆盖（seq ≤ event_seq），要么会被新流从 event_seq 重放，
-    // 丢弃是无损的。
+    // Clear the catch-up queue once more before attach: leftover events the
+    // old connection dispatched during the snapshot fetch are either already
+    // covered by the snapshot (seq ≤ event_seq) or will be replayed by the new
+    // stream from event_seq — dropping them is lossless.
     this.eventFloor = snap.event_seq || 0
     this.eventQueue.length = 0
     this.stream.attach(id, snap.event_seq || 0)
+    void this.refreshApprovalMode()
   }
 
   onSelectSession = (id: string) => {
     if (id === this.store.get().sessionId) return
-    // 从归档视图点开的会话 = 已归档（只读）；默认视图 = 活跃会话
+    // A session opened from the archived view = archived (read-only); the
+    // default view = active sessions
     this.openSession(id, { archived: this.store.get().showArchived }).catch((e) => {
       if ((e as ApiError).status !== 401) toast('open session: ' + (e as Error).message)
     })
   }
 
-  // header 面包屑：当前会话所属工作区名。
+  // Header breadcrumb: workspace name of the current session.
   private syncHdrWorkspace() {
     const s = this.store.get()
     const sess = s.sessions.find((x) => x.id === s.sessionId)
@@ -824,7 +985,8 @@ export class AppController {
     })
   }
 
-  // 面包屑点击：展开侧栏（若折叠）并定位当前会话所属的工作区组
+  // Breadcrumb click: expand the sidebar (if collapsed) and locate the
+  // workspace group owning the current session
   revealCurrentWorkspace(): string | null {
     const s = this.store.get()
     if (!s.sessionId) return null
@@ -834,7 +996,7 @@ export class AppController {
     return sess.workspace_id || ''
   }
 
-  // ---------- workspace 管理 ----------
+  // ---------- workspace management ----------
 
   loadWorkspaces = async () => {
     try {
@@ -861,7 +1023,8 @@ export class AppController {
       toast('已添加工作区 ' + (workspace.name || rootPath), true)
       await this.loadWorkspaces()
       await this.refreshSessions()
-      // 添加首个工作区后从引导态恢复到落地页（仅当没有打开的会话）
+      // After adding the first workspace, leave the onboarding state for the
+      // landing page (only when no session is open)
       if (this.store.get().workspaces.length === 1 && !this.store.get().sessionId) {
         this.showLandingState()
       }
@@ -882,7 +1045,8 @@ export class AppController {
     })
   }
 
-  // 删除工作区（侧栏工作区节点操作）：级联删除其下全部会话；磁盘目录不动。
+  // Delete a workspace (sidebar workspace node action): cascades to all its
+  // sessions; the on-disk directory is untouched.
   onDeleteWorkspace = async (wsId: string) => {
     const ws = this.store.get().workspaces.find((w) => w.id === wsId)
     const name = (ws && (ws.name || ws.root_path)) || wsId
@@ -900,7 +1064,8 @@ export class AppController {
       if ((e as ApiError).status !== 401) toast('删除工作区失败: ' + (e as Error).message)
       return
     }
-    // 当前打开的会话如果属于被删工作区，断开流并清空 transcript
+    // If the currently open session belongs to the deleted workspace, detach
+    // the stream and clear the transcript
     const s = this.store.get()
     if (s.sessionId) {
       const sess = s.sessions.find((x) => x.id === s.sessionId)
@@ -913,19 +1078,22 @@ export class AppController {
     }
     await this.loadWorkspaces()
     await this.refreshSessions()
-    // 删除后可能进入零工作区引导态；否则回落地页（仅当没有打开的会话）
+    // Deletion may enter the zero-workspace onboarding state; otherwise return
+    // to the landing page (only when no session is open)
     if (this.syncWorkspaceGate()) return
     if (!this.store.get().sessionId) this.showLandingState()
   }
 
-  // 零工作区引导态：无任何工作区时隐藏对话区和侧栏列表。
+  // Zero-workspace onboarding state: hide the chat area and sidebar list when
+  // no workspace exists.
   private syncWorkspaceGate(): boolean {
     const noWorkspace = this.store.get().workspaces.length === 0
     this.store.set({ noWorkspace })
     return noWorkspace
   }
 
-  // 首入落地页：不自动打开任何会话（桌面端启动应是廉价且可预期的）。
+  // First entry lands on the landing page: don't auto-open any session
+  // (desktop startup should be cheap and predictable).
   private showLandingState() {
     if (this.syncWorkspaceGate()) return
     const hasSessions = this.store.get().sessions.length > 0
@@ -941,8 +1109,10 @@ export class AppController {
     this.syncAttachCapability()
   }
 
-  // 最近活跃工作区：会话列表按更新时间排序（newest first），取第一项的归属。
-  // 新建会话（直接打字/回车）的默认落点，避免落到进程默认工作区。
+  // Most recently active workspace: the session list is sorted by update time
+  // (newest first); take the first entry's owner. Default target for new
+  // sessions created by typing/enter directly — avoids landing in the process
+  // default workspace.
   recentWorkspaceId(): string {
     const s = this.store.get().sessions.find((x) => x.workspace_id)
     return s ? s.workspace_id || '' : ''
@@ -964,12 +1134,14 @@ export class AppController {
       toast('会话已归档，仅可查看；取消归档后可继续对话')
       return
     }
-    // followup 仅文本：图片随普通 prompt 发送（后端同样拒绝 followup+图片）
+    // followup is text-only: images go with a normal prompt (the backend also
+    // rejects followup+images)
     if (followup && images.length) {
       toast('排队到下一轮的消息仅支持文本，图片已忽略')
       images = []
     }
-    // 幂等键：同一「文本 + 图片集合 + 投递方式」重发共享同键（双击/网络重试不产生重复 turn）
+    // Idempotency key: resending the same "text + image set + delivery mode"
+    // shares one key (double-click / network retry won't create duplicate turns)
     const fp = (followup ? 'F:' : '') + text + '#' + images.map((i) => i.data.length).join('+')
     let key: string
     if (this.lastSubmit && this.lastSubmit.fp === fp) {
@@ -987,9 +1159,10 @@ export class AppController {
     } catch (e) {
       const err = e as ApiError
       if (err.status === 401) return
-      // 失败时仅还原文本，附件留在 composer 以便重试
+      // On failure restore only the text; attachments stay in the composer for retry
       this.onComposerRestore?.(text)
-      // 会话在此期间被归档（手动/自动）：切换为只读并引导取消归档
+      // Session was archived meanwhile (manual/auto): switch to read-only and
+      // prompt to unarchive
       if (err.code === 'session_archived') {
         this.setArchived(true)
         void this.refreshSessions()
@@ -1011,7 +1184,8 @@ export class AppController {
   // ---------- events ----------
 
   onRuntimeEvent(evt: RuntimeEvent) {
-    // 上一会话的迟到帧（切换会话后旧连接的残余）不进入新会话的视图。
+    // Late frames from the previous session (leftovers of the old connection
+    // after switching) must not enter the new session's view.
     const sid = this.store.get().sessionId
     if (evt.session_id && sid && evt.session_id !== sid) return
     if (evt.sequence && evt.sequence <= this.eventFloor) return
@@ -1039,12 +1213,15 @@ export class AppController {
         break
       case 'turn.finished':
         this.setSessionState('idle')
+        this.bumpGitStamp()
         void this.refreshSessions()
         break
       case 'approval.requested':
         this.setSessionState('awaiting_approval')
-        // 侧栏状态灯与工作区待审批徽标的数据源是会话列表：立即刷新，
-        // 不等 5s 轮询，否则徽标的出现/消失明显滞后于卡片的弹出/收起。
+        // The sidebar status light and workspace pending-approval badge are
+        // fed by the session list: refresh immediately instead of waiting for
+        // the 5s poll, otherwise the badge's appear/disappear visibly lags the
+        // card's pop-up/collapse.
         void this.refreshSessions()
         break
       case 'approval.resolved':
@@ -1059,15 +1236,23 @@ export class AppController {
         this.setSessionState('idle')
         break
       case 'budget.updated':
-        // 会话累计口径（usage.updated 是单次调用口径，不驱动状态栏）
+        // Session-cumulative accounting (usage.updated is per-call accounting
+        // and does not drive the status bar)
         this.store.set({ usage: evt.payload })
         break
       case 'context.usage':
-        // 实时 context 占用：驱动 composer 旁的占用环（压缩后后端会补发新值）
+        // Live context occupancy: drives the occupancy ring next to the
+        // composer (the backend re-sends a fresh value after compaction)
         this.store.set({ occupancy: evt.payload?.occupancy_tokens ?? 0 })
         break
       case 'plan.updated':
         this.store.set({ plan: evt.payload || null })
+        break
+      case 'tool.completed':
+        // Any tool hitting disk (edit/write/run_cmd...) may have touched
+        // workspace files: bump gitStamp to invalidate and refetch the right
+        // panel's changes list.
+        this.bumpGitStamp()
         break
       case 'reasoning.changed':
         if (evt.payload?.effective) {
@@ -1094,7 +1279,7 @@ export class AppController {
     }
   }
 
-  // ---------- 分享 ----------
+  // ---------- sharing ----------
 
   shareSession = async (shiftKey: boolean) => {
     const sid = this.store.get().sessionId
@@ -1111,9 +1296,10 @@ export class AppController {
         toast('分享已撤销', true)
         return
       }
-      // 桌面端：分享监听未开启时就地确认并开启——开启动作写穿到
-      // share.enabled 并热应用（即时生效且持久）；loom serve 无开关
-      // （404），直接用当前 origin 拼接。
+      // Desktop: if the share listener is off, confirm in place and enable it —
+      // enabling writes through to share.enabled and hot-applies (effective
+      // immediately and persisted); loom serve has no toggle (404), so fall
+      // back to the current origin.
       try {
         const endpoint = await this.api.getShareEndpoint()
         if (!endpoint.enabled) {
@@ -1132,14 +1318,16 @@ export class AppController {
       } catch (err) {
         if ((err as ApiError).status !== 404) throw err
       }
-      // 分享监听在线时服务端返回绝对 url（docs/DESKTOP_DESIGN.md §5.2）；
-      // 缺省退回按当前 origin 拼接。
+      // When the share listener is online the server returns an absolute url
+      // (docs/DESKTOP_DESIGN.md §5.2); otherwise fall back to joining with the
+      // current origin.
       const { path, url: absoluteUrl } = await this.api.shareSession(sid)
       const url = absoluteUrl || location.origin + path
       if (await copyText(url)) {
         toast('分享链接已复制：任何持有链接的人可只读查看本会话', true)
       } else {
-        // 剪贴板不可用（非安全上下文）：打开分享页，从地址栏复制
+        // Clipboard unavailable (insecure context): open the share page and
+        // copy from the address bar
         window.open(url, '_blank', 'noopener')
         toast('剪贴板不可用，已在新标签页打开分享页（可从地址栏复制链接）')
       }
@@ -1155,7 +1343,7 @@ export class AppController {
     else toast('剪贴板不可用，session id: ' + sid)
   }
 
-  // ---------- 设置面板 ----------
+  // ---------- settings panel ----------
 
   openSettings() {
     this.store.set({ settingsOpen: true })

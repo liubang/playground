@@ -69,6 +69,7 @@ type MazeStats struct {
 	Steps   int     `json:"steps"`
 	Tools   int     `json:"tools"`
 	Rz      int     `json:"rz"`
+	RzMs    int64   `json:"rz_ms,omitempty"`
 	InTok   int64   `json:"in_tok"`
 	RzTok   int64   `json:"rz_tok"`
 	OutTok  int64   `json:"out_tok"`
@@ -86,9 +87,11 @@ type MazeNode struct {
 	E     float64    `json:"e"`
 	Tools []MazeTool `json:"tools"`
 	// Rz counts reasoning blocks; RzTxt is a flattened excerpt (≤2000
-	// chars) for the detail panel.
+	// chars) for the detail panel. RzMs is their summed wall-clock span
+	// (ReasoningContent.DurationMs; 0 for pre-duration transcripts).
 	Rz    int    `json:"rz"`
 	RzTxt string `json:"rz_txt,omitempty"`
+	RzMs  int64  `json:"rz_ms,omitempty"`
 	// Per-request token truth from the persisted response_completed
 	// payload; nil for sessions written before per-request usage existed.
 	InTok  *int64 `json:"in_tok,omitempty"`
@@ -335,6 +338,7 @@ func scanSteps(events []domain.Event, clk mazeClock) []*mazeStep {
 				case domain.PartReasoning:
 					if part.Reasoning != nil && part.Reasoning.Text != "" {
 						st.node.Rz++
+						st.node.RzMs += part.Reasoning.DurationMs
 						rzTxt += part.Reasoning.Text
 					}
 				case domain.PartToolCall:
@@ -707,6 +711,7 @@ func buildLane(key string, sessionID domain.SessionID, title string, events []do
 		stats.Steps++
 		stats.Tools += len(n.Tools)
 		stats.Rz += n.Rz
+		stats.RzMs += n.RzMs
 		if n.InTok != nil {
 			stats.InTok += *n.InTok
 		}
@@ -792,6 +797,7 @@ func childDetourNode(child mazeChild, index int, clk mazeClock) *MazeNode {
 			node.E = n.E
 		}
 		node.Rz += n.Rz
+		node.RzMs += n.RzMs
 		rzTxt += n.RzTxt + " "
 		node.Tools = append(node.Tools, n.Tools...)
 		if n.InTok != nil {

@@ -29,7 +29,7 @@ import { toast } from '../ui/Toast'
 type TraceRow =
   | { id: string; kind: 'user'; turn: number; text: string; ts: number }
   | { id: string; kind: 'assistant'; turn: number; text: string; live: boolean; ts: number }
-  | { id: string; kind: 'reasoning'; turn: number; text: string }
+  | { id: string; kind: 'reasoning'; turn: number; text: string; ms?: number }
   | {
       id: string
       kind: 'tool'
@@ -90,7 +90,8 @@ function buildGroups(blocks: BlockModel[]): TurnGroup[] {
         push({ id: b.id, kind: 'assistant', turn, text: b.text, live: true, ts: -1 })
         break
       case 'reasoning':
-        if (b.text.trim()) push({ id: b.id, kind: 'reasoning', turn, text: b.text })
+        if (b.text.trim())
+          push({ id: b.id, kind: 'reasoning', turn, text: b.text, ms: b.durationMs })
         break
       case 'tool':
         push({
@@ -476,6 +477,9 @@ const TraceRowView = memo(function TraceRowView({
                 : ''
               : '执行中…'}
           </span>
+        )}
+        {row.kind === 'reasoning' && row.ms != null && row.ms > 0 && (
+          <span className="trace-dur">{fmtMs(row.ms)}</span>
         )}
         {row.kind === 'assistant' && row.live && <span className="trace-dur">生成中…</span>}
         <Icon name={expanded ? 'caret-down' : 'caret-right'} className="trace-caret" />

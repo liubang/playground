@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 )
@@ -871,6 +872,42 @@ func (s *SessionService) SetReasoning(ctx context.Context, id domain.SessionID, 
 	}
 	s.proc.SetReasoningPreference(ctx, strings.TrimSpace(arg))
 	return result, nil
+}
+
+// WorkspaceApprovalMode reports the effective baseline approval mode of a
+// workspace: the live override when it is bootstrapped, else the configured
+// approval.mode it will start with. The WebUI reads this after session opens
+// so a page reload never misreports an earlier quick switch.
+func (s *SessionService) WorkspaceApprovalMode(ctx context.Context, id domain.WorkspaceID) (string, error) {
+	var mode permission.ApprovalMode
+	if b, ok := s.registry.Get(id); ok {
+		mode = b.CurrentApprovalMode()
+	} else {
+		if _, err := s.GetWorkspace(ctx, id); err != nil {
+			return "", err
+		}
+		mode = s.proc.Resolved().Approval.Mode
+	}
+	// An unset mode is the empty string; normalize to the documented default.
+	if mode == "" {
+		mode = permission.ModeOnRequest
+	}
+	return string(mode), nil
+}
+
+// SetWorkspaceApprovalMode overrides the baseline approval mode of a
+// workspace's live bootstrap (the WebUI composer quick switch). The change
+// rebuilds the decider chain immediately but is captured per run, so it
+// takes effect from the next turn; it is not persisted — config reloads and
+// restarts fall back to the configured approval.mode. The bootstrap is
+// resolved (lazily assembled) so the override survives the workspace's
+// first session.
+func (s *SessionService) SetWorkspaceApprovalMode(ctx context.Context, id domain.WorkspaceID, mode permission.ApprovalMode) error {
+	b, err := s.registry.Resolve(ctx, id)
+	if err != nil {
+		return err
+	}
+	return b.SetApprovalMode(ctx, mode)
 }
 
 // RequestCompaction schedules a forced compaction for the session's next turn.

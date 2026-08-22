@@ -1,8 +1,12 @@
-// transcript.ts — 消息流控制器（框架无关）：事件 → 块模型调度。
-// 状态来源仅 snapshot（首屏）+ SSE（此后全部）；未知 kind 一律忽略。
-// 逻辑与旧 static/js/components/transcript.js 一一对应，但产出数据模型
-// （BlockModel）而非直接操作 DOM；React 视图层（components/TranscriptView）
-// 订阅模型渲染。流式节流曲线与旧版一致（60ms 最小间隔 + rAF 合帧）。
+// transcript.ts — framework-agnostic message-flow controller: event → block
+// model dispatch.
+// State comes only from snapshot (first paint) + SSE (everything after);
+// unknown kinds are always ignored.
+// Logic mirrors the legacy static/js/components/transcript.js, but produces a
+// data model (BlockModel) instead of touching the DOM; the React view layer
+// (components/TranscriptView) subscribes to the model and renders. The
+// streaming throttle curve matches the legacy version (60ms min interval + rAF
+// batching).
 
 import type {
   ApprovalRequestedPayload,
@@ -18,9 +22,10 @@ import type { Message, Snapshot, ToolResult } from '../protocol/types'
 import { diffForToolCall } from '../lib/diff'
 import { Store } from '../store/store'
 
-// --- 块模型 ---
+// --- block model ---
 
-// 用户消息的图片附件：artifact 引用（{id, size}）或内联 base64（{data}）。
+// Image attachments on user messages: artifact reference ({id, size}) or
+// inline base64 ({data}).
 export type UserImage = ArtifactRef | ImagePayload
 
 export function isInlineImage(img: UserImage): img is ImagePayload {
@@ -46,10 +51,11 @@ export interface AssistantActionContext {
 
 interface Base {
   id: string
-  v: number // 变更版本号：React memo 的比较依据
+  v: number // change version: the comparison basis for React memo
 }
 
-// 分布式 Omit：对联合成员逐个 Omit（直接 Omit 会把联合塌缩成公共属性）
+// Distributive Omit: Omit each union member individually (plain Omit would
+// collapse the union to its common properties)
 type DistributiveOmit<T, K extends keyof never> = T extends unknown ? Omit<T, K> : never
 
 export type BlockModel = Base &
@@ -57,7 +63,7 @@ export type BlockModel = Base &
     | { kind: 'user'; text: string; createdAt?: string; images?: UserImage[] }
     | { kind: 'assistant'; text: string; actions?: AssistantActionContext }
     | { kind: 'stream'; text: string }
-    | { kind: 'reasoning'; text: string; durationMs?: number }
+    | { kind: 'reasoning'; text: string; durationMs?: number; live?: boolean }
     | { kind: 'thinking' }
     | {
         kind: 'tool'
@@ -65,7 +71,7 @@ export type BlockModel = Base &
         toolName: string
         target?: string
         diff?: string
-        diffSuppressed?: boolean // 审批期间 diff 移入审批卡片展示
+        diffSuppressed?: boolean // during approval the diff moves into the approval card
         completion?: ToolCompletion
       }
     | { kind: 'approval'; payload: ApprovalRequestedPayload; diff?: string; resolving?: boolean }
@@ -81,16 +87,19 @@ export type BlockModel = Base &
 
 export interface TranscriptState {
   blocks: BlockModel[]
-  // 滚动跟随意图：视图层据此决定是否在渲染后回底。
-  // forceFollow 为新块强制回底（rAF 前不被用户滚动取消）；following 为流式跟随。
+  // Scroll-follow intent: the view layer uses this to decide whether to snap
+  // to bottom after render.
+  // forceFollow forces a snap for new blocks (not cancelled by user scrolling
+  // before the rAF); following is the streaming follow.
   following: boolean
-  followSeq: number // 每次请求回底递增（视图层 effect 触发器）
-  // resync 保留滚动：applySnapshot(preserveScroll) 前由调用方写入重建前
-  // 的 scrollTop，视图层在 DOM 重建后恢复并清零。
+  followSeq: number // bumped on every snap-to-bottom request (view-layer effect trigger)
+  // Preserve scroll on resync: the caller writes the pre-rebuild scrollTop
+  // before applySnapshot(preserveScroll); the view layer restores it after the
+  // DOM rebuild and clears it.
   preserveScrollTop?: number | null
 }
 
-// --- IO 依赖（由 AppController 注入） ---
+// --- IO dependencies (injected by AppController) ---
 
 export interface TranscriptIO {
   resolveApproval: (
@@ -115,7 +124,7 @@ export class TranscriptController {
   })
 
   private io: TranscriptIO
-  private streamId: string | null = null // 当前 stream 块 id
+  private streamId: string | null = null // current stream block id
   private streamBuf = ''
   private streamScheduled = false
   private streamDestroyed = false
@@ -126,23 +135,25 @@ export class TranscriptController {
   private tools = new Map<string, string>() // call_id → block id
   private approvals = new Map<string, string>() // approval_id → block id
   private questions = new Map<string, string>() // question_id → block id
-  private steers: { id: string; text: string }[] = [] // pending steer notice（FIFO）
-  private followups: { id: string; text: string }[] = [] // pending followup notice（FIFO）
+  private steers: { id: string; text: string }[] = [] // pending steer notice (FIFO)
+  private followups: { id: string; text: string }[] = [] // pending followup notice (FIFO)
   private forceFollow = false
-  private pendingStreamTs = '' // 首个 text_delta 事件时间，收笔注入操作行
-  private turnAssistantId: string | null = null // 本轮最新 assistant 块（轮结束挂操作行）
+  private pendingStreamTs = '' // first text_delta event time, stamped into the action row at finalize
+  private turnAssistantId: string | null = null // latest assistant block of this turn (action row attaches at turn end)
   private turnAssistantTs = ''
-  private turnRunID = '' // 本轮 run id（反馈投票目标）
+  private turnRunID = '' // run id of this turn (feedback vote target)
   private turnErrorShown = false
 
   constructor(io: TranscriptIO) {
     this.io = io
   }
 
-  // --- 滚动跟随（视图层上报/消费） ---
+  // --- scroll following (reported/consumed by the view layer) ---
 
-  // 视图层滚动事件上报：距底 < 阈值视为跟随中。
-  // 值未变时不 emit（滚动事件高频，避免无效广播）。
+  // View-layer scroll event report: within threshold of the bottom counts as
+  // following.
+  // No emit when the value is unchanged (scroll events are high-frequency;
+  // avoid useless broadcasts).
   setFollowing(following: boolean) {
     if (this.store.get().following === following) return
     this.store.update((s) => {
@@ -150,8 +161,10 @@ export class TranscriptController {
     })
   }
 
-  // 请求渲染后回底。force=true（新块/审批卡/问答卡）：强制回底意图先记下，
-  // 即使 rAF 回调前用户滚动事件把 following 置回 false 也照样滚动。
+  // Request a snap-to-bottom after render. force=true (new block / approval
+  // card / question card): record the forced intent first, so it still scrolls
+  // even if a user scroll event flips following back to false before the rAF
+  // callback.
   private requestFollow(force: boolean) {
     if (force) this.forceFollow = true
     if (!this.store.get().following && !this.forceFollow) return
@@ -166,7 +179,7 @@ export class TranscriptController {
     })
   }
 
-  // 跟随按钮点击：立即钉底。
+  // Follow-button click: pin to bottom immediately.
   followNow() {
     this.store.update((s) => {
       s.following = true
@@ -174,13 +187,13 @@ export class TranscriptController {
     })
   }
 
-  // --- 块操作 ---
+  // --- block operations ---
 
   private append(block: DistributiveOmit<BlockModel, 'id' | 'v'>): string {
     const id = 'b' + nextBlockId++
     this.store.update((s) => {
       s.blocks = [...s.blocks, { ...block, id, v: 0 } as BlockModel]
-      s.following = true // 新块到达视为收到新对话：强制回到底部
+      s.following = true // a new block means new conversation: force-snap to bottom
     })
     this.requestFollow(true)
     return id
@@ -226,7 +239,8 @@ export class TranscriptController {
     })
   }
 
-  // --- 反馈上下文：runId 为空（无 trace 的旧消息）时不渲染赞/踩 ---
+  // --- feedback context: no thumbs up/down when runId is empty (old messages
+  // without a trace) ---
   private fbAction(runId: string): AssistantActionContext | undefined {
     if (!runId || !this.io.sendFeedback) return undefined
     return {
@@ -235,7 +249,8 @@ export class TranscriptController {
     }
   }
 
-  // 轮结束时把操作行（复制/反馈 + 时间）挂到本轮末段 assistant 块上。
+  // At turn end, attach the action row (copy/feedback + time) to the final
+  // assistant block of the turn.
   private attachTurnActions() {
     if (!this.turnAssistantId) return
     const createdAt = this.turnAssistantTs
@@ -245,13 +260,13 @@ export class TranscriptController {
         if (b.id !== this.turnAssistantId || (b.kind !== 'assistant' && b.kind !== 'stream')) {
           return b
         }
-        if (b.kind === 'assistant' && b.actions) return b // 幂等
+        if (b.kind === 'assistant' && b.actions) return b // idempotent
         return { ...b, kind: 'assistant', text: b.text, actions: { createdAt, ...fb }, v: b.v + 1 }
       })
     })
   }
 
-  // --- thinking 动画（等待模型输出） ---
+  // --- thinking animation (waiting for model output) ---
 
   private showThinking() {
     if (this.thinkingId) return
@@ -263,10 +278,12 @@ export class TranscriptController {
     this.thinkingId = null
   }
 
-  // --- 首屏：snapshot → 块（§3.3） ---
+  // --- first paint: snapshot → blocks (§3.3) ---
 
-  // preserveScroll（同会话 resync/重连重建）：用户上翻阅读时保留滚动位置，
-  // 不再无条件回底。返回是否发生了「保留滚动」——视图层据此恢复 scrollTop。
+  // preserveScroll (same-session resync / reconnect rebuild): keep the scroll
+  // position when the user is reading up, instead of unconditionally snapping
+  // to bottom. Returns whether scroll was preserved — the view layer restores
+  // scrollTop accordingly.
   applySnapshot(snap: Snapshot, { preserveScroll = false } = {}): { preserved: boolean } {
     const wasFollowing = this.store.get().following
     this.clear()
@@ -293,8 +310,9 @@ export class TranscriptController {
 
     for (const m of snap.messages || []) {
       let textRun: string[] = []
-      // 用户消息的图片附件：收集后随文字一起渲染进气泡（图在文字上方），
-      // 而不是作为独立块挂在气泡后面。
+      // Image attachments on user messages: collected and rendered into the
+      // bubble together with the text (images above text), not as standalone
+      // blocks after the bubble.
       let userImages: UserImage[] = []
       const createdAt = m.created_at || ''
       const flushText = () => {
@@ -307,12 +325,14 @@ export class TranscriptController {
           closeTurn()
           this.append({ kind: 'user', text, createdAt, images })
         } else {
-          // 反馈目标：消息落盘时 agent loop 已打上 run_id metadata
+          // Feedback target: the agent loop has stamped run_id metadata when
+          // persisting the message
           const runId = (m.metadata && m.metadata.run_id) || ''
           if (runId) lastRunId = runId
           if (m.status === 'interrupted') {
-            // 流式中断的残段消息：渲染为持久的中断块，而不是普通
-            // assistant 块——否则错误痕迹在切换会话后凭空消失
+            // Partial message from an interrupted stream: render as a
+            // persistent interrupted block, not a normal assistant block —
+            // otherwise the error trace vanishes after switching sessions
             lastAssistantId = this.append({
               kind: 'interrupted',
               text: (text ? text + '\n' : '') + '[interrupted]',
@@ -333,14 +353,21 @@ export class TranscriptController {
           case 'reasoning':
             flushText()
             if (p.reasoning?.text) {
-              this.append({ kind: 'reasoning', text: p.reasoning.text })
+              // duration_ms is persisted with the reasoning part (stamped by the agent
+              // at seal time): rebuilt history shows the span too, not just live turns.
+              this.append({
+                kind: 'reasoning',
+                text: p.reasoning.text,
+                durationMs: p.reasoning.duration_ms || undefined,
+              })
             }
             break
           case 'tool_call': {
             flushText()
             if (p.tool_call) {
-              // diff 不落盘（只在实时 tool.prepared 载荷里）：历史重建时从
-              // edit/write 参数本地重算（diff.ts diffForToolCall）
+              // Diffs are not persisted (they only exist in the live
+              // tool.prepared payload): recompute locally from edit/write
+              // arguments during history rebuild (diff.ts diffForToolCall)
               const diffText = diffForToolCall(p.tool_call.name || '', p.tool_call.arguments)
               const id = this.append({
                 kind: 'tool',
@@ -351,8 +378,10 @@ export class TranscriptController {
               })
               if (p.tool_call.id) {
                 histTools.set(p.tool_call.id, id)
-                // 同步进实例表：pending 审批卡片要从工具块移入 diff（去重），
-                // 且重连截在运行中途时后续 tool.completed 需配对到该块。
+                // Mirror into the instance map: a pending approval card pulls
+                // the diff out of the tool block (dedup), and when a reconnect
+                // lands mid-run the later tool.completed must pair with this
+                // block.
                 this.tools.set(p.tool_call.id, id)
               }
             }
@@ -366,7 +395,8 @@ export class TranscriptController {
             }
             break
           case 'image':
-            // 用户消息的内联 image part（历史数据）同样收进气泡。
+            // Inline image parts of user messages (historical data) also go
+            // into the bubble.
             if (m.role === 'user' && p.image) {
               userImages.push({
                 media_type: p.image.media_type,
@@ -380,14 +410,16 @@ export class TranscriptController {
             }
             break
           case 'artifact_ref':
-            // 用户附件（artifact 引用）收进气泡；不 flush，保证图随文字同块。
+            // User attachments (artifact refs) go into the bubble; no flush,
+            // so the images stay in the same block as the text.
             if (m.role === 'user' && p.artifact && !p.model_only) {
               userImages.push(p.artifact)
               break
             }
             flushText()
-            // model_only 的图片只给模型看，展示通道渲染文本引用即可（见
-            // histCompletion 的同名过滤）。
+            // model_only images are for the model only; the display channel
+            // renders a text reference (see the same-name filter in
+            // histCompletion).
             if (p.artifact && !p.model_only) {
               this.append({ kind: 'artifact', artifact: p.artifact })
             }
@@ -402,17 +434,20 @@ export class TranscriptController {
       if (pr.kind === 'approval' && pr.approval) this.addApprovalCard(pr.approval)
       else if (pr.kind === 'question' && pr.question) this.addQuestionCard(pr.question)
     }
-    // pending steer/followup 队列重建（STEER_DESIGN §4.5：snapshot 兜底）
+    // Rebuild pending steer/followup queues (STEER_DESIGN §4.5: snapshot is
+    // the fallback)
     for (const text of snap.pending_steers || []) this.addSteerNotice(text)
     for (const text of snap.pending_followups || []) this.addFollowupNotice(text)
-    // 上一轮失败的持久错误块：实时路径的错误块不随 snapshot 重建，
-    // 没有它的话切换会话/刷新后失败痕迹就消失了
+    // Persistent error block for the last failed turn: live-path error blocks
+    // are not rebuilt from snapshot — without this, failure traces disappear
+    // after switching sessions / refreshing
     if (snap.last_error && snap.last_error.message) {
       this.append({ kind: 'fatal', text: failureText(snap.last_error) })
       this.turnErrorShown = true
     }
-    // 快照可能截在轮次中途：进行中的轮不挂行（留给轮终止事件挂，
-    // 状态接力给实时路径）；已完结的轮在此收尾挂行。
+    // The snapshot may cut mid-turn: an in-flight turn gets no action row
+    // (left to the turn-terminal event; state hands off to the live path); a
+    // finished turn is closed out here with its action row.
     const running =
       snap.state === 'running' || snap.state === 'awaiting_approval' || snap.state === 'cancelling'
     if (running) {
@@ -424,9 +459,10 @@ export class TranscriptController {
       closeTurn()
     }
     if (preserveScroll && !wasFollowing) {
-      // 重建期间的 append 已把 following/forceFollow 置位并挂了回底 rAF；
-      // 这些回调在本同步方法结束后才触发，这里复位即可压掉它们，调用方
-      // （视图层）负责把视口恢复到重建前的位置。
+      // Appends during the rebuild already set following/forceFollow and
+      // queued snap-to-bottom rAFs; those callbacks fire only after this
+      // synchronous method returns, so resetting here suppresses them. The
+      // caller (view layer) restores the viewport to its pre-rebuild position.
       this.store.update((s) => {
         s.following = false
       })
@@ -439,13 +475,15 @@ export class TranscriptController {
     return { preserved: false }
   }
 
-  // --- SSE 事件调度（§5；未知 kind 忽略） ---
+  // --- SSE event dispatch (§5; unknown kinds ignored) ---
 
   handleEvent(evt: RuntimeEvent) {
     const p = (evt.payload || {}) as Record<string, unknown>
-    // run_id 跟随策略：turn.started 的信封 run_id 不可信（发布时新 run
-    // 尚未创建——首轮为零值、后续轮带的是上一轮 id），其余事件由 loop 内
-    // publishingStore 发出、携带真实 run id，单调跟随最新非空值即可。
+    // run_id follow policy: turn.started's envelope run_id is untrustworthy
+    // (at publish time the new run doesn't exist yet — zero value on the first
+    // turn, the previous turn's id afterwards); all other events come from the
+    // in-loop publishingStore and carry the real run id, so just track the
+    // latest non-empty value.
     if (evt.kind === 'turn.started') {
       this.turnRunID = ''
     } else if (evt.run_id) {
@@ -454,19 +492,25 @@ export class TranscriptController {
     switch (evt.kind) {
       case 'turn.started': {
         this.hideThinking()
+        // New turn: if the previous turn's reasoning leaked its live state due
+        // to reconnect/lost events (flicker leak), seal it here — the live flag
+        // must never survive across turns.
+        this.finalizeReasoning('')
         this.turnErrorShown = false
         this.drainSteerNotices((p.prompt as string) || '')
         this.drainFollowupNotices((p.prompt as string) || '')
-        // 图片附件随事件载荷实时渲染（artifact 引用，鉴权加载），不再
-        // 依赖切会话后的 snapshot 重放才能看到。
+        // Image attachments render live from the event payload (artifact refs,
+        // authenticated load) — no longer requiring a snapshot replay after
+        // switching sessions to become visible.
         this.append({
           kind: 'user',
           text: (p.prompt as string) || '',
           createdAt: evt.time || '',
           images: (p.images as ArtifactRef[]) || undefined,
         })
-        // 新一轮开始：上一轮末尾的操作行已在上轮终止时挂载（作为该轮
-        // 结束标志），本轮状态从新起算（run_id 由后续事件带回）
+        // New turn: the previous turn's trailing action row was attached at
+        // that turn's end (as its closing marker); this turn's state starts
+        // fresh (run_id arrives with later events)
         this.turnAssistantId = null
         this.turnAssistantTs = ''
         this.showThinking()
@@ -476,9 +520,11 @@ export class TranscriptController {
         this.hideThinking()
         this.finalizeStream()
         this.finalizeReasoning(evt.time || '')
+        this.sweepLiveReasoning()
         this.attachTurnActions()
-        // 兜底展示未被 model.request_failed / runtime.fatal 覆盖的轮级
-        // 失败（如持久化错误）；已展示过错误块则不重复
+        // Fallback display for turn-level failures not covered by
+        // model.request_failed / runtime.fatal (e.g. persistence errors); skip
+        // if an error block was already shown
         if (p.error && !this.turnErrorShown) {
           this.append({
             kind: 'fatal',
@@ -490,7 +536,14 @@ export class TranscriptController {
       }
       case 'model.text_delta':
         this.hideThinking()
-        // 记录首个 delta 的事件时间，供草稿收笔时注入消息时间提示
+        // Body text starting = thinking is over: seal reasoning immediately
+        // (live state / duration both end here).
+        // Covers the path where "the provider doesn't send response_completed
+        // on tool-call responses" — otherwise the thinking block keeps
+        // flickering through the entire tool phase.
+        this.finalizeReasoning(evt.time || '')
+        // Record the first delta's event time, stamped into the message time
+        // hint when the draft finalizes
         if (!this.pendingStreamTs && evt.time) this.pendingStreamTs = evt.time
         this.streamAppend((p.delta as string) || '')
         this.requestFollow(false)
@@ -502,7 +555,8 @@ export class TranscriptController {
         break
       case 'model.response_completed':
         this.hideThinking()
-        // canonical 校正：以 completed.text 整段替换草稿（§3.2 铁律 3）
+        // Canonical correction: replace the draft wholesale with
+        // completed.text (§3.2 iron rule 3)
         if (p.text) {
           this.discardStream()
           this.turnAssistantId = this.append({ kind: 'assistant', text: p.text as string })
@@ -514,14 +568,19 @@ export class TranscriptController {
         break
       case 'model.request_failed': {
         this.hideThinking()
-        // 与 snapshot.last_error 重建时同款 fatal 块：实时与历史一致
+        // Failure also ends thinking: seal reasoning, otherwise the live state
+        // leaks into a permanent flicker
+        this.finalizeReasoning(evt.time || '')
+        this.sweepLiveReasoning()
+        // Same fatal block as the snapshot.last_error rebuild: live and
+        // history stay consistent
         this.append({ kind: 'fatal', text: failureText(p as FailurePayload) })
         this.turnErrorShown = true
         break
       }
       case 'model.request_retrying': {
-        // 限流/瞬态错误：等待重试中。保持 thinking 动画，让轮次看起来
-        // 仍然存活，而不是静默卡死
+        // Rate-limit/transient error: waiting to retry. Keep the thinking
+        // animation so the turn still looks alive instead of silently stuck
         const waitS = Math.max(1, Math.round(((p.wait_ms as number) || 0) / 1000))
         this.append({
           kind: 'notice',
@@ -533,9 +592,14 @@ export class TranscriptController {
       }
       case 'tool.prepared': {
         this.hideThinking()
+        // Entering the tool phase = thinking is over (tool-call responses may
+        // not carry response_completed)
+        this.finalizeReasoning(evt.time || '')
         const payload = p as unknown as import('../protocol/events').ToolPreparedPayload
-        // 去重：迟到/重放的 prepared（旧连接追帧残余、快照已重建过该调用）
-        // 不再追加孪生块——否则同一命令会出现一个永远 running 的多余卡片。
+        // Dedup: a late/replayed prepared (catch-up leftovers from the old
+        // connection, or a call the snapshot already rebuilt) must not append
+        // a twin block — otherwise the same command shows an extra card stuck
+        // running forever.
         if (payload.call_id && this.tools.has(payload.call_id)) break
         const id = this.append({
           kind: 'tool',
@@ -548,18 +612,19 @@ export class TranscriptController {
         break
       }
       case 'tool.started':
-        break // 块在 prepared 已建，running 为默认态
+        break // block was created at prepared; running is the default state
       case 'tool.completed': {
         const payload = p as unknown as ToolCompletedPayload
         const id = payload.call_id ? this.tools.get(payload.call_id) : undefined
         if (id) {
           const cur = this.store.get().blocks.find((b) => b.id === id)
-          // 幂等：迟到/重放的 tool.completed 不二次追加输出
+          // Idempotent: a late/replayed tool.completed must not append output twice
           if (cur && cur.kind === 'tool' && !cur.completion) {
             this.patchBlock(id, { completion: payload as ToolCompletion })
           }
         }
-        // 工具完成后模型会继续思考下一步，重新亮起等待动画
+        // After the tool completes the model keeps thinking about the next
+        // step — relight the waiting animation
         this.showThinking()
         break
       }
@@ -589,7 +654,8 @@ export class TranscriptController {
         else this.addSteerNotice((p.text as string) || (p.prompt as string) || '')
         break
       case 'steer.injected': {
-        // cell 严格 FIFO：移除头部第一条 queued notice，转为正式 user block
+        // The cell is strictly FIFO: remove the head queued notice, promote it
+        // to a real user block
         const head = this.steers.shift()
         if (head) this.removeBlock(head.id)
         if (p.text) this.append({ kind: 'user', text: p.text as string, createdAt: evt.time || '' })
@@ -610,7 +676,8 @@ export class TranscriptController {
         this.append({ kind: 'compact', payload: p as unknown as ContextCompactedPayload })
         break
       case 'budget.notice':
-        // 后端已生成具体文案（梯度提醒 / 软着陆），直接展示
+        // The backend already produced the concrete copy (graduated reminder /
+        // soft landing); display it directly
         this.append({ kind: 'notice', text: (p.text as string) || 'budget notice', warn: true })
         break
       case 'runtime.warning':
@@ -640,11 +707,11 @@ export class TranscriptController {
         })
         break
       default:
-        break // 未知 kind：忽略（契约第 2 条）
+        break // unknown kind: ignore (contract clause 2)
     }
   }
 
-  // --- pending steer 通知生命周期（queued → injected / turn.started 接力） ---
+  // --- pending steer notice lifecycle (queued → injected / turn.started handoff) ---
 
   private addSteerNotice(text: string) {
     const id = this.append({ kind: 'notice', text: `steer queued: “${text}”` })
@@ -659,8 +726,9 @@ export class TranscriptController {
     this.followups.push({ id, text })
   }
 
-  // followup 在 turn 边界接力：turn.started 的 prompt 精确等于队首文本时
-  // 移除该 notice（每轮只接力一条）；不匹配则说明本轮由别的提交触发。
+  // Followups hand off at the turn boundary: when turn.started's prompt
+  // exactly equals the head notice's text, remove that notice (one handoff per
+  // turn); a mismatch means this turn was triggered by another submission.
   private drainFollowupNotices(prompt: string) {
     if (this.followups.length === 0) return
     const head = this.followups[0]
@@ -670,8 +738,9 @@ export class TranscriptController {
     }
   }
 
-  // turn.started 的 prompt 可能是 steer 接力产物（leftover 以 "\n\n" 合并）：
-  // 文本命中 queued notice 即移除；未命中的保留（turn 内仍会 steer.injected）。
+  // turn.started's prompt may be a steer handoff product (leftovers joined
+  // with "\n\n"): remove queued notices whose text matches; unmatched ones
+  // stay (steer.injected still fires within the turn).
   private drainSteerNotices(prompt: string) {
     if (this.steers.length === 0) return
     const kept: { id: string; text: string }[] = []
@@ -682,11 +751,13 @@ export class TranscriptController {
     this.steers = kept
   }
 
-  // --- stream 草稿块（节流渲染，曲线与旧版一致：60ms 最小间隔 + rAF） ---
+  // --- stream draft block (throttled rendering, curve matches legacy: 60ms
+  // min interval + rAF) ---
 
   private ensureStream(): string {
     if (!this.streamId) {
-      // 新草稿即本轮最新 assistant 块；操作行留待轮终止时统一挂载
+      // A new draft is this turn's latest assistant block; the action row is
+      // attached uniformly at turn end
       this.streamBuf = ''
       this.streamDestroyed = false
       this.streamLastRender = 0
@@ -723,7 +794,8 @@ export class TranscriptController {
     this.streamId = null
     this.streamDestroyed = true
     this.pendingStreamTs = ''
-    // 草稿已是 markdown 实时渲染：收笔做最终渲染即可；空草稿移除
+    // The draft is already live-rendered markdown: just do the final render
+    // at finalize; remove empty drafts
     if (this.streamBuf.trim()) {
       this.patchBlock(id, { text: this.streamBuf })
     } else {
@@ -743,34 +815,75 @@ export class TranscriptController {
   }
 
   private reasoningAppend(delta: string, ts: string) {
-    if (!this.reasoningId) {
-      this.reasoningId = this.append({ kind: 'reasoning', text: '' })
+    // The block reasoningId points to may no longer exist (dangling reference
+    // after a resync rebuild): recreate it when missing, otherwise later
+    // deltas would be silently dropped.
+    const alive = this.reasoningId && this.store.get().blocks.some((b) => b.id === this.reasoningId)
+    if (!alive) {
+      this.reasoningId = this.appendReasoningBlock()
       this.reasoningStartTs = ts
     }
-    const id = this.reasoningId
+    const id = this.reasoningId!
     const cur = this.store.get().blocks.find((b) => b.id === id)
     const text = (cur && cur.kind === 'reasoning' ? cur.text : '') + delta
     this.patchBlock(id, { text })
   }
 
-  // Seal the reasoning block: stamp the thinking span (first delta → the
-  // terminal event) so the header can show it alongside the char count.
+  // Under interleaved protocols (OpenAI family: text and reasoning may mix in
+  // one chunk), reasoning arriving after body text has started would pile up
+  // below the streaming draft if appended at the end; inserting before the
+  // draft is correct.
+  private appendReasoningBlock(): string {
+    const block = { kind: 'reasoning', text: '', live: true } as const
+    const streamId = this.streamId
+    if (!streamId) return this.append(block)
+    const id = 'b' + nextBlockId++
+    this.store.update((s) => {
+      const nb = { ...block, id, v: 0 } as BlockModel
+      const idx = s.blocks.findIndex((b) => b.id === streamId)
+      s.blocks =
+        idx < 0 ? [...s.blocks, nb] : [...s.blocks.slice(0, idx), nb, ...s.blocks.slice(idx)]
+      s.following = true
+    })
+    this.requestFollow(true)
+    return id
+  }
+
+  // Seal the reasoning block: clear the live flag (drives the live
+  // presentation — head text, tail preview, pulse) and stamp the thinking
+  // span (first delta → the terminal event) so the header can show it.
   private finalizeReasoning(endTs = '') {
     const id = this.reasoningId
     this.reasoningId = null
-    if (id && endTs && this.reasoningStartTs) {
-      const ms = Date.parse(endTs) - Date.parse(this.reasoningStartTs)
-      if (Number.isFinite(ms) && ms >= 0) this.patchBlock(id, { durationMs: ms })
+    if (!id) {
+      this.reasoningStartTs = ''
+      return
     }
+    const patch: { live: boolean; durationMs?: number } = { live: false }
+    if (endTs && this.reasoningStartTs) {
+      const ms = Date.parse(endTs) - Date.parse(this.reasoningStartTs)
+      if (Number.isFinite(ms) && ms >= 0) patch.durationMs = ms
+    }
+    this.patchBlock(id, patch)
     this.reasoningStartTs = ''
   }
 
-  // --- 审批 / 问答卡片生命周期 ---
+  // Turn-level backstop: any live reasoning block leaked by any path (lost
+  // events, reconnect, unknown provider behavior) is force-sealed at the turn
+  // boundary — the flicker animation must stop when thinking ends.
+  private sweepLiveReasoning() {
+    for (const b of this.store.get().blocks) {
+      if (b.kind === 'reasoning' && b.live) this.patchBlock(b.id, { live: false })
+    }
+  }
+
+  // --- approval / question card lifecycle ---
 
   private addApprovalCard(payload: ApprovalRequestedPayload) {
     if (!payload.approval_id || this.approvals.has(payload.approval_id)) return
-    // diff 去重：工具块已渲染的 diff 移入审批卡片展示（数据化表达：
-    // 卡片持有 diff 文本副本，工具块标记 suppressed），收编时移回。
+    // Diff dedup: the diff already rendered by the tool block moves into the
+    // approval card (concretely: the card holds a copy of the diff text, the
+    // tool block is marked suppressed); it moves back on collapse.
     const toolBlockId = payload.call_id ? this.tools.get(payload.call_id) : undefined
     let diff: string | undefined
     if (toolBlockId) {
@@ -784,7 +897,7 @@ export class TranscriptController {
     this.approvals.set(payload.approval_id, id)
   }
 
-  // 审批按钮回调（视图层调用）
+  // Approval button callback (invoked by the view layer)
   async resolveApproval(approvalId: string, decision: 'allow' | 'deny', always: boolean) {
     const id = this.approvals.get(approvalId)
     if (!id) return
@@ -796,8 +909,9 @@ export class TranscriptController {
       this.collapseApproval(approvalId, decision === 'allow', 'you')
     } catch (e) {
       const err = e as Error & { code?: string; status?: number }
-      // binding_mismatch / not_idle 都意味着该审批已被处理或已过期
-      // （例如同域名的重复申请已被记住的规则自动放行），静默收起即可
+      // binding_mismatch / not_idle both mean the approval was already handled
+      // or expired (e.g. a duplicate request from the same origin was auto-
+      // allowed by a remembered rule) — collapse silently
       if (err.code === 'binding_mismatch' || err.code === 'not_idle') {
         this.collapseApproval(approvalId, true, 'another client')
       } else {
@@ -811,7 +925,7 @@ export class TranscriptController {
     const id = this.approvals.get(approvalId)
     if (!id) return
     this.approvals.delete(approvalId)
-    // diff 移回工具块
+    // Move the diff back to the tool block
     const block = this.store.get().blocks.find((b) => b.id === id)
     if (block && block.kind === 'approval' && block.payload.call_id) {
       const toolBlockId = this.tools.get(block.payload.call_id)
@@ -841,7 +955,7 @@ export class TranscriptController {
     this.questions.set(id, blockId)
   }
 
-  // 问答提交回调（视图层调用）
+  // Question submit callback (invoked by the view layer)
   async answerQuestion(questionId: string, answer: unknown, skipped: boolean) {
     const id = this.questions.get(questionId)
     if (!id) return
@@ -879,7 +993,8 @@ export class TranscriptController {
     this.requestFollow(false)
   }
 
-  // 反馈投票（视图层调用）：失败抛回由视图层回滚选中态。
+  // Feedback vote (invoked by the view layer): failures are rethrown so the
+  // view layer rolls back the selection state.
   async sendFeedback(runId: string, value: 0 | 1) {
     if (!this.io.sendFeedback) return
     try {
@@ -891,20 +1006,25 @@ export class TranscriptController {
   }
 }
 
-// --- 历史（snapshot 重建）工具块辅助（与旧 blocks.js 同逻辑） ---
+// --- history (snapshot rebuild) tool block helpers (same logic as legacy
+// blocks.js) ---
 
-// argv 展示引号规则：与 Go 侧 render.CommandLineForDisplay 完全一致
-// （shlex.join 同款安全字符集），保证实时路径与 snapshot 重建路径渲染出
-// 相同的命令行。含空白/元字符/引号的元素或空串用单引号包裹。
+// argv display quoting rules: exactly match the Go-side
+// render.CommandLineForDisplay (same safe charset as shlex.join), so the live
+// path and the snapshot rebuild path render identical command lines. Elements
+// containing whitespace/metachars/quotes, or empty strings, are wrapped in
+// single quotes.
 const DISPLAY_SAFE_ARG = /^[A-Za-z0-9_@%+=:,./-]+$/
 function quoteArgForDisplay(arg: string): string {
   if (DISPLAY_SAFE_ARG.test(arg)) return arg
   return `'${arg.replaceAll("'", `'"'"'`)}'`
 }
 
-// histTarget 从 tool_call.arguments（wire 上已是 object）提取展示用目标。
-// run_cmd 的参数是 program + args，拼成命令行展示（与实时路径、TUI 一致）；
-// 其余工具按 path/command/pattern 等已知键提取。
+// histTarget extracts the display target from tool_call.arguments (already an
+// object on the wire).
+// run_cmd's arguments are program + args, joined into a command line for
+// display (consistent with the live path and the TUI); other tools are
+// extracted by known keys like path/command/pattern.
 export function histTarget(call: { arguments?: Record<string, unknown> }): string {
   const a = call?.arguments
   if (!a || typeof a !== 'object') return ''
@@ -918,8 +1038,8 @@ export function histTarget(call: { arguments?: Record<string, unknown> }): strin
   return String(v)
 }
 
-// histCompletion 把 ToolResult 映射为 tool completion 载荷。
-// preview 有界（600 chars）用于展示；full_text 完整保留用于复制。
+// histCompletion maps a ToolResult to a tool completion payload.
+// preview is bounded (600 chars) for display; full_text is kept whole for copying.
 export function histCompletion(r: ToolResult): ToolCompletion {
   const status =
     r.status === 'success' ? 'success' : r.status === 'cancelled' ? 'canceled' : 'error'
@@ -937,8 +1057,9 @@ export function histCompletion(r: ToolResult): ToolCompletion {
     media_type: string
     data: string
   }[]
-  // model_only 的 artifact（view_image）不进展示通道：文本头已包含路径/
-  // 类型/尺寸等审计信息，图片本体只给模型看（展示是 present_image 的职责）。
+  // model_only artifacts (view_image) skip the display channel: the text
+  // header already carries audit info (path/type/dimensions); the image body
+  // is for the model only (display is present_image's job).
   const artifacts = content
     .filter(
       (c) => c.kind === 'artifact_ref' && c.artifact && !(c as { model_only?: boolean }).model_only,
@@ -955,8 +1076,9 @@ export function histCompletion(r: ToolResult): ToolCompletion {
   }
 }
 
-// 失败信息格式化：实时 model.request_failed 事件与 snapshot.last_error
-// 共用同一文案，保证切换会话前后看到的错误块一致。
+// Failure text formatting: the live model.request_failed event and
+// snapshot.last_error share the same copy, so the error block looks identical
+// before and after switching sessions.
 export function failureText(err: FailurePayload): string {
   const detail = (err.message || '').slice(0, 300)
   if (!err.code && !err.stage) return `turn failed — ${detail}`
@@ -964,5 +1086,5 @@ export function failureText(err: FailurePayload): string {
   return detail ? `${head} — ${detail}` : head
 }
 
-// Message 类型守卫辅助（snapshot 遍历用）
+// Message type-guard helper (for snapshot traversal)
 export type { Message }
