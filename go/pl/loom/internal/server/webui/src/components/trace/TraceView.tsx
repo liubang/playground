@@ -159,6 +159,10 @@ function rowHaystack(r: TraceRow): string {
 
 const firstLine = (s: string) => s.split('\n', 1)[0]
 
+// Distance from the bottom that still counts as "parked at the tail"
+// (mirrors TranscriptView's follow threshold).
+const FOLLOW_THRESHOLD_PX = 80
+
 function fmtMs(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)}ms` : formatDur(ms / 1000)
 }
@@ -183,6 +187,9 @@ export function TraceView({
 }: TraceViewProps) {
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
+  // Live-follow: while a run is in flight, keep the tail in view as long
+  // as the user stays parked at the bottom.
+  const [following, setFollowing] = useState(true)
   const listRef = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
@@ -194,6 +201,20 @@ export function TraceView({
   }, [scrollerOut])
 
   const groups = useMemo(() => buildGroups(blocks), [blocks])
+
+  // A session is live while anything is still in flight: streaming text,
+  // a pending approval/question, or a tool call without its completion.
+  const live = useMemo(
+    () =>
+      blocks.some(
+        (b) =>
+          b.kind === 'stream' ||
+          b.kind === 'approval' ||
+          b.kind === 'question' ||
+          (b.kind === 'tool' && !b.completion),
+      ),
+    [blocks],
+  )
 
   const metrics = useMemo(() => {
     let turns = 0
@@ -229,6 +250,15 @@ export function TraceView({
     return { groups: filtered, hits }
   }, [groups, q])
 
+  const searching = q !== ''
+  // Snap to the newest event on list growth — but only while live and
+  // followed; searching or scrolling up holds the viewport still.
+  useLayoutEffect(() => {
+    if (!live || !following || searching) return
+    const el = listRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [groups, live, following, searching])
+
   const toggle = useCallback((id: string) => {
     setExpanded((prev) => {
       const next = new Set(prev)
@@ -239,9 +269,12 @@ export function TraceView({
   }, [])
 
   // Strip click → scroll the list to the turn owning that moment.
+  // Explicit navigation releases live-follow so streaming updates don't
+  // yank the view back to the tail.
   const seekTurn = useCallback((turn: number) => {
     const el = listRef.current
     if (!el) return
+    setFollowing(false)
     if (turn <= 0) {
       el.scrollTo({ top: 0, behavior: 'smooth' })
       return
@@ -288,7 +321,15 @@ export function TraceView({
       {rowCount === 0 ? (
         <div className="maze-empty">暂无轨迹——发起一轮对话后这里会列出完整执行过程</div>
       ) : (
-        <div className="trace-list" ref={listRef}>
+        <div
+          className="trace-list"
+          ref={listRef}
+          onScroll={() => {
+            const el = listRef.current
+            if (!el) return
+            setFollowing(el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_THRESHOLD_PX)
+          }}
+        >
           {visible.groups.map((g) => (
             <div key={g.turn} className="trace-turn" data-turn={g.turn}>
               {g.rows.map((r) => (
@@ -302,6 +343,18 @@ export function TraceView({
               ))}
             </div>
           ))}
+          <button
+            type="button"
+            className="follow-btn"
+            hidden={following}
+            onClick={() => {
+              setFollowing(true)
+              const el = listRef.current
+              if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+            }}
+          >
+            <Icon name="arrow-down" /> 回到底部
+          </button>
         </div>
       )}
     </div>
@@ -342,8 +395,10 @@ export function TracePage({ controller }: { controller: AppController }) {
   }, [controller, sessionId])
 
   if (!sessionId) return <div className="maze-empty">未选择会话</div>
+  // key per session: follow/expand state resets when switching sessions.
   return (
     <TraceView
+      key={sessionId}
       blocks={blocks}
       maze={maze}
       scrollerOut={controller.traceScrollerRef}

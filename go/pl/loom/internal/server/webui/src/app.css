@@ -3523,6 +3523,11 @@ brush/pinch pointer handlers. */
 .maze-gap text {
   fill: var(--muted);
   font-size: 10px;
+  /* Background halo: the caption-row label can span wider than its seam
+   and cross neighboring shaded rects — keep it legible without a pill. */
+  paint-order: stroke;
+  stroke: var(--bg0);
+  stroke-width: 3px;
 }
 .maze-tick line {
   stroke: var(--bg2);

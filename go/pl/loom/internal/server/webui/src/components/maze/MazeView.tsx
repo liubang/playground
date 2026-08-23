@@ -31,6 +31,7 @@ const MAIN_H = 30 // main-path row height
 const PAR_BAR_H = 8 // parallel tool sub-bar row height
 const DETOUR_H = 30 // detour row height
 const AXIS_H = 26 // bottom tick strip
+const GAP_BAND_H = 16 // folded-seam caption row (reserved only when gaps exist)
 const PAD_X = 12
 const MIN_BAR_W = 5
 
@@ -223,9 +224,13 @@ export const MazeView = memo(function MazeView({
       const h = LANE_HEADER_H + MAIN_H + parH + detourRows * DETOUR_H + 8
       return { lane, rows, parH, h, detourRows }
     })
-    const totalH = lanes.reduce((s, l) => s + l.h, 0) + AXIS_H
+    // Dedicated caption row for folded-seam labels, between the lanes and
+    // the tick strip — the only band guaranteed free of capsules and sub
+    // labels. Reserved only when gaps exist.
+    const bandH = axis.gaps.length > 0 ? GAP_BAND_H : 0
+    const totalH = lanes.reduce((s, l) => s + l.h, 0) + bandH + AXIS_H
     return { lanes, totalH }
-  }, [data])
+  }, [data, axis.gaps.length])
 
   const total = Math.max(axis.total, 1)
   const [dStart, dEnd] = win ?? [0, total]
@@ -491,6 +496,29 @@ export const MazeView = memo(function MazeView({
   }, [data, q, failOnly, filtering])
 
   const svgW = canvasW
+
+  // Folded-seam labels: one per visible gap, x-clamped into the canvas and
+  // thinned against each other so dense idle periods don't paint a row of
+  // overlapping text. The seam rect always carries a <title> tooltip as
+  // the fallback for skipped labels.
+  const gapMarks = useMemo(() => {
+    const GAP_LABEL_MIN_SPACING = 12
+    let lastRight = -Infinity
+    return axis.gaps.map((g) => {
+      const x1 = toX(g.dStart, svgW)
+      const x2 = toX(g.dEnd, svgW)
+      const label = `⏸ 省略 ${formatDur(g.skipped)}`
+      if (x2 < 0 || x1 > svgW) return { x1, x2, label, cx: 0, show: false }
+      const w = estTextWidth(label)
+      const lo = PAD_X + w / 2
+      const hi = svgW - PAD_X - w / 2
+      const cx = lo <= hi ? Math.min(Math.max((x1 + x2) / 2, lo), hi) : svgW / 2
+      const show = cx - w / 2 >= lastRight + GAP_LABEL_MIN_SPACING
+      if (show) lastRight = cx + w / 2
+      return { x1, x2, label, cx, show }
+    })
+  }, [axis, toX, svgW])
+
   let laneY = 0
 
   return (
@@ -558,20 +586,28 @@ export const MazeView = memo(function MazeView({
           }}
         >
           <svg width="100%" height={layout.totalH} className="maze-svg">
-            {/* folded seams */}
-            {axis.gaps.map((g, i) => {
-              const x1 = toX(g.dStart, svgW)
-              const x2 = toX(g.dEnd, svgW)
-              if (x2 < 0 || x1 > svgW) return null
-              return (
+            {/* folded seams: the label lives in the dedicated caption row
+                above the tick strip (reserved via GAP_BAND_H), so it can
+                never collide with lane headers, capsules or sub labels */}
+            {gapMarks.map((g, i) =>
+              g.x2 < 0 || g.x1 > svgW ? null : (
                 <g key={'gap' + i} className="maze-gap">
-                  <rect x={x1} y={0} width={Math.max(x2 - x1, 2)} height={layout.totalH - AXIS_H} />
-                  <text x={(x1 + x2) / 2} y={14} textAnchor="middle">
-                    ⏸ 省略 {formatDur(g.skipped)}
-                  </text>
+                  <rect
+                    x={g.x1}
+                    y={0}
+                    width={Math.max(g.x2 - g.x1, 2)}
+                    height={layout.totalH - AXIS_H}
+                  >
+                    <title>{g.label}</title>
+                  </rect>
+                  {g.show && (
+                    <text x={g.cx} y={layout.totalH - AXIS_H - GAP_BAND_H + 12} textAnchor="middle">
+                      {g.label}
+                    </text>
+                  )}
                 </g>
-              )
-            })}
+              ),
+            )}
             {/* ticks */}
             {ticks.map((tk, i) => (
               <g key={'tk' + i} className="maze-tick">
