@@ -93,7 +93,7 @@ func TestClientTypesAreJSONSerializable(t *testing.T) {
 		"SetReasoningResult":      SetReasoningResult{},
 		"RequestCompactionResult": RequestCompactionResult{AlreadyPending: true},
 		"SessionSummary":          SessionSummary{ID: domain.NewSessionID(), Version: 7, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()},
-		"RuleSet":                 &permission.RuleSet{},
+		"Packages":                []permission.Package{{Bind: permission.Binding{Kind: permission.BindHost, Host: "example.com"}, Decision: "allow"}},
 		"SubagentView":            SubagentView{SessionID: domain.NewSessionID(), Active: true},
 		"SkillsListing":           SkillsListing{Skills: []SkillInfo{{Name: "s", Description: "d", Scope: "user", Path: "/p"}}, Issues: []string{"i"}},
 		"MCPServerInfo":           MCPServerInfo{Name: "m", Connected: true, Tools: []string{"t1"}},

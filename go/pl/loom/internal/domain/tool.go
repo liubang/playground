@@ -273,6 +273,11 @@ type PreparedCall struct {
 type URLRequest struct {
 	// Host is the canonical hostname (lowercase, no port) of the URL.
 	Host string `json:"host"`
+	// RealIdentity marks a fetch that speaks with the user's real identity
+	// (the browser tool drives the user's actual browser, cookies included)
+	// as opposed to an anonymous credential-less GET (web_fetch). The
+	// policy layer keeps per-call approval for real-identity fetches.
+	RealIdentity bool `json:"real_identity,omitempty"`
 }
 
 // WriteRequest describes a file write the policy layer can classify

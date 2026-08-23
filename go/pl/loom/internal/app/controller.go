@@ -203,12 +203,13 @@ type Controller struct {
 	// ("allow always") before delegating to approver. The agent loop sees
 	// only this wrapper.
 	rulesApprover *RuleApprover
-	// sessionRules is the in-memory "allow always" store shared with the
-	// policy layer; ForgetRule must evict from it too, or a forgotten rule
-	// would keep auto-approving until process restart.
-	sessionRules *permission.SessionRules
-	clock        domain.Clock
-	logger       *slog.Logger
+	// packages is the shared capability set (process-level via the
+	// embedded runtime); ForgetPackage must evict the session-scope twin
+	// too, or a forgotten package would keep auto-approving until
+	// process restart.
+	packages *permission.PackageSet
+	clock    domain.Clock
+	logger   *slog.Logger
 
 	mu          sync.Mutex
 	state       ControllerState
@@ -327,11 +328,17 @@ func NewController(cfg ControllerConfig) *Controller {
 		logger = slog.Default()
 	}
 	sessionCtx, cancelSession := context.WithCancel(context.Background())
-	// Bootstrap is nil in some UI tests; session rules then degrade to a
-	// process-local store so "allow always" still works for the run.
-	sessionRules := permission.NewSessionRules()
-	if cfg.Bootstrap != nil && cfg.Bootstrap.SessionRules != nil {
-		sessionRules = cfg.Bootstrap.SessionRules
+	// Bootstrap is nil in some UI tests; the capability set then
+	// degrades to a process-local one so "allow always" still works.
+	packages := permission.NewPackageSet()
+	policyFn := func() permission.Policy {
+		return permission.Policy{Packages: packages, Mode: permission.ModeOnRequest}
+	}
+	var rememberedStore *permission.RememberedStore
+	if cfg.Bootstrap != nil && cfg.Bootstrap.Packages != nil {
+		packages = cfg.Bootstrap.Packages
+		policyFn = cfg.Bootstrap.CurrentPermissionPolicy
+		rememberedStore = cfg.Bootstrap.RememberedStore
 	}
 	runtime := cfg.Runtime
 	if runtime == nil {
@@ -347,8 +354,8 @@ func NewController(cfg ControllerConfig) *Controller {
 		bootstrap:        cfg.Bootstrap,
 		broker:           cfg.Broker,
 		approver:         cfg.Approver,
-		rulesApprover:    NewRuleApprover(cfg.Approver, sessionRules),
-		sessionRules:     sessionRules,
+		rulesApprover:    NewRuleApprover(cfg.Approver, policyFn, rememberedStore),
+		packages:         packages,
 		questioner:       runtime.Questioner,
 		clock:            clock,
 		logger:           logger,
@@ -1048,65 +1055,42 @@ func (c *Controller) rememberedStore() *permission.RememberedStore {
 	return c.bootstrap.RememberedStore
 }
 
-// ListRules returns the combined rule set (builtin + user + project +
-// remembered) for the /rules picker. A nil set means rules are disabled.
-func (c *Controller) ListRules(ctx context.Context) (*permission.RuleSet, error) {
+// deriveEnv returns the derivation environment (sandbox roots) of the
+// workspace's active policy.
+func (c *Controller) deriveEnv() permission.DeriveEnv {
+	if c.bootstrap == nil {
+		return permission.DeriveEnv{}
+	}
+	return c.bootstrap.CurrentPermissionPolicy().Env
+}
+
+// ListPackages returns the combined capability set (builtin + user +
+// project + remembered + session) for the /rules picker.
+func (c *Controller) ListPackages(ctx context.Context) ([]permission.Package, error) {
 	if c.bootstrap == nil {
 		return nil, fmt.Errorf("policy not available")
 	}
-	return c.bootstrap.CurrentRules(), nil
+	return c.bootstrap.CurrentPackages(), nil
 }
 
-// ForgetRule removes a remembered rule from the persistent store and
-// reloads the in-memory policy so the change takes effect immediately.
-// Exactly one of prefix/host/tool is consulted, selected by kind.
-func (c *Controller) ForgetRule(ctx context.Context, kind permission.RuleKind, prefix []string, host, tool string) error {
+// ForgetPackage removes a remembered package from the persistent store,
+// evicts its session-scope twin, and reloads the declarative layers so
+// the change takes effect immediately.
+func (c *Controller) ForgetPackage(ctx context.Context, bind permission.Binding) error {
 	store := c.rememberedStore()
 	if store == nil {
 		return fmt.Errorf("remembered store not available")
 	}
-	switch kind {
-	case permission.RuleArgv:
-		ok, err := store.ForgetRule(ctx, prefix)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return fmt.Errorf("rule %v not found in remembered store", prefix)
-		}
-	case permission.RuleDomain:
-		ok, err := store.ForgetDomain(ctx, host)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return fmt.Errorf("domain %q not found in remembered store", host)
-		}
-	case permission.RuleTool:
-		ok, err := store.ForgetTool(ctx, tool)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return fmt.Errorf("tool %q not found in remembered store", tool)
-		}
-	default:
-		return fmt.Errorf("unknown rule kind %d", kind)
+	ok, err := store.Forget(ctx, bind)
+	if err != nil {
+		return err
 	}
-	// Evict the session-memory twin too: ReloadPolicy only rebuilds the
-	// declarative/store layers, and a session-remembered entry would
-	// otherwise keep auto-approving until process restart.
-	if c.sessionRules != nil {
-		switch kind {
-		case permission.RuleArgv:
-			c.sessionRules.ForgetRunCmd(prefix)
-		case permission.RuleDomain:
-			c.sessionRules.ForgetDomain(host)
-		case permission.RuleTool:
-			c.sessionRules.ForgetTool(tool)
-		}
+	if !ok {
+		return fmt.Errorf("package %v not found in remembered store", bind)
 	}
-	// Reload the policy so the in-memory ruleset reflects the deletion.
+	if c.packages != nil {
+		c.packages.ForgetSession(bind)
+	}
 	if err := c.bootstrap.ReloadPolicy(ctx); err != nil {
 		return fmt.Errorf("reload policy: %w", err)
 	}
@@ -1801,51 +1785,20 @@ func (c *Controller) handleResolveApproval(cmd controllerCommand) {
 	cmd.ResultCh <- controllerResult{Value: note}
 }
 
-// rememberApprovalRule derives and stores the categorical "allow always"
-// memory for an approved call: session memory first (shared with the policy
-// chain, so re-evaluations see it at once), then the remembered store so
-// future sessions inherit it (rules.persist_remembered=false opts out by not
-// opening the store). run_cmd remembers argv prefixes (with grants);
-// web_fetch remembers exact hosts; eligible tools are remembered by name.
-// Returns the display note, empty when the call is not rememberable.
+// rememberApprovalRule derives and stores the capability packages for
+// an approved call (session scope in the shared set, persisted when a
+// remembered store is configured; rules.persist_remembered=false opts
+// out by not opening one). Returns the display note, empty when the
+// call is not rememberable.
 func (c *Controller) rememberApprovalRule(hint *ApprovalRuleHint) string {
 	rule, ok := c.rulesApprover.RememberCall(hint.ToolName, hint.Arguments, hint.Trust)
 	if !ok {
 		return ""
 	}
-	note := rule.Label
-	if summary := rule.Grant.Summary(); summary != "" {
-		note += " (" + summary + ")"
+	if store := c.rememberedStore(); store != nil {
+		return rule.Label + " (saved to " + store.Path() + ")"
 	}
-	store := c.rememberedStore()
-	if store == nil {
-		return note
-	}
-	persistCtx, persistCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer persistCancel()
-	var persistErr error
-	switch {
-	case rule.Tool != "":
-		persistErr = store.RememberTool(persistCtx, rule.Tool)
-	case rule.Host != "":
-		persistErr = store.RememberDomain(persistCtx, rule.Host)
-	case rule.Path != "":
-		persistErr = store.RememberPath(persistCtx, rule.Path)
-	default:
-		// A composed shell command contributes one prefix per subcommand;
-		// each is persisted as its own rule row.
-		for _, prefix := range rule.Prefixes {
-			if err := store.RememberRule(persistCtx, prefix, rule.Grant); err != nil {
-				persistErr = err
-				break
-			}
-		}
-	}
-	if persistErr != nil {
-		c.logger.Warn("persist remembered rule failed", "rule", note, "error", persistErr)
-		return note
-	}
-	return note + " (saved to " + store.Path() + ")"
+	return rule.Label
 }
 
 func (c *Controller) handleNewSession(cmd controllerCommand) {
@@ -2544,10 +2497,20 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				Arguments:   s.pendingArgs[payload.CallID],
 			}
 			// Surface what "allow always" would remember so frontends can label
-			// (or hide) the option honestly instead of offering a no-op.
-			if preview, _, ok := ApprovalRulePreview(payload.Tool, card.Arguments); ok {
+			// (or hide) the option honestly instead of offering a no-op, the
+			// L2 trust option for escalated calls, and the derived consequence
+			// description — what the operation DOES, not its text.
+			env := s.controller.deriveEnv()
+			if preview, _, ok := ApprovalRulePreview(payload.Tool, card.Arguments, env); ok {
 				card.RulePreview = preview
 			}
+			if RunCmdTrustPreview(payload.Tool, card.Arguments, env) {
+				d := permission.DeriveRawArgs(payload.Tool, card.Arguments, env)
+				if label, _, ok := permission.MemoryPreviewLabel(d, TrustUnsandboxed); ok {
+					card.TrustPreview = label
+				}
+			}
+			card.Consequence = approvalConsequence(payload.Tool, card.Arguments, env)
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindApprovalRequested, card)
 			// Project the card so reconnecting clients can rebuild it from
 			// the snapshot (the requested event itself is not replayed into

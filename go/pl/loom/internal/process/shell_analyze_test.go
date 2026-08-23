@@ -92,8 +92,14 @@ func TestAnalyzeShellScriptCommands(t *testing.T) {
 			argvs:  [][]string{nil},
 		},
 		{
-			name:   "heredoc is not static",
+			name:   "static heredoc body stays static",
 			script: "python3 <<'PY'\nprint(1)\nPY",
+			static: true,
+			argvs:  [][]string{{"python3"}},
+		},
+		{
+			name:   "dynamic heredoc body is not static",
+			script: "python3 <<PY\nprint($x)\nPY",
 			argvs:  [][]string{{"python3"}},
 		},
 		{

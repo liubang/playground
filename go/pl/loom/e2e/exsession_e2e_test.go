@@ -113,7 +113,7 @@ func TestExecSessionE2E(t *testing.T) {
 	loop := &agent.Loop{
 		Run: run, Model: model, ModelName: "fake",
 		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
-		Policy:   permission.DefaultPolicy().Decider(permission.ModeOnRequest),
+		Policy:   permission.DefaultPolicy(),
 		Registry: registry, Logger: slog.Default(),
 		SystemPrompt: prompt.NewBuilder(ws),
 	}

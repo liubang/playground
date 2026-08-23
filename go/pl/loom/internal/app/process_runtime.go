@@ -68,8 +68,12 @@ type ProcessRuntime struct {
 	// SessionEnv holds the loom attribution variables injected into every
 	// spawned command; per-session values ride the turn context (SERVE_DESIGN
 	// G3), this process-level atomic is the context-less fallback.
-	SessionEnv      *process.AtomicSessionEnv
-	SessionRules    *permission.SessionRules
+	SessionEnv *process.AtomicSessionEnv
+	// Packages is the process-shared capability set: the declarative
+	// layers (builtin/user/project/remembered) load into it per
+	// workspace, and interactive "allow always" approvals live in it
+	// as session-scope packages.
+	Packages        *permission.PackageSet
 	RememberedStore *permission.RememberedStore
 	// MCPManager owns every running MCP server subprocess (process-level:
 	// per-workspace assembly would spawn N×M subprocesses, WORKSPACE_DESIGN
@@ -316,18 +320,16 @@ func NewProcessRuntime(ctx context.Context, resolved *config.ResolvedConfig, cfg
 		questioner = domain.AutonomousQuestioner{}
 	}
 
-	// Session-remembered approvals ("allow always") share one store with the
-	// policy layer; declarative user/project rules load on top per workspace.
-	sessionRules := permission.NewSessionRules()
+	// The capability set is process-shared (WORKSPACE_DESIGN D4):
+	// declarative layers load into it per workspace; session-remembered
+	// approvals ("allow always") live in it as session-scope packages.
+	packages := permission.NewPackageSet()
 	var rememberedStore *permission.RememberedStore
 	if resolved.Rules.PersistRemembered {
 		rulesDir := resolved.Storage.RulesDir()
 		if store, err := permission.OpenRememberedStore(ctx, permission.RememberedDBPath(rulesDir)); err != nil {
 			logger.Warn("remembered rules disabled: open store failed", "error", err)
 		} else {
-			if err := store.MigrateLegacyJSON(ctx, rulesDir); err != nil {
-				logger.Warn("remembered rules: legacy migration incomplete", "error", err)
-			}
 			rememberedStore = store
 		}
 	}
@@ -442,7 +444,7 @@ func NewProcessRuntime(ctx context.Context, resolved *config.ResolvedConfig, cfg
 		Logger:             logger,
 		Version:            cfg.Version,
 		SessionEnv:         sessionEnv,
-		SessionRules:       sessionRules,
+		Packages:           packages,
 		RememberedStore:    rememberedStore,
 		MCPManager:         mcpManager,
 		MemoryStore:        memoryStore,

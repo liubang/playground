@@ -24,84 +24,40 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 )
 
-// RuleEntry is one row in the /rules picker: an argv-prefix, domain, or
-// tool-name rule, with enough data to render, filter, and (for
-// remembered entries) delete.
+// RuleEntry is one row in the /rules picker: one capability package,
+// with enough data to render, filter, and (for remembered entries)
+// delete.
 type RuleEntry struct {
-	Kind          permission.RuleKind // Argv, Domain, or Tool
-	Label         string              // display text: joined prefix, @host, or #tool
+	Kind          string // argv | exact | host | path | tool
+	Label         string // display text: joined prefix, @host, #tool, ~/dir
 	Decision      string
+	Scope         string // builtin | project | user | session
 	Source        string
 	Grant         string // grant summary (e.g. "network=full, write=2 paths")
+	Consequence   string // consequence ceiling (allow packages)
 	Justification string
 	Deletable     bool // true when Source == "remembered"
-	// Deletion keys (only valid when Deletable):
-	Prefix []string // argv prefix (Kind == Argv)
-	Host   string   // domain host  (Kind == Domain)
-	Tool   string   // tool name    (Kind == Tool)
+	// Bind is the deletion key (only valid when Deletable).
+	Bind permission.Binding
 }
 
 // NewRulesFinder creates the /rules picker populated with the combined
-// rule set. Builtin / user / project entries are read-only; remembered
-// entries are deletable.
-func (m Model) NewRulesFinder(rules *permission.RuleSet) *Finder[RuleEntry] {
+// capability set. Builtin / user / project entries are read-only;
+// remembered entries are deletable.
+func (m Model) NewRulesFinder(packages []permission.Package) *Finder[RuleEntry] {
 	return NewFinder(FinderConfig[RuleEntry]{
 		Title:   "Rules",
-		Items:   rulesFinderItems(rules),
+		Items:   rulesFinderItems(packages),
 		Preview: rulePreview,
 		Styles:  m.finderStyles(),
 	})
 }
 
-// rulesFinderItems flattens the combined rule set into finder rows.
-// A nil rule set (rules disabled) yields no rows.
-func rulesFinderItems(rules *permission.RuleSet) []FinderItem[RuleEntry] {
-	items := make([]FinderItem[RuleEntry], 0, len(rules.Rules())+len(rules.Domains())+len(rules.Tools()))
-	for _, r := range rules.Rules() {
-		e := RuleEntry{
-			Kind:          permission.RuleArgv,
-			Label:         strings.Join(r.ArgvPrefix, " "),
-			Decision:      r.Decision,
-			Source:        r.Source,
-			Justification: r.Justification,
-			Deletable:     r.Source == permission.RememberedSource,
-			Prefix:        r.ArgvPrefix,
-		}
-		if r.Grant != nil {
-			e.Grant = summarizeGrant(r.Grant)
-		}
-		items = append(items, FinderItem[RuleEntry]{
-			Value: e,
-			Text:  e.Label,
-			Hint:  rulesRowHint(e),
-		})
-	}
-	for _, d := range rules.Domains() {
-		e := RuleEntry{
-			Kind:          permission.RuleDomain,
-			Label:         "@" + d.Host,
-			Decision:      d.Decision,
-			Source:        d.Source,
-			Justification: d.Justification,
-			Deletable:     d.Source == permission.RememberedSource,
-			Host:          d.Host,
-		}
-		items = append(items, FinderItem[RuleEntry]{
-			Value: e,
-			Text:  e.Label,
-			Hint:  rulesRowHint(e),
-		})
-	}
-	for _, t := range rules.Tools() {
-		e := RuleEntry{
-			Kind:          permission.RuleTool,
-			Label:         "#" + t.Name,
-			Decision:      t.Decision,
-			Source:        t.Source,
-			Justification: t.Justification,
-			Deletable:     t.Source == permission.RememberedSource,
-			Tool:          t.Name,
-		}
+// rulesFinderItems flattens the capability set into finder rows.
+func rulesFinderItems(packages []permission.Package) []FinderItem[RuleEntry] {
+	items := make([]FinderItem[RuleEntry], 0, len(packages))
+	for _, p := range packages {
+		e := ruleEntryOf(p)
 		items = append(items, FinderItem[RuleEntry]{
 			Value: e,
 			Text:  e.Label,
@@ -111,53 +67,95 @@ func rulesFinderItems(rules *permission.RuleSet) []FinderItem[RuleEntry] {
 	return items
 }
 
-// rulesRowHint is the dimmed secondary column: the rule source, plus the
-// delete affordance for remembered entries.
+// ruleEntryOf renders one package as a picker row.
+func ruleEntryOf(p permission.Package) RuleEntry {
+	e := RuleEntry{
+		Decision:      string(p.Decision),
+		Scope:         p.Scope.String(),
+		Source:        p.Source,
+		Justification: p.Justification,
+		Deletable:     p.Source == permission.RememberedSource,
+		Bind:          p.Bind,
+	}
+	switch p.Bind.Kind {
+	case permission.BindArgv:
+		e.Kind = "argv"
+		e.Label = strings.Join(p.Bind.Argv, " ")
+	case permission.BindArgvExact:
+		e.Kind = "exact"
+		e.Label = "exact: " + strings.Join(p.Bind.Argv, " ")
+	case permission.BindHost:
+		e.Kind = "host"
+		e.Label = "@" + p.Bind.Host
+	case permission.BindPath:
+		e.Kind = "path"
+		e.Label = p.Bind.Path
+	case permission.BindTool:
+		e.Kind = "tool"
+		e.Label = "#" + p.Bind.Tool
+	}
+	if !p.Grant.IsZero() {
+		e.Grant = summarizeGrant(p.Grant)
+	}
+	if p.Decision == "allow" && p.MaxConsequence != permission.ConsequenceConfined {
+		e.Consequence = p.MaxConsequence.String()
+	}
+	return e
+}
+
+// rulesRowHint is the dimmed secondary column: the package source, plus
+// the delete affordance for remembered entries.
 func rulesRowHint(e RuleEntry) string {
 	if e.Deletable {
 		return "remembered · d=delete"
 	}
-	return e.Source
+	if e.Source != "" {
+		return e.Source
+	}
+	return e.Scope
 }
 
 func rulePreview(e RuleEntry) string {
 	var b strings.Builder
-	switch e.Kind {
-	case permission.RuleDomain:
-		b.WriteString("Kind:     domain\n")
-		b.WriteString("Host:     " + e.Host + "\n")
-	case permission.RuleTool:
-		b.WriteString("Kind:     tool\n")
-		b.WriteString("Tool:     " + e.Tool + "\n")
-	default:
-		b.WriteString("Kind:     argv\n")
-		b.WriteString("Prefix:   " + e.Label + "\n")
-	}
+	b.WriteString("Kind:     " + e.Kind + "\n")
+	b.WriteString("Binding:  " + e.Label + "\n")
 	b.WriteString("Decision: " + e.Decision + "\n")
-	b.WriteString("Source:   " + e.Source + "\n")
+	b.WriteString("Scope:    " + e.Scope + "\n")
+	if e.Source != "" {
+		b.WriteString("Source:   " + e.Source + "\n")
+	}
 	if e.Grant != "" {
 		b.WriteString("Grant:    " + e.Grant + "\n")
+	}
+	if e.Consequence != "" {
+		b.WriteString("Ceiling:  " + e.Consequence + "\n")
 	}
 	if e.Justification != "" {
 		b.WriteString("Reason:   " + e.Justification + "\n")
 	}
 	if e.Deletable {
-		b.WriteString("\nPress d to delete this rule.")
+		b.WriteString("\nPress d to delete this package.")
 	}
 	return b.String()
 }
 
-// summarizeGrant renders a RuleGrant as a compact one-liner.
-func summarizeGrant(g *permission.RuleGrant) string {
+// summarizeGrant renders a PackageGrant as a compact one-liner.
+func summarizeGrant(g permission.PackageGrant) string {
 	var parts []string
-	if g.Network != "" {
-		parts = append(parts, "network="+g.Network)
-	}
 	if g.Unsandboxed {
 		parts = append(parts, "unsandboxed")
 	}
-	if len(g.Write) > 0 {
-		parts = append(parts, fmt.Sprintf("write=%d paths", len(g.Write)))
+	if g.NetworkFull {
+		parts = append(parts, "network=full")
+	}
+	for _, h := range g.NetworkHosts {
+		parts = append(parts, "network="+h)
+	}
+	if len(g.WritablePaths) > 0 {
+		parts = append(parts, fmt.Sprintf("write=%d paths", len(g.WritablePaths)))
+	}
+	if g.GUIOpen {
+		parts = append(parts, "gui_open")
 	}
 	return strings.Join(parts, ", ")
 }

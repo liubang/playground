@@ -614,10 +614,10 @@ func (c *httpClient) ToolchainEnvironment(ctx context.Context) (*ToolchainReport
 	return &out, nil
 }
 
-func (c *httpClient) ListRules(ctx context.Context) (*permission.RuleSet, error) {
+func (c *httpClient) ListPackages(ctx context.Context) ([]permission.Package, error) {
 	return nil, ErrUnsupported
 }
 
-func (c *httpClient) ForgetRule(ctx context.Context, kind permission.RuleKind, prefix []string, host, tool string) error {
+func (c *httpClient) ForgetPackage(ctx context.Context, bind permission.Binding) error {
 	return ErrUnsupported
 }

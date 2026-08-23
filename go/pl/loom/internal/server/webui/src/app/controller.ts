@@ -222,13 +222,13 @@ export class AppController {
       onUnauthorized: () => this.onUnauthorized(),
     })
     this.transcript = new TranscriptController({
-      resolveApproval: (payload, { decision, always }) =>
+      resolveApproval: (payload, { decision, always, trust }) =>
         this.api.resolveApproval(this.store.get().sessionId || '', payload.approval_id || '', {
           callId: payload.call_id,
           argsHash: payload.args_hash,
           decision,
           ruleHint: always
-            ? { tool_name: payload.tool_name, arguments: payload.arguments }
+            ? { tool_name: payload.tool_name, arguments: payload.arguments, trust }
             : undefined,
         }),
       answerQuestion: (questionId, answer) =>

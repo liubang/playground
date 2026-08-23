@@ -23,34 +23,33 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 )
 
-// wirePolicy builds the agent-facing policy for a permission policy and
-// approval mode: the bare decider chain, wrapped in the transcript
-// adapter when user-intent trust is enabled (approval.trust_user_urls).
-func wirePolicy(policy permission.Policy, mode permission.ApprovalMode) agent.Policy {
-	chain := policy.Decider(mode)
+// wirePolicy builds the agent-facing policy: the permission policy
+// itself, wrapped in the transcript adapter when user-intent trust is
+// enabled (approval.trust_user_urls).
+func wirePolicy(policy permission.Policy) agent.Policy {
 	if policy.UserIntent {
-		return transcriptPolicy{chain: chain}
+		return transcriptPolicy{policy: policy}
 	}
-	return chain
+	return policy
 }
 
-// transcriptPolicy adapts a permission chain to agent.TranscriptAwarePolicy:
-// each tool-call routing pass rebinds the chain's user-intent decider with
-// the hosts the user mentioned in the live transcript, so a URL the user
-// handed the agent is auto-allowed without weakening rule denies or the
-// mode baseline. The wrapped chain is shared and immutable; binding
-// returns a cheap copy, so concurrent runs never observe each other's
-// transcripts.
+// transcriptPolicy adapts a permission policy to
+// agent.TranscriptAwarePolicy: each tool-call routing pass rebinds the
+// user-intent host snapshot from the live transcript, so a URL the user
+// handed the agent is auto-allowed without weakening deny packages or
+// the mode residual. The wrapped policy is shared and immutable during
+// a pass; binding returns a cheap copy, so concurrent runs never
+// observe each other's transcripts.
 type transcriptPolicy struct {
-	chain permission.Chain
+	policy permission.Policy
 }
 
 // Evaluate implements agent.Policy.
 func (p transcriptPolicy) Evaluate(call domain.PreparedCall) domain.Verdict {
-	return p.chain.Evaluate(call)
+	return p.policy.Evaluate(call)
 }
 
 // WithTranscript implements agent.TranscriptAwarePolicy.
 func (p transcriptPolicy) WithTranscript(messages []domain.Message) agent.Policy {
-	return transcriptPolicy{chain: p.chain.WithUserIntent(permission.ExtractUserIntentHosts(messages))}
+	return transcriptPolicy{policy: p.policy.WithUserIntent(permission.ExtractUserIntentHosts(messages))}
 }

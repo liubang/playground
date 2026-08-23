@@ -178,11 +178,10 @@ type Client interface {
 	// ToolchainEnvironment returns the PATH-augmentation report behind the
 	// /doctor listing and the settings environment card.
 	ToolchainEnvironment(ctx context.Context) (*ToolchainReport, error)
-	// ListRules returns the effective approval ruleset.
-	ListRules(ctx context.Context) (*permission.RuleSet, error)
-	// ForgetRule removes a remembered approval rule. Exactly one of
-	// prefix/host/tool is consulted, selected by kind.
-	ForgetRule(ctx context.Context, kind permission.RuleKind, prefix []string, host, tool string) error
+	// ListPackages returns the effective capability set.
+	ListPackages(ctx context.Context) ([]permission.Package, error)
+	// ForgetPackage removes a remembered capability package by binding.
+	ForgetPackage(ctx context.Context, bind permission.Binding) error
 
 	// --- workspaces ---
 

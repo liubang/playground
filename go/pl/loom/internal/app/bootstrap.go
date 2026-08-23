@@ -281,20 +281,25 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		}
 	}
 
-	// Approval policy: the decider chain (rules → danger → session →
-	// mode-aware baseline). Session/user-layer rules and the remembered
-	// store are process-shared (held by the ProcessRuntime, WORKSPACE_DESIGN
-	// D4); the project layer is loaded per workspace from cfg.WorkspaceRoot.
-	policy := permission.DefaultPolicy()
-	policy.Session = proc.SessionRules
-	policy.UserIntent = resolved.Approval.TrustUserURLs
-	policy = permission.AttachRules(ctx, policy, cfg.WorkspaceRoot, resolved.Storage.RulesDir(), permission.RuleLoadOptions{
+	// Approval policy: the capability set (process-shared via
+	// ProcessRuntime, WORKSPACE_DESIGN D4) plus the per-workspace
+	// derivation environment and approval mode. The declarative layers
+	// (builtin + user + project + remembered) are (re)loaded into the
+	// shared set; the session's in-memory approvals live in the same
+	// set and survive reloads.
+	permission.AttachPackages(ctx, proc.Packages, cfg.WorkspaceRoot, resolved.Storage.RulesDir(), permission.PackageLoadOptions{
 		Enabled:      resolved.Rules.Enabled,
 		Builtin:      resolved.Rules.Builtin,
 		Project:      resolved.Rules.Project,
 		ProjectAllow: resolved.Rules.ProjectAllow,
 	}, logger)
-	decider := wirePolicy(policy, resolved.Approval.Mode)
+	policy := permission.Policy{
+		Packages:   proc.Packages,
+		Env:        permission.DeriveEnv{Roots: append([]string{validator.Root()}, process.ExtraWritableDirs()...)},
+		Mode:       resolved.Approval.Mode,
+		UserIntent: resolved.Approval.TrustUserURLs,
+	}
+	decider := wirePolicy(policy)
 
 	// Skills assembly (read_skill tool + catalog prompt option) happens
 	// once here; the option is cached on the Bootstrap so prompt rebuilds
@@ -563,23 +568,36 @@ func (b *Bootstrap) CurrentPolicy() agent.Policy {
 	return b.Policy
 }
 
-// CurrentRules returns the active declarative rule set (nil when rules
-// are disabled); safe for concurrent use with ReloadPolicy.
-func (b *Bootstrap) CurrentRules() *permission.RuleSet {
+// CurrentPermissionPolicy returns the assembled permission policy
+// (capability set + derivation environment + approval mode) for the
+// approval layer; safe for concurrent use with ReloadPolicy.
+func (b *Bootstrap) CurrentPermissionPolicy() permission.Policy {
+	b.policyMu.RLock()
+	defer b.policyMu.RUnlock()
+	if b.permissionPolicy == nil {
+		return permission.DefaultPolicy()
+	}
+	return *b.permissionPolicy
+}
+
+// CurrentPackages returns the active capability set's packages
+// (builtin + user + project + remembered + session), for the /rules
+// picker and `loom rules list`; safe for concurrent use with
+// ReloadPolicy.
+func (b *Bootstrap) CurrentPackages() []permission.Package {
 	b.policyMu.RLock()
 	defer b.policyMu.RUnlock()
 	if b.permissionPolicy == nil {
 		return nil
 	}
-	return b.permissionPolicy.Rules
+	return b.permissionPolicy.Packages.Packages()
 }
 
-// ReloadPolicy re-reads rules from files and the remembered store,
-// rebuilds the decider chain, and replaces b.Policy so subsequent
-// evaluations reflect the updated rule set. Runs already in flight keep
-// the decider they captured at construction. Rule-load switches and the
-// approval mode read from the live resolved config, so a hot-applied
-// config takes effect here too.
+// ReloadPolicy re-reads packages from files and the remembered store
+// (atomically replacing the shared set's declarative layers while
+// session approvals survive), refreshes the approval mode from the
+// live config, and rewires b.Policy so subsequent evaluations reflect
+// the update.
 func (b *Bootstrap) ReloadPolicy(ctx context.Context) error {
 	resolved := b.Resolved()
 	b.policyMu.RLock()
@@ -587,23 +605,28 @@ func (b *Bootstrap) ReloadPolicy(ctx context.Context) error {
 		b.policyMu.RUnlock()
 		return nil
 	}
-	session := b.permissionPolicy.Session
+	packages := b.permissionPolicy.Packages
+	env := b.permissionPolicy.Env
+	mode := b.approvalMode
 	b.policyMu.RUnlock()
-	policy := permission.DefaultPolicy()
-	policy.Session = session
-	policy.UserIntent = resolved.Approval.TrustUserURLs
 	// File and store I/O happens outside the lock; only the swap is
 	// serialized against readers.
-	policy = permission.AttachRules(ctx, policy, b.WorkspaceRoot, resolved.Storage.RulesDir(), permission.RuleLoadOptions{
+	permission.AttachPackages(ctx, packages, b.WorkspaceRoot, resolved.Storage.RulesDir(), permission.PackageLoadOptions{
 		Enabled:      resolved.Rules.Enabled,
 		Builtin:      resolved.Rules.Builtin,
 		Project:      resolved.Rules.Project,
 		ProjectAllow: resolved.Rules.ProjectAllow,
 	}, b.Logger)
+	policy := permission.Policy{
+		Packages:   packages,
+		Env:        env,
+		Mode:       mode,
+		UserIntent: resolved.Approval.TrustUserURLs,
+	}
 	b.policyMu.Lock()
 	defer b.policyMu.Unlock()
 	*b.permissionPolicy = policy
-	b.Policy = wirePolicy(policy, b.approvalMode)
+	b.Policy = wirePolicy(policy)
 	return nil
 }
 

@@ -22,6 +22,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
+	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
@@ -1725,8 +1726,8 @@ func TestControllerResolveApprovalRemembersBeforeWakingLoop(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("pending approval was not resolved")
 	}
-	if !controller.sessionRules.MatchDomain("example.com") {
-		t.Fatal("domain was not remembered in session rules")
+	if !hasSessionHostPackage(controller, "example.com") {
+		t.Fatal("domain was not remembered as a session package")
 	}
 
 	// The loop's re-evaluation path: a follow-up call on the remembered host
@@ -1790,7 +1791,7 @@ func TestControllerResolveApprovalMismatchedBindingDoesNotRemember(t *testing.T)
 	}); err == nil {
 		t.Fatal("mismatched binding was accepted")
 	}
-	if controller.sessionRules.MatchDomain("example.com") {
+	if hasSessionHostPackage(controller, "example.com") {
 		t.Fatal("mismatched binding wrote an allow-always memory")
 	}
 	if got := approver.PendingCount(); got != 1 {
@@ -1804,6 +1805,20 @@ func TestControllerResolveApprovalMismatchedBindingDoesNotRemember(t *testing.T)
 	if decision := <-result; decision != domain.DecisionAllow {
 		t.Fatalf("decision = %q, want allow", decision)
 	}
+}
+
+// hasSessionHostPackage reports whether the controller's capability set
+// holds a session-scope host package for the given host.
+func hasSessionHostPackage(c *Controller, host string) bool {
+	if c.packages == nil {
+		return false
+	}
+	for _, p := range c.packages.Packages() {
+		if p.Bind.Kind == permission.BindHost && p.Bind.Host == host {
+			return true
+		}
+	}
+	return false
 }
 
 // TestLastErrorFromEvents pins the resume-time rebuild of the failure

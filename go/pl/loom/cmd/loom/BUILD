@@ -46,6 +46,7 @@ go_library(
         "//go/pl/loom/internal/session:session_lib",
         "//go/pl/loom/internal/ui",
         "//go/pl/loom/internal/version",
+        "//go/pl/loom/internal/workspace:workspace_lib",
     ],
 )
 

@@ -106,9 +106,13 @@ func (f *permissionFixture) drive(t *testing.T, policy permission.Policy, mode p
 	)
 	approver := fakes.NewFakeApprover(domain.DecisionAllow)
 	run := newRun(t, "run the scripted step")
+	policy.Mode = mode
+	policy.Env = permission.DeriveEnv{
+		Roots: append([]string{f.validator.Root()}, process.ExtraWritableDirs()...),
+	}
 	loop := &agent.Loop{
 		Run: run, Model: model, ModelName: "fake", Approver: approver,
-		Policy:   policy.Decider(mode),
+		Policy:   policy,
 		Registry: f.registry, Logger: slog.Default(),
 		SystemPrompt: prompt.NewBuilder(f.ws),
 	}
@@ -131,12 +135,15 @@ func TestEscalationNeverSilentlyDowngraded(t *testing.T) {
 	f := newPermissionFixture(t)
 	outside := filepath.Join(f.home, "escalation-proof")
 
-	session := permission.NewSessionRules()
-	if _, ok := session.RememberRunCmd(permission.RunCmdCall{Argv: []string{"touch", outside}}, domain.ExecGrant{NetworkFull: true}); !ok {
-		t.Fatal("remember failed")
-	}
+	// A session package carrying only a network grant for this prefix
+	// must NOT answer a require_escalated call.
 	policy := permission.DefaultPolicy()
-	policy.Session = session
+	policy.Packages.RememberSession(permission.Package{
+		Bind:           permission.Binding{Kind: permission.BindArgv, Argv: []string{"touch", outside}},
+		Decision:       domain.DecisionAllow,
+		Grant:          permission.PackageGrant{NetworkFull: true},
+		MaxConsequence: permission.ConsequenceConfined,
+	})
 
 	run, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
 		"program":             "touch",
@@ -249,21 +256,21 @@ func TestUnlessDangerousBlacklistFlow(t *testing.T) {
 		}
 	})
 
-	// A writable-path rule answers the same call without prompting.
-	t.Run("path rule auto-allows external write", func(t *testing.T) {
+	// A writable-path package answers the same call without prompting.
+	t.Run("path package auto-allows external write", func(t *testing.T) {
 		f := newPermissionFixture(t)
 		outside := filepath.Join(f.home, "notes", "b.txt")
 		rulesDir := t.TempDir()
-		ruleJSON := `{"paths":[{"path":` + strconv.Quote(filepath.Join(f.home, "notes")) + `,"decision":"allow","justification":"notes vault"}]}`
+		ruleJSON := `{"packages":[{"bind":{"path":` + strconv.Quote(filepath.Join(f.home, "notes")) + `},"decision":"allow","justification":"notes vault"}]}`
 		if err := os.WriteFile(filepath.Join(rulesDir, "paths.json"), []byte(ruleJSON), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		set, errs := permission.LoadRuleSets(rulesDir, "", permission.LoadOptions{})
+		pkgs, errs := permission.LoadPackageSets(rulesDir, "", permission.LoadOptions{})
 		if len(errs) != 0 {
-			t.Fatalf("load rules: %v", errs)
+			t.Fatalf("load packages: %v", errs)
 		}
 		rulePolicy := permission.DefaultPolicy()
-		rulePolicy.Rules = set
+		rulePolicy.Packages.Add(pkgs...)
 
 		_, approver := f.drive(t, rulePolicy, permission.ModeUnlessDangerous, toolCall(t, "write", map[string]any{
 			"path":    outside,

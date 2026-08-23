@@ -13,57 +13,156 @@
       "terraform validate"
     ]
   },
-  "rules": [
+  "packages": [
     {
-      "argv_prefix": ["gh", "api"],
+      "bind": {
+        "argv_prefix": [
+          "gh",
+          "api"
+        ]
+      },
       "decision": "allow",
-      "grant": { "unsandboxed": true },
+      "consequence": "confined",
+      "grant": {
+        "unsandboxed": true
+      },
       "justification": "gh api: GitHub CLI 为 Go 实现，TLS 需 keychain；用户已启用 cloud-cli 规则包",
-      "match": [["gh", "api", "repos/x/y"]],
+      "match": [
+        [
+          "gh",
+          "api",
+          "repos/x/y"
+        ]
+      ],
       "not_match": [
-        ["git", "push"],
-        ["gh", "repo", "delete"]
+        [
+          "git",
+          "push"
+        ],
+        [
+          "gh",
+          "repo",
+          "delete"
+        ]
       ]
     },
     {
-      "argv_prefix": ["gcloud", "auth", "list"],
+      "bind": {
+        "argv_prefix": [
+          "gcloud",
+          "auth",
+          "list"
+        ]
+      },
       "decision": "allow",
-      "grant": { "unsandboxed": true },
+      "consequence": "confined",
+      "grant": {
+        "unsandboxed": true
+      },
       "justification": "gcloud auth list: 只读列凭证，Go 实现 TLS 需 keychain；用户已启用 cloud-cli 规则包",
-      "match": [["gcloud", "auth", "list"]],
-      "not_match": [["gcloud", "auth", "login"]]
+      "match": [
+        [
+          "gcloud",
+          "auth",
+          "list"
+        ]
+      ],
+      "not_match": [
+        [
+          "gcloud",
+          "auth",
+          "login"
+        ]
+      ]
     },
     {
-      "argv_prefix": ["terraform", "plan"],
+      "bind": {
+        "argv_prefix": [
+          "terraform",
+          "plan"
+        ]
+      },
       "decision": "allow",
-      "grant": { "unsandboxed": true },
+      "consequence": "confined",
+      "grant": {
+        "unsandboxed": true
+      },
       "justification": "terraform plan: 只读计划，Go 实现 TLS 需 keychain；用户已启用 cloud-cli 规则包",
-      "match": [["terraform", "plan"]],
+      "match": [
+        [
+          "terraform",
+          "plan"
+        ]
+      ],
       "not_match": [
-        ["terraform", "destroy"],
-        ["terraform", "apply"]
+        [
+          "terraform",
+          "destroy"
+        ],
+        [
+          "terraform",
+          "apply"
+        ]
       ]
     },
     {
-      "argv_prefix": ["terraform", "fmt"],
+      "bind": {
+        "argv_prefix": [
+          "terraform",
+          "fmt"
+        ]
+      },
       "decision": "allow",
-      "grant": { "unsandboxed": true },
+      "consequence": "confined",
+      "grant": {
+        "unsandboxed": true
+      },
       "justification": "terraform fmt: 本地格式化，Go 实现 TLS 需 keychain；用户已启用 cloud-cli 规则包",
-      "match": [["terraform", "fmt"]],
+      "match": [
+        [
+          "terraform",
+          "fmt"
+        ]
+      ],
       "not_match": [
-        ["terraform", "destroy"],
-        ["terraform", "apply"]
+        [
+          "terraform",
+          "destroy"
+        ],
+        [
+          "terraform",
+          "apply"
+        ]
       ]
     },
     {
-      "argv_prefix": ["terraform", "validate"],
+      "bind": {
+        "argv_prefix": [
+          "terraform",
+          "validate"
+        ]
+      },
       "decision": "allow",
-      "grant": { "unsandboxed": true },
+      "consequence": "confined",
+      "grant": {
+        "unsandboxed": true
+      },
       "justification": "terraform validate: 只读校验，Go 实现 TLS 需 keychain；用户已启用 cloud-cli 规则包",
-      "match": [["terraform", "validate"]],
+      "match": [
+        [
+          "terraform",
+          "validate"
+        ]
+      ],
       "not_match": [
-        ["terraform", "destroy"],
-        ["terraform", "apply"]
+        [
+          "terraform",
+          "destroy"
+        ],
+        [
+          "terraform",
+          "apply"
+        ]
       ]
     }
   ]

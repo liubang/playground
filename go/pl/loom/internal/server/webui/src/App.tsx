@@ -40,8 +40,8 @@ export function App({ controller }: { controller: AppController }) {
   // are all bound arrow functions)
   const transcriptIO = useMemo<TranscriptViewIO>(
     () => ({
-      onResolveApproval: (approvalId, decision, always) =>
-        void controller.transcript.resolveApproval(approvalId, decision, always),
+      onResolveApproval: (approvalId, decision, always, trust) =>
+        void controller.transcript.resolveApproval(approvalId, decision, always, trust),
       onAnswerQuestion: (questionId, answer) =>
         void controller.transcript.answerQuestion(questionId, answer, answer.skipped),
       onFeedback: (runId, value) => controller.transcript.sendFeedback(runId, value),

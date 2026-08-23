@@ -1035,21 +1035,24 @@ func (m Model) approvalOverlayLines() []string {
 	}
 	lines = append(lines, m.approvalPathLines(p, prefix, contentWidth)...)
 
+	// The consequence line renders what the operation DOES (the derived
+	// effect), not just its text — the user's decision basis.
+	if p.Consequence != "" {
+		lines = append(lines, prefix+m.theme.Dim.Render(truncateDisplayWidth(p.Consequence, contentWidth)))
+	}
+
 	// The argument diff is rendered on the tool block (from tool.prepared),
 	// not repeated here: the overlay stays compact enough to keep the
 	// options on screen.
 	lines = append(lines, bar)
-	alwaysRule, grant, alwaysOK := app.ApprovalRulePreview(p.ToolName, p.Arguments)
+	alwaysOK := p.RulePreview != ""
 	alwaysLabel := "Always allow (not available for this call)"
 	if alwaysOK {
-		alwaysLabel = fmt.Sprintf("Always allow `%s`", alwaysRule)
-		if summary := grant.Summary(); summary != "" {
-			alwaysLabel += fmt.Sprintf(" (%s)", summary)
-		}
+		alwaysLabel = fmt.Sprintf("Always allow `%s`", p.RulePreview)
 	}
 	labels := []string{"Allow once", alwaysLabel}
-	if app.RunCmdTrustPreview(p.ToolName, p.Arguments) {
-		labels = append(labels, fmt.Sprintf("Always TRUST `%s` — runs WITHOUT sandbox", alwaysRule))
+	if p.TrustPreview != "" {
+		labels = append(labels, fmt.Sprintf("Always TRUST `%s` — runs WITHOUT sandbox", p.TrustPreview))
 	}
 	labels = append(labels, "Deny")
 	for i, label := range labels {

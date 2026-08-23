@@ -28,7 +28,12 @@ const FOLLOW_THRESHOLD_PX = 80
 // 视图层回调集合（App 注入；分享页只传 fetchToolOutput 的子集——
 // 审批/问答/反馈不出现，传 undefined 即不渲染对应交互）
 export interface TranscriptViewIO {
-  onResolveApproval?: (approvalId: string, decision: 'allow' | 'deny', always: boolean) => void
+  onResolveApproval?: (
+    approvalId: string,
+    decision: 'allow' | 'deny',
+    always: boolean,
+    trust?: string,
+  ) => void
   onAnswerQuestion?: (
     questionId: string,
     answer: { selected: string[]; custom_text: string; skipped: boolean },
@@ -74,8 +79,8 @@ const BlockView = memo(
             payload={block.payload}
             diff={block.diff}
             resolving={block.resolving}
-            onResolve={(decision, always) =>
-              io.onResolveApproval?.(block.payload.approval_id || '', decision, always)
+            onResolve={(decision, always, trust) =>
+              io.onResolveApproval?.(block.payload.approval_id || '', decision, always, trust)
             }
           />
         )

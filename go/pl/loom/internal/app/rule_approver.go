@@ -20,40 +20,46 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"strings"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 )
 
-// RuleApprover auto-approves prepared calls that match session-persisted
-// rules before delegating to the inner approver (the UI). Rules are created
-// when the user picks "allow always" on an approval, and are categorical
-// command prefixes like ["go", "test"] — never raw full commands.
+// RuleApprover delegates to the inner approver (the UI) and records
+// "allow always" decisions as capability packages — session-scope in
+// the shared PackageSet (immediately effective for the policy), plus
+// the persistent remembered store when one is configured.
 //
-// The store lives in permission.SessionRules and is shared with the policy
-// layer (SessionDecider), so a remembered prefix normally resolves at
-// policy evaluation time and never reaches this approver; the match here
-// is a second line of defense for approvals already in flight. Only
-// run_cmd calls are rule-eligible: other tools' approvals (e.g.
-// edit/write) stay per-call because their blast radius varies by path.
+// A remembered package normally resolves at policy evaluation time and
+// never reaches this approver; the second-line evaluation in
+// RequestApproval covers approvals remembered DURING another call's
+// pending approval (the policy's shared set already contains them).
 type RuleApprover struct {
-	inner   domain.Approver
-	session *permission.SessionRules
+	inner  domain.Approver
+	policy func() permission.Policy
+	store  *permission.RememberedStore
 }
 
-// NewRuleApprover wraps inner with session rule matching. A nil inner
-// approver makes every unmatched call deny, which is useful in tests. A nil
-// session store disables remembering (rules still match when present).
-func NewRuleApprover(inner domain.Approver, session *permission.SessionRules) *RuleApprover {
-	return &RuleApprover{inner: inner, session: session}
+// NewRuleApprover wraps inner with the policy's shared capability set.
+// policy is resolved per call so hot-reloaded modes and freshly
+// remembered packages are always seen. A nil inner approver makes
+// every call deny (useful in tests).
+func NewRuleApprover(inner domain.Approver, policy func() permission.Policy, store *permission.RememberedStore) *RuleApprover {
+	return &RuleApprover{inner: inner, policy: policy, store: store}
 }
 
-// RequestApproval auto-allows rule-matching calls; everything else reaches
-// the inner approver (and thus the user) as usual.
+// RequestApproval re-evaluates the call against the (possibly freshly
+// enriched) capability set before bothering the user; everything else
+// reaches the inner approver as usual.
 func (r *RuleApprover) RequestApproval(ctx context.Context, req domain.ApprovalRequest) (domain.Decision, error) {
-	if r.matches(req.Call) {
-		return domain.DecisionAllow, nil
+	if r.policy != nil {
+		policy := r.policy()
+		if policy.Packages != nil {
+			d := deriveForApproval(req.Call, policy.Env)
+			if v := policy.Packages.Decide(d, policy.Mode, nil); v.Decision == domain.DecisionAllow {
+				return domain.DecisionAllow, nil
+			}
+		}
 	}
 	if r.inner == nil {
 		return domain.DecisionDeny, nil
@@ -61,206 +67,114 @@ func (r *RuleApprover) RequestApproval(ctx context.Context, req domain.ApprovalR
 	return r.inner.RequestApproval(ctx, req)
 }
 
-// ApprovalRuleHint carries the raw call arguments the frontend got with the
-// approval request, so a remembered decision can derive a categorical rule.
+// deriveForApproval derives the call for the approver-layer second
+// line. The call arriving from the agent loop carries its real
+// Definition (source, risk), so the single DeriveEffect entry classifies
+// it exactly as the policy path did — including MCP identity, which a
+// raw-arguments re-derivation would lose.
+func deriveForApproval(call domain.PreparedCall, env permission.DeriveEnv) permission.Derivation {
+	return permission.DeriveEffect(call, env)
+}
+
+// ApprovalRuleHint carries the raw call arguments the frontend got with
+// the approval request, so a remembered decision can derive packages.
 type ApprovalRuleHint struct {
 	ToolName  string
 	Arguments json.RawMessage
 	// Trust selects the remembered flavor: "" remembers the derived
-	// minimal-capability grant (recommended), "unsandboxed" remembers L2
-	// full trust (only meaningful for escalated calls).
+	// minimal-capability grant (recommended), "unsandboxed" remembers
+	// L2 full trust (only meaningful for escalated calls).
 	Trust string
 }
 
-// TrustUnsandboxed is the ApprovalRuleHint.Trust value for L2 rememberance.
-// Re-exported from the permission package so callers in this layer don't
-// need to import permission directly for the constant.
+// TrustUnsandboxed is the ApprovalRuleHint.Trust value for L2
+// remembrance, re-exported so this layer's callers need no permission
+// import for the constant.
 const TrustUnsandboxed = permission.TrustUnsandboxed
 
-// RememberedRule is the categorical memory created by an interactive
-// approval: argv prefixes (with grant) for run_cmd — one per subcommand
-// for a composed shell command — an exact host for web_fetch, a writable
-// directory for boundary-crossing file writes, or a bare tool name for
-// the eligible fixed-blast-radius tools
-// (permission.ToolMemoryEligible). Label is the display form;
-// Prefixes/Host/Path/Tool carry the structured form for persistence
-// (never re-split from the label).
+// RememberedRule is the display-facing summary of what an "allow
+// always" approval recorded: a human label plus the packages that were
+// written (session scope, and persisted when a store is configured).
 type RememberedRule struct {
 	Label    string
-	Prefixes [][]string
-	Host     string
-	Path     string
-	Tool     string
-	Grant    domain.ExecGrant
+	Packages []permission.Package
 }
 
-// RememberCall derives and stores the categorical memory for an approved
-// call. ok=false means the call must never be remembered (shells, eval
-// forms, destructive programs, heredocs, or unmappable URLs).
-//
-// The memory shape is derived from the typed request fields
-// (ExecRequest/URLRequest) via permission.DeriveMemoryShape — this layer
-// never switches on tool names.
+// RememberCall derives and stores the capability packages for an
+// approved call. ok=false means the call must stay per-call (dynamic
+// shells, eval forms, multi-step indicated shapes, ineligible tools).
+// The memory shape is derived from the call's DERIVATION
+// (permission.DeriveRawArgs) — this layer never switches on tool names.
 func (r *RuleApprover) RememberCall(toolName string, arguments json.RawMessage, trust string) (RememberedRule, bool) {
-	if r.session == nil {
+	if r.policy == nil {
 		return RememberedRule{}, false
 	}
-	// Build a minimal PreparedCall so DeriveMemoryShape's fallback parsing
-	// (ExecInfoOf/URLInfoOf) can resolve the request shape from raw
-	// arguments — the typed ExecRequest/URLRequest are nil here because
-	// this is the approval-UI boundary, not the Prepare path. The write
-	// contract is synthesized explicitly (an absolute path argument at the
-	// approval boundary IS a boundary write); deciders never guess it.
-	call := domain.PreparedCall{
-		Call: domain.ToolCall{
-			ID:        domain.NewToolCallID(),
-			Name:      toolName,
-			Arguments: arguments,
-		},
-		WriteRequest: permission.WriteRequestFromRawArgs(arguments),
-	}
-	shape := permission.DeriveMemoryShape(call)
-	switch shape.Kind {
-	case permission.MemoryArgv:
-		info := shape.Info
-		if info.Escalated && trust != TrustUnsandboxed {
-			// An escalation can only be remembered as explicit full trust:
-			// any lesser grant would not cover the next escalated call
-			// (permission.AllowGrantCovers), so a "minimal" memory would be
-			// dead weight that never fires.
-			return RememberedRule{}, false
-		}
-		grant := permission.DeriveRememberGrant(info, trust)
-		prefixes, remembered := r.session.RememberRunCmd(info, grant)
-		if !remembered {
-			return RememberedRule{}, false
-		}
-		labels := make([]string, 0, len(prefixes))
-		for _, prefix := range prefixes {
-			labels = append(labels, strings.Join(prefix, " "))
-		}
-		return RememberedRule{Label: strings.Join(labels, " && "), Prefixes: prefixes, Grant: grant}, true
-
-	case permission.MemoryHost:
-		host, remembered := r.session.RememberDomain(shape.Host)
-		if !remembered {
-			return RememberedRule{}, false
-		}
-		return RememberedRule{Label: host, Host: host}, true
-
-	case permission.MemoryPath:
-		dir, remembered := r.session.RememberPath(shape.Dir)
-		if !remembered {
-			return RememberedRule{}, false
-		}
-		return RememberedRule{Label: dir, Path: dir}, true
-
-	case permission.MemoryTool:
-		name, remembered := r.session.RememberTool(shape.ToolName)
-		if !remembered {
-			return RememberedRule{}, false
-		}
-		return RememberedRule{Label: name, Tool: name}, true
-
-	default:
+	policy := r.policy()
+	if policy.Packages == nil {
 		return RememberedRule{}, false
 	}
-}
-
-func (r *RuleApprover) matches(call domain.PreparedCall) bool {
-	if r.session == nil {
-		return false
+	d := permission.DeriveRawArgs(toolName, arguments, policy.Env)
+	label, pkgs, ok := permission.MemoryPreviewLabel(d, trust)
+	if !ok {
+		return RememberedRule{}, false
 	}
-	// ExecRequest: match argv prefixes with grant coverage.
-	if info, ok := permission.ExecInfoOf(call); ok {
-		var (
-			grant   domain.ExecGrant
-			matched bool
-		)
-		if info.Shell != nil {
-			if !info.Shell.Static || info.Shell.DynamicWrites {
-				return false
-			}
-			argvs, provable := info.ShellCommandArgvs()
-			if !provable {
-				return false
-			}
-			grant, matched = r.session.MatchAll(argvs)
-		} else {
-			grant, matched = r.session.Match(info.Argv)
+	for _, pkg := range pkgs {
+		policy.Packages.RememberSession(pkg)
+		if r.store != nil {
+			// Persistence is best-effort: the session package is
+			// already effective, and a store hiccup must not lose the
+			// user's approval.
+			_ = r.store.Remember(context.Background(), pkg)
 		}
-		// A remembered grant only auto-approves what it covers: a plain
-		// (zero-grant) memory must not silently approve an escalated or
-		// needs_network request — the user approved the sandboxed form.
-		return matched && permission.AllowGrantCovers(grant, info)
 	}
-	// URLRequest: match exact host (web_fetch, browser navigate).
-	if urlInfo, ok := permission.URLInfoOf(call); ok {
-		return r.session.MatchDomain(urlInfo.Host)
-	}
-	// WriteRequest outside the roots: match remembered writable dirs.
-	if writeInfo, ok := permission.WriteInfoOf(call); ok {
-		return r.session.MatchPath(writeInfo.Path)
-	}
-	// No typed request: tool-name memory.
-	return r.session.MatchTool(call.Call.Name)
+	return RememberedRule{Label: label, Packages: pkgs}, true
 }
 
-// RunCmdRuleCount reports how many run_cmd prefixes are remembered (for
-// status display and tests).
-func (r *RuleApprover) RunCmdRuleCount() int {
-	if r.session == nil {
-		return 0
-	}
-	return len(r.session.Prefixes())
-}
-
-// ApprovalRulePreview renders the categorical rule that "allow always"
-// would create for a call, plus the grant it would carry, for display in
-// the approval overlay: an argv prefix ("go test") for run_cmd, an exact
-// host ("www.weather.com.cn") for web_fetch, the bare tool name for the
-// eligible fixed-blast-radius tools. ok=false means the call cannot be
-// remembered.
-//
-// The shape is derived from the typed request fields via
-// permission.DeriveMemoryShape — this layer never switches on tool names.
-func ApprovalRulePreview(toolName string, arguments json.RawMessage) (preview string, grant domain.ExecGrant, ok bool) {
-	call := domain.PreparedCall{
-		Call: domain.ToolCall{
-			ID:        domain.NewToolCallID(),
-			Name:      toolName,
-			Arguments: arguments,
-		},
-		WriteRequest: permission.WriteRequestFromRawArgs(arguments),
-	}
-	shape := permission.DeriveMemoryShape(call)
-	// Escalated exec calls offer only "allow once" and "always trust
-	// (unsandboxed)" — a minimal-capability memory could never cover the
-	// next escalation, so the option is hidden.
-	if shape.Kind == permission.MemoryArgv && shape.Info.Escalated {
+// ApprovalRulePreview renders the packages that "allow always" would
+// record for a call, for display in the approval overlay: categorical
+// argv prefixes ("go test"), an exact host, a writable directory, or a
+// bare tool name. ok=false means the call cannot be remembered — for
+// escalated calls the minimal flavor is hidden by design (only the
+// explicit unsandboxed trust option is offered).
+func ApprovalRulePreview(toolName string, arguments json.RawMessage, env permission.DeriveEnv) (preview string, grant domain.ExecGrant, ok bool) {
+	d := permission.DeriveRawArgs(toolName, arguments, env)
+	if d.Effect.Unsandboxed {
 		return "", domain.ExecGrant{}, false
 	}
-	return shape.PreviewLabel()
+	label, pkgs, ok := permission.MemoryPreviewLabel(d, "")
+	if !ok || len(pkgs) == 0 {
+		return "", domain.ExecGrant{}, false
+	}
+	return label, pkgs[0].Grant.ExecGrant(), true
 }
 
-// RunCmdTrustPreview reports whether the approval overlay should offer the
-// "always trust (unsandboxed)" option: escalated exec calls whose prefix
-// is derivable.
-func RunCmdTrustPreview(toolName string, arguments json.RawMessage) bool {
-	call := domain.PreparedCall{
-		Call: domain.ToolCall{
-			ID:        domain.NewToolCallID(),
-			Name:      toolName,
-			Arguments: arguments,
-		},
-	}
-	shape := permission.DeriveMemoryShape(call)
-	if shape.Kind != permission.MemoryArgv {
+// RunCmdTrustPreview reports whether the approval overlay should offer
+// the "always trust (unsandboxed)" option: escalated exec calls whose
+// memory shape is derivable.
+func RunCmdTrustPreview(toolName string, arguments json.RawMessage, env permission.DeriveEnv) bool {
+	d := permission.DeriveRawArgs(toolName, arguments, env)
+	if !d.Effect.Unsandboxed {
 		return false
 	}
-	if !shape.Info.Escalated {
-		return false
-	}
-	_, ok := permission.DeriveRunCmdPrefixes(shape.Info)
+	_, ok := permission.MemoryPackages(d, TrustUnsandboxed)
 	return ok
+}
+
+// approvalConsequence renders the consequence-oriented summary of a
+// call's derived effect for the approval card: what the operation DOES
+// (plus any danger indicators), empty when the call is fully confined.
+func approvalConsequence(toolName string, arguments json.RawMessage, env permission.DeriveEnv) string {
+	d := permission.DeriveRawArgs(toolName, arguments, env)
+	e := d.Effect
+	if !e.CrossesBoundary() && e.Consequence == permission.ConsequenceConfined && len(e.Indicators) == 0 && e.Proven {
+		return ""
+	}
+	desc := e.Describe()
+	if len(e.Indicators) > 0 {
+		desc += " ⚠ " + e.Indicators[0]
+		if len(e.Indicators) > 1 {
+			desc += " 等"
+		}
+	}
+	return desc
 }

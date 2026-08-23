@@ -28,70 +28,95 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
+	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
-// listRules prints every effective rule with its layer, so users can audit
-// what the policy engine will do without running a command.
-func listRules() error {
+// loadCheckPolicy assembles the policy for the rules CLI: the full
+// capability set plus the workspace derivation environment.
+func loadCheckPolicy() (permission.Policy, error) {
 	root, err := resolveWorkspace("")
 	if err != nil {
-		return err
+		return permission.Policy{}, err
 	}
 	resolved, err := loadConfig(false, slog.Default())
 	if err != nil {
+		return permission.Policy{}, err
+	}
+	set := permission.NewPackageSet()
+	permission.AttachPackages(context.Background(), set, root, resolved.Storage.RulesDir(), resolved.Rules.LoadOptions(), slog.Default())
+	env := permission.DeriveEnv{
+		Roots: append([]string{workspacepkg.Canonicalize(root)}, process.ExtraWritableDirs()...),
+	}
+	return permission.Policy{
+		Packages: set,
+		Env:      env,
+		Mode:     resolved.Approval.Mode,
+	}, nil
+}
+
+// listRules prints every effective package with its scope, so users can
+// audit what the policy engine will do without running a command.
+func listRules() error {
+	policy, err := loadCheckPolicy()
+	if err != nil {
 		return err
 	}
-	policy := permission.AttachRules(context.Background(), permission.DefaultPolicy(), root, resolved.Storage.RulesDir(), resolved.Rules.LoadOptions(), slog.Default())
-	rules := policy.Rules.Rules()
-	domains := policy.Rules.Domains()
-	tools := policy.Rules.Tools()
-	paths := policy.Rules.Paths()
-	if len(rules) == 0 && len(domains) == 0 && len(tools) == 0 && len(paths) == 0 {
-		fmt.Println("no rules in effect (rules.enabled/rules.builtin may be disabled)")
+	pkgs := policy.Packages.Packages()
+	if len(pkgs) == 0 {
+		fmt.Println("no packages in effect (rules.enabled/rules.builtin may be disabled)")
 		return nil
 	}
-	for _, r := range rules {
-		just := ""
-		if r.Justification != "" {
-			just = " — " + r.Justification
-		}
-		grant := ""
-		if g := r.Grant.ExecGrant(); !g.IsZero() {
-			grant = " (" + g.Summary() + ")"
-		}
-		fmt.Printf("[%s] %-40s %s%s\n", r.Decision, strings.Join(r.ArgvPrefix, " ")+grant, r.Source, just)
-	}
-	for _, d := range domains {
-		just := ""
-		if d.Justification != "" {
-			just = " — " + d.Justification
-		}
-		fmt.Printf("[%s] %-40s %s%s\n", d.Decision, "host:"+d.Host, d.Source, just)
-	}
-	for _, t := range tools {
-		just := ""
-		if t.Justification != "" {
-			just = " — " + t.Justification
-		}
-		fmt.Printf("[%s] %-40s %s%s\n", t.Decision, "tool:"+t.Name, t.Source, just)
-	}
-	for _, p := range paths {
+	for _, p := range pkgs {
 		just := ""
 		if p.Justification != "" {
 			just = " — " + p.Justification
 		}
-		fmt.Printf("[%s] %-40s %s%s\n", p.Decision, "path:"+p.Path, p.Source, just)
+		grant := ""
+		if g := p.Grant.ExecGrant(); !g.IsZero() {
+			grant = " (" + g.Summary() + ")"
+		}
+		ceiling := ""
+		if p.Decision == domain.DecisionAllow && p.MaxConsequence != permission.ConsequenceConfined {
+			ceiling = " ≤" + p.MaxConsequence.String()
+		}
+		fmt.Printf("[%s] %-44s %s%s%s\n", p.Decision, bindingText(p.Bind)+grant+ceiling, p.Scope, sourceSuffix(p.Source), just)
 	}
 	return nil
 }
 
-// checkRules is the dry-run inspector for the declarative rule engine: it
-// evaluates an argv exactly like the run_cmd policy path and prints the
-// verdict with the matching rule (if any), mirroring `codex execpolicy
-// check`. Usage:
+// bindingText renders a binding for the list output.
+func bindingText(b permission.Binding) string {
+	switch b.Kind {
+	case permission.BindArgv:
+		return strings.Join(b.Argv, " ")
+	case permission.BindArgvExact:
+		return "exact:" + strings.Join(b.Argv, " ")
+	case permission.BindHost:
+		return "host:" + b.Host
+	case permission.BindPath:
+		return "path:" + b.Path
+	case permission.BindTool:
+		return "tool:" + b.Tool
+	}
+	return ""
+}
+
+// sourceSuffix renders the package source when it adds information
+// beyond the scope (file paths, the remembered store).
+func sourceSuffix(source string) string {
+	if source == "" || source == "builtin" {
+		return ""
+	}
+	return " <" + source + ">"
+}
+
+// checkRules is the dry-run inspector: it derives the effect of an
+// invocation exactly like the policy path and prints the verdict,
+// mirroring `codex execpolicy check`. Usage:
 //
 //	loom rules check [--escalated] [--needs-network] <program> [args...]
-//	loom rules check --url https://example.com/x   (web_fetch evaluation)
+//	loom rules check --url https://example.com/x   (URL evaluation)
+//	loom rules check --path /abs/path              (write evaluation)
 func checkRules(argv []string) error {
 	var (
 		escalated    bool
@@ -122,42 +147,45 @@ func checkRules(argv []string) error {
 			args = append(args, argv[i])
 		}
 	}
-	root, err := resolveWorkspace("")
+	policy, err := loadCheckPolicy()
 	if err != nil {
 		return err
 	}
-	resolved, err := loadConfig(false, slog.Default())
-	if err != nil {
-		return err
+	var call domain.PreparedCall
+	switch {
+	case fetchURL != "":
+		argsJSON, _ := json.Marshal(map[string]string{"url": fetchURL})
+		call = domain.PreparedCall{
+			Call: domain.ToolCall{Name: "web_fetch", Arguments: argsJSON},
+			Risk: domain.R3,
+		}
+	case writePath != "":
+		argsJSON, _ := json.Marshal(map[string]string{"path": writePath})
+		call = domain.PreparedCall{
+			Call:         domain.ToolCall{Name: "write", Arguments: argsJSON},
+			Risk:         domain.R2,
+			WriteRequest: &domain.WriteRequest{Path: writePath, OutsideRoots: true},
+		}
+	default:
+		if len(args) == 0 {
+			return errors.New("usage: loom rules check [--escalated] [--needs-network] [--url URL] [--path PATH] <program> [args...]")
+		}
+		risk := domain.R2
+		if escalated {
+			risk = domain.R3
+		}
+		call = domain.PreparedCall{
+			Call: domain.ToolCall{Name: "run_cmd"},
+			Risk: risk,
+			ExecRequest: &domain.ExecRequest{
+				Argv:         args,
+				Escalated:    escalated,
+				NeedsNetwork: needsNetwork,
+			},
+		}
 	}
-	policy := permission.AttachRules(context.Background(), permission.DefaultPolicy(), root, resolved.Storage.RulesDir(), resolved.Rules.LoadOptions(), slog.Default())
-	if fetchURL != "" {
-		return checkFetchURL(policy, resolved.Approval.Mode, fetchURL)
-	}
-	if writePath != "" {
-		return checkWritePath(policy, resolved.Approval.Mode, writePath)
-	}
-	if len(args) == 0 {
-		return errors.New("usage: loom rules check [--escalated] [--needs-network] [--url URL] [--path PATH] <program> [args...]")
-	}
-	argv = args
-	callArgs := map[string]any{"program": argv[0], "args": argv[1:]}
-	risk := domain.R2
-	if escalated {
-		callArgs["sandbox_permissions"] = "require_escalated"
-		callArgs["justification"] = "dry run"
-		risk = domain.R3
-	}
-	if needsNetwork {
-		callArgs["needs_network"] = true
-	}
-	argsJSON, _ := json.Marshal(callArgs)
-	call := domain.PreparedCall{
-		Call: domain.ToolCall{Name: "run_cmd", Arguments: argsJSON},
-		Risk: risk,
-	}
-	decider := policy.Decider(resolved.Approval.Mode)
-	verdict := decider.Evaluate(call)
+	verdict := policy.Evaluate(call)
+	d := policy.DeriveCall(call)
 	fmt.Printf("decision: %s (source: %s)\n", verdict.Decision, verdict.Source)
 	if !verdict.Grant.IsZero() {
 		fmt.Printf("grant: %s\n", verdict.Grant.Summary())
@@ -165,84 +193,54 @@ func checkRules(argv []string) error {
 	if verdict.Reason != "" {
 		fmt.Printf("reason: %s\n", verdict.Reason)
 	}
-	if process.IsShellProgram(argv[0]) {
-		fmt.Println("note: shell scripts are evaluated per subcommand via AST analysis (pipes/redirects included)")
-	}
-	if ruleArgv, ok := permission.RunCmdArgv(argsJSON); ok {
-		rule := permission.MatchRule(policy.Rules, ruleArgv)
-		via := ""
-		if rule.Source == "" {
-			if norm, ok := permission.NormalizeTrustedPath(ruleArgv); ok {
-				rule = permission.MatchRule(policy.Rules, norm)
-				via = " (via trusted basename " + norm[0] + ")"
-			}
-		}
-		if rule.Source != "" {
-			source := rule.Source
-			if source == "builtin" {
-				source = "builtin (embedded read-only set)"
-			}
-			fmt.Printf("matched rule: %v -> %s (%s)%s\n", rule.ArgvPrefix, rule.Decision, source, via)
-			if rule.Justification != "" {
-				fmt.Printf("justification: %s\n", rule.Justification)
-			}
+	printEffect(d)
+	if pkg, ok := policy.Packages.ExplainMatch(d); ok {
+		fmt.Printf("matched package: %s -> %s (%s, %s)\n", bindingText(pkg.Bind), pkg.Decision, pkg.Scope, pkg.Source)
+		if pkg.Justification != "" {
+			fmt.Printf("justification: %s\n", pkg.Justification)
 		}
 	}
 	return nil
 }
 
-// checkFetchURL evaluates a web_fetch call against the domain rules and
-// prints the verdict — the web_fetch counterpart of checkRules.
-func checkFetchURL(policy permission.Policy, mode permission.ApprovalMode, rawURL string) error {
-	argsJSON, _ := json.Marshal(map[string]string{"url": rawURL})
-	call := domain.PreparedCall{
-		Call: domain.ToolCall{Name: "web_fetch", Arguments: argsJSON},
-		Risk: domain.R3,
+// printEffect renders the derived effect for `loom rules check`.
+func printEffect(d permission.Derivation) {
+	e := d.Effect
+	fmt.Printf("effect: consequence=%s proven=%v", e.Consequence, e.Proven)
+	if !e.Proven && e.Reason != "" {
+		fmt.Printf(" (%s)", e.Reason)
 	}
-	verdict := policy.Decider(mode).Evaluate(call)
-	fmt.Printf("decision: %s (source: %s)\n", verdict.Decision, verdict.Source)
-	if verdict.Reason != "" {
-		fmt.Printf("reason: %s\n", verdict.Reason)
-	}
-	if host, ok := permission.ParseWebFetchHost(argsJSON); ok {
-		if _, rule := policy.Rules.EvaluateDomain(host); rule.Source != "" {
-			fmt.Printf("matched rule: host:%s -> %s (%s)\n", rule.Host, rule.Decision, rule.Source)
-			if rule.Justification != "" {
-				fmt.Printf("justification: %s\n", rule.Justification)
-			}
+	fmt.Println()
+	if !e.Network.IsZero() {
+		if e.Network.Any {
+			fmt.Println("  network: any (underivable)")
+		} else {
+			fmt.Println("  network: " + strings.Join(e.Network.Hosts, ", "))
 		}
 	}
-	return nil
-}
-
-// checkWritePath evaluates a boundary-crossing file write against the
-// writable-path rules and prints the verdict — the write counterpart of
-// checkFetchURL.
-func checkWritePath(policy permission.Policy, mode permission.ApprovalMode, path string) error {
-	argsJSON, _ := json.Marshal(map[string]string{"path": path})
-	call := domain.PreparedCall{
-		Call: domain.ToolCall{Name: "write", Arguments: argsJSON},
-		Risk: domain.R2,
-	}
-	verdict := policy.Decider(mode).Evaluate(call)
-	fmt.Printf("decision: %s (source: %s)\n", verdict.Decision, verdict.Source)
-	if verdict.Reason != "" {
-		fmt.Printf("reason: %s\n", verdict.Reason)
-	}
-	if _, rule := policy.Rules.EvaluatePath(path); rule.Source != "" {
-		fmt.Printf("matched rule: path:%s -> %s (%s)\n", rule.Path, rule.Decision, rule.Source)
-		if rule.Justification != "" {
-			fmt.Printf("justification: %s\n", rule.Justification)
+	if !e.Writes.IsZero() {
+		if e.Writes.Any {
+			fmt.Println("  writes: any (underivable)")
+		} else {
+			fmt.Println("  writes: " + strings.Join(e.Writes.Paths, ", "))
 		}
 	}
-	return nil
+	if e.Unsandboxed {
+		fmt.Println("  unsandboxed: true")
+	}
+	if e.GUIOpen {
+		fmt.Println("  gui_open: true")
+	}
+	for _, ind := range e.Indicators {
+		fmt.Println("  indicator: " + ind)
+	}
 }
 
 // forgetRules removes a remembered approval from the SQLite store.
-// Usage: loom rules forget [--domain host | --tool name | --path dir] <program> [args...]
+// Usage: loom rules forget [--host h | --tool name | --path dir | --exact] <program> [args...]
 func forgetRules(argv []string) error {
 	if len(argv) == 0 {
-		return errors.New("usage: loom rules forget [--domain host | --tool name | --path dir] <program> [args...]")
+		return errors.New("usage: loom rules forget [--host h | --tool name | --path dir | --exact] <program> [args...]")
 	}
 	resolved, err := loadConfig(false, slog.Default())
 	if err != nil {
@@ -253,79 +251,55 @@ func forgetRules(argv []string) error {
 		return fmt.Errorf("open remembered store: %w", err)
 	}
 	defer store.Close()
-	if argv[0] == "--domain" || argv[0] == "--tool" || argv[0] == "--path" {
-		if len(argv) < 2 || strings.HasPrefix(argv[1], "--") {
-			return fmt.Errorf("%s requires a value\nusage: loom rules forget [--domain host | --tool name | --path dir] <program> [args...]", argv[0])
+	var bind permission.Binding
+	switch argv[0] {
+	case "--host", "--domain":
+		if len(argv) < 2 {
+			return errors.New("--host requires a value")
 		}
-		if argv[0] == "--domain" {
-			host := argv[1]
-			ok, err := store.ForgetDomain(context.Background(), host)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				fmt.Printf("no remembered domain for %q\n", host)
-			} else {
-				fmt.Printf("forgot domain %q\n", host)
-			}
-			return nil
+		bind = permission.Binding{Kind: permission.BindHost, Host: argv[1]}
+	case "--tool":
+		if len(argv) < 2 {
+			return errors.New("--tool requires a value")
 		}
-		if argv[0] == "--path" {
-			dir := argv[1]
-			ok, err := store.ForgetPath(context.Background(), dir)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				fmt.Printf("no remembered path rule for %q\n", dir)
-			} else {
-				fmt.Printf("forgot path rule %q\n", dir)
-			}
-			return nil
+		bind = permission.Binding{Kind: permission.BindTool, Tool: argv[1]}
+	case "--path":
+		if len(argv) < 2 {
+			return errors.New("--path requires a value")
 		}
-		name := argv[1]
-		ok, err := store.ForgetTool(context.Background(), name)
-		if err != nil {
-			return err
+		bind = permission.Binding{Kind: permission.BindPath, Path: argv[1]}
+	case "--exact":
+		if len(argv) < 2 {
+			return errors.New("--exact requires an argv")
 		}
-		if !ok {
-			fmt.Printf("no remembered tool rule for %q\n", name)
-		} else {
-			fmt.Printf("forgot tool rule %q\n", name)
-		}
-		return nil
+		bind = permission.Binding{Kind: permission.BindArgvExact, Argv: argv[1:]}
+	default:
+		bind = permission.Binding{Kind: permission.BindArgv, Argv: argv}
 	}
-	// argv prefix rule
-	ok, err := store.ForgetRule(context.Background(), argv)
+	ok, err := store.Forget(context.Background(), bind)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		fmt.Printf("no remembered rule for %v\n", argv)
+		fmt.Printf("no remembered package for %s\n", bindingText(bind))
 	} else {
-		fmt.Printf("forgot rule %v\n", argv)
+		fmt.Printf("forgot %s\n", bindingText(bind))
 	}
 	return nil
 }
 
-// importRules imports a declarative rule file (the user-layer JSON schema)
-// into the remembered store. Existing store entries win; the file itself is
-// left untouched (rename it aside manually to complete a migration).
-// Usage: loom rules import <file.json>
-func importRules(path string) error {
+// migrateRules performs the one-time v2→v3 migration of the user rules
+// directory (rule files, remembered.db, legacy remembered.json).
+// Usage: loom rules migrate
+func migrateRules() error {
 	resolved, err := loadConfig(false, slog.Default())
 	if err != nil {
 		return err
 	}
-	ctx := context.Background()
-	store, err := permission.OpenRememberedStore(ctx, permission.RememberedDBPath(resolved.Storage.RulesDir()))
+	report, err := permission.MigrateUserRules(context.Background(), resolved.Storage.RulesDir())
 	if err != nil {
-		return fmt.Errorf("open remembered store: %w", err)
+		return err
 	}
-	defer store.Close()
-	if err := store.ImportRuleFile(ctx, path); err != nil {
-		return fmt.Errorf("import %s: %w", path, err)
-	}
-	fmt.Printf("imported allow rules from %s into %s (existing entries kept)\n", path, store.Path())
+	fmt.Println("migration complete:", report)
 	return nil
 }

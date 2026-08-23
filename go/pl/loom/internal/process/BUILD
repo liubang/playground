@@ -34,6 +34,7 @@ go_library(
         "sandbox_linux.go",
         "session.go",
         "shell_analyze.go",
+        "shell_forms.go",
         "shellprobe.go",
         "types.go",
     ],

@@ -20,111 +20,297 @@
       "go list"
     ]
   },
-  "rules": [
+  "packages": [
     {
-      "argv_prefix": ["go", "mod", "download"],
+      "bind": {
+        "argv_prefix": [
+          "go",
+          "mod",
+          "download"
+        ]
+      },
       "decision": "allow",
-      "grant": { "unsandboxed": true },
+      "consequence": "confined",
+      "grant": {
+        "unsandboxed": true
+      },
       "justification": "go mod download: TLS 需 keychain（Security framework），沙箱内必然失败；用户已启用 go-toolchain 规则包",
-      "match": [["go", "mod", "download", "github.com/x/y"]],
+      "match": [
+        [
+          "go",
+          "mod",
+          "download",
+          "github.com/x/y"
+        ]
+      ],
       "not_match": [
-        ["go", "run", "."],
-        ["go", "install", "x"]
+        [
+          "go",
+          "run",
+          "."
+        ],
+        [
+          "go",
+          "install",
+          "x"
+        ]
       ]
     },
     {
-      "argv_prefix": ["go", "mod", "tidy"],
+      "bind": {
+        "argv_prefix": [
+          "go",
+          "mod",
+          "tidy"
+        ]
+      },
       "decision": "allow",
-      "grant": { "unsandboxed": true },
+      "consequence": "confined",
+      "grant": {
+        "unsandboxed": true
+      },
       "justification": "go mod tidy: 依赖下载同 go mod download；用户已启用 go-toolchain 规则包",
-      "match": [["go", "mod", "tidy"]],
+      "match": [
+        [
+          "go",
+          "mod",
+          "tidy"
+        ]
+      ],
       "not_match": [
-        ["go", "run", "."],
-        ["go", "install", "x"]
+        [
+          "go",
+          "run",
+          "."
+        ],
+        [
+          "go",
+          "install",
+          "x"
+        ]
       ]
     },
     {
-      "argv_prefix": ["go", "mod", "vendor"],
+      "bind": {
+        "argv_prefix": [
+          "go",
+          "mod",
+          "vendor"
+        ]
+      },
       "decision": "allow",
-      "grant": { "unsandboxed": true },
+      "consequence": "confined",
+      "grant": {
+        "unsandboxed": true
+      },
       "justification": "go mod vendor: 依赖下载同 go mod download；用户已启用 go-toolchain 规则包",
-      "match": [["go", "mod", "vendor"]],
+      "match": [
+        [
+          "go",
+          "mod",
+          "vendor"
+        ]
+      ],
       "not_match": [
-        ["go", "run", "."],
-        ["go", "install", "x"]
+        [
+          "go",
+          "run",
+          "."
+        ],
+        [
+          "go",
+          "install",
+          "x"
+        ]
       ]
     },
     {
-      "argv_prefix": ["go", "build"],
+      "bind": {
+        "argv_prefix": [
+          "go",
+          "build"
+        ]
+      },
       "decision": "allow",
-      "grant": { "unsandboxed": true },
+      "consequence": "confined",
+      "grant": {
+        "unsandboxed": true
+      },
       "justification": "go build: 编译需要 GOCACHE/GOMODCACHE 写权限与 TLS，沙箱内必然失败；用户已启用 go-toolchain 规则包",
-      "match": [["go", "build", "./..."]],
-      "not_match": []
+      "match": [
+        [
+          "go",
+          "build",
+          "./..."
+        ]
+      ]
     },
     {
-      "argv_prefix": ["go", "test"],
+      "bind": {
+        "argv_prefix": [
+          "go",
+          "test"
+        ]
+      },
       "decision": "allow",
-      "grant": { "unsandboxed": true },
+      "consequence": "confined",
+      "grant": {
+        "unsandboxed": true
+      },
       "justification": "go test: 编译并运行测试代码，需缓存与 TLS；用户已启用 go-toolchain 规则包（注意：测试代码获得完整用户权限）",
-      "match": [["go", "test", "./..."]],
-      "not_match": []
+      "match": [
+        [
+          "go",
+          "test",
+          "./..."
+        ]
+      ]
     },
     {
-      "argv_prefix": ["go", "vet"],
+      "bind": {
+        "argv_prefix": [
+          "go",
+          "vet"
+        ]
+      },
       "decision": "allow",
-      "grant": { "unsandboxed": true },
+      "consequence": "confined",
+      "grant": {
+        "unsandboxed": true
+      },
       "justification": "go vet: 静态检查需编译缓存；用户已启用 go-toolchain 规则包",
-      "match": [["go", "vet", "./..."]],
-      "not_match": []
+      "match": [
+        [
+          "go",
+          "vet",
+          "./..."
+        ]
+      ]
     },
     {
-      "argv_prefix": ["go", "run"],
+      "bind": {
+        "argv_prefix": [
+          "go",
+          "run"
+        ]
+      },
       "decision": "allow",
-      "grant": { "unsandboxed": true },
+      "consequence": "confined",
+      "grant": {
+        "unsandboxed": true
+      },
       "justification": "go run: 编译并执行命令（沙箱内无法完成）；用户已启用 go-toolchain 规则包（注意：被运行的程序获得完整用户权限）",
-      "match": [["go", "run", "./cmd/x"]],
-      "not_match": []
+      "match": [
+        [
+          "go",
+          "run",
+          "./cmd/x"
+        ]
+      ]
     },
     {
-      "argv_prefix": ["go", "install"],
+      "bind": {
+        "argv_prefix": [
+          "go",
+          "install"
+        ]
+      },
       "decision": "allow",
-      "grant": { "unsandboxed": true },
+      "consequence": "confined",
+      "grant": {
+        "unsandboxed": true
+      },
       "justification": "go install: 下载并安装工具；用户已启用 go-toolchain 规则包",
-      "match": [["go", "install", "golang.org/x/tools/..."]],
-      "not_match": []
+      "match": [
+        [
+          "go",
+          "install",
+          "golang.org/x/tools/..."
+        ]
+      ]
     },
     {
-      "argv_prefix": ["go", "fmt"],
+      "bind": {
+        "argv_prefix": [
+          "go",
+          "fmt"
+        ]
+      },
       "decision": "allow",
-      "grant": { "unsandboxed": true },
+      "consequence": "confined",
+      "grant": {
+        "unsandboxed": true
+      },
       "justification": "go fmt: 格式化需要写源码文件与 GOCACHE；用户已启用 go-toolchain 规则包",
-      "match": [["go", "fmt", "./..."]],
-      "not_match": []
+      "match": [
+        [
+          "go",
+          "fmt",
+          "./..."
+        ]
+      ]
     },
     {
-      "argv_prefix": ["gofmt"],
+      "bind": {
+        "argv_prefix": [
+          "gofmt"
+        ]
+      },
       "decision": "allow",
-      "grant": { "unsandboxed": true },
+      "consequence": "confined",
+      "grant": {
+        "unsandboxed": true
+      },
       "justification": "gofmt: 格式化（沙箱内无法定位 GOCACHE 相关缓存）；用户已启用 go-toolchain 规则包",
-      "match": [["gofmt", "-l", "main.go"]],
-      "not_match": []
+      "match": [
+        [
+          "gofmt",
+          "-l",
+          "main.go"
+        ]
+      ]
     },
     {
-      "argv_prefix": ["go", "env"],
+      "bind": {
+        "argv_prefix": [
+          "go",
+          "env"
+        ]
+      },
       "decision": "allow",
-      "grant": { "unsandboxed": true },
+      "consequence": "confined",
+      "grant": {
+        "unsandboxed": true
+      },
       "justification": "go env: 只读查询 Go 环境；用户已启用 go-toolchain 规则包",
-      "match": [["go", "env", "GOROOT"]],
-      "not_match": []
+      "match": [
+        [
+          "go",
+          "env",
+          "GOROOT"
+        ]
+      ]
     },
     {
-      "argv_prefix": ["go", "list"],
+      "bind": {
+        "argv_prefix": [
+          "go",
+          "list"
+        ]
+      },
       "decision": "allow",
-      "grant": { "unsandboxed": true },
+      "consequence": "confined",
+      "grant": {
+        "unsandboxed": true
+      },
       "justification": "go list: 查询包信息，需模块解析与缓存；用户已启用 go-toolchain 规则包",
-      "match": [["go", "list", "./..."]],
-      "not_match": []
+      "match": [
+        [
+          "go",
+          "list",
+          "./..."
+        ]
+      ]
     }
   ]
 }

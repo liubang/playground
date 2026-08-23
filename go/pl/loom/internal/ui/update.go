@@ -201,12 +201,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.rulesFinder != nil {
 			// The picker is open (initial load or post-delete refresh):
 			// reload items in place so deletions become visible.
-			m.rulesFinder.Load(rulesFinderItems(msg.rules), msg.err)
+			m.rulesFinder.Load(rulesFinderItems(msg.packages), msg.err)
 		} else if msg.err != nil {
 			m.setStatus(fmt.Sprintf("Load rules: %v", msg.err), true)
 			m.mode = ModeChat
 		} else {
-			m.rulesFinder = m.NewRulesFinder(msg.rules)
+			m.rulesFinder = m.NewRulesFinder(msg.packages)
 		}
 		next = m
 	case ruleForgottenMsg:
@@ -2119,20 +2119,19 @@ func (m Model) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // approvalAlwaysAvailable reports whether "always allow" can persist a
 // rule for the pending call. It mirrors the overlay's disabled option:
-// shell, heredoc, and non-run_cmd calls are per-call decisions only.
+// the projection computes the preview once (RulePreview on the card).
 func (m Model) approvalAlwaysAvailable() bool {
 	if m.pendingApproval == nil {
 		return false
 	}
-	_, _, ok := app.ApprovalRulePreview(m.pendingApproval.ToolName, m.pendingApproval.Arguments)
-	return ok
+	return m.pendingApproval.RulePreview != ""
 }
 
 // approvalOptionCount reports how many rows the approval overlay offers:
 // escalated run_cmd calls get a fourth "always trust (unsandboxed)" row
 // between "always allow" and "deny".
 func (m Model) approvalOptionCount() int {
-	if m.pendingApproval != nil && app.RunCmdTrustPreview(m.pendingApproval.ToolName, m.pendingApproval.Arguments) {
+	if m.pendingApproval != nil && m.pendingApproval.TrustPreview != "" {
 		return 4
 	}
 	return 3

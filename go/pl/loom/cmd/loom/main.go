@@ -133,10 +133,10 @@ func run(ctx context.Context, args []string) error {
 		if len(args) >= 2 && args[1] == "forget" {
 			return forgetRules(args[2:])
 		}
-		if len(args) == 3 && args[1] == "import" {
-			return importRules(args[2])
+		if len(args) == 2 && args[1] == "migrate" {
+			return migrateRules()
 		}
-		return errors.New("usage: loom rules <list|check <program> [args...]|forget [--domain host] <program> [args...]|import <file.json>>")
+		return errors.New("usage: loom rules <list|check <program> [args...]|forget [--host h|--tool t|--path p|--exact] <program> [args...]|migrate>")
 	case "serve":
 		return runServe(ctx, args[1:])
 	case "config":

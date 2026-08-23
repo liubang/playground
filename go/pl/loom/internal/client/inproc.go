@@ -288,18 +288,18 @@ func (c *inprocClient) ToolchainEnvironment(ctx context.Context) (*ToolchainRepo
 	return h.Controller.ToolchainEnvironment(ctx)
 }
 
-func (c *inprocClient) ListRules(ctx context.Context) (*permission.RuleSet, error) {
+func (c *inprocClient) ListPackages(ctx context.Context) ([]permission.Package, error) {
 	h, err := c.bound()
 	if err != nil {
 		return nil, err
 	}
-	return h.Controller.ListRules(ctx)
+	return h.Controller.ListPackages(ctx)
 }
 
-func (c *inprocClient) ForgetRule(ctx context.Context, kind permission.RuleKind, prefix []string, host, tool string) error {
+func (c *inprocClient) ForgetPackage(ctx context.Context, bind permission.Binding) error {
 	h, err := c.bound()
 	if err != nil {
 		return err
 	}
-	return h.Controller.ForgetRule(ctx, kind, prefix, host, tool)
+	return h.Controller.ForgetPackage(ctx, bind)
 }

@@ -41,6 +41,12 @@ func TestUnwrapSimpleShell(t *testing.T) {
 		// Escapes stay raw in the resolved word — classification-only,
 		// execution still goes through the shell.
 		{"escape", []string{"sh", "-c", `echo a\ b`}, []string{"echo", `a\ b`}},
+		// The -c flag inside combined short options, an attached script
+		// word, and trailing arg0/args are all valid -c forms.
+		{"combined lc flags", []string{"bash", "-lc", "ls"}, []string{"ls"}},
+		{"separate l flag", []string{"sh", "-l", "-c", "ls"}, []string{"ls"}},
+		{"trailing arg0", []string{"sh", "-c", "ls", "extra"}, []string{"ls"}},
+		{"attached script word", []string{"sh", "-cls"}, []string{"ls"}},
 	}
 	for _, tt := range unwrap {
 		t.Run(tt.name, func(t *testing.T) {
@@ -70,8 +76,7 @@ func TestUnwrapSimpleShell(t *testing.T) {
 		{"newline", []string{"sh", "-c", "ls\npwd"}},
 		{"env assignment prefix", []string{"sh", "-c", "FOO=bar make build"}},
 		{"unterminated quote", []string{"sh", "-c", `echo "a`}},
-		{"extra argv after script", []string{"sh", "-c", "ls", "extra"}},
-		{"not -c form", []string{"sh", "-l", "-c", "ls"}},
+		{"script file form", []string{"sh", "deploy.sh"}},
 		{"not a shell", []string{"python3", "-c", "print(1)"}},
 		{"empty script", []string{"sh", "-c", "   "}},
 	}

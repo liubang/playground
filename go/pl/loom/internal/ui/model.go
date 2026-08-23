@@ -453,14 +453,14 @@ func (m Model) requestSessions() tea.Cmd {
 
 func (m Model) requestRules() tea.Cmd {
 	return func() tea.Msg {
-		rules, err := m.controller.ListRules(context.Background())
-		return rulesLoadedMsg{rules: rules, err: err}
+		packages, err := m.controller.ListPackages(context.Background())
+		return rulesLoadedMsg{packages: packages, err: err}
 	}
 }
 
 func (m Model) forgetRuleCmd(entry RuleEntry) tea.Cmd {
 	return func() tea.Msg {
-		err := m.controller.ForgetRule(context.Background(), entry.Kind, entry.Prefix, entry.Host, entry.Tool)
+		err := m.controller.ForgetPackage(context.Background(), entry.Bind)
 		return ruleForgottenMsg{entry: entry, err: err}
 	}
 }
@@ -488,8 +488,8 @@ type sessionsLoadedMsg struct {
 }
 
 type rulesLoadedMsg struct {
-	rules *permission.RuleSet
-	err   error
+	packages []permission.Package
+	err      error
 }
 
 type ruleForgottenMsg struct {

@@ -88,6 +88,8 @@ export interface ApprovalRequestedPayload {
   description?: string
   risk?: number | string
   rule_preview?: string
+  trust_preview?: string
+  consequence?: string
 }
 
 export interface ApprovalResolvedPayload {

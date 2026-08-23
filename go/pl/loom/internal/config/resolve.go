@@ -1353,8 +1353,8 @@ func resolveRunaway(in Runaway) (domain.RunawayConfig, error) {
 
 // LoadOptions maps the resolved rules section onto the permission layer's
 // load switches (shared by the TUI bootstrap and the headless entry).
-func (r ResolvedRules) LoadOptions() permission.RuleLoadOptions {
-	return permission.RuleLoadOptions{
+func (r ResolvedRules) LoadOptions() permission.PackageLoadOptions {
+	return permission.PackageLoadOptions{
 		Enabled:      r.Enabled,
 		Builtin:      r.Builtin,
 		Project:      r.Project,

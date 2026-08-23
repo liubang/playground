@@ -18,11 +18,12 @@ export const ApprovalCard = memo(function ApprovalCard({
   payload: ApprovalRequestedPayload
   diff?: string
   resolving?: boolean
-  onResolve: (decision: 'allow' | 'deny', always: boolean) => void
+  onResolve: (decision: 'allow' | 'deny', always: boolean, trust?: string) => void
 }) {
   // rule_preview 为空表示该调用不可记忆（后端 ApprovalRulePreview），
   // 此时隐藏 Allow always，避免提供一个静默无效的选项。
   const preview = payload.rule_preview || ''
+  const trustPreview = payload.trust_preview || ''
   return (
     <div className="block card-approval">
       <div className="card-title">
@@ -33,6 +34,8 @@ export const ApprovalCard = memo(function ApprovalCard({
         <span className="mono">{payload.tool_name || ''}</span>
       </div>
       {payload.description && <div className="desc">{payload.description}</div>}
+      {/* 后果行：这个操作「会做什么」（推导出的效果），而非命令文本本身 */}
+      {payload.consequence && <div className="consequence">{payload.consequence}</div>}
       {/* cmd 仅在 target 与 description 不同时展示，避免同一段话渲染两遍 */}
       {payload.target && payload.target !== payload.description && (
         <div className="cmd">
@@ -59,6 +62,16 @@ export const ApprovalCard = memo(function ApprovalCard({
             Allow always
           </button>
         )}
+        {trustPreview && (
+          <button
+            type="button"
+            className="btn btn-danger"
+            disabled={resolving}
+            onClick={() => onResolve('allow', true, 'unsandboxed')}
+          >
+            Trust (no sandbox)
+          </button>
+        )}
         <button
           type="button"
           className="btn btn-danger"
@@ -69,6 +82,9 @@ export const ApprovalCard = memo(function ApprovalCard({
         </button>
         {preview && (
           <span className="memo">{`allow always remembers "${preview}" for the workspace`}</span>
+        )}
+        {trustPreview && (
+          <span className="memo">{`trust remembers "${trustPreview}" with FULL user privileges`}</span>
         )}
       </div>
     </div>

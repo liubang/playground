@@ -49,12 +49,12 @@ import (
 var packsFS embed.FS
 
 // packFile is the on-disk template format: metadata plus the standard
-// rule file sections. Only the rule sections are written to the user
-// rules directory on install; the metadata is display-only.
+// package file section (schema v3). Only the packages section is
+// written to the user rules directory on install; the metadata is
+// display-only.
 type packFile struct {
-	Pack    PackMeta     `json:"pack"`
-	Rules   []Rule       `json:"rules"`
-	Domains []DomainRule `json:"domains,omitempty"`
+	Pack     PackMeta      `json:"pack"`
+	Packages []packageJSON `json:"packages"`
 }
 
 // PackMeta describes one rule pack for the settings UI.
@@ -133,22 +133,21 @@ func LoadPacks() ([]PackInfo, error) {
 		if f.Pack.ID == "" {
 			return nil, fmt.Errorf("embedded pack %s: missing pack.id", name)
 		}
-		// Validate the rule sections exactly as a user rule file would be,
-		// so a pack can never install rules that fail loading.
-		for i := range f.Rules {
-			f.Rules[i].Source = builtinSource
-			if err := validateRule(&f.Rules[i]); err != nil {
+		// Validate the packages exactly as a user package file would be,
+		// so a pack can never install packages that fail loading. Packs
+		// exist to widen capabilities, so every entry must be an allow
+		// package, and argv entries must carry a grant — anything else
+		// is a template bug.
+		for i := range f.Packages {
+			p, err := f.Packages[i].materialize(builtinSource)
+			if err != nil {
 				return nil, fmt.Errorf("embedded pack %s: %w", name, err)
 			}
-			// Packs exist to widen capabilities; only allow-with-grant
-			// rules make sense. Anything else is a template bug.
-			if f.Rules[i].Decision != string(domain.DecisionAllow) || f.Rules[i].Grant == nil {
-				return nil, fmt.Errorf("embedded pack %s: rule %v must be allow with a grant", name, f.Rules[i].ArgvPrefix)
+			if p.Decision != domain.DecisionAllow {
+				return nil, fmt.Errorf("embedded pack %s: package %v must be allow", name, p.Bind)
 			}
-		}
-		for i := range f.Domains {
-			if err := validateDomainRule(&f.Domains[i]); err != nil {
-				return nil, fmt.Errorf("embedded pack %s: %w", name, err)
+			if p.Bind.Kind == BindArgv && p.Grant.IsZero() {
+				return nil, fmt.Errorf("embedded pack %s: argv package %v must carry a grant", name, p.Bind)
 			}
 		}
 		packs = append(packs, PackInfo{
@@ -158,7 +157,7 @@ func LoadPacks() ([]PackInfo, error) {
 			Risk:        f.Pack.Risk,
 			Reason:      f.Pack.Reason,
 			Commands:    append([]string(nil), f.Pack.Commands...),
-			RuleCount:   len(f.Rules) + len(f.Domains),
+			RuleCount:   len(f.Packages),
 		})
 	}
 	return packs, nil
@@ -229,7 +228,7 @@ func InstallPack(rulesDir, id string) (*PackInfo, error) {
 	if err := json.Unmarshal(raw, &f); err != nil {
 		return nil, fmt.Errorf("parse embedded pack %s: %w", id, err)
 	}
-	out := ruleFile{Rules: f.Rules, Domains: f.Domains}
+	out := packageFileV3{Packages: f.Packages}
 	body, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("encode pack %s rules: %w", id, err)

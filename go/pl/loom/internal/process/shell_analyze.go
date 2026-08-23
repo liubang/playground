@@ -23,11 +23,37 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
+// StdinSource identifies what feeds a command's standard input. It
+// matters because several programs EXECUTE their stdin: a heredoc or a
+// pipe feeding an interpreter carries code, and the policy layer must
+// either analyze that code or treat the command as unprovable.
+type StdinSource int
+
+const (
+	// StdinNone is the inherited/terminal stdin — no program input.
+	StdinNone StdinSource = iota
+	// StdinPipe is a pipeline producer's output.
+	StdinPipe
+	// StdinHeredoc is a <<EOF / <<-EOF body (Heredoc holds the literal
+	// body when HeredocStatic).
+	StdinHeredoc
+	// StdinWord is a <<< here-string.
+	StdinWord
+)
+
 // ShellCommand is one simple command extracted from a shell script. A nil
 // Argv marks a command whose words contain dynamic expansions (variables,
 // substitutions, arithmetic): the program cannot be proven statically.
 type ShellCommand struct {
 	Argv []string
+	// Stdin records what feeds the command's stdin (StdinNone when
+	// nothing does).
+	Stdin StdinSource
+	// Heredoc is the literal heredoc body (Stdin == StdinHeredoc only).
+	Heredoc string
+	// HeredocStatic reports that the heredoc body resolved to a pure
+	// literal (no expansions). A dynamic body is arbitrary content.
+	HeredocStatic bool
 }
 
 // PipeEdge records one "producer | consumer" pair of a pipeline. Producer
@@ -41,16 +67,19 @@ type PipeEdge struct {
 	ConsumerArgv []string
 }
 
-// ShellAnalysis is the static classification of a `sh -c` script, built by
+// ShellAnalysis is the static classification of a shell script, built by
 // walking the parsed AST once. It serves three distinct policy uses:
 //
-//   - danger screening: every literal command (including ones nested in
-//     substitutions and subshells) is collected in Commands, plus the
-//     pipeline and write-redirect shapes a naive argv scan cannot see;
-//   - whitelist evaluation: when Static is true, every command's argv is
-//     exact and may be matched against argv-prefix rules individually;
-//   - memory eligibility: only a Static analysis with no DynamicWrites is
-//     a honest basis for a standing approval.
+//   - effect derivation: every literal command (including ones nested in
+//     substitutions and subshells) is collected in Commands with its
+//     stdin shape, plus the pipeline and write-redirect shapes a naive
+//     argv scan cannot see;
+//   - package binding: when Static is true, every command's argv is
+//     exact and may be matched against argv-prefix bindings
+//     individually;
+//   - memory eligibility: only a Static analysis with no DynamicWrites
+//     and no code-carrying stdin is an honest basis for a standing
+//     approval.
 //
 // Execution is unaffected by the analysis — the script still runs through
 // the shell inside the sandbox; the analysis only feeds classification.
@@ -60,7 +89,8 @@ type ShellAnalysis struct {
 	Commands []ShellCommand
 	// Static reports that the whole script resolved statically: no
 	// variable expansions, substitutions, control flow, subshells,
-	// background jobs, env-assignment prefixes, or heredocs.
+	// background jobs, env-assignment prefixes, and every heredoc body
+	// is a pure literal.
 	Static bool
 	// Pipes lists the producer→consumer pairs of every pipeline.
 	Pipes []PipeEdge
@@ -72,24 +102,18 @@ type ShellAnalysis struct {
 	DynamicWrites bool
 }
 
-// AnalyzeShellArgv classifies a ["sh", "-c", script]-form argv. ok=false
-// when argv is not a shell -c invocation or the script fails to parse.
-func AnalyzeShellArgv(argv []string) (ShellAnalysis, bool) {
-	if len(argv) != 3 || !IsShellProgram(argv[0]) || argv[1] != "-c" {
-		return ShellAnalysis{}, false
-	}
-	return AnalyzeShellScript(argv[2])
-}
-
 // AnalyzeShellScript parses and classifies a shell script. ok=false on a
 // parse error or when the script contains no command at all (e.g. only
-// assignments) — callers keep their conservative fallback in that case.
+// assignments) — callers treat !ok as "unanalyzable", never as "safe".
 func AnalyzeShellScript(script string) (ShellAnalysis, bool) {
 	file, err := syntax.NewParser().Parse(strings.NewReader(script), "")
 	if err != nil {
 		return ShellAnalysis{}, false
 	}
-	a := &shellAnalyzer{analysis: ShellAnalysis{Static: true}}
+	a := &shellAnalyzer{
+		analysis: ShellAnalysis{Static: true},
+		stdinOf:  map[*syntax.CallExpr]StdinSource{},
+	}
 	syntax.Walk(file, a.visit)
 	if len(a.analysis.Commands) == 0 {
 		return ShellAnalysis{}, false
@@ -100,37 +124,43 @@ func AnalyzeShellScript(script string) (ShellAnalysis, bool) {
 // shellAnalyzer accumulates the classification during the AST walk.
 type shellAnalyzer struct {
 	analysis ShellAnalysis
+	// stdinOf records pipe consumers discovered at BinaryCmd nodes
+	// (parents), consulted when the consumer's own Stmt is visited
+	// (children).
+	stdinOf map[*syntax.CallExpr]StdinSource
 }
 
 func (a *shellAnalyzer) visit(n syntax.Node) bool {
 	switch node := n.(type) {
-	case *syntax.CallExpr:
-		a.addCall(node)
+	case *syntax.Stmt:
+		if node.Background || node.Negated || node.Coprocess {
+			a.analysis.Static = false
+		}
+		if call, ok := node.Cmd.(*syntax.CallExpr); ok {
+			a.addCallStmt(node, call)
+		}
 	case *syntax.BinaryCmd:
 		if node.Op == syntax.Pipe || node.Op == syntax.PipeAll {
 			a.addPipe(node)
 		}
 	case *syntax.Redirect:
 		a.addRedirect(node)
-	case *syntax.Stmt:
-		if node.Background || node.Negated || node.Coprocess {
-			a.analysis.Static = false
-		}
 	case *syntax.Subshell, *syntax.Block, *syntax.IfClause, *syntax.WhileClause,
 		*syntax.ForClause, *syntax.CaseClause, *syntax.TimeClause,
 		*syntax.TestClause, *syntax.DeclClause, *syntax.LetClause, *syntax.ArithmCmd,
 		*syntax.FuncDecl:
 		// Control flow, grouping, and declarations hide execution shape
 		// from a prefix matcher; literals inside are still collected for
-		// the danger screen because Walk descends into them.
+		// the effect derivation because Walk descends into them.
 		a.analysis.Static = false
 	}
 	return true
 }
 
-// addCall resolves a simple command's words. A pure env-assignment
+// addCallStmt resolves one simple command together with the stdin shape
+// its redirects and pipe position give it. A pure env-assignment
 // statement (FOO=bar with no command) is not a command at all.
-func (a *shellAnalyzer) addCall(c *syntax.CallExpr) {
+func (a *shellAnalyzer) addCallStmt(stmt *syntax.Stmt, c *syntax.CallExpr) {
 	if len(c.Assigns) > 0 {
 		a.analysis.Static = false
 	}
@@ -141,15 +171,38 @@ func (a *shellAnalyzer) addCall(c *syntax.CallExpr) {
 	if !static {
 		a.analysis.Static = false
 	}
-	a.analysis.Commands = append(a.analysis.Commands, ShellCommand{Argv: argv})
+	cmd := ShellCommand{Argv: argv}
+	if src, ok := a.stdinOf[c]; ok {
+		cmd.Stdin = src
+	}
+	for _, r := range stmt.Redirs {
+		switch r.Op {
+		case syntax.Hdoc, syntax.DashHdoc:
+			cmd.Stdin = StdinHeredoc
+			// r.Word is the DELIMITER; the body is r.Hdoc (already
+			// tab-stripped for <<-). A body with expansions is
+			// arbitrary content.
+			if r.Hdoc != nil {
+				if body, ok := resolveWord(r.Hdoc); ok {
+					cmd.Heredoc, cmd.HeredocStatic = body, true
+				} else {
+					a.analysis.Static = false
+				}
+			}
+		case syntax.WordHdoc:
+			cmd.Stdin = StdinWord
+		}
+	}
+	a.analysis.Commands = append(a.analysis.Commands, cmd)
 }
 
 // addPipe records the producer→consumer pair of a pipeline. Nested
-// pipelines (a | b | c) decompose into per-edge pairs: the producer of the
-// outer edge is the LAST command of its left side.
+// pipelines (a | b | c) decompose into per-edge pairs: the producer of
+// the outer edge is the LAST command of its left side.
 func (a *shellAnalyzer) addPipe(bc *syntax.BinaryCmd) {
 	edge := PipeEdge{Producer: callProgram(lastCall(bc.X))}
 	if first := firstCall(bc.Y); first != nil {
+		a.stdinOf[first] = StdinPipe
 		argv, static := resolveWords(first.Args)
 		if static && len(argv) > 0 {
 			edge.Consumer = programBaseName(argv[0])
@@ -162,14 +215,12 @@ func (a *shellAnalyzer) addPipe(bc *syntax.BinaryCmd) {
 	a.analysis.Pipes = append([]PipeEdge{edge}, a.analysis.Pipes...)
 }
 
-// addRedirect classifies redirections. Heredocs make the script non-static
-// (their body is arbitrary content); file-writing redirects record their
-// target for the danger screen; input redirects and fd duplications are
-// behavior-neutral for classification.
+// addRedirect classifies redirections. File-writing redirects record
+// their target for the effect derivation; input redirects, fd
+// duplications, and heredocs are behavior-neutral here (heredocs are
+// associated with their command in addCallStmt).
 func (a *shellAnalyzer) addRedirect(r *syntax.Redirect) {
 	switch r.Op {
-	case syntax.Hdoc, syntax.DashHdoc, syntax.WordHdoc:
-		a.analysis.Static = false
 	case syntax.RdrOut, syntax.AppOut, syntax.RdrAll, syntax.AppAll, syntax.ClbOut:
 		a.addWriteTarget(r.Word)
 	case syntax.DplOut:
@@ -191,7 +242,10 @@ func (a *shellAnalyzer) addWriteTarget(w *syntax.Word) {
 }
 
 // firstCall returns the first simple command of a command node, descending
-// through statement wrappers and binary compositions.
+// through statement wrappers, binary compositions, and grouping
+// constructs (a pipe consumer written as `{ sh; }` or `( sh )` is still
+// that interpreter — hiding it would blind the pipe-into-interpreter
+// indicator).
 func firstCall(n syntax.Node) *syntax.CallExpr {
 	switch node := n.(type) {
 	case *syntax.Stmt:
@@ -201,6 +255,14 @@ func firstCall(n syntax.Node) *syntax.CallExpr {
 			return c
 		}
 		return firstCall(node.Y)
+	case *syntax.Block:
+		if len(node.Stmts) > 0 {
+			return firstCall(node.Stmts[0])
+		}
+	case *syntax.Subshell:
+		if len(node.Stmts) > 0 {
+			return firstCall(node.Stmts[0])
+		}
 	case *syntax.CallExpr:
 		return node
 	}
@@ -217,6 +279,14 @@ func lastCall(n syntax.Node) *syntax.CallExpr {
 			return c
 		}
 		return lastCall(node.X)
+	case *syntax.Block:
+		if len(node.Stmts) > 0 {
+			return lastCall(node.Stmts[len(node.Stmts)-1])
+		}
+	case *syntax.Subshell:
+		if len(node.Stmts) > 0 {
+			return lastCall(node.Stmts[len(node.Stmts)-1])
+		}
 	case *syntax.CallExpr:
 		return node
 	}
@@ -303,15 +373,18 @@ func resolveWord(w *syntax.Word) (string, bool) {
 	return b.String(), true
 }
 
-// UnwrapSimpleShell rewrites ["sh", "-c", script] (or another supported
-// shell) into the plain argv the script denotes — but only when the script
+// UnwrapSimpleShell rewrites a shell -c invocation (any supported -c flag
+// form) into the plain argv the script denotes — but only when the script
 // is provably ONE static command: no pipes, redirections, sequencing,
-// substitutions, control flow, or env-assignment prefixes. Execution is
-// unaffected — the command still runs through the shell; the unwrapped
-// argv only feeds risk classification, danger screening, and argv-prefix
-// rule matching.
+// substitutions, control flow, env-assignment prefixes, or stdin feeds.
+// Execution is unaffected — the command still runs through the shell; the
+// unwrapped argv only feeds effect derivation and package binding.
 func UnwrapSimpleShell(argv []string) ([]string, bool) {
-	analysis, ok := AnalyzeShellArgv(argv)
+	script, ok := ShellScriptForm(argv)
+	if !ok {
+		return nil, false
+	}
+	analysis, ok := AnalyzeShellScript(script)
 	if !ok || !analysis.Static {
 		return nil, false
 	}
@@ -319,9 +392,9 @@ func UnwrapSimpleShell(argv []string) ([]string, bool) {
 		len(analysis.WriteRedirects) > 0 || analysis.DynamicWrites {
 		return nil, false
 	}
-	cmd := analysis.Commands[0].Argv
-	if len(cmd) == 0 {
+	cmd := analysis.Commands[0]
+	if len(cmd.Argv) == 0 || cmd.Stdin != StdinNone {
 		return nil, false
 	}
-	return cmd, true
+	return cmd.Argv, true
 }

@@ -104,7 +104,7 @@ export interface TranscriptState {
 export interface TranscriptIO {
   resolveApproval: (
     payload: ApprovalRequestedPayload,
-    opts: { decision: 'allow' | 'deny'; always: boolean },
+    opts: { decision: 'allow' | 'deny'; always: boolean; trust?: string },
   ) => Promise<unknown>
   answerQuestion: (questionId: string, answer: unknown) => Promise<unknown>
   sendFeedback?: (runId: string, value: 0 | 1) => Promise<unknown>
@@ -898,14 +898,19 @@ export class TranscriptController {
   }
 
   // Approval button callback (invoked by the view layer)
-  async resolveApproval(approvalId: string, decision: 'allow' | 'deny', always: boolean) {
+  async resolveApproval(
+    approvalId: string,
+    decision: 'allow' | 'deny',
+    always: boolean,
+    trust?: string,
+  ) {
     const id = this.approvals.get(approvalId)
     if (!id) return
     const block = this.store.get().blocks.find((b) => b.id === id)
     if (!block || block.kind !== 'approval') return
     this.patchBlock(id, { resolving: true })
     try {
-      await this.io.resolveApproval(block.payload, { decision, always })
+      await this.io.resolveApproval(block.payload, { decision, always, trust })
       this.collapseApproval(approvalId, decision === 'allow', 'you')
     } catch (e) {
       const err = e as Error & { code?: string; status?: number }

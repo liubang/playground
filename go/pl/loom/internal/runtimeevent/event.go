@@ -256,10 +256,20 @@ type ApprovalRequestedPayload struct {
 	// approval description already shows the same information).
 	Arguments json.RawMessage `json:"arguments,omitempty"`
 	// RulePreview renders what "allow always" would remember for this call
-	// (an argv prefix, an exact host, or the bare tool name). Empty means
-	// the call cannot be remembered; frontends should hide the "allow
-	// always" affordance rather than offer a no-op.
+	// (categorical argv prefixes with the grant, an exact host, or the bare
+	// tool name). Empty means the call cannot be remembered; frontends
+	// should hide the "allow always" affordance rather than offer a no-op.
 	RulePreview string `json:"rule_preview,omitempty"`
+	// TrustPreview renders the L2 "always trust (unsandboxed)" option for
+	// escalated calls whose memory shape is derivable. Empty means the
+	// trust option is not offered.
+	TrustPreview string `json:"trust_preview,omitempty"`
+	// Consequence renders the derived effect of the call in human terms —
+	// what the operation DOES (shared-state mutation, local destruction,
+	// boundary crossings) rather than what its text looks like — plus any
+	// danger indicators attached during effect derivation. Empty for
+	// fully-confined calls.
+	Consequence string `json:"consequence,omitempty"`
 }
 
 // ApprovalResolvedPayload describes an approval resolution.

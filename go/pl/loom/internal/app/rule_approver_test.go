@@ -21,7 +21,6 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"testing"
 
@@ -50,39 +49,11 @@ func preparedRunCmd(t *testing.T, program string, args ...string) domain.Prepare
 	}
 }
 
-func TestDeriveRunCmdPrefix(t *testing.T) {
-	tests := []struct {
-		name string
-		argv []string
-		want []string
-		ok   bool
-	}{
-		{"subcommand widens the rule", []string{"go", "test", "./..."}, []string{"go", "test"}, true},
-		{"golangci-lint run", []string{"golangci-lint", "run", "--out-format", "json", "./..."}, []string{"golangci-lint", "run"}, true},
-		{"flag first arg keeps program only", []string{"bazel", "test"}, []string{"bazel", "test"}, true},
-		{"program only when arg is a path", []string{"ls", "-la"}, []string{"ls"}, true},
-		{"non-token arg keeps program only", []string{"rg", "pattern"}, []string{"rg"}, true},
-		{"shell is banned", []string{"sh", "-c", "echo hi"}, nil, false},
-		{"bash path is banned", []string{"/bin/bash", "-c", "echo hi"}, nil, false},
-		{"script file is persistable", []string{"python3", "script.py"}, []string{"python3", "script.py"}, true},
-		{"node script path is persistable", []string{"node", "/home/u/.loom/skills/x/scripts/lx.js", "skill", "start"}, []string{"node", "/home/u/.loom/skills/x/scripts/lx.js"}, true},
-		{"node eval is banned", []string{"node", "-e", "require('fs').rmSync('/')"}, nil, false},
-		{"python bare repl is banned", []string{"python3"}, nil, false},
-		{"rm is banned", []string{"rm", "-rf", "x"}, nil, false},
-		{"sudo is banned", []string{"sudo", "make", "install"}, nil, false},
-		{"heredoc is banned", []string{"sh-cmd-wrapper", "cat<<EOF"}, nil, false},
-		{"empty argv", nil, nil, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, ok := permission.DeriveRunCmdPrefix(tt.argv)
-			if ok != tt.ok {
-				t.Fatalf("DeriveRunCmdPrefix(%v) ok = %v, want %v", tt.argv, ok, tt.ok)
-			}
-			if tt.ok && !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("DeriveRunCmdPrefix(%v) = %v, want %v", tt.argv, got, tt.want)
-			}
-		})
+// staticPolicy returns a policy accessor over the given capability set
+// (on-request mode, no roots) for the approver tests.
+func staticPolicy(set *permission.PackageSet) func() permission.Policy {
+	return func() permission.Policy {
+		return permission.Policy{Packages: set, Mode: permission.ModeOnRequest}
 	}
 }
 
@@ -99,17 +70,14 @@ func (r *recordingApprover) RequestApproval(ctx context.Context, req domain.Appr
 
 func TestRuleApproverAutoAllowsRememberedPrefix(t *testing.T) {
 	inner := &recordingApprover{}
-	rules := NewRuleApprover(inner, permission.NewSessionRules())
+	rules := NewRuleApprover(inner, staticPolicy(permission.NewPackageSet()), nil)
 
 	rule, ok := rules.RememberCall("run_cmd", argsJSON(t, "go", "test", "./pl/loom/..."), "")
 	if !ok {
 		t.Fatal("expected go test to be persistable")
 	}
-	if !reflect.DeepEqual(rule.Prefixes, [][]string{{"go", "test"}}) {
-		t.Fatalf("prefixes = %v, want [[go test]]", rule.Prefixes)
-	}
-	if !rule.Grant.IsZero() {
-		t.Fatalf("grant = %+v, want zero for a plain sandboxed call", rule.Grant)
+	if rule.Label != "go test" {
+		t.Fatalf("label = %q, want 'go test'", rule.Label)
 	}
 
 	// A matching later call is auto-approved without touching the user.
@@ -123,9 +91,11 @@ func TestRuleApproverAutoAllowsRememberedPrefix(t *testing.T) {
 		t.Fatalf("inner approver was consulted for a rule-matching call")
 	}
 
-	// A non-matching call still reaches the user.
+	// A boundary-crossing call the memory does not cover still reaches
+	// the user (git push needs network + shared-state; the remembered
+	// go test package answers neither).
 	decision, err = rules.RequestApproval(context.Background(), domain.ApprovalRequest{
-		Call: preparedRunCmd(t, "go", "build", "./..."),
+		Call: preparedRunCmd(t, "git", "push"),
 	})
 	if err != nil || decision != domain.DecisionAsk {
 		t.Fatalf("decision = %v err = %v, want delegated ask", decision, err)
@@ -133,35 +103,29 @@ func TestRuleApproverAutoAllowsRememberedPrefix(t *testing.T) {
 	if inner.calls != 1 {
 		t.Fatalf("inner approver calls = %d, want 1", inner.calls)
 	}
-
-	// Non-run_cmd tools never match.
-	decision, err = rules.RequestApproval(context.Background(), domain.ApprovalRequest{
-		Call: domain.PreparedCall{Call: domain.ToolCall{ID: domain.NewToolCallID(), Name: "edit", Arguments: json.RawMessage(`{}`)}},
-	})
-	if err != nil || decision != domain.DecisionAsk || inner.calls != 2 {
-		t.Fatalf("edit call must delegate: decision=%v calls=%d", decision, inner.calls)
-	}
 }
 
-// TestRememberCompoundShell covers per-subcommand memory for a static
+// TestRememberCompoundShell covers per-step memory for a static
 // composed script: remembering `go test ./... && git status` stores one
-// prefix per subcommand, later scripts combining ONLY remembered
-// subcommands auto-approve, and any script containing an unremembered
-// subcommand still reaches the user.
+// package per step, later scripts combining ONLY remembered steps
+// auto-approve, and any script containing an unremembered step still
+// reaches the user.
 func TestRememberCompoundShell(t *testing.T) {
 	inner := &recordingApprover{}
-	rules := NewRuleApprover(inner, permission.NewSessionRules())
+	rules := NewRuleApprover(inner, staticPolicy(permission.NewPackageSet()), nil)
 
 	rule, ok := rules.RememberCall("run_cmd", argsJSON(t, "sh", "-c", "go test ./... && git status"), "")
 	if !ok {
 		t.Fatal("a static compound shell must be persistable")
 	}
-	want := [][]string{{"go", "test"}, {"git", "status"}}
-	if !reflect.DeepEqual(rule.Prefixes, want) {
-		t.Fatalf("prefixes = %v, want %v", rule.Prefixes, want)
+	if rule.Label != "go test && git status" {
+		t.Fatalf("label = %q, want 'go test && git status'", rule.Label)
+	}
+	if len(rule.Packages) != 2 {
+		t.Fatalf("packages = %d, want 2 (one per step)", len(rule.Packages))
 	}
 
-	// A later script combining only remembered subcommands auto-approves.
+	// A later script combining only remembered steps auto-approves.
 	decision, err := rules.RequestApproval(context.Background(), domain.ApprovalRequest{
 		Call: preparedRunCmd(t, "sh", "-c", "git status && go test ./pl/..."),
 	})
@@ -169,25 +133,37 @@ func TestRememberCompoundShell(t *testing.T) {
 		t.Fatalf("remembered combination = %v err=%v inner=%d, want allow without prompting", decision, err, inner.calls)
 	}
 
-	// One unremembered subcommand keeps the whole script per-call.
+	// A boundary-crossing step that is NOT remembered keeps the whole
+	// script at an ask (git push needs network + shared-state, which no
+	// remembered package covers).
 	decision, err = rules.RequestApproval(context.Background(), domain.ApprovalRequest{
-		Call: preparedRunCmd(t, "sh", "-c", "go test ./... && make deploy"),
+		Call: preparedRunCmd(t, "sh", "-c", "go test ./... && git push"),
 	})
 	if err != nil || decision != domain.DecisionAsk || inner.calls != 1 {
 		t.Fatalf("partially-remembered script = %v err=%v inner=%d, want delegated ask", decision, err, inner.calls)
 	}
+
+	// A fully-covered script after remembering the push too auto-approves.
+	if _, ok := rules.RememberCall("run_cmd", argsJSON(t, "git", "push"), ""); !ok {
+		t.Fatal("git push must be persistable")
+	}
+	decision, err = rules.RequestApproval(context.Background(), domain.ApprovalRequest{
+		Call: preparedRunCmd(t, "sh", "-c", "go test ./... && git push"),
+	})
+	if err != nil || decision != domain.DecisionAllow || inner.calls != 1 {
+		t.Fatalf("fully-remembered script = %v err=%v inner=%d, want allow", decision, err, inner.calls)
+	}
 }
 
 func TestRememberRunCmdRejectsNonPersistable(t *testing.T) {
-	rules := NewRuleApprover(nil, permission.NewSessionRules())
+	rules := NewRuleApprover(nil, staticPolicy(permission.NewPackageSet()), nil)
 	for name, raw := range map[string]json.RawMessage{
 		// A DYNAMIC shell script (variables, substitutions) cannot prove
-		// its subcommands and stays unpersistable; a fully static compound
-		// script IS persistable per-subcommand (covered in
-		// TestRememberCompoundShell).
-		"dynamic shell": argsJSON(t, "sh", "-c", "echo hi > $out"),
-		"eval":          argsJSON(t, "python3", "-c", "print(1)"),
-		"other tool":    json.RawMessage(`{"path":"x.go"}`),
+		// its steps and stays unpersistable.
+		"dynamic shell":  argsJSON(t, "sh", "-c", "echo hi > $out"),
+		"eval":           argsJSON(t, "python3", "-c", "print(1)"),
+		"heredoc python": argsJSON(t, "bash", "-c", "python3 <<'EOF'\nimport os\nEOF"),
+		"other tool":     json.RawMessage(`{"path":"x.go"}`),
 	} {
 		toolName := "run_cmd"
 		if name == "other tool" {
@@ -197,107 +173,136 @@ func TestRememberRunCmdRejectsNonPersistable(t *testing.T) {
 			t.Fatalf("%s must not be persistable", name)
 		}
 	}
-	if rules.RunCmdRuleCount() != 0 {
-		t.Fatalf("rules = %d, want 0", rules.RunCmdRuleCount())
-	}
 }
 
-// TestRememberRunCmdGrantDerivation covers the grant flavors a remembered
-// rule carries: needs_network calls remember a sandboxed network grant;
-// escalated calls can ONLY be remembered as explicit L2 full trust — a
-// lesser grant would never cover the next escalation.
+// TestRememberRunCmdGrantDerivation covers the grant flavors a
+// remembered package carries: needs_network remembers a sandboxed
+// network grant; escalated calls can ONLY be remembered as explicit L2
+// full trust — a lesser grant would never cover the next escalation.
 func TestRememberRunCmdGrantDerivation(t *testing.T) {
-	rules := NewRuleApprover(nil, permission.NewSessionRules())
+	rules := NewRuleApprover(nil, staticPolicy(permission.NewPackageSet()), nil)
 
 	needsNet := json.RawMessage(`{"program":"mycli","args":["query","submit"],"needs_network":true}`)
 	rule, ok := rules.RememberCall("run_cmd", needsNet, "")
-	if !ok || !rule.Grant.NetworkFull || rule.Grant.Unsandboxed {
-		t.Fatalf("needs_network remember = ok=%v grant=%+v, want sandboxed network grant", ok, rule.Grant)
+	if !ok || !rule.Packages[0].Grant.NetworkFull || rule.Packages[0].Grant.Unsandboxed {
+		t.Fatalf("needs_network remember = ok=%v packages=%+v, want sandboxed network grant", ok, rule.Packages)
 	}
 
 	needsGUI := json.RawMessage(`{"program":"open","args":["https://example.com"],"needs_gui_open":true}`)
 	rule, ok = rules.RememberCall("run_cmd", needsGUI, "")
-	if !ok || !rule.Grant.GUIOpen || rule.Grant.Unsandboxed {
-		t.Fatalf("needs_gui_open remember = ok=%v grant=%+v, want sandboxed gui_open grant", ok, rule.Grant)
+	if !ok || !rule.Packages[0].Grant.GUIOpen || rule.Packages[0].Grant.Unsandboxed {
+		t.Fatalf("needs_gui_open remember = ok=%v packages=%+v, want sandboxed gui_open grant", ok, rule.Packages)
 	}
 
 	escalated := json.RawMessage(`{"program":"make","args":["deploy"],"sandbox_permissions":"require_escalated"}`)
-	if _, ok = rules.RememberCall("run_cmd", escalated, ""); ok {
-		t.Fatal("escalated remember without trust flavor must be refused (minimal grants cannot cover escalations)")
+	rule, ok = rules.RememberCall("run_cmd", escalated, "")
+	if !ok || !rule.Packages[0].Grant.NetworkFull || rule.Packages[0].Grant.Unsandboxed {
+		t.Fatalf("escalated minimal flavor = ok=%v packages=%+v, want the network approximation", ok, rule.Packages)
 	}
 
-	rules2 := NewRuleApprover(nil, permission.NewSessionRules())
+	rules2 := NewRuleApprover(nil, staticPolicy(permission.NewPackageSet()), nil)
 	rule, ok = rules2.RememberCall("run_cmd", escalated, TrustUnsandboxed)
-	if !ok || !rule.Grant.Unsandboxed {
-		t.Fatalf("escalated remember (trust flavor) = ok=%v grant=%+v, want unsandboxed", ok, rule.Grant)
+	if !ok || !rule.Packages[0].Grant.Unsandboxed {
+		t.Fatalf("escalated remember (trust flavor) = ok=%v packages=%+v, want unsandboxed", ok, rule.Packages)
 	}
 	// The trust flavor is honored only for escalated calls.
 	rule, ok = rules2.RememberCall("run_cmd", argsJSON(t, "go", "build", "./..."), TrustUnsandboxed)
-	if !ok || !rule.Grant.IsZero() {
-		t.Fatalf("non-escalated trust flavor = ok=%v grant=%+v, want zero grant", ok, rule.Grant)
+	if !ok || !rule.Packages[0].Grant.IsZero() {
+		t.Fatalf("non-escalated trust flavor = ok=%v packages=%+v, want zero grant", ok, rule.Packages)
+	}
+}
+
+// TestRememberIndicatedExact covers the indicator gate's memory shape:
+// a call carrying danger indicators is remembered by its EXACT argv,
+// never a categorical prefix — and a later identical call auto-approves
+// while a variant still asks.
+func TestRememberIndicatedExact(t *testing.T) {
+	inner := &recordingApprover{}
+	rules := NewRuleApprover(inner, staticPolicy(permission.NewPackageSet()), nil)
+
+	sudoArgs := json.RawMessage(`{"program":"sudo","args":["rm","-rf","/tmp/x"],"sandbox_permissions":"require_escalated"}`)
+	rule, ok := rules.RememberCall("run_cmd", sudoArgs, TrustUnsandboxed)
+	if !ok {
+		t.Fatal("an indicated single command must be exactly memorable")
+	}
+	if len(rule.Packages) != 1 || rule.Packages[0].Bind.Kind != permission.BindArgvExact {
+		t.Fatalf("indicated memory = %+v, want one exact-argv package", rule.Packages)
+	}
+
+	// The identical call auto-approves.
+	decision, err := rules.RequestApproval(context.Background(), domain.ApprovalRequest{
+		Call: domain.PreparedCall{Call: domain.ToolCall{ID: domain.NewToolCallID(), Name: "run_cmd", Arguments: sudoArgs}},
+	})
+	if err != nil || decision != domain.DecisionAllow || inner.calls != 0 {
+		t.Fatalf("exact-remembered call = %v err=%v inner=%d", decision, err, inner.calls)
+	}
+	// A variant still asks.
+	decision, err = rules.RequestApproval(context.Background(), domain.ApprovalRequest{
+		Call: domain.PreparedCall{Call: domain.ToolCall{
+			ID: domain.NewToolCallID(), Name: "run_cmd",
+			Arguments: json.RawMessage(`{"program":"sudo","args":["rm","-rf","/tmp/y"],"sandbox_permissions":"require_escalated"}`),
+		}},
+	})
+	if err != nil || decision != domain.DecisionAsk || inner.calls != 1 {
+		t.Fatalf("variant call = %v inner=%d, want delegated ask", decision, inner.calls)
 	}
 }
 
 func TestApprovalRulePreview(t *testing.T) {
-	preview, grant, ok := ApprovalRulePreview("run_cmd", argsJSON(t, "go", "vet", "./..."))
+	env := permission.DeriveEnv{}
+	preview, grant, ok := ApprovalRulePreview("run_cmd", argsJSON(t, "go", "vet", "./..."), env)
 	if !ok || preview != "go vet" {
 		t.Fatalf("preview = %q ok = %v, want 'go vet'", preview, ok)
 	}
 	if !grant.IsZero() {
 		t.Fatalf("grant = %+v, want zero", grant)
 	}
-	// A static compound shell previews one prefix per subcommand; a
-	// DYNAMIC script (unprovable argv) has no preview.
-	preview, _, ok = ApprovalRulePreview("run_cmd", argsJSON(t, "sh", "-c", "go test ./... && git status"))
+	// A static compound shell previews one prefix per step; a DYNAMIC
+	// script (unprovable argv) has no preview.
+	preview, _, ok = ApprovalRulePreview("run_cmd", argsJSON(t, "sh", "-c", "go test ./... && git status"), env)
 	if !ok || preview != "go test && git status" {
 		t.Fatalf("compound shell preview = %q ok=%v, want 'go test && git status'", preview, ok)
 	}
-	if _, _, ok := ApprovalRulePreview("run_cmd", argsJSON(t, "sh", "-c", "echo hi > $out")); ok {
+	if _, _, ok := ApprovalRulePreview("run_cmd", argsJSON(t, "sh", "-c", "echo hi > $out"), env); ok {
 		t.Fatal("dynamic shell must not have a rule preview")
 	}
-	preview, _, ok = ApprovalRulePreview("run_cmd", argsJSON(t, "sh", "-c", "ls -la"))
+	preview, _, ok = ApprovalRulePreview("run_cmd", argsJSON(t, "sh", "-c", "ls -la"), env)
 	if !ok || preview != "ls" {
 		t.Fatalf("simple shell preview = %q ok=%v, want 'ls'", preview, ok)
 	}
 	// Escalated calls have no minimal-capability preview (only the
 	// unsandboxed trust option, surfaced by RunCmdTrustPreview).
-	if _, _, ok := ApprovalRulePreview("run_cmd", json.RawMessage(`{"program":"make","args":["deploy"],"sandbox_permissions":"require_escalated"}`)); ok {
+	if _, _, ok := ApprovalRulePreview("run_cmd", json.RawMessage(`{"program":"make","args":["deploy"],"sandbox_permissions":"require_escalated"}`), env); ok {
 		t.Fatal("escalated calls must not have a minimal rule preview")
 	}
-	if _, _, ok := ApprovalRulePreview("edit", json.RawMessage(`{}`)); ok {
+	if _, _, ok := ApprovalRulePreview("edit", json.RawMessage(`{}`), env); ok {
 		t.Fatal("non-run_cmd must not have a rule preview")
 	}
 
 	// needs_network previews carry the network grant.
-	_, grant, ok = ApprovalRulePreview("run_cmd", json.RawMessage(`{"program":"mycli","needs_network":true}`))
+	_, grant, ok = ApprovalRulePreview("run_cmd", json.RawMessage(`{"program":"mycli","needs_network":true}`), env)
 	if !ok || !grant.NetworkFull {
 		t.Fatalf("needs_network preview grant = %+v ok=%v", grant, ok)
 	}
 
-	// needs_gui_open previews carry the gui_open grant.
-	_, grant, ok = ApprovalRulePreview("run_cmd", json.RawMessage(`{"program":"open","args":["https://example.com"],"needs_gui_open":true}`))
-	if !ok || !grant.GUIOpen {
-		t.Fatalf("needs_gui_open preview grant = %+v ok=%v", grant, ok)
-	}
-
 	// web_fetch previews show the exact host.
-	preview, _, ok = ApprovalRulePreview("web_fetch", json.RawMessage(`{"url":"https://WWW.weather.com.cn/weather/1.shtml"}`))
+	preview, _, ok = ApprovalRulePreview("web_fetch", json.RawMessage(`{"url":"https://WWW.weather.com.cn/weather/1.shtml"}`), env)
 	if !ok || preview != "www.weather.com.cn" {
 		t.Fatalf("web_fetch preview = %q ok=%v, want www.weather.com.cn", preview, ok)
 	}
-	if _, _, ok := ApprovalRulePreview("web_fetch", json.RawMessage(`{"url":"ftp://x/y"}`)); ok {
+	if _, _, ok := ApprovalRulePreview("web_fetch", json.RawMessage(`{"url":"ftp://x/y"}`), env); ok {
 		t.Fatal("non-http URLs must not have a rule preview")
 	}
 }
 
-// TestRememberWebFetchDomain covers the domain memory for web_fetch
-// approvals: exact host, session match, and auto-approval on later calls.
+// TestRememberWebFetchDomain covers the host memory for web_fetch
+// approvals: exact host, and auto-approval on later calls.
 func TestRememberWebFetchDomain(t *testing.T) {
 	inner := &recordingApprover{}
-	rules := NewRuleApprover(inner, permission.NewSessionRules())
+	rules := NewRuleApprover(inner, staticPolicy(permission.NewPackageSet()), nil)
 
 	rule, ok := rules.RememberCall("web_fetch", json.RawMessage(`{"url":"https://www.weather.com.cn/a"}`), "")
-	if !ok || rule.Host != "www.weather.com.cn" {
+	if !ok || rule.Label != "www.weather.com.cn" {
 		t.Fatalf("remember = %+v ok=%v", rule, ok)
 	}
 
@@ -318,26 +323,23 @@ func TestRememberWebFetchDomain(t *testing.T) {
 }
 
 func TestRunCmdTrustPreview(t *testing.T) {
+	env := permission.DeriveEnv{}
 	escalated := json.RawMessage(`{"program":"make","args":["deploy"],"sandbox_permissions":"require_escalated"}`)
-	if !RunCmdTrustPreview("run_cmd", escalated) {
+	if !RunCmdTrustPreview("run_cmd", escalated, env) {
 		t.Fatal("escalated run_cmd must offer the trust option")
 	}
-	if RunCmdTrustPreview("run_cmd", argsJSON(t, "make", "build")) {
+	if RunCmdTrustPreview("run_cmd", argsJSON(t, "make", "build"), env) {
 		t.Fatal("non-escalated calls must not offer the trust option")
 	}
 	// A static compound shell offers the trust option (one trusted
-	// prefix per subcommand); a dynamic one does not.
-	if !RunCmdTrustPreview("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","make deploy && echo done"],"sandbox_permissions":"require_escalated"}`)) {
+	// prefix per step); a dynamic one does not.
+	if !RunCmdTrustPreview("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","make deploy && echo done"],"sandbox_permissions":"require_escalated"}`), env) {
 		t.Fatal("static compound shells must offer the trust option")
 	}
-	if RunCmdTrustPreview("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","make $TARGET"],"sandbox_permissions":"require_escalated"}`)) {
+	if RunCmdTrustPreview("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","make $TARGET"],"sandbox_permissions":"require_escalated"}`), env) {
 		t.Fatal("dynamic compound shells must not offer the trust option")
 	}
-	// A simple sh -c script unwraps to its inner program and may offer it.
-	if !RunCmdTrustPreview("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","make deploy"],"sandbox_permissions":"require_escalated"}`)) {
-		t.Fatal("simple-shell escalated calls must offer the trust option for the inner program")
-	}
-	if RunCmdTrustPreview("edit", json.RawMessage(`{}`)) {
+	if RunCmdTrustPreview("edit", json.RawMessage(`{}`), env) {
 		t.Fatal("non-run_cmd must not offer the trust option")
 	}
 }
@@ -347,15 +349,12 @@ func TestRunCmdTrustPreview(t *testing.T) {
 // later calls; path/host-varying tools (edit) stay per-call.
 func TestRememberToolByName(t *testing.T) {
 	inner := &recordingApprover{}
-	rules := NewRuleApprover(inner, permission.NewSessionRules())
+	rules := NewRuleApprover(inner, staticPolicy(permission.NewPackageSet()), nil)
 
 	genArgs := json.RawMessage(`{"prompt":"a cat"}`)
 	rule, ok := rules.RememberCall("generate_image", genArgs, "")
-	if !ok || rule.Tool != "generate_image" || rule.Label != "generate_image" {
+	if !ok || rule.Label != "generate_image" {
 		t.Fatalf("remember = %+v ok=%v, want tool generate_image", rule, ok)
-	}
-	if !rule.Grant.IsZero() || rule.Prefixes != nil || rule.Host != "" {
-		t.Fatalf("tool memory must not carry prefixes/host/grant: %+v", rule)
 	}
 
 	genCall := domain.PreparedCall{Call: domain.ToolCall{ID: domain.NewToolCallID(), Name: "generate_image", Arguments: genArgs}}
@@ -371,26 +370,21 @@ func TestRememberToolByName(t *testing.T) {
 	if _, ok := rules.RememberCall("view_image", json.RawMessage(`{"path":"x.png"}`), ""); ok {
 		t.Fatal("view_image must not be rememberable by tool name")
 	}
-	editCall := domain.PreparedCall{Call: domain.ToolCall{ID: domain.NewToolCallID(), Name: "edit", Arguments: json.RawMessage(`{"path":"x.go"}`)}}
-	decision, err = rules.RequestApproval(context.Background(), domain.ApprovalRequest{Call: editCall})
-	if err != nil || decision != domain.DecisionAsk || inner.calls != 1 {
-		t.Fatalf("edit call must delegate: decision=%v inner=%d", decision, inner.calls)
-	}
 }
 
-// TestRememberWritePath covers path memory for boundary-crossing writes:
-// the target's parent directory is remembered and later writes anywhere
-// under it auto-approve; writes elsewhere keep prompting.
+// TestRememberWritePath covers path memory for boundary-crossing
+// writes: the target's parent directory is remembered and later writes
+// anywhere under it auto-approve; writes elsewhere keep prompting.
 func TestRememberWritePath(t *testing.T) {
 	inner := &recordingApprover{}
-	rules := NewRuleApprover(inner, permission.NewSessionRules())
+	rules := NewRuleApprover(inner, staticPolicy(permission.NewPackageSet()), nil)
 
 	dir := t.TempDir()
 	target := filepath.Join(dir, "notes", "a.txt")
 	args := json.RawMessage(`{"path":` + strconv.Quote(target) + `,"content":"x"}`)
 	rule, ok := rules.RememberCall("write", args, "")
 	wantDir := workspacepkg.Canonicalize(filepath.Join(dir, "notes"))
-	if !ok || rule.Path != wantDir || rule.Label != wantDir {
+	if !ok || rule.Label != wantDir {
 		t.Fatalf("remember = %+v ok=%v, want path %q", rule, ok, wantDir)
 	}
 
@@ -415,19 +409,19 @@ func TestRememberWritePath(t *testing.T) {
 
 func TestApprovalRulePreviewWritePath(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "notes", "a.txt")
-	preview, _, ok := ApprovalRulePreview("write", json.RawMessage(`{"path":`+strconv.Quote(target)+`,"content":"x"}`))
+	preview, _, ok := ApprovalRulePreview("write", json.RawMessage(`{"path":`+strconv.Quote(target)+`,"content":"x"}`), permission.DeriveEnv{})
 	want := workspacepkg.Canonicalize(filepath.Dir(target))
 	if !ok || preview != want {
 		t.Fatalf("write preview = %q ok=%v, want %q", preview, ok, want)
 	}
 	// Workspace-relative paths are confined writes: no approval, no preview.
-	if _, _, ok := ApprovalRulePreview("write", json.RawMessage(`{"path":"x.go"}`)); ok {
+	if _, _, ok := ApprovalRulePreview("write", json.RawMessage(`{"path":"x.go"}`), permission.DeriveEnv{}); ok {
 		t.Fatal("relative write paths must not have a path rule preview")
 	}
 }
 
 func TestApprovalRulePreviewTool(t *testing.T) {
-	preview, grant, ok := ApprovalRulePreview("generate_image", json.RawMessage(`{"prompt":"a cat"}`))
+	preview, grant, ok := ApprovalRulePreview("generate_image", json.RawMessage(`{"prompt":"a cat"}`), permission.DeriveEnv{})
 	if !ok || preview != "generate_image" {
 		t.Fatalf("preview = %q ok=%v, want generate_image", preview, ok)
 	}
@@ -435,12 +429,12 @@ func TestApprovalRulePreviewTool(t *testing.T) {
 		t.Fatalf("grant = %+v, want zero", grant)
 	}
 	// The preview is the canonical (normalized) tool name.
-	preview, _, ok = ApprovalRulePreview("Generate_Image", json.RawMessage(`{"prompt":"a cat"}`))
+	preview, _, ok = ApprovalRulePreview("Generate_Image", json.RawMessage(`{"prompt":"a cat"}`), permission.DeriveEnv{})
 	if !ok || preview != "generate_image" {
 		t.Fatalf("preview = %q ok=%v, want canonical generate_image", preview, ok)
 	}
 	for _, name := range []string{"edit", "write", "view_image", "websearch"} {
-		if _, _, ok := ApprovalRulePreview(name, json.RawMessage(`{}`)); ok {
+		if _, _, ok := ApprovalRulePreview(name, json.RawMessage(`{}`), permission.DeriveEnv{}); ok {
 			t.Errorf("%s must not have a tool-name rule preview", name)
 		}
 	}

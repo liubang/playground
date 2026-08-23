@@ -15,13 +15,15 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/07/22 21:10
 
+// Policy is the agent-loop facade of the permission model: it owns the
+// capability set, the derivation environment, and the approval mode,
+// and answers the loop's single question — Evaluate — by deriving the
+// call's effect and running the inclusion decision (decide.go).
 package permission
 
 import (
 	"context"
 	"log/slog"
-	"os"
-	"path/filepath"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
@@ -29,162 +31,190 @@ import (
 // PolicyDecision represents allow/deny/ask.
 type PolicyDecision = domain.Decision
 
-// Policy is the assembly parameter pack for the decider chain
-// (docs/PERMISSION_DESIGN.md §4): declarative rules plus session memory.
-// Evaluation itself lives in the deciders (decider.go); Policy.Decider
-// wires them in strictest-first order.
+// Policy is the assembled permission policy.
 type Policy struct {
-	// Rules are declarative argv-prefix rules loaded from user/project
-	// layers (nil = none).
-	Rules *RuleSet
-	// Session holds categorical prefixes remembered from interactive
-	// "allow always" decisions (nil = none). Only run_cmd calls are
-	// session-rule eligible.
-	Session *SessionRules
-	// UserIntent enables the user-intent decider: URL calls targeting a
-	// host the user mentioned in the conversation are auto-allowed
-	// (interactive modes only — never mode keeps its strict unattended
-	// contract). The decider enters the chain with an empty snapshot;
-	// each routing pass rebinds it from the live transcript via
-	// Chain.WithUserIntent.
+	// Packages is the evaluated capability set: builtin + user +
+	// project + remembered packages, plus the running session's
+	// in-memory approvals (scope session).
+	Packages *PackageSet
+	// Env carries the canonical roots the default sandbox confines.
+	Env DeriveEnv
+	// Mode is the approval mode (residual strategy).
+	Mode ApprovalMode
+	// UserIntent enables the user-intent allowance: URL calls targeting
+	// a host the user mentioned in the conversation are auto-allowed
+	// (interactive modes only). The host snapshot is rebound from the
+	// live transcript once per routing pass via WithUserIntent.
 	UserIntent bool
+	// intentHosts is the current host snapshot (nil until rebound).
+	intentHosts map[string]struct{}
 }
 
-// DefaultPolicy returns the baseline security policy per §12.1.
+// DefaultPolicy returns the empty policy: no packages, on-request mode,
+// the default sandbox as the only grant.
 func DefaultPolicy() Policy {
-	return Policy{}
+	return Policy{Packages: NewPackageSet(), Mode: ModeOnRequest}
 }
 
-// Decider assembles the strategy chain for the given approval mode:
-//
-//	rules (strictest wins, incl. deny) → danger heuristics → user intent
-//	(hosts the user mentioned; interactive modes only, when enabled) →
-//	session memory → mode-aware baseline (always terminal)
-//
-// Swapping a strategy means swapping one chain element. The returned
-// Chain satisfies the agent's Policy interface (Evaluate → domain.Verdict)
-// and never produces a nil verdict.
-func (p Policy) Decider(mode ApprovalMode) Chain {
-	chain := Chain{
-		RuleDecider{Rules: p.Rules},
-		DangerDecider{Mode: mode},
+// Evaluate resolves the verdict for one prepared call: derive the
+// effect, then decide by inclusion. It satisfies the agent loop's
+// Policy interface and never blocks.
+func (p Policy) Evaluate(call domain.PreparedCall) domain.Verdict {
+	d := DeriveEffect(call, p.Env)
+	var hosts map[string]struct{}
+	if p.UserIntent && p.Mode != ModeNever {
+		hosts = p.intentHosts
 	}
-	if p.UserIntent && mode != ModeNever {
-		chain = append(chain, UserIntentDecider{})
-	}
-	return append(
-		chain,
-		SessionDecider{Session: p.Session},
-		BaselineDecider{Mode: mode},
-	)
+	return p.Packages.Decide(d, p.Mode, hosts)
 }
 
-// trustedProgramDirs are candidate system directories whose executables
-// may resolve through basename rules (/bin/ls → ls) — but only after a
-// runtime check proves the directory is trustworthy (isTrustedProgramDir).
-// Anything else must match rules by full path: an attacker-writable
-// directory must never gain basename trust (an evil /tmp/ls is NOT ls).
-var trustedProgramDirs = []string{
-	"/bin", "/sbin", "/usr/bin", "/usr/sbin",
-	"/usr/local/bin", "/usr/local/sbin", "/opt/homebrew/bin",
+// DeriveCall exposes the derivation for the approval flow (the ask
+// verdict's UI wants the effect's description and indicators without
+// re-deriving).
+func (p Policy) DeriveCall(call domain.PreparedCall) Derivation {
+	return DeriveEffect(call, p.Env)
 }
 
-// isTrustedProgramDir reports whether dir is a candidate directory whose
-// ownership and permissions actually justify basename trust: it must be
-// root-owned and not writable by group or others. A static allowlist is
-// not enough — /opt/homebrew/bin is owned by the daily login user (and
-// group-writable) on any Homebrew machine, so a trojaned binary there
-// would otherwise inherit the trust of bare-name rules.
-func isTrustedProgramDir(dir string) bool {
-	listed := false
-	for _, d := range trustedProgramDirs {
-		if dir == d {
-			listed = true
-			break
-		}
-	}
-	if !listed {
-		return false
-	}
-	info, err := os.Stat(dir)
-	if err != nil || !info.IsDir() {
-		return false
-	}
-	return info.Mode().Perm()&0o022 == 0 && dirOwnedByRoot(info)
+// WithUserIntent returns a copy of the policy with the user-intent host
+// snapshot rebound. The copy is cheap (the capability set is shared and
+// immutable during a routing pass), so concurrent runs never observe
+// each other's transcripts.
+func (p Policy) WithUserIntent(hosts map[string]struct{}) Policy {
+	p.intentHosts = hosts
+	return p
 }
 
-// NormalizeTrustedPath rewrites argv[0] to its basename when it lives in a
-// verified trusted system directory, so bare-name rules match absolute
-// invocations.
-func NormalizeTrustedPath(argv []string) ([]string, bool) {
-	if len(argv) == 0 {
-		return nil, false
-	}
-	dir := filepath.Dir(argv[0])
-	base := filepath.Base(argv[0])
-	if base == argv[0] {
-		return nil, false // already bare
-	}
-	if isTrustedProgramDir(dir) {
-		return append([]string{base}, argv[1:]...), true
-	}
-	return nil, false
-}
-
-// RuleLoadOptions selects which declarative rule layers load onto the
-// policy baseline. Values come from the config file's rules.* section
-// (resolved by internal/config).
-type RuleLoadOptions struct {
-	// Enabled=false skips all rule loading (including the builtin set).
+// PackageLoadOptions selects which declarative layers load onto the
+// capability set. Values come from the config file's rules.* section.
+type PackageLoadOptions struct {
+	// Enabled=false skips all loading (including the builtin set).
 	Enabled bool
-	// Builtin=false skips only the embedded read-only set.
+	// Builtin=false skips only the embedded set.
 	Builtin bool
 	// Project=false skips the project layer (<workspace>/.loom/rules).
 	Project bool
-	// ProjectAllow lets project rules say "allow" (off by default: an
-	// untrusted checkout may only tighten policy, never loosen it).
+	// ProjectAllow lets project packages say "allow" (off by default:
+	// an untrusted checkout may only tighten policy, never loosen it).
 	ProjectAllow bool
 }
 
-// AttachRules loads declarative rules onto the given baseline policy: the
-// embedded builtin set, plus the user layer (userDir, i.e. <loom home>/rules)
-// and the project layer (<workspace>/.loom/rules), plus the SQLite
-// remembered store under userDir. Rule loading never fails the agent —
-// broken files/stores are logged and skipped.
-func AttachRules(ctx context.Context, policy Policy, workspaceRoot, userDir string, loadOpts RuleLoadOptions, logger *slog.Logger) Policy {
-	if !loadOpts.Enabled {
-		return policy
+// AttachPackages (re)loads the declarative layers of the given
+// capability set — the embedded builtin set, the user layer (userDir,
+// i.e. <loom home>/rules), the project layer
+// (<workspace>/.loom/rules), and the SQLite remembered store under
+// userDir — atomically replacing every non-session package, so config
+// hot-reloads and rule-file edits take effect while the session's
+// in-memory approvals survive. Loading never fails the agent — broken
+// files/stores are logged and skipped.
+func AttachPackages(ctx context.Context, set *PackageSet, workspaceRoot, userDir string, opts PackageLoadOptions, logger *slog.Logger) {
+	if set == nil {
+		return
 	}
-	rules := &RuleSet{}
-	if loadOpts.Builtin {
-		if builtin, err := LoadBuiltinRules(); err != nil {
-			// Broken embedded rules are a build-time bug; never break the agent.
-			logger.Warn("loom rules: builtin set rejected", "error", err)
+	if !opts.Enabled {
+		set.ReplaceLayers()
+		return
+	}
+	var loaded []Package
+	if opts.Builtin {
+		if builtin, err := LoadBuiltinPackages(); err != nil {
+			// Broken embedded packages are a build-time bug; never
+			// break the agent.
+			logger.Warn("loom packages: builtin set rejected", "error", err)
 		} else {
-			rules.merge(builtin)
+			loaded = append(loaded, builtin...)
 		}
 	}
 	projectDir := ""
-	if loadOpts.Project {
+	if opts.Project {
 		projectDir = RulesDirProject(workspaceRoot)
 	}
-	opts := LoadOptions{ProjectAllows: loadOpts.ProjectAllow}
-	fileRules, errs := LoadRuleSets(userDir, projectDir, opts)
+	filePackages, errs := LoadPackageSets(userDir, projectDir, LoadOptions{ProjectAllows: opts.ProjectAllow})
 	for _, err := range errs {
-		logger.Warn("loom rules: skipped a rule source", "error", err)
+		logger.Warn("loom packages: skipped a package source", "error", err)
 	}
-	rules.merge(fileRules)
-	// Remembered store (SQLite): machine-managed "allow always" memory.
+	loaded = append(loaded, filePackages...)
 	if userDir != "" {
-		if remembered, err := LoadRememberedRules(ctx, RememberedDBPath(userDir)); err != nil {
-			logger.Warn("loom rules: remembered store unreadable", "error", err)
-		} else if remembered.HasAny() {
-			rules.merge(remembered)
+		if remembered, err := LoadRememberedPackages(ctx, RememberedDBPath(userDir)); err != nil {
+			logger.Warn("loom packages: remembered store unreadable", "error", err)
+		} else {
+			loaded = append(loaded, remembered...)
 		}
 	}
-	if rules.HasAny() {
-		logger.Info("loom rules loaded", "rules", len(rules.Rules()), "domains", len(rules.Domains()), "tools", len(rules.Tools()))
+	set.ReplaceLayers(loaded...)
+	if len(loaded) > 0 {
+		logger.Info("loom packages loaded", "packages", len(loaded))
 	}
-	policy.Rules = rules
-	return policy
+}
+
+// ReplaceLayers atomically swaps every non-session package (the
+// declarative layers) while keeping the session's in-memory approvals.
+func (s *PackageSet) ReplaceLayers(pkgs ...Package) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	kept := s.packages[:0]
+	for _, p := range s.packages {
+		if p.Scope == ScopeSession {
+			kept = append(kept, p)
+		}
+	}
+	s.packages = append(kept, pkgs...)
+}
+
+// RememberSession records an interactive approval as a session-scope
+// package (latest approval wins on the same binding). Only allow
+// packages are accepted: deny/ask policy belongs in files, not in
+// interactive memory.
+func (s *PackageSet) RememberSession(pkg Package) bool {
+	if s == nil || pkg.Decision != domain.DecisionAllow {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	pkg.Scope = ScopeSession
+	for i, existing := range s.packages {
+		if bindingsEqual(existing.Bind, pkg.Bind) && existing.Scope == ScopeSession {
+			s.packages[i] = pkg // latest approval wins
+			return true
+		}
+	}
+	s.packages = append(s.packages, pkg)
+	return true
+}
+
+// ForgetSession removes a session-scope package by binding. ok=false
+// means the binding was not remembered this session.
+func (s *PackageSet) ForgetSession(bind Binding) bool {
+	if s == nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, p := range s.packages {
+		if p.Scope == ScopeSession && bindingsEqual(p.Bind, bind) {
+			s.packages = append(s.packages[:i], s.packages[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
+// bindingsEqual compares two bindings exactly (kind plus content).
+func bindingsEqual(a, b Binding) bool {
+	if a.Kind != b.Kind {
+		return false
+	}
+	switch a.Kind {
+	case BindArgv, BindArgvExact:
+		return stringSliceEqual(a.Argv, b.Argv)
+	case BindHost:
+		return a.Host == b.Host
+	case BindPath:
+		return a.Path == b.Path
+	case BindTool:
+		return a.Tool == b.Tool
+	}
+	return false
 }

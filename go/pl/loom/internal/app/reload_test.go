@@ -162,14 +162,19 @@ func TestRulePackHotReload(t *testing.T) {
 	// Bootstrap assembled by testBootstrap lacks permissionPolicy, which
 	// ReloadPolicy treats as "no policy loaded" and skips — the exact gap
 	// this test guards.
-	policy := permission.AttachRules(ctx, permission.DefaultPolicy(), t.TempDir(), rulesDir, permission.RuleLoadOptions{Enabled: true, Builtin: true}, slog.Default())
-	decider := policy.Decider(permission.ModeUnlessDangerous)
+	packages := permission.NewPackageSet()
+	permission.AttachPackages(ctx, packages, t.TempDir(), rulesDir, permission.PackageLoadOptions{Enabled: true, Builtin: true}, slog.Default())
+	policy := permission.Policy{
+		Packages:   packages,
+		Mode:       permission.ModeUnlessDangerous,
+		UserIntent: true,
+	}
 	b := &Bootstrap{
 		ProcessRuntime:   proc,
 		Registry:         agent.NewToolRegistry(),
 		SteerCell:        agent.NewSteerCell(),
 		WorkspaceRoot:    t.TempDir(),
-		Policy:           decider,
+		Policy:           wirePolicy(policy),
 		permissionPolicy: &policy,
 		approvalMode:     permission.ModeUnlessDangerous,
 	}
