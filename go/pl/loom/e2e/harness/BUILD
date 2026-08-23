@@ -15,6 +15,7 @@ go_library(
         "//go/pl/loom/internal/config:config_lib",
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/model/replay:replay_lib",
+        "//go/pl/loom/internal/prompt",
         "//go/pl/loom/internal/runtimeevent",
         "//go/pl/loom/internal/session:session_lib",
         "@in_gopkg_yaml_v3//:yaml_v3",

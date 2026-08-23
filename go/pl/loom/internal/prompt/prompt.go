@@ -486,6 +486,33 @@ type systemEnvProvider struct {
 	clock         domain.Clock
 }
 
+// NewFixedEnvProvider returns an EnvProvider that collects the host
+// environment like the default but reports fixed Platform/Shell values.
+// Snapshot tests pin these: the byte/4 occupancy estimate counts the
+// system prompt, so a one-byte host difference (darwin/arm64 vs
+// linux/amd64, /bin/zsh vs an unset SHELL) flips the golden numbers
+// across platforms.
+func NewFixedEnvProvider(workspaceRoot, platform, shell string) EnvProvider {
+	return fixedEnvProvider{
+		inner:    systemEnvProvider{workspaceRoot: workspaceRoot, clock: domain.RealClock{}},
+		platform: platform,
+		shell:    shell,
+	}
+}
+
+type fixedEnvProvider struct {
+	inner    EnvProvider
+	platform string
+	shell    string
+}
+
+func (p fixedEnvProvider) Collect(ctx context.Context) (Environment, error) {
+	env, err := p.inner.Collect(ctx)
+	env.Platform = p.platform
+	env.Shell = p.shell
+	return env, err
+}
+
 func (p systemEnvProvider) Collect(ctx context.Context) (Environment, error) {
 	env := Environment{
 		WorkspaceRoot: p.workspaceRoot,

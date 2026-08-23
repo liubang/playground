@@ -44,6 +44,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/client"
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/model/replay"
+	"github.com/liubang/playground/go/pl/loom/internal/prompt"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 )
@@ -184,6 +185,11 @@ func (e *Env) StartStack(t *testing.T) {
 
 	bootstrap, err := app.NewWorkspaceBootstrap(e.Ctx, proc, app.BootstrapConfig{
 		WorkspaceRoot: e.Workspace,
+		// Pin the prompt environment: the byte/4 occupancy estimate counts
+		// the system prompt, so host-derived Platform/Shell (darwin/arm64 +
+		// /bin/zsh vs linux/amd64 + unset SHELL) would flip golden numbers
+		// across platforms.
+		PromptEnv: prompt.NewFixedEnvProvider(e.Workspace, "e2e/e2e", "e2e"),
 	})
 	if err != nil {
 		t.Fatalf("NewWorkspaceBootstrap: %v", err)

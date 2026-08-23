@@ -70,6 +70,11 @@ type BootstrapConfig struct {
 	// WorkspaceID is the owning workspace entity's ID (docs/WORKSPACE_DESIGN
 	// W1); zero only in hand-assembled test bootstraps.
 	WorkspaceID domain.WorkspaceID
+	// PromptEnv overrides the system prompt's environment collector for every
+	// prompt this workspace builds (main agent and sub-agent roles); nil
+	// keeps the host-derived default. E2e harnesses pin it so golden files
+	// stay platform-deterministic.
+	PromptEnv prompt.EnvProvider
 }
 
 // Bootstrap assembles the workspace-scoped runtime components for one
@@ -106,8 +111,11 @@ type Bootstrap struct {
 	// assembly (WireSkills also registers read_skill, which stays fixed);
 	// prompt rebuilds reuse it.
 	skillsPromptOpt prompt.Option
-	Validator       *workspace.PathValidator
-	Runner          *process.Runner
+	// promptEnv is the pinned environment collector from BootstrapConfig
+	// (nil outside tests); prompt rebuilds must keep applying it.
+	promptEnv prompt.EnvProvider
+	Validator *workspace.PathValidator
+	Runner    *process.Runner
 	// FileStateBook is the shared read/write hash tracker used by
 	// read_file and edit for drift detection; rewind restoration updates
 	// it so a post-rewind edit measures drift from the restored content.
@@ -362,9 +370,14 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 
 		// Assemble the role specs: researcher (read-only, R1) and coder
 		// (read-write, R3). The coder registry adds edit/write/run_cmd/lint.
-		researcherPrompt := prompt.NewBuilder(cfg.WorkspaceRoot,
+		researcherOpts := []prompt.Option{
 			prompt.WithExtraInstructions(subagent.ResearcherInstructions),
-			prompt.WithRulesProvider(prompt.NewFileRulesProvider(cfg.WorkspaceRoot, resolved.Storage.LoomMDPath())))
+			prompt.WithRulesProvider(prompt.NewFileRulesProvider(cfg.WorkspaceRoot, resolved.Storage.LoomMDPath())),
+		}
+		if cfg.PromptEnv != nil {
+			researcherOpts = append(researcherOpts, prompt.WithEnvProvider(cfg.PromptEnv))
+		}
+		researcherPrompt := prompt.NewBuilder(cfg.WorkspaceRoot, researcherOpts...)
 		researcherSpec := &subagent.RoleSpec{
 			Registry: researcherRegistry,
 			Prompt:   researcherPrompt,
@@ -380,9 +393,14 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 				logger.Warn("coder knowledge base tools registration failed", "error", err)
 			}
 		}
-		coderPrompt := prompt.NewBuilder(cfg.WorkspaceRoot,
+		coderOpts := []prompt.Option{
 			prompt.WithExtraInstructions(subagent.CoderInstructions),
-			prompt.WithRulesProvider(prompt.NewFileRulesProvider(cfg.WorkspaceRoot, resolved.Storage.LoomMDPath())))
+			prompt.WithRulesProvider(prompt.NewFileRulesProvider(cfg.WorkspaceRoot, resolved.Storage.LoomMDPath())),
+		}
+		if cfg.PromptEnv != nil {
+			coderOpts = append(coderOpts, prompt.WithEnvProvider(cfg.PromptEnv))
+		}
+		coderPrompt := prompt.NewBuilder(cfg.WorkspaceRoot, coderOpts...)
 		coderSpec := &subagent.RoleSpec{
 			Registry: coderRegistry,
 			Prompt:   coderPrompt,
@@ -466,6 +484,7 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		permissionPolicy: &policy,
 		approvalMode:     resolved.Approval.Mode,
 		skillsPromptOpt:  skillsOpt,
+		promptEnv:        cfg.PromptEnv,
 		Validator:        validator,
 		Runner:           runner,
 		FileStateBook:    book,
@@ -496,6 +515,9 @@ func (b *Bootstrap) buildPrompt(ctx context.Context, resolved *config.ResolvedCo
 	promptOpts := []prompt.Option{
 		prompt.WithExtraInstructions(resolved.Prompt.Extra),
 		prompt.WithRulesProvider(prompt.NewFileRulesProvider(b.WorkspaceRoot, resolved.Storage.LoomMDPath())),
+	}
+	if b.promptEnv != nil {
+		promptOpts = append(promptOpts, prompt.WithEnvProvider(b.promptEnv))
 	}
 	// traceCfg is rebuilt from the resolved config for ResolveManagedPrompt;
 	// the recorder/provider themselves are process-level (ProcessRuntime).
