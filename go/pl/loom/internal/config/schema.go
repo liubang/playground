@@ -390,6 +390,13 @@ type Sessions struct {
 	// until explicitly unarchived. Empty or "0" disables the archiver
 	// (the default).
 	AutoArchiveAfter string `yaml:"auto_archive_after,omitempty"`
+	// GCArchivedAfter (Go duration, e.g. "720h") permanently deletes
+	// sessions that have been archived for longer than this, together with
+	// their events, checkpoints and file-change history; artifacts no
+	// remaining session references are collected by the same sweep. Empty
+	// or "0" disables purging (the default): archived sessions are kept
+	// forever.
+	GCArchivedAfter string `yaml:"gc_archived_after,omitempty"`
 }
 
 // Browser configures the headless Chrome browser tool. Enabled is

@@ -290,6 +290,11 @@ func (s *Store) OpenArtifact(ctx context.Context, ref domain.ArtifactRef) (io.Re
 	return file, nil
 }
 
+// DefaultGCGracePeriod keeps recently referenced artifacts reachable so a
+// crash between reference recording and garbage collection never collects
+// a live blob.
+const DefaultGCGracePeriod = 24 * time.Hour
+
 // GCReport summarizes one garbage-collection sweep.
 type GCReport struct {
 	Scanned       int   `json:"scanned"`
@@ -330,22 +335,28 @@ func (s *Store) CollectGarbage(ctx context.Context, referenced map[domain.Artifa
 			return nil
 		}
 		if strings.HasPrefix(entry.Name(), ".artifact-") {
-			info, err := entry.Info()
+			info, ok, err := walkEntryInfo(entry)
 			if err != nil {
 				return err
+			}
+			if !ok {
+				return nil
 			}
 			if info.ModTime().After(cutoff) {
 				return nil
 			}
-			if err := os.Remove(path); err != nil {
+			if _, err := removeBlob(path); err != nil {
 				return err
 			}
 			dirtyDirs[filepath.Dir(path)] = struct{}{}
 			return nil
 		}
-		info, err := entry.Info()
+		info, ok, err := walkEntryInfo(entry)
 		if err != nil {
 			return err
+		}
+		if !ok {
+			return nil
 		}
 		if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
 			return domain.NewError(domain.ErrSecurity, "artifact store contains a non-regular blob")
@@ -371,8 +382,15 @@ func (s *Store) CollectGarbage(ctx context.Context, referenced map[domain.Artifa
 			report.GraceRetained++
 			return nil
 		}
-		if err := os.Remove(path); err != nil {
+		removed, err := removeBlob(path)
+		if err != nil {
 			return err
+		}
+		if !removed {
+			// Lost the race with a concurrent sweep: the blob is gone, so
+			// this pass neither scanned nor deleted it.
+			report.Scanned--
+			return nil
 		}
 		report.Deleted++
 		report.DeletedBytes += info.Size()
@@ -395,6 +413,34 @@ func (s *Store) CollectGarbage(ctx context.Context, referenced map[domain.Artifa
 		}
 	}
 	return report, nil
+}
+
+// walkEntryInfo stats a walked entry; ok=false means the entry vanished
+// mid-walk (a concurrent commit, abort, or sweep removed it) and the walk
+// should skip it rather than abort the whole pass.
+func walkEntryInfo(entry os.DirEntry) (info os.FileInfo, ok bool, err error) {
+	info, err = entry.Info()
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	return info, true, nil
+}
+
+// removeBlob deletes one collected blob, reporting whether this call
+// actually removed it. A missing file is not an error: concurrent sweeps
+// (loom serve and a manual loom gc share the store root) may collect the
+// same blob, and the loser simply has nothing left to do.
+func removeBlob(path string) (bool, error) {
+	if err := os.Remove(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // ReadAll reads a verified artifact while retaining the store's hard bound.
@@ -433,6 +479,7 @@ func (s *Store) commitStaged(stagingPath, digest string, size int64) (domain.Art
 		if err := validateExisting(destination, info, digest, size); err != nil {
 			return domain.ArtifactRef{}, err
 		}
+		refreshBlobModTime(destination)
 		_ = os.Remove(stagingPath)
 		return ref, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -441,6 +488,7 @@ func (s *Store) commitStaged(stagingPath, digest string, size int64) (domain.Art
 	if err := os.Link(stagingPath, destination); err != nil {
 		if info, statErr := os.Lstat(destination); statErr == nil {
 			if verifyErr := validateExisting(destination, info, digest, size); verifyErr == nil {
+				refreshBlobModTime(destination)
 				_ = os.Remove(stagingPath)
 				return ref, nil
 			}
@@ -454,6 +502,17 @@ func (s *Store) commitStaged(stagingPath, digest string, size int64) (domain.Art
 		return domain.ArtifactRef{}, err
 	}
 	return ref, nil
+}
+
+// refreshBlobModTime restarts a re-published blob's GC grace window:
+// without it, re-committing content whose blob survives from an old
+// session keeps the ancient mtime, and a collector walking between this
+// commit and the reference landing in the session store could delete a
+// live blob. Best-effort — a failed touch degrades to the pre-existing
+// behavior, never corrupts.
+func refreshBlobModTime(path string) {
+	now := time.Now()
+	_ = os.Chtimes(path, now, now)
 }
 
 func (s *Store) pathForDigest(digest string) string {

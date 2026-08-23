@@ -799,6 +799,96 @@ func TestSQLiteStoreArchiveStaleSessions(t *testing.T) {
 	}
 }
 
+// DeleteExpiredArchivedSessions removes exactly the sessions archived at
+// or before the cutoff — with every per-session row — and is idempotent.
+// Active and recently archived sessions are never touched.
+func TestSQLiteStoreDeleteExpiredArchivedSessions(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	expired, boundary, freshArchived, active := domain.NewSessionID(), domain.NewSessionID(), domain.NewSessionID(), domain.NewSessionID()
+	for _, id := range []domain.SessionID{expired, boundary, freshArchived, active} {
+		if err := store.CreateSession(ctx, id, domain.WorkspaceID{}); err != nil {
+			t.Fatalf("CreateSession: %v", err)
+		}
+	}
+	// The expired session carries a full complement of per-session rows.
+	artifactID, _ := domain.ParseArtifactID("art_sha256_" + strings.Repeat("9", 64))
+	ckpt := testCheckpoint(expired, 1, time.Now().UTC())
+	ckpt.Messages[0].Parts = []domain.ContentPart{
+		{Kind: domain.PartArtifact, Artifact: &domain.ArtifactRef{ID: artifactID, Size: 7}},
+	}
+	events := []domain.Event{newEvent(expired, 1, domain.EventSessionCreated, nil)}
+	if err := store.AppendEventsAndCheckpoint(ctx, expired, 0, events, ckpt); err != nil {
+		t.Fatalf("AppendEventsAndCheckpoint: %v", err)
+	}
+	if err := store.RecordFileChange(ctx, expired, "a.go", true, "h1", []byte("v1"), "h2"); err != nil {
+		t.Fatalf("RecordFileChange: %v", err)
+	}
+	if err := store.EnqueueMemoryJob(ctx, expired, "/ws"); err != nil {
+		t.Fatalf("EnqueueMemoryJob: %v", err)
+	}
+	if _, err := store.GetOrCreateShare(ctx, expired); err != nil {
+		t.Fatalf("GetOrCreateShare: %v", err)
+	}
+	for _, id := range []domain.SessionID{expired, boundary, freshArchived} {
+		if _, err := store.SetSessionArchived(ctx, id, true); err != nil {
+			t.Fatalf("SetSessionArchived: %v", err)
+		}
+	}
+	cutoff := time.Now().Add(-24 * time.Hour)
+	backdate := map[domain.SessionID]time.Time{
+		expired:  cutoff.Add(-time.Hour),
+		boundary: cutoff, // boundary semantics: archived_at == cutoff is purged (<=)
+	}
+	for id, at := range backdate {
+		if _, err := store.db.ExecContext(ctx,
+			"UPDATE sessions SET archived_at_unix_nano = ? WHERE session_id = ?",
+			at.UnixNano(), id.String()); err != nil {
+			t.Fatalf("backdate %s: %v", id, err)
+		}
+	}
+
+	ids, err := store.DeleteExpiredArchivedSessions(ctx, cutoff)
+	if err != nil {
+		t.Fatalf("DeleteExpiredArchivedSessions: %v", err)
+	}
+	if len(ids) != 2 {
+		t.Fatalf("purged ids = %v, want 2 (expired + boundary)", ids)
+	}
+	got := map[domain.SessionID]bool{ids[0]: true, ids[1]: true}
+	if !got[expired] || !got[boundary] {
+		t.Fatalf("purged ids = %v, want %s and %s", ids, expired, boundary)
+	}
+	for _, table := range []string{"sessions", "events", "checkpoints", "artifact_refs", "file_changes", "memory_jobs", "session_shares"} {
+		var n int
+		if err := store.db.QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM "+table+" WHERE session_id = ?", expired.String()).Scan(&n); err != nil {
+			t.Fatalf("count %s: %v", table, err)
+		}
+		if n != 0 {
+			t.Fatalf("%s rows after purge = %d, want 0", table, n)
+		}
+	}
+	arch, _, err := store.ListSessions(ctx, "", 10, true, domain.WorkspaceID{})
+	if err != nil {
+		t.Fatalf("ListSessions archived: %v", err)
+	}
+	if len(arch) != 1 || arch[0].ID != freshArchived {
+		t.Fatalf("archived listing after purge = %+v, want only the fresh archived session", arch)
+	}
+	def, _, err := store.ListSessions(ctx, "", 10, false, domain.WorkspaceID{})
+	if err != nil {
+		t.Fatalf("ListSessions default: %v", err)
+	}
+	if len(def) != 1 || def[0].ID != active {
+		t.Fatalf("default listing after purge = %+v, want only the active session", def)
+	}
+	// A second sweep with the same cutoff purges nothing.
+	if ids, err := store.DeleteExpiredArchivedSessions(ctx, cutoff); err != nil || len(ids) != 0 {
+		t.Fatalf("second DeleteExpiredArchivedSessions = %v, %v; want empty, nil", ids, err)
+	}
+}
+
 func TestSQLiteStoreFirstUserMessageTexts(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))

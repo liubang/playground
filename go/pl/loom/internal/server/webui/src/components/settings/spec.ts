@@ -492,6 +492,12 @@ export const TABS: TabSpec[] = [
             ph: '如 720h',
             hint: '超过该时长未活跃的会话自动归档（只读，可随时取消归档）；留空或 0 = 关闭',
           },
+          {
+            key: 'sessions.gc_archived_after',
+            label: '归档保留时长',
+            ph: '如 720h',
+            hint: '归档超过该时长的会话被永久删除（含事件、检查点与文件变更历史）；留空或 0 = 永久保留',
+          },
         ],
       ],
       [

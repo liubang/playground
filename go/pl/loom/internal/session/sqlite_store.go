@@ -1021,6 +1021,70 @@ func (s *SQLiteStore) IsSessionArchived(ctx context.Context, sessionID domain.Se
 	return archivedAt.Valid, nil
 }
 
+// DeleteExpiredArchivedSessions permanently removes every session archived
+// at or before cutoff, together with all of its persisted data, and returns
+// the deleted session IDs. It is the retention sweep behind
+// sessions.gc_archived_after: archiving is reversible, this is not.
+//
+// The candidate scan and the deletes ride one transaction, which BEGIN
+// IMMEDIATE (see OpenSQLiteStore) takes the write lock up front — a
+// concurrent unarchive (SetSessionArchived) serializes against the whole
+// pass, so a session restored between scan and delete can never be
+// removed. Like ArchiveStaleSessions the sweep is idempotent and safe for
+// concurrent loom processes sharing the database.
+func (s *SQLiteStore) DeleteExpiredArchivedSessions(ctx context.Context, cutoff time.Time) ([]domain.SessionID, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, storeError("begin purge transaction", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	rows, err := tx.QueryContext(ctx, `
+SELECT session_id FROM sessions
+WHERE archived_at_unix_nano IS NOT NULL AND archived_at_unix_nano <= ?`, cutoff.UnixNano())
+	if err != nil {
+		return nil, storeError("scan expired archived sessions", err)
+	}
+	var ids []domain.SessionID
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			_ = rows.Close()
+			return nil, storeError("scan expired archived session", err)
+		}
+		id, err := domain.ParseSessionID(raw)
+		if err != nil {
+			_ = rows.Close()
+			return nil, storeError("decode expired session ID", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, storeError("iterate expired archived sessions", err)
+	}
+	_ = rows.Close()
+	for _, id := range ids {
+		if _, err := tx.ExecContext(ctx,
+			"DELETE FROM file_changes WHERE session_id = ?", id.String()); err != nil {
+			return nil, storeError("delete purged session file changes", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			"DELETE FROM memory_jobs WHERE session_id = ?", id.String()); err != nil {
+			return nil, storeError("delete purged session memory job", err)
+		}
+		// Events, checkpoints, artifact_refs and session_shares cascade
+		// from the sessions row.
+		if _, err := tx.ExecContext(ctx,
+			"DELETE FROM sessions WHERE session_id = ?", id.String()); err != nil {
+			return nil, storeError("delete purged session", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, storeError("commit purge transaction", err)
+	}
+	return ids, nil
+}
+
 // ArchiveStaleSessions marks every unarchived session whose last activity
 // (updated_at) is at or before cutoff as archived, and reports how many
 // sessions this call archived. It is a single atomic UPDATE — idempotent

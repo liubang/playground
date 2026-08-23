@@ -122,7 +122,7 @@ func run(ctx context.Context, args []string) error {
 		if len(args) != 1 {
 			return errors.New("usage: loom gc")
 		}
-		return collectArtifactGarbage(ctx)
+		return collectGarbage(ctx)
 	case "rules":
 		if len(args) == 2 && args[1] == "list" {
 			return listRules()

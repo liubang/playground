@@ -83,6 +83,7 @@ go_test(
         "channel_questioner_test.go",
         "controller_test.go",
         "maze_test.go",
+        "process_runtime_test.go",
         "prompt_refs_test.go",
         "reload_test.go",
         "rewind_test.go",

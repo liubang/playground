@@ -801,3 +801,32 @@ func TestWorkspaceRegistryDeleteRePinsDefault(t *testing.T) {
 		t.Fatal("expected nil Default() after deleting all workspaces")
 	}
 }
+
+// A session purged by the maintenance sweep loses its live handle through
+// the purge hook registered at service construction — no in-memory ghost
+// outlives its persisted session.
+func TestSessionServiceEvictsPurgedSessionHandles(t *testing.T) {
+	ctx := context.Background()
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
+	t.Cleanup(broker.Close)
+	b := testBootstrap(store, fakes.NewFakeModel())
+	svc := NewSingletonWorkspaceService(b, broker, SessionServiceConfig{})
+	t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
+
+	h, err := svc.CreateSession(ctx, domain.WorkspaceID{})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if _, ok := svc.Get(h.ID); !ok {
+		t.Fatal("handle must be live after CreateSession")
+	}
+	b.ProcessRuntime.notifySessionsPurged(ctx, []domain.SessionID{h.ID})
+	if _, ok := svc.Get(h.ID); ok {
+		t.Fatal("purged session handle must be evicted")
+	}
+}

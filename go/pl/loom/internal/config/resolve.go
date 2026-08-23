@@ -1292,24 +1292,36 @@ type ResolvedSessions struct {
 	// AutoArchiveAfter archives sessions idle (no appended events) for
 	// longer than this; 0 disables the background archiver.
 	AutoArchiveAfter time.Duration
+	// GCArchivedAfter permanently deletes sessions archived for longer than
+	// this; 0 disables the purge (archived sessions are kept forever).
+	GCArchivedAfter time.Duration
 }
 
-// resolveSessions validates the sessions section. The archiver is opt-in:
-// absent/empty/"0" leaves AutoArchiveAfter at 0 (disabled).
+// resolveSessions validates the sessions section. Both knobs are opt-in:
+// absent/empty/"0" leaves the durations at 0 (disabled).
 func resolveSessions(in Sessions) (ResolvedSessions, error) {
 	var out ResolvedSessions
-	raw := strings.TrimSpace(in.AutoArchiveAfter)
-	if raw == "" {
-		return out, nil
+	for _, d := range []struct {
+		name  string
+		raw   string
+		field *time.Duration
+	}{
+		{"sessions.auto_archive_after", in.AutoArchiveAfter, &out.AutoArchiveAfter},
+		{"sessions.gc_archived_after", in.GCArchivedAfter, &out.GCArchivedAfter},
+	} {
+		raw := strings.TrimSpace(d.raw)
+		if raw == "" {
+			continue
+		}
+		v, err := time.ParseDuration(raw)
+		if err != nil {
+			return ResolvedSessions{}, fmt.Errorf("config: %s: expected a Go duration (e.g. \"720h\"), got %q", d.name, d.raw)
+		}
+		if v < 0 {
+			return ResolvedSessions{}, fmt.Errorf("config: %s must be >= 0", d.name)
+		}
+		*d.field = v
 	}
-	v, err := time.ParseDuration(raw)
-	if err != nil {
-		return ResolvedSessions{}, fmt.Errorf("config: sessions.auto_archive_after: expected a Go duration (e.g. \"720h\"), got %q", in.AutoArchiveAfter)
-	}
-	if v < 0 {
-		return ResolvedSessions{}, fmt.Errorf("config: sessions.auto_archive_after must be >= 0")
-	}
-	out.AutoArchiveAfter = v
 	return out, nil
 }
 

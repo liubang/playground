@@ -215,7 +215,7 @@ func TestGCCommandDeletesOnlyOldUnreferencedArtifacts(t *testing.T) {
 	}
 	digest := strings.TrimPrefix(orphan.ID.String(), "art_sha256_")
 	blobPath := filepath.Join(artifactStore.Root(), "sha256", digest[:2], digest[2:])
-	oldTime := time.Now().Add(-artifactGCGracePeriod - time.Hour)
+	oldTime := time.Now().Add(-artifact.DefaultGCGracePeriod - time.Hour)
 	if err := os.Chtimes(blobPath, oldTime, oldTime); err != nil {
 		t.Fatalf("Chtimes: %v", err)
 	}
@@ -233,6 +233,69 @@ func TestGCCommandDeletesOnlyOldUnreferencedArtifacts(t *testing.T) {
 	}
 	if _, err := os.Stat(blobPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("orphan still exists: %v", err)
+	}
+}
+
+func TestGCCommandPurgesExpiredArchivedSessions(t *testing.T) {
+	ctx := context.Background()
+	base := filepath.Join(t.TempDir(), "private")
+	if err := os.MkdirAll(filepath.Dir(testSessionDB(base)), 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	writeTestConfig(t, base)
+	// A 1ns retention purges anything archived before the sweep runs.
+	if err := os.WriteFile(filepath.Join(base, "config.yaml"),
+		[]byte("sessions:\n  gc_archived_after: \"1ns\"\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	store, err := session.OpenSQLiteStore(ctx, testSessionDB(base))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	archivedID, activeID := domain.NewSessionID(), domain.NewSessionID()
+	for _, id := range []domain.SessionID{archivedID, activeID} {
+		if err := store.CreateSession(ctx, id, domain.WorkspaceID{}); err != nil {
+			t.Fatalf("CreateSession: %v", err)
+		}
+	}
+	if _, err := store.SetSessionArchived(ctx, archivedID, true); err != nil {
+		t.Fatalf("SetSessionArchived: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run(ctx, []string{"gc"}); err != nil {
+			t.Fatalf("run gc: %v", err)
+		}
+	})
+	var report gcReport
+	if err := json.Unmarshal([]byte(output), &report); err != nil {
+		t.Fatalf("decode GC report %q: %v", output, err)
+	}
+	if report.PurgedSessions != 1 {
+		t.Fatalf("purged_sessions = %d, want 1", report.PurgedSessions)
+	}
+
+	ro, err := session.OpenSQLiteStoreReadOnly(ctx, testSessionDB(base))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStoreReadOnly: %v", err)
+	}
+	defer ro.Close()
+	def, _, err := ro.ListSessions(ctx, "", 10, false, domain.WorkspaceID{})
+	if err != nil {
+		t.Fatalf("ListSessions default: %v", err)
+	}
+	if len(def) != 1 || def[0].ID != activeID {
+		t.Fatalf("default listing = %+v, want only the active session", def)
+	}
+	arch, _, err := ro.ListSessions(ctx, "", 10, true, domain.WorkspaceID{})
+	if err != nil {
+		t.Fatalf("ListSessions archived: %v", err)
+	}
+	if len(arch) != 0 {
+		t.Fatalf("archived listing = %+v, want empty", arch)
 	}
 }
 

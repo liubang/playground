@@ -259,6 +259,7 @@ func NewSessionService(proc *ProcessRuntime, reg *WorkspaceRegistry, broker *run
 		s.wg.Add(1)
 		go s.sweeper()
 	}
+	proc.SetSessionPurgeHook(s.evictPurgedSessions)
 	return s
 }
 
@@ -662,23 +663,40 @@ func (s *SessionService) ListSessions(ctx context.Context, cursor string, limit 
 // handle is shut down first so no in-flight turn keeps writing into a
 // deleted session.
 func (s *SessionService) DeleteSession(ctx context.Context, id domain.SessionID) error {
+	s.dropHandle(ctx, id)
+	store, ok := s.proc.Store.(*session.SQLiteStore)
+	if !ok {
+		return fmt.Errorf("session deletion is unavailable for this store")
+	}
+	return store.DeleteSession(ctx, id)
+}
+
+// dropHandle removes the live handle for id (if any) and shuts its
+// controller down: subscribers see the stream end (and resync) rather
+// than a silently dead session.
+func (s *SessionService) dropHandle(ctx context.Context, id domain.SessionID) {
 	s.mu.Lock()
 	h, live := s.sessions[id]
 	if live {
 		delete(s.sessions, id)
 	}
 	s.mu.Unlock()
-	if live {
-		h.dropSubscribers()
-		if err := h.Controller.Shutdown(ctx); err != nil {
-			s.logger.Warn("shutdown before delete failed", "session_id", id, "error", err)
-		}
+	if !live {
+		return
 	}
-	store, ok := s.proc.Store.(*session.SQLiteStore)
-	if !ok {
-		return fmt.Errorf("session deletion is unavailable for this store")
+	h.dropSubscribers()
+	if err := h.Controller.Shutdown(ctx); err != nil {
+		s.logger.Warn("session handle shutdown failed", "session_id", id, "error", err)
 	}
-	return store.DeleteSession(ctx, id)
+}
+
+// evictPurgedSessions drops live handles for sessions the maintenance
+// sweep permanently deleted, so no in-memory ghost outlives its persisted
+// session. Registered as the ProcessRuntime's purge hook.
+func (s *SessionService) evictPurgedSessions(ctx context.Context, ids []domain.SessionID) {
+	for _, id := range ids {
+		s.dropHandle(ctx, id)
+	}
 }
 
 // SetSessionArchived marks a session archived (hidden from default session

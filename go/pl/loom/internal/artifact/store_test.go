@@ -238,6 +238,46 @@ func TestStoreCollectGarbageRetainsReferencesAndYoungOrphans(t *testing.T) {
 	}
 }
 
+// Re-publishing identical content hits the dedup path in commitStaged; the
+// blob's mtime must be refreshed, or a collector walking before the new
+// reference lands in the session store could reap the just-re-committed
+// blob (its ancient mtime would defeat the grace period).
+func TestStoreCommitDedupRefreshesModTime(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "artifacts"), 1024)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	ctx := context.Background()
+	ref, err := store.PutBytes(ctx, []byte("dedup me"))
+	if err != nil {
+		t.Fatalf("PutBytes: %v", err)
+	}
+	digest := strings.TrimPrefix(ref.ID.String(), idPrefix)
+	blobPath := store.pathForDigest(digest)
+	oldTime := time.Now().Add(-DefaultGCGracePeriod - time.Hour)
+	if err := os.Chtimes(blobPath, oldTime, oldTime); err != nil {
+		t.Fatalf("Chtimes: %v", err)
+	}
+	again, err := store.PutBytes(ctx, []byte("dedup me"))
+	if err != nil {
+		t.Fatalf("PutBytes dedup: %v", err)
+	}
+	if again != ref {
+		t.Fatalf("dedup ref = %+v, want %+v", again, ref)
+	}
+	// Unreferenced but freshly re-published: the grace period must retain it.
+	report, err := store.CollectGarbage(ctx, map[domain.ArtifactID]int64{}, DefaultGCGracePeriod, time.Now())
+	if err != nil {
+		t.Fatalf("CollectGarbage: %v", err)
+	}
+	if report.Deleted != 0 || report.GraceRetained != 1 {
+		t.Fatalf("unexpected report: %+v, want the re-published blob grace-retained", report)
+	}
+	if _, err := store.ReadAll(ctx, ref); err != nil {
+		t.Fatalf("re-published artifact removed: %v", err)
+	}
+}
+
 func TestStoreCollectGarbageCleansOldStagingAndHonorsCancellation(t *testing.T) {
 	store, err := Open(filepath.Join(t.TempDir(), "artifacts"), 1024)
 	if err != nil {

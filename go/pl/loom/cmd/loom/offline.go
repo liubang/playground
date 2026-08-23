@@ -34,14 +34,22 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 )
 
-// artifactGCGracePeriod keeps recently referenced artifacts reachable so a
-// crash between reference recording and garbage collection never collects
-// a live blob.
-const artifactGCGracePeriod = 24 * time.Hour
+// gcReport is the loom gc result: the artifact sweep plus the number of
+// archived sessions purged beforehand (0 when sessions.gc_archived_after
+// is unset).
+type gcReport struct {
+	artifact.GCReport
+	PurgedSessions int `json:"purged_sessions"`
+}
 
-// collectArtifactGarbage implements loom gc: it removes artifact blobs no
-// session references anymore (past the grace period).
-func collectArtifactGarbage(ctx context.Context) error {
+// collectGarbage implements loom gc: it purges sessions archived longer
+// than sessions.gc_archived_after, then removes artifact blobs no
+// remaining session references (past the grace period) — mirroring the
+// online maintenance sweep, so the offline path behaves identically.
+// The purge hook is process-local: a running serve's live handles for
+// purged sessions are not evicted here — they fail their next write and
+// are reaped by the service's idle sweeper.
+func collectGarbage(ctx context.Context) error {
 	resolved, err := loadConfig(false, slog.Default())
 	if err != nil {
 		return err
@@ -54,6 +62,15 @@ func collectArtifactGarbage(ctx context.Context) error {
 		return fmt.Errorf("open session store: %w", err)
 	}
 	defer store.Close()
+	var report gcReport
+	if resolved.Sessions.GCArchivedAfter > 0 {
+		cutoff := time.Now().UTC().Add(-resolved.Sessions.GCArchivedAfter)
+		ids, err := store.DeleteExpiredArchivedSessions(ctx, cutoff)
+		if err != nil {
+			return fmt.Errorf("purge archived sessions: %w", err)
+		}
+		report.PurgedSessions = len(ids)
+	}
 	refs, err := store.ListArtifactRefs(ctx)
 	if err != nil {
 		return fmt.Errorf("list artifact references: %w", err)
@@ -65,10 +82,11 @@ func collectArtifactGarbage(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("open artifact store: %w", err)
 	}
-	report, err := artifactStore.CollectGarbage(ctx, refs, artifactGCGracePeriod, time.Now())
+	artifactReport, err := artifactStore.CollectGarbage(ctx, refs, artifact.DefaultGCGracePeriod, time.Now())
 	if err != nil {
 		return fmt.Errorf("collect artifact garbage: %w", err)
 	}
+	report.GCReport = artifactReport
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetEscapeHTML(false)
 	return encoder.Encode(report)

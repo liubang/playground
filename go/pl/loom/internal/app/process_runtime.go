@@ -97,9 +97,16 @@ type ProcessRuntime struct {
 	reasoningPref      string
 	traceProvider      *trace.Provider
 	memoryPipelineStop context.CancelFunc
-	// autoArchiveStop cancels the background session archiver (nil when
-	// the archiver was never started — e.g. bare test runtimes).
-	autoArchiveStop context.CancelFunc
+	// sessionSweepStop cancels the background session sweeper (nil when
+	// the sweeper was never started — e.g. bare test runtimes).
+	sessionSweepStop context.CancelFunc
+	// sessionPurgeHook, when set, is invoked after the sweep permanently
+	// deletes archived sessions, so live-handle owners (the
+	// SessionService) can drop their in-memory state for the deleted
+	// sessions. Guarded by purgeHookMu: the service registers after
+	// NewProcessRuntime has already started the sweeper.
+	purgeHookMu      sync.RWMutex
+	sessionPurgeHook func(context.Context, []domain.SessionID)
 	// mcpMu guards MCPManager: created on demand when a hot-applied
 	// config introduces the first MCP server, swapped on shutdown.
 	mcpMu sync.RWMutex
@@ -453,35 +460,36 @@ func NewProcessRuntime(ctx context.Context, resolved *config.ResolvedConfig, cfg
 	// effect for processes that never made a manual choice.
 	p.resolved.Store(resolved)
 	p.loadPrefs(ctx)
-	// Session auto-archiver (sessions.auto_archive_after): one pass at
-	// startup, then hourly. Each pass reads Resolved() fresh, so a
-	// hot-applied config change takes effect on the next pass without a
-	// restart. The sweep is a single idempotent UPDATE — concurrent loom
-	// processes sharing the same database may all run it safely. A
-	// live-but-idle session CAN be archived by the sweep; the store's
-	// read-only enforcement then rejects its next write with
-	// ErrSessionArchived until the user unarchives it.
-	p.startSessionArchiver(store)
+	// Session maintenance sweep: one pass at startup, then hourly. Each
+	// pass reads Resolved() fresh, so a hot-applied config change takes
+	// effect on the next pass without a restart. Every stage is a single
+	// idempotent statement or transaction — concurrent loom processes
+	// sharing the same database may all run them safely. A live-but-idle
+	// session CAN be archived by the sweep; the store's read-only
+	// enforcement then rejects its next write with ErrSessionArchived
+	// until the user unarchives it.
+	p.startSessionSweeper(store, artStore)
 	return p, nil
 }
 
-// sessionArchiveSweepInterval is how often the background archiver
-// re-scans for stale sessions; the staleness threshold itself comes from
-// sessions.auto_archive_after and is read fresh every pass.
-const sessionArchiveSweepInterval = time.Hour
+// sessionSweepInterval is how often the background sweeper re-scans for
+// stale sessions and orphaned artifacts; the thresholds themselves come
+// from sessions.auto_archive_after / sessions.gc_archived_after and are
+// read fresh every pass.
+const sessionSweepInterval = time.Hour
 
-// startSessionArchiver launches the background session archiver. The
-// goroutine is cheap when the feature is disabled: every pass re-reads
-// the resolved config and returns immediately while
-// sessions.auto_archive_after is unset.
-func (p *ProcessRuntime) startSessionArchiver(store *session.SQLiteStore) {
+// startSessionSweeper launches the background session maintenance sweep:
+// auto-archive, archived-session purge, and artifact garbage collection.
+// The goroutine is cheap when every knob is off: each pass re-reads the
+// resolved config and the scans find nothing.
+func (p *ProcessRuntime) startSessionSweeper(store *session.SQLiteStore, artifacts *artifact.Store) {
 	ctx, cancel := context.WithCancel(context.Background())
-	p.autoArchiveStop = cancel
+	p.sessionSweepStop = cancel
 	go func() {
-		ticker := time.NewTicker(sessionArchiveSweepInterval)
+		ticker := time.NewTicker(sessionSweepInterval)
 		defer ticker.Stop()
 		for {
-			p.archiveStaleSessionsOnce(ctx, store)
+			p.runSessionSweepOnce(ctx, store, artifacts)
 			select {
 			case <-ctx.Done():
 				return
@@ -491,24 +499,80 @@ func (p *ProcessRuntime) startSessionArchiver(store *session.SQLiteStore) {
 	}()
 }
 
-// archiveStaleSessionsOnce runs one archiver pass: no-op while disabled.
-func (p *ProcessRuntime) archiveStaleSessionsOnce(ctx context.Context, store *session.SQLiteStore) {
+// runSessionSweepOnce runs one maintenance pass: archive stale sessions,
+// purge long-archived ones, then collect the artifacts nothing references
+// anymore. The stages are independent — a failure is logged and the pass
+// continues; everything retries on the next tick.
+func (p *ProcessRuntime) runSessionSweepOnce(ctx context.Context, store *session.SQLiteStore, artifacts *artifact.Store) {
 	resolved := p.Resolved()
-	if resolved == nil || resolved.Sessions.AutoArchiveAfter <= 0 {
+	if resolved == nil {
 		return
 	}
-	cutoff := time.Now().UTC().Add(-resolved.Sessions.AutoArchiveAfter)
-	n, err := store.ArchiveStaleSessions(ctx, cutoff)
-	if err != nil {
-		// A cancelled pass (Close raced the sweep) is a normal shutdown.
-		if !errors.Is(err, context.Canceled) {
-			p.Logger.Warn("session auto-archive sweep failed", "error", err)
+	now := time.Now().UTC()
+	if resolved.Sessions.AutoArchiveAfter > 0 {
+		cutoff := now.Add(-resolved.Sessions.AutoArchiveAfter)
+		if n, err := store.ArchiveStaleSessions(ctx, cutoff); err != nil {
+			p.logSweepError("session auto-archive sweep failed", err)
+		} else if n > 0 {
+			p.Logger.Info("stale sessions auto-archived",
+				"count", n, "idle_for", resolved.Sessions.AutoArchiveAfter.String())
 		}
+	}
+	if resolved.Sessions.GCArchivedAfter > 0 {
+		cutoff := now.Add(-resolved.Sessions.GCArchivedAfter)
+		ids, err := store.DeleteExpiredArchivedSessions(ctx, cutoff)
+		if err != nil {
+			p.logSweepError("archived-session purge failed", err)
+		} else if len(ids) > 0 {
+			p.Logger.Info("archived sessions purged",
+				"count", len(ids), "archived_for", resolved.Sessions.GCArchivedAfter.String())
+			p.notifySessionsPurged(ctx, ids)
+		}
+	}
+	// Artifact GC runs unconditionally: session deletion (manual or
+	// purged) only shrinks the reference set, so orphaned blobs would
+	// otherwise accumulate until someone runs `loom gc` by hand. The
+	// grace period protects blobs published but not yet referenced.
+	refs, err := store.ListArtifactRefs(ctx)
+	if err != nil {
+		p.logSweepError("artifact reference scan failed", err)
 		return
 	}
-	if n > 0 {
-		p.Logger.Info("stale sessions auto-archived",
-			"count", n, "idle_for", resolved.Sessions.AutoArchiveAfter.String())
+	report, err := artifacts.CollectGarbage(ctx, refs, artifact.DefaultGCGracePeriod, now)
+	if err != nil {
+		p.logSweepError("artifact garbage collection failed", err)
+		return
+	}
+	if report.Deleted > 0 {
+		p.Logger.Info("orphaned artifacts collected",
+			"count", report.Deleted, "bytes", report.DeletedBytes)
+	}
+}
+
+// logSweepError logs a sweep-stage failure; a cancelled pass (Close
+// raced the sweep) is a normal shutdown and stays quiet.
+func (p *ProcessRuntime) logSweepError(msg string, err error) {
+	if !errors.Is(err, context.Canceled) {
+		p.Logger.Warn(msg, "error", err)
+	}
+}
+
+// SetSessionPurgeHook registers the callback invoked after the sweep
+// purges archived sessions; nil clears it. The SessionService registers
+// once at assembly time.
+func (p *ProcessRuntime) SetSessionPurgeHook(hook func(context.Context, []domain.SessionID)) {
+	p.purgeHookMu.Lock()
+	defer p.purgeHookMu.Unlock()
+	p.sessionPurgeHook = hook
+}
+
+// notifySessionsPurged reports purged sessions to the registered hook.
+func (p *ProcessRuntime) notifySessionsPurged(ctx context.Context, ids []domain.SessionID) {
+	p.purgeHookMu.RLock()
+	hook := p.sessionPurgeHook
+	p.purgeHookMu.RUnlock()
+	if hook != nil {
+		hook(ctx, ids)
 	}
 }
 
@@ -525,10 +589,10 @@ func (p *ProcessRuntime) Close() {
 	if p.memoryPipelineStop != nil {
 		p.memoryPipelineStop()
 	}
-	// Stop the session auto-archiver; an in-flight pass finishes or
-	// aborts with the cancelled context.
-	if p.autoArchiveStop != nil {
-		p.autoArchiveStop()
+	// Stop the session sweeper; an in-flight pass finishes or aborts
+	// with the cancelled context.
+	if p.sessionSweepStop != nil {
+		p.sessionSweepStop()
 	}
 	if p.RememberedStore != nil {
 		if err := p.RememberedStore.Close(); err != nil && p.Logger != nil {
