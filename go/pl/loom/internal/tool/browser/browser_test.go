@@ -24,7 +24,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chromedp/cdproto/cdp"
+	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/media"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
@@ -48,8 +49,8 @@ func newToolCall(t *testing.T, name string, args any) domain.ToolCall {
 // those don't touch the browser instance — only Execute does.
 func newTestManager(t *testing.T) *Manager {
 	t.Helper()
-	// Use /bin/true as a stand-in: NewManager only checks the path exists,
-	// it doesn't verify it's Chrome until Acquire creates a context.
+	// Use /bin/true as a stand-in: NewManager takes the path as-is; the
+	// launch only fails later at Acquire time.
 	m, err := NewManager("/bin/true", "", 0, 0, 0)
 	if err != nil {
 		t.Fatalf("NewManager() error = %v", err)
@@ -447,7 +448,7 @@ func TestMapBrowserError(t *testing.T) {
 		{"cancelled", context.Canceled, domain.ErrCancelled},
 		{"connection refused", errFake("connection refused"), domain.ErrUnavailable},
 		{"no such host", errFake("no such host"), domain.ErrUnavailable},
-		{"navigation error", errFake("navigation failed"), domain.ErrUnavailable},
+		{"navigation error", &rod.NavigationError{Reason: "net::ERR_ABORTED"}, domain.ErrUnavailable},
 		{"generic", errFake("something else"), domain.ErrInternal},
 	}
 	for _, tt := range tests {
@@ -572,14 +573,6 @@ func TestManager_String(t *testing.T) {
 	s := mgr.String()
 	assert.Contains(t, s, "browser.Manager")
 	assert.Contains(t, s, "idleTTL")
-}
-
-func TestFindChrome(t *testing.T) {
-	// findChrome should return a non-empty string on most systems with
-	// Chrome installed, or empty when none found. We only test that it
-	// doesn't panic.
-	result := findChrome()
-	_ = result
 }
 
 // --- Execute tests (actions that don't require a live browser) ---
@@ -791,7 +784,7 @@ func TestRefRegistry_KnownRefs(t *testing.T) {
 	// The summary is bounded: more than 8 refs are truncated with a count.
 	big := make(map[string]*axNode)
 	for i := 1; i <= 12; i++ {
-		big[fmt.Sprintf("[%d]", i)] = &axNode{backendDOMID: cdp.BackendNodeID(i), role: "tab"}
+		big[fmt.Sprintf("[%d]", i)] = &axNode{backendDOMID: proto.DOMBackendNodeID(i), role: "tab"}
 	}
 	r.replace(big)
 	summary := r.knownRefs()

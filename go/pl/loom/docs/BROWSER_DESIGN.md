@@ -110,6 +110,8 @@ loom 已有完整的 MCP 管理面，playwright-mcp 现成提供 browser 能力�
 
 **chromedp**（纯 Go、无 cgo、CDP 直连、bazel/gazelle 友好）+ **系统 Chrome 探测**。探测序列：darwin `/Applications/Google Chrome.app` → Chromium → Edge；linux `google-chrome` → `chromium` → `chromium-browser`。找不到时工具返回明确指引（"未检测到 Chrome，安装后重试"），不静默降级。playwright-go 需 node 驱动，rod 与 chromedp 等价但社区生态略薄——chromedp 胜出。
 
+**（v3 修正，2026-08）CDP 客户端迁移 chromedp → go-rod**：chromedp 的 context 即执行器模型（首次 `Run` 的 ctx 绑定进程生死、超时需手工包裹）被证明是持续维护负担；go-rod 的显式 `Browser`/`Page` 对象、链式 `Timeout`、`launcher` 内建浏览器探测与 leakless 进程回收在同等 CDP 能力下显著降低生命周期代码复杂度。对外行为（工具 schema、ref 交互、stealth 硬化、远程 `cdp_url` 模式）不变，e2e 套件原样通过。
+
 浏览器**不进 Runner/Seatbelt**：Chrome 的 helper 进程群（GPU/renderer/network service）在 `(deny default)` 下无法启动，且 CDP 本身需要 loopback WebSocket。由主进程直接管理子进程——与 M1 的 Runner 路径无关。启动参数：`--headless=new`、`--disable-gpu`、`--user-data-dir=<os.MkdirTemp>`（**临时 profile，用户 cookie/登录态天然隔离**）、`--no-first-run`、窗口 1280×800（可配）。
 
 ### 5.2 工具形态
@@ -160,7 +162,7 @@ v1 假设"per session 懒启动、session 关闭 kill"，审查证伪：loom ses
 
 - **实例键控**：browser 实例按 `LOOM_SESSION_ID`（turn ctx 已注入，工具可经 `SessionEnvFromContext` 读取）键控管理；每实例一把互斥锁，跨 session 并发驱动不同实例、同 session 内串行。`ConcurrentSafe()=false` 管 turn 内批处理，实例锁管跨 session。
 - **回收**：仿 `exsession.Manager` 的 idle-TTL reaper 模式——browser 实例 30 分钟无活动自动 kill + 删临时 profile；workspace 级 `Bootstrap.Close` 兜底全量回收。
-- **（v2 修正，审查 M10）"父亡子随"修正**：macOS 无 `PR_SET_PDEATHSIG`，loom 被 SIGKILL 时 chromedp 的 cancel 链不生效，Chrome 孤儿 + 临时 profile 残留。缓解：临时目录名带 loom 标记 + 时间戳，browser 工具初始化时清扫自己创建的陈旧目录（进程已死的）；§6.3 不变量表相应改为"孤儿有界回收"，不承诺强父亡子随。
+- **（v2 修正，审查 M10）"父亡子随"修正**：macOS 无 `PR_SET_PDEATHSIG`，loom 被 SIGKILL 时 chromedp 的 cancel 链不生效，Chrome 孤儿 + 临时 profile 残留。缓解：临时目录名带 loom 标记 + 时间戳，browser 工具初始化时清扫自己创建的陈旧目录（进程已死的）；§6.3 不变量表相应改为"孤儿有界回收"，不承诺强父亡子随。**（v3 补充）**迁移 go-rod 后，其 launcher 的 leakless 守卫进程在父进程 SIGKILL 时也能回收 Chrome，该问题在本地启动模式下结构性消除；远程 `cdp_url` 模式不涉及本机进程。
 
 ## 6. 安全分析
 
@@ -210,7 +212,7 @@ Seatbelt GUI 开口：`ExecGrant.GUIOpen` + `RuleGrant.gui_open` + run_cmd/exec_
 | 按参数分级 risk 先例 | `internal/tool/command/run_cmd.go`（`riskForArgs`） |
 | idle-TTL 回收先例 | `internal/tool/exsession/manager.go` |
 | snapshot ref 交互范式 | playwright-mcp（Microsoft playwright MCP server） |
-| CDP Go 客户端 | github.com/chromedp/chromedp |
+| CDP Go 客户端 | github.com/go-rod/rod（v3 起，原 chromedp） |
 
 ## 9. 审查记录
 

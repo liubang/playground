@@ -16,17 +16,14 @@
 // Created: 2026/08/12
 
 // Package browser implements the browser tool: headless Chrome controlled
-// via chromedp, providing navigate/snapshot/screenshot/scroll/click/type/close
-// operations with idle-TTL instance reaping and SSRF-aware URL gating through
-// URLRequest. The snapshot action captures the accessibility tree (AX tree)
-// and assigns ref numbers to interactive elements; click and type use those
-// refs to interact with the page without fragile CSS selectors.
+// via go-rod (CDP), providing navigate/snapshot/screenshot/scroll/click/type/
+// close operations with idle-TTL instance reaping and SSRF-aware URL gating
+// through URLRequest. The snapshot action captures the accessibility tree
+// (AX tree) and assigns ref numbers to interactive elements; click and type
+// use those refs to interact with the page without fragile CSS selectors.
 package browser
 
 import (
-	"context"
-	"time"
-
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
@@ -76,17 +73,4 @@ func extractURLRequest(rawURL string) *domain.URLRequest {
 		return nil
 	}
 	return &domain.URLRequest{Host: host}
-}
-
-// withOpTimeout derives an operation context from the browser session
-// context with a per-action timeout, while still honoring cancellation of
-// the caller's context (e.g. the user interrupting the agent loop). The
-// returned CancelFunc must be called to release both resources.
-func withOpTimeout(ctx, browserCtx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	opCtx, cancel := context.WithTimeout(browserCtx, timeout)
-	stop := context.AfterFunc(ctx, cancel)
-	return opCtx, func() {
-		stop()
-		cancel()
-	}
 }

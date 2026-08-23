@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-rod/rod/lib/launcher"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,12 +76,12 @@ type e2eEnv struct {
 
 func newE2EEnv(t *testing.T) *e2eEnv {
 	t.Helper()
-	chromePath := findChrome()
-	if chromePath == "" {
-		t.Skip("Chrome/Chromium binary not found; skipping browser e2e test")
+	// An empty chrome path makes the Manager probe the well-known install
+	// locations; no Chrome on this machine means the e2e suite skips.
+	mgr, err := NewManager("", "", time.Minute, 1280, 720)
+	if err != nil {
+		t.Skipf("Chrome/Chromium binary not found; skipping browser e2e test: %v", err)
 	}
-	mgr, err := NewManager(chromePath, "", time.Minute, 1280, 720)
-	require.NoError(t, err)
 	t.Cleanup(mgr.Close)
 
 	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 15*time.Second, 0)
@@ -275,8 +276,61 @@ func TestBrowserTool_E2E_StaleRefAfterNavigate(t *testing.T) {
 	assert.Contains(t, result.Error.Message, "no live snapshot refs")
 }
 
+// TestBrowserTool_E2E_RemoteCDP drives the remote-CDP mode: the Manager
+// attaches to an externally launched Chrome via its http debug URL, and
+// closing the instance must release only loom's tab — the shared browser
+// itself stays alive.
+func TestBrowserTool_E2E_RemoteCDP(t *testing.T) {
+	bin, has := launcher.LookPath()
+	if !has {
+		t.Skip("Chrome/Chromium binary not found; skipping browser e2e test")
+	}
+
+	// The "remote" browser is a real Chrome launched beside the test; its
+	// lifetime is owned here, not by the Manager under test. Bin is set
+	// explicitly: a bare launcher.New() downloads a Chromium instead of
+	// probing the system install.
+	l := launcher.New().Bin(bin).
+		Set("no-sandbox"). // nested sandboxes are impossible inside bazel's darwin-sandbox
+		Set("disable-gpu") // no GPU in headless CI/sandbox environments
+	controlURL, err := l.Launch()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		l.Kill()
+		l.Cleanup()
+	})
+
+	mgr, err := NewManager("", controlURL, time.Minute, 1280, 720)
+	require.NoError(t, err)
+	t.Cleanup(mgr.Close)
+	assert.Equal(t, controlURL, mgr.CdpURL())
+
+	tool, err := NewBrowserTool(mgr, &mockArtifactStore{}, 15*time.Second, 0)
+	require.NoError(t, err)
+	env := &e2eEnv{t: t, tool: tool}
+
+	srv := httptest.NewServer(e2eHandler())
+	defer srv.Close()
+
+	nav := env.exec(browserArgs{Action: "navigate", URL: srv.URL})
+	assert.Equal(t, "ok", nav.Status)
+	assert.Equal(t, "Loom Browser E2E", nav.Title)
+
+	snapText := env.waitForSnapshot(func(s string) bool {
+		return strings.Contains(s, "Count: 0")
+	}, "AX tree to populate over remote CDP")
+	assert.Contains(t, snapText, "Accessibility Tree Snapshot")
+
+	closed := env.exec(browserArgs{Action: "close"})
+	assert.Equal(t, "ok", closed.Status)
+
+	// The remote browser must survive close: only loom's tab goes away.
+	_, err = launcher.ResolveURL(controlURL)
+	assert.NoError(t, err, "remote browser must stay alive after the close action")
+}
+
 // TestBrowserTool_E2E_TypeUnicode verifies the IME text-insertion path
-// handles non-ASCII text (chromedp.SendKeys cannot).
+// handles non-ASCII text (a per-key dispatch path cannot).
 func TestBrowserTool_E2E_TypeUnicode(t *testing.T) {
 	env := newE2EEnv(t)
 	srv := httptest.NewServer(e2eHandler())

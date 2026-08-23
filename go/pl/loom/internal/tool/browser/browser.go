@@ -26,8 +26,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chromedp/cdproto/page"
-	"github.com/chromedp/chromedp"
+	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/media"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
@@ -85,8 +85,9 @@ type scrollPosition struct {
 	Y int `json:"y"`
 }
 
-// BrowserTool controls a headless Chrome browser via chromedp. It supports
-// seven actions: navigate, snapshot, screenshot, scroll, click, type, and close.
+// BrowserTool controls a headless Chrome browser via go-rod (CDP). It
+// supports seven actions: navigate, snapshot, screenshot, scroll, click,
+// type, and close.
 // The tool carries a Manager that owns the browser instance lifecycle (idle-TTL
 // reaping) and a refRegistry that maps snapshot-assigned ref numbers to AX
 // node IDs for click/type operations.
@@ -158,9 +159,25 @@ func (t *BrowserTool) Definition() domain.ToolDefinition {
 }
 
 // ConcurrentSafe implements domain.ConcurrentSafely: browser operations
-// are serialized through the Manager mutex, so concurrent calls won't
-// race on the shared chromedp context.
+// mutate one shared page, so calls must be serialized by the agent loop.
 func (t *BrowserTool) ConcurrentSafe() bool { return false }
+
+// pageFor acquires the instance page and derives the per-action operation
+// handle: the returned page honors both cancellation of the caller's
+// context (user interrupting the agent loop) and the action timeout. The
+// release func cancels the timeout and refreshes the instance idle timer;
+// callers must defer it.
+func (t *BrowserTool) pageFor(ctx context.Context, timeout time.Duration) (*rod.Page, func(), error) {
+	page, err := t.manager.Acquire()
+	if err != nil {
+		return nil, nil, err
+	}
+	op := page.Context(ctx).Timeout(timeout)
+	return op, func() {
+		op.CancelTimeout()
+		t.manager.Touch()
+	}, nil
+}
 
 func (t *BrowserTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
 	args, err := toolkit.DecodeStrict[browserArgs](call.Arguments)
@@ -252,35 +269,42 @@ func (t *BrowserTool) Execute(ctx context.Context, prepared domain.PreparedCall)
 }
 
 func (t *BrowserTool) doNavigate(ctx context.Context, callID domain.ToolCallID, args browserArgs, timeout time.Duration, startedAt time.Time) domain.ToolResult {
-	browserCtx, err := t.manager.Acquire()
+	op, release, err := t.pageFor(ctx, timeout)
 	if err != nil {
 		return toolkit.ErrorResult(callID, startedAt, err)
 	}
+	defer release()
 
-	navCtx, cancel := withOpTimeout(ctx, browserCtx, timeout)
-	defer cancel()
-
-	// Location before Navigate yields the pre-navigation URL. A fragment-
-	// only change is a same-document navigation: Chrome fires no load
-	// event, the page does not reload, and history-mode SPAs (Vue/React
-	// Router) ignore the fragment entirely — so the model must be told
+	// A fragment-only change is a same-document navigation: Chrome fires
+	// no load event, the page does not reload, and history-mode SPAs
+	// (Vue/React Router) ignore the fragment entirely. Waiting for a load
+	// event that never comes would burn the whole action timeout, so
+	// same-document navigations skip WaitLoad — and the model must be told
 	// the click path is the only way through, instead of receiving a bare
 	// "ok" for a navigation that changed nothing.
-	var prevURL, title string
-	err = chromedp.Run(
-		navCtx,
-		chromedp.Location(&prevURL),
-		chromedp.Navigate(args.URL),
-		chromedp.Title(&title),
-	)
-	t.manager.Touch()
+	var prevURL string
+	if info, err := op.Info(); err == nil {
+		prevURL = info.URL
+	}
+	sameDoc := prevURL != "" && sameDocumentURL(prevURL, args.URL)
 
-	if err != nil {
+	if err := op.Navigate(args.URL); err != nil {
 		return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
+	}
+	if !sameDoc {
+		// WaitLoad returns immediately when the load event already fired.
+		if err := op.WaitLoad(); err != nil {
+			return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
+		}
 	}
 
 	// Invalidate refs: navigation changes the page.
 	t.registry.invalidate()
+
+	var title string
+	if info, err := op.Info(); err == nil {
+		title = info.Title
+	}
 
 	out := browserOutput{
 		Action: "navigate",
@@ -288,7 +312,7 @@ func (t *BrowserTool) doNavigate(ctx context.Context, callID domain.ToolCallID, 
 		Title:  title,
 		Status: "ok",
 	}
-	if prevURL != "" && sameDocumentURL(prevURL, args.URL) {
+	if sameDoc {
 		out.Message = "only the URL fragment changed and the document did not reload; " +
 			"if the page content did not switch, this SPA uses history-mode routing — " +
 			"snapshot the page and click the target element by ref instead of navigating by fragment"
@@ -310,13 +334,11 @@ func sameDocumentURL(a, b string) bool {
 }
 
 func (t *BrowserTool) doScreenshot(ctx context.Context, callID domain.ToolCallID, args browserArgs, timeout time.Duration, startedAt time.Time) domain.ToolResult {
-	browserCtx, err := t.manager.Acquire()
+	op, release, err := t.pageFor(ctx, timeout)
 	if err != nil {
 		return toolkit.ErrorResult(callID, startedAt, err)
 	}
-
-	shotCtx, cancel := withOpTimeout(ctx, browserCtx, timeout)
-	defer cancel()
+	defer release()
 
 	format := args.Format
 	if format == "" {
@@ -327,24 +349,18 @@ func (t *BrowserTool) doScreenshot(ctx context.Context, callID domain.ToolCallID
 		quality = t.screenshotQual
 	}
 
-	// page.CaptureScreenshot honors format (jpeg quality applies to jpeg
+	// Page.captureScreenshot honors format (jpeg quality applies to jpeg
 	// only); CaptureBeyondViewport switches viewport → full-page capture.
-	var buf []byte
-	err = chromedp.Run(shotCtx, chromedp.ActionFunc(func(ctx context.Context) error {
-		var err error
-		buf, err = page.CaptureScreenshot().
-			WithCaptureBeyondViewport(args.FullPage).
-			WithFromSurface(true).
-			WithFormat(page.CaptureScreenshotFormat(format)).
-			WithQuality(int64(quality)).
-			Do(ctx)
-		return err
-	}))
-	t.manager.Touch()
-
+	shot, err := proto.PageCaptureScreenshot{
+		Format:                proto.PageCaptureScreenshotFormat(format),
+		Quality:               &quality,
+		FromSurface:           true,
+		CaptureBeyondViewport: args.FullPage,
+	}.Call(op)
 	if err != nil {
 		return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
 	}
+	buf := shot.Data
 
 	// Deliver the screenshot the same way every image source does: persist
 	// the raw bytes as an artifact. The UI renders the reference for the
@@ -387,48 +403,43 @@ func (t *BrowserTool) doScreenshot(ctx context.Context, callID domain.ToolCallID
 }
 
 func (t *BrowserTool) doScroll(ctx context.Context, callID domain.ToolCallID, args browserArgs, timeout time.Duration, startedAt time.Time) domain.ToolResult {
-	browserCtx, err := t.manager.Acquire()
+	op, release, err := t.pageFor(ctx, timeout)
 	if err != nil {
 		return toolkit.ErrorResult(callID, startedAt, err)
 	}
-
-	scrollCtx, cancel := withOpTimeout(ctx, browserCtx, timeout)
-	defer cancel()
+	defer release()
 
 	if args.Selector != "" {
-		err = chromedp.Run(
-			scrollCtx,
-			chromedp.ScrollIntoView(args.Selector, chromedp.ByQuery),
-		)
+		// Element retries the query until the action timeout, covering
+		// elements that render late on JS-heavy pages.
+		el, err := op.Element(args.Selector)
+		if err != nil {
+			return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
+		}
+		if err := el.ScrollIntoView(); err != nil {
+			return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
+		}
 	} else {
-		// Use JavaScript to scroll to the specified coordinates.
-		script := fmt.Sprintf("window.scrollTo(%d, %d);", args.ScrollX, args.ScrollY)
-		err = chromedp.Run(
-			scrollCtx,
-			chromedp.Evaluate(script, nil),
-		)
-	}
-	t.manager.Touch()
-
-	if err != nil {
-		return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
+		// Coordinates go through rod's argument passing, not string
+		// interpolation into JS source.
+		if _, err := op.Eval("(x, y) => window.scrollTo(x, y)", args.ScrollX, args.ScrollY); err != nil {
+			return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
+		}
 	}
 
-	// Read back the current scroll position.
-	var scrollX, scrollY int64
-	_ = chromedp.Run(
-		scrollCtx,
-		chromedp.Evaluate("window.scrollX", &scrollX),
-		chromedp.Evaluate("window.scrollY", &scrollY),
-	)
+	// Read back the current scroll position, best-effort: the scroll
+	// itself already succeeded, so a failed read must not fail the action.
+	var scrollX, scrollY int
+	if res, err := op.Eval("() => [window.scrollX, window.scrollY]"); err == nil {
+		if pos := res.Value.Arr(); len(pos) == 2 {
+			scrollX, scrollY = pos[0].Int(), pos[1].Int()
+		}
+	}
 
 	return toolkit.SuccessResult(callID, startedAt, browserOutput{
-		Action: "scroll",
-		ScrollPos: &scrollPosition{
-			X: int(scrollX),
-			Y: int(scrollY),
-		},
-		Status: "ok",
+		Action:    "scroll",
+		ScrollPos: &scrollPosition{X: scrollX, Y: scrollY},
+		Status:    "ok",
 	})
 }
 
@@ -502,22 +513,25 @@ func validateBrowserArgs(args browserArgs) (browserArgs, error) {
 	return args, nil
 }
 
-// mapBrowserError translates chromedp errors into domain errors.
+// mapBrowserError translates rod errors into domain errors.
 func mapBrowserError(err error) error {
 	if err == nil {
 		return nil
 	}
-	// Use errors.Is for sentinel errors — chromedp may wrap them.
+	// Use errors.Is/As for the typed failures — rod wraps them with the
+	// CDP method name.
 	if errors.Is(err, context.Canceled) {
 		return domain.NewError(domain.ErrCancelled, "browser operation cancelled", domain.WithCause(err))
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return domain.NewError(domain.ErrTimeout, "browser operation timed out", domain.WithCause(err), domain.WithRetryable(true))
 	}
+	var navErr *rod.NavigationError
+	if errors.As(err, &navErr) {
+		return domain.NewError(domain.ErrUnavailable, navErr.Error(), domain.WithCause(err), domain.WithRetryable(true))
+	}
 	msg := err.Error()
 	switch {
-	case strings.Contains(msg, "navigation"):
-		return domain.NewError(domain.ErrUnavailable, fmt.Sprintf("navigation failed: %s", msg), domain.WithCause(err), domain.WithRetryable(true))
 	case strings.Contains(msg, "connection refused") || strings.Contains(msg, "no such host"):
 		return domain.NewError(domain.ErrUnavailable, fmt.Sprintf("browser connection error: %s", msg), domain.WithCause(err), domain.WithRetryable(true))
 	default:

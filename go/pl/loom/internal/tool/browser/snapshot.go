@@ -19,7 +19,6 @@ package browser
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -29,12 +28,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chromedp/cdproto/accessibility"
-	"github.com/chromedp/cdproto/cdp"
-	"github.com/chromedp/cdproto/dom"
-	"github.com/chromedp/cdproto/input"
-	"github.com/chromedp/chromedp"
-	"github.com/chromedp/chromedp/kb"
+	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/input"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
@@ -59,10 +55,11 @@ func newRefRegistry() *refRegistry {
 	return &refRegistry{}
 }
 
-// axNode is a trimmed view of an accessibility.Node used for ref tracking.
-// role and name are kept for error messages when a ref fails to resolve.
+// axNode is a trimmed view of a proto.AccessibilityAXNode used for ref
+// tracking. role and name are kept for error messages when a ref fails to
+// resolve.
 type axNode struct {
-	backendDOMID cdp.BackendNodeID
+	backendDOMID proto.DOMBackendNodeID
 	role         string
 	name         string
 }
@@ -173,35 +170,23 @@ func (r *refRegistry) replace(refs map[string]*axNode) {
 // --- snapshot action ---
 
 func (t *BrowserTool) doSnapshot(ctx context.Context, callID domain.ToolCallID, timeout time.Duration, startedAt time.Time) domain.ToolResult {
-	browserCtx, err := t.manager.Acquire()
+	op, release, err := t.pageFor(ctx, timeout)
 	if err != nil {
 		return toolkit.ErrorResult(callID, startedAt, err)
 	}
+	defer release()
 
-	snapCtx, cancel := withOpTimeout(ctx, browserCtx, timeout)
-	defer cancel()
-
-	// All CDP calls must go through chromedp.Run: it starts the browser on
-	// first use and injects the target executor into the context that the
-	// cdproto Do methods require.
-	var nodes []*accessibility.Node
-	err = chromedp.Run(
-		snapCtx,
-		// Enable the accessibility domain so AXNodeIds are stable.
-		accessibility.Enable(),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			var err error
-			nodes, err = accessibility.GetFullAXTree().Do(ctx)
-			return err
-		}),
-	)
-	t.manager.Touch()
+	// Enable the accessibility domain so AXNodeIds are stable.
+	if err := (proto.AccessibilityEnable{}).Call(op); err != nil {
+		return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
+	}
+	tree, err := (proto.AccessibilityGetFullAXTree{}).Call(op)
 	if err != nil {
 		return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
 	}
 
 	// Build the serialized tree and populate the ref registry.
-	serialized := t.serializeAXTree(nodes)
+	serialized := t.serializeAXTree(tree.Nodes)
 
 	return toolkit.SuccessResult(callID, startedAt, browserOutput{
 		Action: "snapshot",
@@ -213,14 +198,14 @@ func (t *BrowserTool) doSnapshot(ctx context.Context, callID domain.ToolCallID, 
 // serializeAXTree converts the flat AX node list from CDP into a
 // depth-first text serialization with ref numbers for interactive
 // elements. It also replaces the tool's refRegistry.
-func (t *BrowserTool) serializeAXTree(nodes []*accessibility.Node) string {
+func (t *BrowserTool) serializeAXTree(nodes []*proto.AccessibilityAXNode) string {
 	// Build a lookup from AX NodeID → Node for tree reconstruction.
-	byID := make(map[accessibility.NodeID]*accessibility.Node, len(nodes))
-	var root *accessibility.Node
+	byID := make(map[proto.AccessibilityAXNodeID]*proto.AccessibilityAXNode, len(nodes))
+	var root *proto.AccessibilityAXNode
 	for _, n := range nodes {
 		byID[n.NodeID] = n
 		if n.ParentID == "" {
-			if root == nil || n.Role != nil && axString(n.Role.Value) == "RootWebArea" {
+			if root == nil || axValue(n.Role) == "RootWebArea" {
 				root = n
 			}
 		}
@@ -252,8 +237,8 @@ func (t *BrowserTool) serializeAXTree(nodes []*accessibility.Node) string {
 // buildAXSerial recursively serializes the AX tree depth-first.
 func (t *BrowserTool) buildAXSerial(
 	b *strings.Builder,
-	node *accessibility.Node,
-	byID map[accessibility.NodeID]*accessibility.Node,
+	node *proto.AccessibilityAXNode,
+	byID map[proto.AccessibilityAXNodeID]*proto.AccessibilityAXNode,
 	depth int,
 	refCounter *int,
 	refs map[string]*axNode,
@@ -296,7 +281,7 @@ func (t *BrowserTool) buildAXSerial(
 	}
 
 	// Include value for certain roles (e.g., textbox current value).
-	if value := axString(nodeValue(node)); value != "" {
+	if value := axValue(node.Value); value != "" {
 		b.WriteString(" (value: ")
 		b.WriteString(value)
 		b.WriteString(")")
@@ -340,30 +325,20 @@ func (t *BrowserTool) doClick(ctx context.Context, callID domain.ToolCallID, arg
 		return toolkit.ErrorResult(callID, startedAt, t.unknownRefError(args.Ref))
 	}
 
-	browserCtx, err := t.manager.Acquire()
+	op, release, err := t.pageFor(ctx, timeout)
 	if err != nil {
 		return toolkit.ErrorResult(callID, startedAt, err)
 	}
-
-	clickCtx, cancel := withOpTimeout(ctx, browserCtx, timeout)
-	defer cancel()
+	defer release()
 
 	// Click the element by its backend DOM node ID (captured at snapshot
 	// time). DescribeNode is not usable here: it can return nodeId=0 for
-	// nodes the DOM agent has not pushed to the frontend, and chromedp's
-	// MouseClickNode requires a frontend nodeId. GetContentQuads accepts a
+	// nodes the DOM agent has not pushed to the frontend, and high-level
+	// click helpers require a frontend nodeId. GetContentQuads accepts a
 	// backend node ID directly and fails for detached nodes, which doubles
 	// as our stale-element check.
-	err = chromedp.Run(clickCtx, clickBackendNode(node.backendDOMID))
-	t.manager.Touch()
-	if err != nil {
-		// Context failures are timeouts/cancellations, not element problems.
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
-		}
-		return toolkit.ErrorResult(callID, startedAt, domain.NewError(domain.ErrInvalidInput,
-			fmt.Sprintf("failed to click ref %q (%s); the element may be gone or not clickable, take a new snapshot", args.Ref, node),
-			domain.WithCause(err)))
+	if err := clickBackendNode(op, node.backendDOMID); err != nil {
+		return interactionError(callID, startedAt, "click", args.Ref, node, err)
 	}
 
 	// After click, the page may have changed. Invalidate refs.
@@ -373,7 +348,7 @@ func (t *BrowserTool) doClick(ctx context.Context, callID domain.ToolCallID, arg
 		Action:  "click",
 		Ref:     args.Ref,
 		Status:  "ok",
-		Message: t.capturePageSummary(clickCtx),
+		Message: t.capturePageSummary(op),
 	})
 }
 
@@ -385,49 +360,27 @@ func (t *BrowserTool) doType(ctx context.Context, callID domain.ToolCallID, args
 		return toolkit.ErrorResult(callID, startedAt, t.unknownRefError(args.Ref))
 	}
 
-	if args.Text == "" {
-		return toolkit.ErrorResult(callID, startedAt, domain.NewError(domain.ErrInvalidInput,
-			"text is required for type action"))
-	}
-
-	browserCtx, err := t.manager.Acquire()
+	op, release, err := t.pageFor(ctx, timeout)
 	if err != nil {
 		return toolkit.ErrorResult(callID, startedAt, err)
 	}
-
-	typeCtx, cancel := withOpTimeout(ctx, browserCtx, timeout)
-	defer cancel()
+	defer release()
 
 	// Focus the element by backend node ID, then insert the text via the
-	// IME path (input.InsertText) which handles arbitrary Unicode text.
-	err = chromedp.Run(
-		typeCtx,
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			return dom.Focus().WithBackendNodeID(node.backendDOMID).Do(ctx)
-		}),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			return input.InsertText(args.Text).Do(ctx)
-		}),
-	)
-	if err != nil {
-		t.manager.Touch()
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
-		}
-		return toolkit.ErrorResult(callID, startedAt, domain.NewError(domain.ErrInvalidInput,
-			fmt.Sprintf("failed to type into ref %q (%s); take a new snapshot", args.Ref, node),
-			domain.WithCause(err)))
+	// IME path (Input.insertText) which handles arbitrary Unicode text.
+	if err := (proto.DOMFocus{BackendNodeID: node.backendDOMID}).Call(op); err != nil {
+		return interactionError(callID, startedAt, "type into", args.Ref, node, err)
+	}
+	if err := (proto.InputInsertText{Text: args.Text}).Call(op); err != nil {
+		return interactionError(callID, startedAt, "type into", args.Ref, node, err)
 	}
 
 	// If submit is requested, press Enter.
 	if args.Submit {
-		err = chromedp.Run(typeCtx, chromedp.KeyEvent(kb.Enter))
-		if err != nil {
-			t.manager.Touch()
+		if err := op.Keyboard.Press(input.Enter); err != nil {
 			return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
 		}
 	}
-	t.manager.Touch()
 
 	// After type/submit, the page may have changed. Invalidate refs.
 	t.registry.invalidate()
@@ -436,96 +389,85 @@ func (t *BrowserTool) doType(ctx context.Context, callID domain.ToolCallID, args
 		Action:  "type",
 		Ref:     args.Ref,
 		Status:  "ok",
-		Message: t.capturePageSummary(typeCtx),
+		Message: t.capturePageSummary(op),
 	})
 }
 
+// interactionError classifies a click/type failure on a ref'd element:
+// caller cancellation and timeouts keep their typed mapping, anything else
+// means the element captured at snapshot time is gone or not actionable —
+// the recovery is a fresh snapshot either way.
+func interactionError(callID domain.ToolCallID, startedAt time.Time, verb, ref string, node *axNode, err error) domain.ToolResult {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))
+	}
+	return toolkit.ErrorResult(callID, startedAt, domain.NewError(domain.ErrInvalidInput,
+		fmt.Sprintf("failed to %s ref %q (%s); the element may be gone or not actionable, take a new snapshot", verb, ref, node),
+		domain.WithCause(err)))
+}
+
 // clickBackendNode clicks the center of the element identified by a
-// backend DOM node ID. It mirrors chromedp.MouseClickNode but keys off the
-// backend node ID captured at snapshot time, avoiding a frontend nodeId
-// round-trip. The window is scrolled so the element is in the viewport.
-func clickBackendNode(backendID cdp.BackendNodeID) chromedp.Action {
-	return chromedp.ActionFunc(func(ctx context.Context) error {
-		if err := dom.ScrollIntoViewIfNeeded().WithBackendNodeID(backendID).Do(ctx); err != nil {
-			return err
-		}
-		boxes, err := dom.GetContentQuads().WithBackendNodeID(backendID).Do(ctx)
-		if err != nil {
-			return err
-		}
-		if len(boxes) == 0 || len(boxes[0]) < 2 || len(boxes[0])%2 != 0 {
-			return fmt.Errorf("element has no clickable dimensions")
-		}
-		content := boxes[0]
-		var x, y float64
-		for i := 0; i < len(content); i += 2 {
-			x += content[i]
-			y += content[i+1]
-		}
-		x /= float64(len(content) / 2)
-		y /= float64(len(content) / 2)
-		return chromedp.MouseClickXY(x, y).Do(ctx)
-	})
+// backend DOM node ID, avoiding a frontend nodeId round-trip: the backend
+// ID was captured at snapshot time. The window is scrolled so the element
+// is in the viewport first.
+func clickBackendNode(page *rod.Page, backendID proto.DOMBackendNodeID) error {
+	if err := (proto.DOMScrollIntoViewIfNeeded{BackendNodeID: backendID}).Call(page); err != nil {
+		return err
+	}
+	quads, err := (proto.DOMGetContentQuads{BackendNodeID: backendID}).Call(page)
+	if err != nil {
+		return err
+	}
+	if len(quads.Quads) == 0 || len(quads.Quads[0]) < 2 || len(quads.Quads[0])%2 != 0 {
+		return fmt.Errorf("element has no clickable dimensions")
+	}
+	content := quads.Quads[0]
+	var x, y float64
+	for i := 0; i < len(content); i += 2 {
+		x += content[i]
+		y += content[i+1]
+	}
+	n := float64(len(content) / 2)
+	if err := page.Mouse.MoveTo(proto.NewPoint(x/n, y/n)); err != nil {
+		return err
+	}
+	return page.Mouse.Click(proto.InputMouseButtonLeft, 1)
 }
 
 // capturePageSummary returns a brief post-action page summary (title + URL)
 // on a best-effort basis: the page may still be navigating, so failures are
 // silently dropped.
-func (t *BrowserTool) capturePageSummary(ctx context.Context) string {
-	var title, currentURL string
-	_ = chromedp.Run(
-		ctx,
-		chromedp.Title(&title),
-		chromedp.Location(&currentURL),
-	)
-	if title == "" && currentURL == "" {
+func (t *BrowserTool) capturePageSummary(page *rod.Page) string {
+	info, err := page.Info()
+	if err != nil || (info.Title == "" && info.URL == "") {
 		return ""
 	}
-	return fmt.Sprintf("title=%q url=%s", title, currentURL)
+	return fmt.Sprintf("title=%q url=%s", info.Title, info.URL)
 }
 
 // --- helpers ---
 
-// axString unmarshals a raw JSON AX value into a plain string. AX values
-// arrive as jsontext.Value (raw JSON bytes), so a plain string conversion
-// would keep the surrounding quotes. Non-string scalars (numbers, bools)
-// are returned as-is.
-func axString(raw []byte) string {
-	if len(raw) == 0 {
+// axValue extracts a plain string from an AX value. AX values arrive as
+// raw JSON; gson's Str unquotes strings and passes non-string scalars
+// (numbers, bools) through as text.
+func axValue(v *proto.AccessibilityAXValue) string {
+	if v == nil || v.Value.Nil() {
 		return ""
 	}
-	var s string
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return string(raw)
-	}
-	return s
-}
-
-// nodeValue safely extracts the raw JSON of an AX node's value.
-func nodeValue(n *accessibility.Node) []byte {
-	if n == nil || n.Value == nil {
-		return nil
-	}
-	return n.Value.Value
+	return v.Value.Str()
 }
 
 // roleOf safely extracts the role value from an AX node.
-func roleOf(n *accessibility.Node) string {
-	if n == nil || n.Role == nil {
-		return "unknown"
-	}
-	if s := axString(n.Role.Value); s != "" {
-		return s
+func roleOf(n *proto.AccessibilityAXNode) string {
+	if role := axValue(n.Role); role != "" {
+		return role
 	}
 	return "unknown"
 }
 
 // nameOf safely extracts the accessible name value from an AX node.
-func nameOf(n *accessibility.Node) string {
-	if n == nil || n.Name == nil {
-		return ""
-	}
-	return axString(n.Name.Value)
+func nameOf(n *proto.AccessibilityAXNode) string {
+	return axValue(n.Name)
 }
 
 // isInteractive reports whether the AX role represents an element the

@@ -31,13 +31,10 @@ go_library(
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/media:media_lib",
         "//go/pl/loom/internal/tool/toolkit:toolkit_lib",
-        "@com_github_chromedp_cdproto//accessibility",
-        "@com_github_chromedp_cdproto//cdp",
-        "@com_github_chromedp_cdproto//dom",
-        "@com_github_chromedp_cdproto//input",
-        "@com_github_chromedp_cdproto//page",
-        "@com_github_chromedp_chromedp//:chromedp",
-        "@com_github_chromedp_chromedp//kb",
+        "@com_github_go_rod_rod//:rod",
+        "@com_github_go_rod_rod//lib/input",
+        "@com_github_go_rod_rod//lib/launcher",
+        "@com_github_go_rod_rod//lib/proto",
     ],
 )
 
@@ -50,6 +47,9 @@ go_test(
     embed = [":browser_lib"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
+        "@com_github_go_rod_rod//:rod",
+        "@com_github_go_rod_rod//lib/launcher",
+        "@com_github_go_rod_rod//lib/proto",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
