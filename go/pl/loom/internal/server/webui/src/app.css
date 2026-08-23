@@ -1666,11 +1666,13 @@ body.lightbox-open {
   gap: 8px;
 }
 
-/* Picker button */
+/* Picker button: fixed capsule height so icon-only variants (approval in
+standard mode) stay level with the text capsules beside them */
 .picker-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  height: 26px;
   background: var(--bg2);
   color: var(--fg);
   border: 1px solid transparent;
@@ -1980,26 +1982,37 @@ body.lightbox-open {
   flex: 1;
 }
 
-/* Context usage ring (right of the composer; progressive disclosure: quiet by default, color shifts with the level) */
+/* Context usage ring (right of the composer; progressive disclosure: quiet by default, color shifts with the level).
+Same 32px footprint as the send button — the pair closes the bar as twin circles. */
 .ctx-gauge {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
   flex: none;
+  width: 32px;
+  height: 32px;
   color: var(--muted);
-  font-size: var(--text-xs);
-  line-height: 1;
-  padding: 0 2px;
   user-select: none;
 }
 .ctx-ring {
-  width: 16px;
-  height: 16px;
+  width: 32px;
+  height: 32px;
   transform: rotate(-90deg);
 }
 .ctx-ring circle {
   fill: none;
-  stroke-width: 2.2;
+  stroke-width: 3;
+}
+/* Percentage centered inside the ring; empty below the warm level */
+.ctx-gauge-pct {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1;
 }
 .ctx-ring-bg {
   stroke: var(--bg2);
@@ -4467,9 +4480,12 @@ brush/pinch pointer handlers. */
   display: inline-flex;
   font-size: 12px;
 }
-/* Non-default approval modes always show a warning color: prevents forgetting a switch to permissive/unattended */
+/* Non-default approval modes always show a warning color: prevents forgetting a
+switch to permissive/unattended. Soft tinted background + amber text instead of a
+hard outline — still the only colored capsule in the bar, but no longer the
+highest-contrast element (that rank belongs to the send button). */
 .picker-btn.is-warn {
-  border-color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
   color: var(--warning);
 }
 .picker-btn.is-warn.is-active {

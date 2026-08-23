@@ -16,7 +16,7 @@ const DEFAULT_TRIGGER_RATIO = 0.8
 // First notice level (domain default notice_levels[0])
 const WARM_RATIO = 0.6
 
-const R = 7
+const R = 15
 const CIRC = 2 * Math.PI * R
 
 export const CtxGauge = memo(function CtxGauge({ controller }: { controller: AppController }) {
@@ -26,9 +26,9 @@ export const CtxGauge = memo(function CtxGauge({ controller }: { controller: App
   if (!win || !win.effective) {
     return (
       <span id="ctx-gauge" className="ctx-gauge" hidden>
-        <svg className="ctx-ring" viewBox="0 0 18 18" aria-hidden="true">
-          <circle className="ctx-ring-bg" cx="9" cy="9" r="7" />
-          <circle className="ctx-ring-fg" cx="9" cy="9" r="7" />
+        <svg className="ctx-ring" viewBox="0 0 36 36" aria-hidden="true">
+          <circle className="ctx-ring-bg" cx="18" cy="18" r="15" />
+          <circle className="ctx-ring-fg" cx="18" cy="18" r="15" />
         </svg>
         <span className="ctx-gauge-pct" />
       </span>
@@ -56,22 +56,23 @@ export const CtxGauge = memo(function CtxGauge({ controller }: { controller: App
 
   return (
     <span id="ctx-gauge" className={'ctx-gauge' + (cls ? ' ' + cls : '')} title={parts.join(' · ')}>
-      <svg className="ctx-ring" viewBox="0 0 18 18" aria-hidden="true">
-        <circle className="ctx-ring-bg" cx="9" cy="9" r="7" />
+      <svg className="ctx-ring" viewBox="0 0 36 36" aria-hidden="true">
+        <circle className="ctx-ring-bg" cx="18" cy="18" r="15" />
         <circle
           className="ctx-ring-fg"
-          cx="9"
-          cy="9"
-          r="7"
+          cx="18"
+          cy="18"
+          r="15"
           style={{
             strokeDasharray: CIRC.toFixed(2),
             strokeDashoffset: (CIRC * (1 - ratio)).toFixed(2),
           }}
         />
       </svg>
-      {/* The number appears on demand: below the warm level only the ring shows
-          (the number would be noise); it lights up once the level is reached —
-          its very appearance is the signal. Full numbers in the title tooltip. */}
+      {/* The number sits inside the ring and appears on demand: below the warm
+          level only the ring shows (the number would be noise); it lights up once
+          the level is reached — its very appearance is the signal. Full numbers
+          in the title tooltip. */}
       <span className="ctx-gauge-pct">{ratio >= WARM_RATIO ? pct + '%' : ''}</span>
     </span>
   )
