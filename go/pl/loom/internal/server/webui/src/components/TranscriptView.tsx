@@ -2,8 +2,20 @@
 // 滚动跟随：流式 delta 遵循 following（用户上翻阅读时不打扰）；新块/卡片
 // 强制回底（controller 侧 forceFollow 语义）。块组件按引用 memo——controller
 // 对未变更的块保持对象引用，重渲只发生在版本号变化的块上。
+//
+// 虚拟滚动：长会话下只渲染视口内（+ overscan）的块，DOM 节点数从 O(N) 降到
+// O(视口)。块高度用 ResizeObserver 实测（未测到的用估计值），顶部/底部用
+// padding 占位撑起滚动高度；滚动跟随与 preserveScroll 语义不变。
 
-import { memo, useLayoutEffect, useRef, type ReactNode } from 'react'
+import {
+  memo,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import type { BlockModel, TranscriptController } from '../app/transcript'
 import { useStore } from '../store/store'
 import { Icon } from '../lib/icons'
@@ -24,6 +36,16 @@ import { ApprovalCard, QuestionCard } from './blocks/cards'
 import { ArtifactBlock, InlineImage } from './blocks/images'
 
 const FOLLOW_THRESHOLD_PX = 80
+
+// Inter-block spacing (kept in sync with .block-wrap { margin-bottom }).
+const BLOCK_GAP_PX = 20
+// Height used for blocks not yet measured (conservative underestimate — the
+// ResizeObserver corrects it on the next frame, so the scrollbar only briefly
+// under-estimates on first paint).
+const ESTIMATED_H = 140
+// Extra blocks rendered above/below the viewport to avoid blank flashes while
+// scrolling fast.
+const OVERSCAN = 6
 
 // 视图层回调集合（App 注入；分享页只传 fetchToolOutput 的子集——
 // 审批/问答/反馈不出现，传 undefined 即不渲染对应交互）
@@ -119,6 +141,47 @@ const BlockView = memo(
   (prev, next) => prev.block === next.block && prev.io === next.io,
 )
 
+// MeasuredBlock wraps a rendered block and reports its height via ResizeObserver
+// so the virtualizer can maintain per-block offsets. The wrapper carries the
+// flex-column context (so .block-user's align-self:flex-end still works) and the
+// inter-block margin.
+function MeasuredBlock({
+  id,
+  measure,
+  children,
+}: {
+  id: string
+  measure: (id: string, h: number) => void
+  children: ReactNode
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      measure(id, el.getBoundingClientRect().height)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [id, measure])
+  return (
+    <div ref={ref} className="block-wrap" data-block-id={id}>
+      {children}
+    </div>
+  )
+}
+
+function lowerBound(offsets: number[], value: number): number {
+  let lo = 0
+  let hi = offsets.length
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1
+    if (offsets[mid] < value) lo = mid + 1
+    else hi = mid
+  }
+  return lo
+}
+
 export interface EmptyState {
   hidden: boolean
   hint: string
@@ -147,6 +210,31 @@ export function TranscriptView({
   const followSeq = useStore(controller.store, (s) => s.followSeq)
   const scrollerRef = useRef<HTMLDivElement>(null)
 
+  // --- virtual scroll state ---
+  const heightsRef = useRef<Map<string, number>>(new Map())
+  const [measureTick, setMeasureTick] = useState(0)
+  const [viewport, setViewport] = useState({ top: 0, height: 0 })
+
+  const measure = useCallback((id: string, h: number) => {
+    const map = heightsRef.current
+    const prev = map.get(id)
+    if (prev == null || Math.abs(prev - h) > 1) {
+      map.set(id, h)
+      setMeasureTick((t) => t + 1)
+    }
+  }, [])
+
+  // Track the container size and initial scroll position.
+  useLayoutEffect(() => {
+    const el = scrollerRef.current
+    if (!el) return
+    const update = () => setViewport({ top: el.scrollTop, height: el.clientHeight })
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   useLayoutEffect(() => {
     if (!scrollerOut) return
     scrollerOut.el = scrollerRef.current
@@ -168,11 +256,44 @@ export function TranscriptView({
     const t = controller.store.get().preserveScrollTop
     if (t != null && scrollerRef.current) {
       scrollerRef.current.scrollTop = t
+      setViewport({ top: t, height: scrollerRef.current.clientHeight })
       controller.store.update((s) => {
         s.preserveScrollTop = null
       })
     }
   }, [blocks, controller])
+
+  // --- visible range computation ---
+  const { renderStart, renderEnd, topPad, bottomPad } = useMemo(() => {
+    const n = blocks.length
+    if (n === 0) return { renderStart: 0, renderEnd: 0, topPad: 0, bottomPad: 0 }
+    // offsets[i] = top offset of block i = sum(heights[0..i-1]) + i*GAP
+    const offsets: number[] = new Array(n)
+    let acc = 0
+    for (let i = 0; i < n; i++) {
+      offsets[i] = acc
+      acc += (heightsRef.current.get(blocks[i].id) ?? ESTIMATED_H) + BLOCK_GAP_PX
+    }
+    // total content height = sum(heights) + (n-1)*GAP
+    const lastH = heightsRef.current.get(blocks[n - 1].id) ?? ESTIMATED_H
+    const total = acc - BLOCK_GAP_PX + lastH
+
+    const top = viewport.top
+    const bottom = top + viewport.height
+    const start = Math.max(0, lowerBound(offsets, top) - 1)
+    const end = lowerBound(offsets, bottom)
+    const rs = Math.max(0, start - OVERSCAN)
+    const re = Math.min(n, end + OVERSCAN)
+
+    const topPad = rs > 0 ? offsets[rs] : 0
+    const bottomPad = re < n ? total - offsets[re] : 0
+    return { renderStart: rs, renderEnd: re, topPad, bottomPad }
+  }, [blocks, viewport, measureTick])
+
+  const visible = useMemo(
+    () => blocks.slice(renderStart, renderEnd),
+    [blocks, renderStart, renderEnd],
+  )
 
   return (
     <div
@@ -182,14 +303,19 @@ export function TranscriptView({
       onScroll={() => {
         const el = scrollerRef.current
         if (!el) return
+        setViewport({ top: el.scrollTop, height: el.clientHeight })
         const gap = el.scrollHeight - el.scrollTop - el.clientHeight
         controller.setFollowing(gap < FOLLOW_THRESHOLD_PX)
       }}
     >
       <div id="blocks" className="transcript-inner">
-        {blocks.map((b) => (
-          <BlockView key={b.id} block={b} io={io} />
+        {topPad > 0 && <div style={{ height: topPad }} aria-hidden="true" />}
+        {visible.map((b) => (
+          <MeasuredBlock key={b.id} id={b.id} measure={measure}>
+            <BlockView block={b} io={io} />
+          </MeasuredBlock>
         ))}
+        {bottomPad > 0 && <div style={{ height: bottomPad }} aria-hidden="true" />}
       </div>
       {children}
       {empty && (

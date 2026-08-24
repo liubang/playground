@@ -87,3 +87,48 @@ export function renderMarkdown(text: string): string {
   const html = marked.parse(text || '', { async: false })
   return DOMPurify.sanitize(html, PURIFY_OPTS)
 }
+
+// markdownStableBoundary returns the byte offset of the longest prefix of text
+// that consists of fully closed markdown blocks. Everything after this offset
+// is the "live tail" that may still be growing (an open paragraph / list /
+// fenced code block). Streaming rendering caches the prefix and only re-renders
+// the tail — the dominant cost in a long stream is re-sanitizing and re-parsing
+// the whole buffer on every tick, which this avoids.
+//
+// Implemented as a lightweight line scan (not marked.lexer): lexer is O(n) and
+// ~200x slower than this scan, and it would dominate the per-tick cost it is
+// meant to eliminate. The scan is deliberately conservative — a boundary is
+// only advanced past text that is provably closed (a blank line outside a code
+// fence, or a closed fence). Underestimating the stable prefix only costs a
+// slightly longer tail re-render; overestimating would drop content, so the
+// conservative direction is the safe one. The final turn-end render is still a
+// full parse, which is the correctness backstop.
+export function markdownStableBoundary(text: string): number {
+  if (!text) return 0
+  let inFence = false
+  let lastBoundary = 0
+  let i = 0
+  const n = text.length
+  while (i <= n) {
+    const nl = text.indexOf('\n', i)
+    const lineEnd = nl < 0 ? n : nl
+    const line = text.slice(i, lineEnd)
+    const trimmed = line.trim()
+    // Fenced code block: ``` or ~~~ (marked allows up to 3 spaces of indent;
+    // trim() covers the common cases).
+    const isFence = trimmed.startsWith('```') || trimmed.startsWith('~~~')
+    if (isFence) {
+      inFence = !inFence
+      if (!inFence) {
+        // The fence closed: the whole code block is stable.
+        lastBoundary = nl < 0 ? n : nl + 1
+      }
+    } else if (!inFence && trimmed === '') {
+      // A blank line outside a code fence is a block boundary.
+      lastBoundary = nl < 0 ? n : nl + 1
+    }
+    if (nl < 0) break
+    i = nl + 1
+  }
+  return lastBoundary
+}

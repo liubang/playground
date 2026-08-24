@@ -729,7 +729,15 @@ button {
   padding: 24px 24px 12px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+}
+/* Block wrapper used by virtualized rendering: keeps .block-user's
+   align-self:flex-end working (flex column) and carries the inter-block
+   spacing as margin (gap is 0 so the virtualizer can compute offsets from
+   heights + a constant). */
+.block-wrap {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 20px;
 }
 .empty-state {
   text-align: center;
@@ -3264,7 +3272,9 @@ select.set-input {
      yield the limited width to conversation content */
   .share-body .transcript-inner {
     padding: 16px 12px 12px;
-    gap: 14px;
+    /* NOTE: no gap override here — inter-block spacing lives on
+       .block-wrap's margin and must stay equal to BLOCK_GAP_PX in
+       TranscriptView.tsx, otherwise the virtualizer's offset math drifts. */
   }
   .share-body .block-user {
     max-width: 88%;

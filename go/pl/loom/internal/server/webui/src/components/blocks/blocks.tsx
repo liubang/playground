@@ -9,7 +9,7 @@ import { isInlineImage } from '../../app/transcript'
 import type { ContextCompactedPayload } from '../../protocol/events'
 import { fmtBytes, fmtDuration, fmtTokens } from '../../lib/format'
 import { Icon } from '../../lib/icons'
-import { renderMarkdown } from '../../lib/markdown'
+import { markdownStableBoundary, renderMarkdown } from '../../lib/markdown'
 import { MarkdownView } from './MarkdownView'
 import { MessageActions } from './MessageActions'
 import { ArtifactImage, InlineImage } from './images'
@@ -111,28 +111,68 @@ export const AssistantBlock = memo(function AssistantBlock({
 // paragraph/list item (done by the DOM-side effect).
 
 export const StreamBlock = memo(function StreamBlock({ text }: { text: string }) {
-  const ref = useRef<HTMLDivElement>(null)
+  const mdRef = useRef<HTMLDivElement>(null)
+  const tailRef = useRef<HTMLDivElement>(null)
+  // Incremental rendering cache: the closed prefix is rendered once and its
+  // HTML string is cached; React's dangerouslySetInnerHTML diff skips the
+  // innerHTML write when the string is unchanged, so the prefix DOM is not
+  // rebuilt. Only the live tail is re-rendered each tick (it is short).
+  const cacheRef = useRef({ stableText: '', stableHtml: '' })
+
+  const end = markdownStableBoundary(text)
+  const stableText = text.slice(0, end)
+  const cache = cacheRef.current
+  let stableHtml: string
+  if (stableText === cache.stableText) {
+    stableHtml = cache.stableHtml
+  } else if (stableText.startsWith(cache.stableText)) {
+    // A new block just closed: render only the newly-closed delta and append to
+    // the cached prefix. The boundary is always a block boundary, so rendering
+    // the delta independently is equivalent to re-rendering the whole prefix.
+    const delta = stableText.slice(cache.stableText.length)
+    stableHtml = cache.stableHtml + renderMarkdown(delta)
+    cache.stableText = stableText
+    cache.stableHtml = stableHtml
+  } else {
+    // Non-prefix (text was edited/rewound mid-stream — rare): full re-render.
+    stableHtml = renderMarkdown(stableText)
+    cache.stableText = stableText
+    cache.stableHtml = stableHtml
+  }
+  const tailHtml = renderMarkdown(text.slice(end))
+
   useEffect(() => {
-    const md = ref.current
+    const md = mdRef.current
     if (!md) return
     // Cursor follows the end of rendered content: embedded into the last node
-    // when it is a paragraph/list item so it doesn't take its own line
+    // when it is a paragraph/list item so it doesn't take its own line. The
+    // tail is wrapped in a display:contents container, so the last content node
+    // lives inside the tail wrapper.
     const cursor = document.createElement('span')
     cursor.className = 'stream-cursor'
     cursor.textContent = '▍'
-    const last = md.lastElementChild
+    const tail = tailRef.current
+    const last = tail && tail.lastElementChild ? tail.lastElementChild : md.lastElementChild
     if (last && (last.tagName === 'P' || last.tagName === 'LI')) last.appendChild(cursor)
     else md.appendChild(cursor)
     return () => cursor.remove()
-  }, [text])
+  }, [text, tailHtml])
+
   return (
     <div className="block block-assistant">
-      <div
-        ref={ref}
-        className="md"
-        // Sanitize pipeline: see lib/markdown.ts (the app's only innerHTML entry)
-        dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }}
-      />
+      <div ref={mdRef} className="md">
+        <div
+          className="md-stable"
+          style={{ display: 'contents' }}
+          dangerouslySetInnerHTML={{ __html: stableHtml }}
+        />
+        <div
+          ref={tailRef}
+          className="md-tail"
+          style={{ display: 'contents' }}
+          dangerouslySetInnerHTML={{ __html: tailHtml }}
+        />
+      </div>
     </div>
   )
 })
