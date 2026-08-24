@@ -146,8 +146,7 @@ func TestEscalationNeverSilentlyDowngraded(t *testing.T) {
 	})
 
 	run, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
-		"program":             "touch",
-		"args":                []string{outside},
+		"command":             "touch " + outside,
 		"sandbox_permissions": "require_escalated",
 		"justification":       "needs to write outside the workspace",
 	}))
@@ -169,39 +168,36 @@ func TestEscalationNeverSilentlyDowngraded(t *testing.T) {
 func TestUnlessDangerousBlacklistFlow(t *testing.T) {
 	policy := permission.DefaultPolicy()
 
-	t.Run("simple sh -c needs no approval", func(t *testing.T) {
+	t.Run("simple command needs no approval", func(t *testing.T) {
 		f := newPermissionFixture(t)
 		_, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
-			"program": "sh",
-			"args":    []string{"-c", "mkdir -p .myapp_logs"},
+			"command": "mkdir -p .myapp_logs",
 		}))
 		if got := len(approver.Requests()); got != 0 {
 			t.Fatalf("approver requests = %d, want 0", got)
 		}
 		if info, err := os.Stat(filepath.Join(f.ws, ".myapp_logs")); err != nil || !info.IsDir() {
-			t.Fatalf("simple sh -c command did not execute: %v", err)
+			t.Fatalf("simple command did not execute: %v", err)
 		}
 	})
 
-	t.Run("compound sh -c needs no approval", func(t *testing.T) {
+	t.Run("compound command needs no approval", func(t *testing.T) {
 		f := newPermissionFixture(t)
 		_, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
-			"program": "sh",
-			"args":    []string{"-c", "mkdir -p .myapp_logs && echo created"},
+			"command": "mkdir -p .myapp_logs && echo created",
 		}))
 		if got := len(approver.Requests()); got != 0 {
 			t.Fatalf("approver requests = %d, want 0 (composition is not a risk; the sandbox confines the script)", got)
 		}
 		if _, err := os.Stat(filepath.Join(f.ws, ".myapp_logs")); err != nil {
-			t.Fatalf("compound sh -c command did not execute: %v", err)
+			t.Fatalf("compound command did not execute: %v", err)
 		}
 	})
 
-	t.Run("danger-listed compound sh -c still asks", func(t *testing.T) {
+	t.Run("danger-listed compound command still asks", func(t *testing.T) {
 		f := newPermissionFixture(t)
 		_, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
-			"program": "sh",
-			"args":    []string{"-c", "echo hi && sudo make install"},
+			"command": "echo hi && sudo make install",
 		}))
 		if got := len(approver.Requests()); got != 1 {
 			t.Fatalf("approver requests = %d, want 1 (the AST danger screen must see inside the script)", got)
@@ -211,7 +207,7 @@ func TestUnlessDangerousBlacklistFlow(t *testing.T) {
 	t.Run("declared network need is granted without a prompt", func(t *testing.T) {
 		f := newPermissionFixture(t)
 		run, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
-			"program":       "ls",
+			"command":       "ls",
 			"needs_network": true,
 		}))
 		if got := len(approver.Requests()); got != 0 {
@@ -303,19 +299,17 @@ func TestUnlessDangerousBlacklistFlow(t *testing.T) {
 	t.Run("danger-listed commands still ask", func(t *testing.T) {
 		f := newPermissionFixture(t)
 		_, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
-			"program": "git",
-			"args":    []string{"reset", "--hard"},
+			"command": "git reset --hard",
 		}))
 		if got := len(approver.Requests()); got != 1 {
 			t.Fatalf("approver requests = %d, want 1 (git reset --hard is danger-listed)", got)
 		}
 	})
 
-	t.Run("danger screen sees through simple shells", func(t *testing.T) {
+	t.Run("danger screen sees through the shell", func(t *testing.T) {
 		f := newPermissionFixture(t)
 		_, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
-			"program": "sh",
-			"args":    []string{"-c", "sudo echo hi"},
+			"command": "sudo echo hi",
 		}))
 		if got := len(approver.Requests()); got != 1 {
 			t.Fatalf("approver requests = %d, want 1 (sudo is danger-listed)", got)
@@ -325,8 +319,7 @@ func TestUnlessDangerousBlacklistFlow(t *testing.T) {
 	t.Run("skill env namespace survives the sandbox filter", func(t *testing.T) {
 		f := newPermissionFixture(t)
 		run, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
-			"program": "printenv",
-			"args":    []string{"SKILL_REGION"},
+			"command": "printenv SKILL_REGION",
 			"env":     map[string]string{"SKILL_REGION": "cn", "NODE_OPTIONS": "--no-warnings"},
 		}))
 		if got := len(approver.Requests()); got != 0 {

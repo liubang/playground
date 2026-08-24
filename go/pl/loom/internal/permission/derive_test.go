@@ -256,7 +256,7 @@ func TestDeriveMCP(t *testing.T) {
 }
 
 func TestDeriveRawArgs(t *testing.T) {
-	raw, _ := json.Marshal(map[string]any{"program": "git", "args": []string{"push", "--force"}})
+	raw, _ := json.Marshal(map[string]any{"command": "git push --force"})
 	d := DeriveRawArgs("run_cmd", raw, DeriveEnv{Roots: []string{"/ws"}})
 	if d.Effect.Consequence != ConsequenceSharedDestructive {
 		t.Fatalf("raw-args derivation = %s", d.Effect.Consequence)

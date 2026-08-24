@@ -94,8 +94,7 @@ func TestExecSessionE2E(t *testing.T) {
 	}
 
 	callArgs, err := json.Marshal(map[string]any{
-		"program":       python,
-		"args":          []string{script},
+		"command":       python + " " + script,
 		"working_dir":   ws,
 		"yield_time_ms": 10000,
 	})

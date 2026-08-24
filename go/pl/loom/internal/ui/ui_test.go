@@ -640,7 +640,7 @@ func TestApprovalOverlayShowsAlwaysAllowWithRulePreview(t *testing.T) {
 		Risk:        domain.R2,
 		Description: "Run 'go' 'test' './...'",
 		ArgsHash:    "abc",
-		Arguments:   json.RawMessage(`{"program":"go","args":["test","./..."]}`),
+		Arguments:   json.RawMessage(`{"command":"go test ./..."}`),
 		RulePreview: "go test",
 	}
 	m.approvalCursor = 0
@@ -721,7 +721,7 @@ func TestApprovalOverlayHidesRulePreviewForDynamicShell(t *testing.T) {
 		ApprovalID: domain.NewEventID(),
 		ToolName:   "run_cmd",
 		Risk:       domain.R3,
-		Arguments:  json.RawMessage(`{"program":"sh","args":["-c","echo hi > $out"]}`),
+		Arguments:  json.RawMessage(`{"command":"echo hi > $out"}`),
 	}
 	overlay := m.renderApprovalOverlay()
 	if !strings.Contains(overlay, "Always allow") {
@@ -738,7 +738,7 @@ func TestApprovalOverlayShowsRulePreviewForStaticCompoundShell(t *testing.T) {
 		ApprovalID:  domain.NewEventID(),
 		ToolName:    "run_cmd",
 		Risk:        domain.R2,
-		Arguments:   json.RawMessage(`{"program":"sh","args":["-c","go test ./... && git status"]}`),
+		Arguments:   json.RawMessage(`{"command":"go test ./... && git status"}`),
 		RulePreview: "go test && git status",
 	}
 	overlay := m.renderApprovalOverlay()
@@ -2156,7 +2156,7 @@ func TestApprovalOverlayNavigation(t *testing.T) {
 		Risk:       domain.R2,
 		// Rule-eligible arguments: Enter on the always-allow option must
 		// resolve (calls without a derivable rule keep the overlay up).
-		Arguments:   json.RawMessage(`{"program":"go","args":["test","./..."]}`),
+		Arguments:   json.RawMessage(`{"command":"go test ./..."}`),
 		RulePreview: "go test",
 	}
 	m.mode = ModeApproval
@@ -2267,7 +2267,7 @@ func TestApprovalNumberKeysAndDisabledAlways(t *testing.T) {
 	}
 
 	// "1" resolves allow-once directly.
-	m := newApprovalModel("run_cmd", json.RawMessage(`{"program":"go","args":["test","./..."]}`), "go test")
+	m := newApprovalModel("run_cmd", json.RawMessage(`{"command":"go test ./..."}`), "go test")
 	updated, cmd := m.handleApprovalKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
 	m = updated.(Model)
 	if cmd == nil || m.pendingApproval != nil {
@@ -2275,7 +2275,7 @@ func TestApprovalNumberKeysAndDisabledAlways(t *testing.T) {
 	}
 
 	// "2" remembers a rule when one is derivable.
-	m = newApprovalModel("run_cmd", json.RawMessage(`{"program":"go","args":["test","./..."]}`), "go test")
+	m = newApprovalModel("run_cmd", json.RawMessage(`{"command":"go test ./..."}`), "go test")
 	updated, cmd = m.handleApprovalKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
 	m = updated.(Model)
 	if cmd == nil || m.pendingApproval != nil {
@@ -2284,7 +2284,7 @@ func TestApprovalNumberKeysAndDisabledAlways(t *testing.T) {
 
 	// For a DYNAMIC shell call the rule is not derivable: "2", "a" and
 	// Enter on the always option are all inert, and the overlay stays up.
-	m = newApprovalModel("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","echo hi > $out"]}`), "")
+	m = newApprovalModel("run_cmd", json.RawMessage(`{"command":"echo hi > $out"}`), "")
 	m.approvalCursor = 1
 	for _, key := range []tea.KeyMsg{
 		{Type: tea.KeyRunes, Runes: []rune{'2'}},

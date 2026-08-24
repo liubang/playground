@@ -387,17 +387,16 @@ func DeriveRawArgs(toolName string, raw json.RawMessage, env DeriveEnv) Derivati
 // survive). The typed ExecRequest is authoritative when present.
 func ParseRunCmdCall(raw json.RawMessage) (argv []string, escalated, needsNetwork, needsGUI bool, writable []string, ok bool) {
 	var args struct {
-		Program            string   `json:"program"`
-		Args               []string `json:"args"`
+		Command            string   `json:"command"`
 		SandboxPermissions string   `json:"sandbox_permissions"`
 		NeedsNetwork       bool     `json:"needs_network"`
 		NeedsGUIOpen       bool     `json:"needs_gui_open"`
 		WritablePaths      []string `json:"writable_paths"`
 	}
-	if err := json.Unmarshal(raw, &args); err != nil || args.Program == "" {
+	if err := json.Unmarshal(raw, &args); err != nil || args.Command == "" {
 		return nil, false, false, false, nil, false
 	}
-	return append([]string{args.Program}, args.Args...),
+	return []string{"sh", "-c", args.Command},
 		args.SandboxPermissions == "require_escalated",
 		args.NeedsNetwork, args.NeedsGUIOpen,
 		args.WritablePaths, true

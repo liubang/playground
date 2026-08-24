@@ -40,7 +40,7 @@ func TestRunCmdToolExternalizesLargeOutput(t *testing.T) {
 	validator, root := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:  process.ExplicitTestSandbox{},
-		LookPath: fixedLookPath(python),
+		LookPath: exec.LookPath,
 	})
 	artifactStore, err := artifact.Open(filepath.Join(t.TempDir(), "artifacts"), 4096)
 	if err != nil {
@@ -51,8 +51,7 @@ func TestRunCmdToolExternalizesLargeOutput(t *testing.T) {
 		t.Fatalf("NewRunCmdToolWithArtifacts() error = %v", err)
 	}
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program:        stringPtr("python3"),
-		Args:           &[]string{"-c", "import sys; sys.stdout.write('o' * 600); sys.stderr.write('e' * 400)"},
+		Command:        stringPtr(pyCmd(python, "import sys; sys.stdout.write('o' * 600); sys.stderr.write('e' * 400)")),
 		WorkingDir:     stringPtr(root),
 		Env:            &map[string]string{},
 		TimeoutMs:      int64Ptr(2000),
@@ -122,7 +121,7 @@ func TestRunCmdToolMarksArtifactTruncationAndDrainsProcessOutput(t *testing.T) {
 	validator, root := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:  process.ExplicitTestSandbox{},
-		LookPath: fixedLookPath(python),
+		LookPath: exec.LookPath,
 	})
 	artifactStore, err := artifact.Open(filepath.Join(t.TempDir(), "artifacts"), 64)
 	if err != nil {
@@ -133,7 +132,7 @@ func TestRunCmdToolMarksArtifactTruncationAndDrainsProcessOutput(t *testing.T) {
 		t.Fatalf("NewRunCmdToolWithArtifacts() error = %v", err)
 	}
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program: stringPtr("python3"), Args: &[]string{"-c", "import sys; sys.stdout.write('x' * 500); sys.stderr.write('y' * 300)"},
+		Command:    stringPtr(pyCmd(python, "import sys; sys.stdout.write('x' * 500); sys.stderr.write('y' * 300)")),
 		WorkingDir: stringPtr(root), Env: &map[string]string{}, TimeoutMs: int64Ptr(2000), MaxOutputBytes: int64Ptr(1024),
 	}))
 	if err != nil {
@@ -161,15 +160,14 @@ func TestRunCmdToolArtifactFailureDoesNotEmbedLargeOutput(t *testing.T) {
 	validator, root := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:  process.ExplicitTestSandbox{},
-		LookPath: fixedLookPath(python),
+		LookPath: exec.LookPath,
 	})
 	tool, err := NewRunCmdToolWithArtifacts(validator, runner, failingArtifactWriter{}, 2048)
 	if err != nil {
 		t.Fatalf("NewRunCmdToolWithArtifacts() error = %v", err)
 	}
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program:        stringPtr("python3"),
-		Args:           &[]string{"-c", "print('x' * 1000)"},
+		Command:        stringPtr(pyCmd(python, "print('x' * 1000)")),
 		WorkingDir:     stringPtr(root),
 		Env:            &map[string]string{},
 		TimeoutMs:      int64Ptr(2000),
@@ -203,14 +201,16 @@ func TestRunCmdToolSuccessAndNonZeroExit(t *testing.T) {
 	runner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:      process.ExplicitTestSandbox{},
 		EnvAllowlist: []string{"PATH", "SAFE_VALUE", "MY_SECRET_TOKEN", "LANG", "TMPDIR"},
-		LookPath:     fixedLookPath(python),
+		LookPath:     exec.LookPath,
 	})
 	tool := newTool(t, validator, runner)
 
 	workingDir := mustMkdirAllPath(t, filepath.Join(root, "subdir"))
+	// The command uses the bare interpreter name (not the absolute path)
+	// to keep the approval description within its display budget — the
+	// PATH allowlist entry below makes the lookup work inside the sandbox.
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program:        stringPtr("python3"),
-		Args:           &[]string{"-c", "import json, os, sys; print(json.dumps({'argv': sys.argv[1:], 'cwd': os.getcwd(), 'safe': os.environ.get('SAFE_VALUE', ''), 'secret': os.environ.get('MY_SECRET_TOKEN', '')}, sort_keys=True)); sys.stderr.buffer.write(b'bad\\xfferr')", "alpha", "beta"},
+		Command:        stringPtr("python3 -c \"import json, os, sys; print(json.dumps({'argv': sys.argv[1:], 'cwd': os.getcwd(), 'safe': os.environ.get('SAFE_VALUE', ''), 'secret': os.environ.get('MY_SECRET_TOKEN', '')}, sort_keys=True)); sys.stderr.buffer.write(b'bad\\xfferr')\" alpha beta"),
 		WorkingDir:     stringPtr(workingDir),
 		Env:            &map[string]string{"SAFE_VALUE": "kept", "MY_SECRET_TOKEN": "drop-me"},
 		TimeoutMs:      int64Ptr(2000),
@@ -225,8 +225,8 @@ func TestRunCmdToolSuccessAndNonZeroExit(t *testing.T) {
 	if prepared.Risk != domain.R2 {
 		t.Fatalf("prepared.Risk = %v, want R2", prepared.Risk)
 	}
-	if !strings.Contains(prepared.ApprovalDesc, "'python3' '-c'") {
-		t.Fatalf("approval desc missing quoted command: %q", prepared.ApprovalDesc)
+	if !strings.Contains(prepared.ApprovalDesc, "python3 -c ") {
+		t.Fatalf("approval desc missing the command line: %q", prepared.ApprovalDesc)
 	}
 	if !strings.Contains(prepared.ApprovalDesc, "env[MY_SECRET_TOKEN, SAFE_VALUE]") {
 		t.Fatalf("approval desc missing env keys: %q", prepared.ApprovalDesc)
@@ -271,11 +271,15 @@ func TestRunCmdToolSuccessAndNonZeroExit(t *testing.T) {
 	if output.Isolation != process.ProcessGroupIsolation.Name() {
 		t.Fatalf("output.Isolation = %q, want %q", output.Isolation, process.ProcessGroupIsolation.Name())
 	}
-	// The launcher reports the path it resolved via LookPath; on systems
-	// where the interpreter is a symlink (e.g. mise's python3 ->
-	// python3.14) the two sides only agree after canonicalization.
-	if realPath(t, output.ExecutablePath) != realPath(t, python) {
-		t.Fatalf("ExecutablePath = %q, want %q", output.ExecutablePath, realPath(t, python))
+	// The executed program is the shell; the launcher reports the path it
+	// resolved via LookPath (/bin/sh may itself be a symlink, so both
+	// sides are canonicalized).
+	wantSh, err := exec.LookPath("sh")
+	if err != nil {
+		t.Fatalf("exec.LookPath(sh) error = %v", err)
+	}
+	if realPath(t, output.ExecutablePath) != realPath(t, wantSh) {
+		t.Fatalf("ExecutablePath = %q, want %q", output.ExecutablePath, realPath(t, wantSh))
 	}
 	if output.Hash == "" {
 		t.Fatal("expected executable hash")
@@ -302,8 +306,7 @@ func TestRunCmdToolSuccessAndNonZeroExit(t *testing.T) {
 	}
 
 	nonZeroPrepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program:        stringPtr("python3"),
-		Args:           &[]string{"-c", "import sys; sys.stderr.write('boom\\n'); sys.exit(7)"},
+		Command:        stringPtr(pyCmd(python, "import sys; sys.stderr.write('boom\\n'); sys.exit(7)")),
 		WorkingDir:     stringPtr(root),
 		Env:            &map[string]string{},
 		TimeoutMs:      int64Ptr(2000),
@@ -327,13 +330,12 @@ func TestRunCmdToolTimeoutAndCancelled(t *testing.T) {
 	validator, root := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:  process.ExplicitTestSandbox{},
-		LookPath: fixedLookPath(python),
+		LookPath: exec.LookPath,
 	})
 	tool := newTool(t, validator, runner)
 
 	timeoutPrepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program:        stringPtr("python3"),
-		Args:           &[]string{"-c", "import time; print('start', flush=True); time.sleep(30)"},
+		Command:        stringPtr(pyCmd(python, "import time; print('start', flush=True); time.sleep(30)")),
 		WorkingDir:     stringPtr(root),
 		Env:            &map[string]string{},
 		TimeoutMs:      int64Ptr(100),
@@ -353,8 +355,7 @@ func TestRunCmdToolTimeoutAndCancelled(t *testing.T) {
 	}
 
 	cancelPrepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program:        stringPtr("python3"),
-		Args:           &[]string{"-c", "import time; time.sleep(30)"},
+		Command:        stringPtr(pyCmd(python, "import time; time.sleep(30)")),
 		WorkingDir:     stringPtr(root),
 		Env:            &map[string]string{},
 		TimeoutMs:      int64Ptr(2000),
@@ -384,20 +385,19 @@ func TestRunCmdToolRejectsTamperingAndWorkspaceEscape(t *testing.T) {
 	validator, root := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:  process.ExplicitTestSandbox{},
-		LookPath: fixedLookPath(python),
+		LookPath: exec.LookPath,
 	})
 	tool := newTool(t, validator, runner)
 
 	_, err := tool.Prepare(context.Background(), domain.ToolCall{
 		ID:        domain.NewToolCallID(),
 		Name:      "run_cmd",
-		Arguments: json.RawMessage(`{"program":"python3","args":[],"working_dir":".","env":{},"timeout_ms":1,"max_output_bytes":1,"extra":true}`),
+		Arguments: json.RawMessage(`{"command":"echo hi","working_dir":".","env":{},"timeout_ms":1,"max_output_bytes":1,"extra":true}`),
 	})
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 
 	_, err = tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program:        stringPtr("python3"),
-		Args:           &[]string{},
+		Command:        stringPtr("echo hi"),
 		WorkingDir:     stringPtr(filepath.Join(root, "..")),
 		Env:            &map[string]string{},
 		TimeoutMs:      int64Ptr(10),
@@ -406,8 +406,7 @@ func TestRunCmdToolRejectsTamperingAndWorkspaceEscape(t *testing.T) {
 	assertAgentErrorCode(t, err, domain.ErrSecurity)
 
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program:        stringPtr("python3"),
-		Args:           &[]string{"-c", "print('ok')"},
+		Command:        stringPtr(pyCmd(python, "print('ok')")),
 		WorkingDir:     stringPtr(root),
 		Env:            &map[string]string{},
 		TimeoutMs:      int64Ptr(1000),
@@ -417,8 +416,7 @@ func TestRunCmdToolRejectsTamperingAndWorkspaceEscape(t *testing.T) {
 		t.Fatalf("Prepare(valid) error = %v", err)
 	}
 	prepared.Call.Arguments = mustMarshalRaw(t, runCmdArgs{
-		Program:        "python3",
-		Args:           []string{"-c", "print('tampered')"},
+		Command:        pyCmd(python, "print('tampered')"),
 		WorkingDir:     ".",
 		Env:            map[string]string{},
 		TimeoutMs:      1000,
@@ -428,8 +426,7 @@ func TestRunCmdToolRejectsTamperingAndWorkspaceEscape(t *testing.T) {
 	assertToolResultError(t, tampered, domain.ToolStatusError, domain.ErrSecurity)
 
 	prepared, err = tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program:        stringPtr("python3"),
-		Args:           &[]string{"-c", "print('ok')"},
+		Command:        stringPtr(pyCmd(python, "print('ok')")),
 		WorkingDir:     stringPtr(root),
 		Env:            &map[string]string{},
 		TimeoutMs:      int64Ptr(1000),
@@ -449,13 +446,12 @@ func TestRunCmdToolFailsClosedWithoutSandbox(t *testing.T) {
 	validator, root := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:  process.UnsupportedSandbox{Reason: "no sandbox"},
-		LookPath: fixedLookPath(python),
+		LookPath: exec.LookPath,
 	})
 	tool := newTool(t, validator, runner)
 
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program:        stringPtr("python3"),
-		Args:           &[]string{"-c", "print('ok')"},
+		Command:        stringPtr(pyCmd(python, "print('ok')")),
 		WorkingDir:     stringPtr(root),
 		Env:            &map[string]string{},
 		TimeoutMs:      int64Ptr(1000),
@@ -474,8 +470,7 @@ func TestRunCmdToolFailsClosedWithoutSandbox(t *testing.T) {
 func TestRunCmdToolValidateArguments(t *testing.T) {
 	validator, root := newValidator(t)
 	_, _, err := validateArgs(validator, rawRunCmdArgs{
-		Program:        nil,
-		Args:           &[]string{},
+		Command:        stringPtr(" "),
 		WorkingDir:     stringPtr(root),
 		Env:            &map[string]string{},
 		TimeoutMs:      int64Ptr(1),
@@ -484,8 +479,7 @@ func TestRunCmdToolValidateArguments(t *testing.T) {
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 
 	_, _, err = validateArgs(validator, rawRunCmdArgs{
-		Program:        stringPtr("python3"),
-		Args:           &[]string{},
+		Command:        stringPtr("python3 --version"),
 		WorkingDir:     stringPtr(root),
 		Env:            &map[string]string{"": "bad"},
 		TimeoutMs:      int64Ptr(1),
@@ -494,8 +488,7 @@ func TestRunCmdToolValidateArguments(t *testing.T) {
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 
 	_, _, err = validateArgs(validator, rawRunCmdArgs{
-		Program:        stringPtr("python3"),
-		Args:           &[]string{},
+		Command:        stringPtr("python3 --version"),
 		WorkingDir:     stringPtr(root),
 		Env:            &map[string]string{},
 		TimeoutMs:      int64Ptr(0),
@@ -504,8 +497,7 @@ func TestRunCmdToolValidateArguments(t *testing.T) {
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 
 	_, _, err = validateArgs(validator, rawRunCmdArgs{
-		Program:        stringPtr("python3"),
-		Args:           &[]string{},
+		Command:        stringPtr("python3 --version"),
 		WorkingDir:     stringPtr(root),
 		Env:            &map[string]string{},
 		TimeoutMs:      int64Ptr(1),
@@ -514,47 +506,59 @@ func TestRunCmdToolValidateArguments(t *testing.T) {
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 }
 
-func TestRunCmdShellProgramKeepsBaseRisk(t *testing.T) {
+// The missing-command error is the model's only signal when it sends the
+// wrong shape: it must state the fix, not just the missing field (a bare
+// "program is required" once cost a model two blind retries).
+func TestRunCmdMissingCommandErrorTeachesTheFix(t *testing.T) {
+	validator, root := newValidator(t)
+	_, _, err := validateArgs(validator, rawRunCmdArgs{WorkingDir: stringPtr(root)})
+	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
+	if !strings.Contains(err.Error(), "single 'command' string") || !strings.Contains(err.Error(), `{"command":`) {
+		t.Fatalf("missing-command error = %v, want the contract stated with an example", err)
+	}
+}
+
+func TestRunCmdShellCommandKeepsBaseRisk(t *testing.T) {
 	validator, _ := newValidator(t)
-	python := ensurePython3(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:      process.ExplicitTestSandbox{},
 		EnvAllowlist: []string{"PATH", "SAFE_VALUE"},
-		LookPath:     fixedLookPath(python),
+		LookPath:     exec.LookPath,
 	})
 	tool := newTool(t, validator, runner)
 
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program: stringPtr("sh"),
-		Args:    &[]string{"-c", "echo hi | grep h"},
+		Command: stringPtr("echo hi | grep h"),
 	}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
-	// Composition alone no longer elevates: the sandbox confines the
-	// script and the permission layer's AST danger screen handles the
-	// dangerous shapes.
+	// Composition alone does not elevate: the sandbox confines the script
+	// and the permission layer's AST danger screen handles the dangerous
+	// shapes.
 	if prepared.Risk != domain.R2 {
 		t.Fatalf("shell risk = %v, want R2", prepared.Risk)
 	}
 	if !strings.Contains(prepared.ApprovalDesc, "shell=parsed") {
 		t.Fatalf("approval desc missing shell marker: %q", prepared.ApprovalDesc)
 	}
+	// Every call is a shell invocation: the typed exec contract wraps the
+	// command as sh -c for the policy layer's AST analysis.
+	if prepared.ExecRequest == nil || len(prepared.ExecRequest.Argv) != 3 ||
+		prepared.ExecRequest.Argv[0] != "sh" || prepared.ExecRequest.Argv[1] != "-c" ||
+		prepared.ExecRequest.Argv[2] != "echo hi | grep h" {
+		t.Fatalf("ExecRequest.Argv = %+v, want [sh -c 'echo hi | grep h']", prepared.ExecRequest)
+	}
 
-	// The signed call survives Execute-time verification and actually runs.
-	shellRunner := newRunner(t, validator, process.RunnerOptions{
-		Sandbox:  process.ExplicitTestSandbox{},
-		LookPath: exec.LookPath,
-	})
-	shellTool := newTool(t, validator, shellRunner)
-	prepared2, err := shellTool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program: stringPtr("sh"),
-		Args:    &[]string{"-c", "printf 'a\\nb\\n' | grep b"},
+	// The signed call survives Execute-time verification and actually runs
+	// through the shell (pipes included).
+	prepared2, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+		Command: stringPtr("printf 'a\\nb\\n' | grep b"),
 	}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
-	result := shellTool.Execute(context.Background(), prepared2)
+	result := tool.Execute(context.Background(), prepared2)
 	if result.Status != domain.ToolStatusSuccess {
 		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
 	}
@@ -563,33 +567,19 @@ func TestRunCmdShellProgramKeepsBaseRisk(t *testing.T) {
 	if output.Stdout != "b\n" {
 		t.Fatalf("shell pipeline stdout = %q, want %q", output.Stdout, "b\n")
 	}
-
-	// Plain programs stay at R2.
-	plain, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{Program: stringPtr("python3")}))
-	if err != nil {
-		t.Fatalf("Prepare() error = %v", err)
-	}
-	if plain.Risk != domain.R2 {
-		t.Fatalf("plain program risk = %v, want R2", plain.Risk)
-	}
-	if strings.Contains(plain.ApprovalDesc, "shell=parsed") {
-		t.Fatalf("plain approval desc must not carry the shell marker: %q", plain.ApprovalDesc)
-	}
 }
 
 func TestRunCmdEscalationValidation(t *testing.T) {
 	validator, _ := newValidator(t)
-	python := ensurePython3(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:  process.ExplicitTestSandbox{},
-		LookPath: fixedLookPath(python),
+		LookPath: exec.LookPath,
 	})
 	tool := newTool(t, validator, runner)
 
 	t.Run("escalated requires justification", func(t *testing.T) {
 		_, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-			Program:            stringPtr("go"),
-			Args:               &[]string{"mod", "download"},
+			Command:            stringPtr("go mod download"),
 			SandboxPermissions: stringPtr("require_escalated"),
 		}))
 		assertAgentErrorCode(t, err, domain.ErrInvalidInput)
@@ -600,8 +590,7 @@ func TestRunCmdEscalationValidation(t *testing.T) {
 		// calls only taught models to retry in a loop. It is accepted and
 		// surfaced in the approval description as a plain note.
 		prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-			Program:       stringPtr("go"),
-			Args:          &[]string{"build", "./..."},
+			Command:       stringPtr("go build ./..."),
 			Justification: stringPtr("编译整个工作区以验证改动"),
 		}))
 		if err != nil {
@@ -620,7 +609,7 @@ func TestRunCmdEscalationValidation(t *testing.T) {
 
 	t.Run("justification length bound still applies with use_default", func(t *testing.T) {
 		_, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-			Program:       stringPtr("go"),
+			Command:       stringPtr("go build ./..."),
 			Justification: stringPtr(strings.Repeat("x", maxJustificationBytes+1)),
 		}))
 		assertAgentErrorCode(t, err, domain.ErrInvalidInput)
@@ -628,8 +617,7 @@ func TestRunCmdEscalationValidation(t *testing.T) {
 
 	t.Run("escalated elevates risk and shows justification", func(t *testing.T) {
 		prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-			Program:            stringPtr("go"),
-			Args:               &[]string{"mod", "download"},
+			Command:            stringPtr("go mod download"),
 			SandboxPermissions: stringPtr("require_escalated"),
 			Justification:      stringPtr("Allow downloading Go modules outside the sandbox?"),
 		}))
@@ -653,13 +641,12 @@ func TestRunCmdEscalatedBypassesDefaultSandbox(t *testing.T) {
 	// can get through, which proves the sandbox selection works.
 	runner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:  process.UnsupportedSandbox{Reason: "no OS sandbox in this test"},
-		LookPath: fixedLookPath(python),
+		LookPath: exec.LookPath,
 	})
 	tool := newTool(t, validator, runner)
 
 	blocked, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program: stringPtr("python3"),
-		Args:    &[]string{"-c", "print('x')"},
+		Command: stringPtr(pyCmd(python, "print('x')")),
 	}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
@@ -669,8 +656,7 @@ func TestRunCmdEscalatedBypassesDefaultSandbox(t *testing.T) {
 	}
 
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program:            stringPtr("python3"),
-		Args:               &[]string{"-c", "import os; p=os.path.join(os.getcwd(), 'esc.txt'); open(p, 'w').write('ok'); print(p)"},
+		Command:            stringPtr(pyCmd(python, "import os; p=os.path.join(os.getcwd(), 'esc.txt'); open(p, 'w').write('ok'); print(p)")),
 		WorkingDir:         stringPtr(root),
 		SandboxPermissions: stringPtr("require_escalated"),
 		Justification:      stringPtr("Allow writing esc.txt without a sandbox?"),
@@ -698,17 +684,15 @@ func TestRunCmdEscalatedBypassesDefaultSandbox(t *testing.T) {
 
 func TestRunCmdNeedsNetworkValidation(t *testing.T) {
 	validator, _ := newValidator(t)
-	python := ensurePython3(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:  process.ExplicitTestSandbox{},
-		LookPath: fixedLookPath(python),
+		LookPath: exec.LookPath,
 	})
 	tool := newTool(t, validator, runner)
 
 	t.Run("needs_network stays R2 and is marked in the approval desc", func(t *testing.T) {
 		prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-			Program:      stringPtr("mycli"),
-			Args:         &[]string{"query", "submit"},
+			Command:      stringPtr("mycli query submit"),
 			NeedsNetwork: boolPtr(true),
 		}))
 		if err != nil {
@@ -724,7 +708,7 @@ func TestRunCmdNeedsNetworkValidation(t *testing.T) {
 
 	t.Run("needs_network conflicts with require_escalated", func(t *testing.T) {
 		_, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-			Program:            stringPtr("go"),
+			Command:            stringPtr("go build ./..."),
 			SandboxPermissions: stringPtr("require_escalated"),
 			NeedsNetwork:       boolPtr(true),
 			Justification:      stringPtr("x"),
@@ -742,13 +726,12 @@ func TestRunCmdGrantExecutionModes(t *testing.T) {
 	python := ensurePython3(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:  process.UnsupportedSandbox{Reason: "no OS sandbox in this test"},
-		LookPath: fixedLookPath(python),
+		LookPath: exec.LookPath,
 	})
 	tool := newTool(t, validator, runner)
 	prepare := func() domain.PreparedCall {
 		prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-			Program: stringPtr("python3"),
-			Args:    &[]string{"-c", "print('x')"},
+			Command: stringPtr(pyCmd(python, "print('x')")),
 		}))
 		if err != nil {
 			t.Fatalf("Prepare() error = %v", err)
@@ -936,16 +919,16 @@ func TestRiskForArgsShellForms(t *testing.T) {
 	base := domain.R2
 	// Shell forms keep the base risk: the sandbox is the boundary and
 	// the AST danger screen catches the dangerous shapes.
-	simple := runCmdArgs{Program: "sh", Args: []string{"-c", "mkdir -p .myapp_logs"}}
+	simple := runCmdArgs{Command: "mkdir -p .myapp_logs"}
 	if got := riskForArgs(simple, base); got != base {
-		t.Errorf("riskForArgs(simple sh -c) = %v, want %v", got, base)
+		t.Errorf("riskForArgs(simple) = %v, want %v", got, base)
 	}
-	compound := runCmdArgs{Program: "sh", Args: []string{"-c", "mkdir -p x && echo done"}}
+	compound := runCmdArgs{Command: "mkdir -p x && echo done"}
 	if got := riskForArgs(compound, base); got != base {
-		t.Errorf("riskForArgs(compound sh -c) = %v, want %v", got, base)
+		t.Errorf("riskForArgs(compound) = %v, want %v", got, base)
 	}
 	// Escalations always rate R3.
-	escalated := runCmdArgs{Program: "make", SandboxPermissions: sandboxRequireEscalated}
+	escalated := runCmdArgs{Command: "make", SandboxPermissions: sandboxRequireEscalated}
 	if got := riskForArgs(escalated, base); got != domain.R3 {
 		t.Errorf("riskForArgs(escalated) = %v, want R3", got)
 	}
@@ -1027,8 +1010,16 @@ func ensurePython3(t *testing.T) string {
 	return python
 }
 
-func fixedLookPath(path string) func(string) (string, error) {
-	return func(string) (string, error) { return path, nil }
+// pyCmd builds the shell command string that runs a python script via
+// 'python -c "<script>"' using the interpreter's absolute path (test
+// scripts only use single quotes internally and no shell-active
+// characters, so double-quoting is safe).
+func pyCmd(python, script string, extra ...string) string {
+	cmd := python + " -c \"" + script + "\""
+	for _, arg := range extra {
+		cmd += " " + arg
+	}
+	return cmd
 }
 
 func realPath(t *testing.T, path string) string {
@@ -1116,8 +1107,7 @@ func TestRunCmdToolPrepareWritablePaths(t *testing.T) {
 	outside := filepath.Join(workspacepkg.Canonicalize(home), "Library", "Logs", "myapp")
 
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program:       stringPtr("myapp"),
-		Args:          &[]string{"login"},
+		Command:       stringPtr("myapp login"),
 		WritablePaths: &[]string{"~/Library/Logs/myapp"},
 		NeedsNetwork:  boolPtr(true),
 	}))
@@ -1145,7 +1135,7 @@ func TestRunCmdToolPrepareWritablePathsRejectsEscalatedCombo(t *testing.T) {
 	tool := newTool(t, validator, runner)
 	escalated := sandboxRequireEscalated
 	_, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program:            stringPtr("myapp"),
+		Command:            stringPtr("myapp login"),
 		SandboxPermissions: &escalated,
 		WritablePaths:      &[]string{"/tmp/myapp-logs"},
 		Justification:      stringPtr("x"),
@@ -1162,16 +1152,14 @@ func TestRunCmdToolPrepareWritablePathsRejectsEscalatedCombo(t *testing.T) {
 func TestRunCmdToolExecuteRejectsSensitiveGrant(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	python := ensurePython3(t)
 	validator, _ := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:  process.ExplicitTestSandbox{},
-		LookPath: fixedLookPath(python),
+		LookPath: exec.LookPath,
 	})
 	tool := newTool(t, validator, runner)
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program: stringPtr("python3"),
-		Args:    &[]string{"-c", "print('hi')"},
+		Command: stringPtr("python3 -c \"print('hi')\""),
 	}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
@@ -1263,7 +1251,6 @@ func boolPtr(value bool) *bool    { return &value }
 func int64Ptr(value int64) *int64 { return &value }
 
 func TestRunCmdApprovalDescSurfacesExternalPathRefs(t *testing.T) {
-	python := ensurePython3(t)
 	validator, _ := newValidator(t)
 	// macOS temp dirs are symlinked (/var → /private/var); the validator
 	// stores the resolved root, so workspace-internal paths in this test
@@ -1271,7 +1258,7 @@ func TestRunCmdApprovalDescSurfacesExternalPathRefs(t *testing.T) {
 	root := validator.Root()
 	runner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:  process.ExplicitTestSandbox{},
-		LookPath: fixedLookPath(python),
+		LookPath: exec.LookPath,
 	})
 	tool := newTool(t, validator, runner)
 
@@ -1288,10 +1275,9 @@ func TestRunCmdApprovalDescSurfacesExternalPathRefs(t *testing.T) {
 		return desc[idx : idx+end+1]
 	}
 
-	t.Run("plain argv", func(t *testing.T) {
+	t.Run("plain command", func(t *testing.T) {
 		prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-			Program: stringPtr("ls"),
-			Args:    &[]string{filepath.Join(root, "internal"), "/etc/hosts"},
+			Command: stringPtr("ls " + filepath.Join(root, "internal") + " /etc/hosts"),
 		}))
 		if err != nil {
 			t.Fatalf("Prepare() error = %v", err)
@@ -1305,10 +1291,9 @@ func TestRunCmdApprovalDescSurfacesExternalPathRefs(t *testing.T) {
 		}
 	})
 
-	t.Run("shell payload", func(t *testing.T) {
+	t.Run("pipeline payload", func(t *testing.T) {
 		prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-			Program: stringPtr("sh"),
-			Args:    &[]string{"-c", "cat /etc/hosts | head -5"},
+			Command: stringPtr("cat /etc/hosts | head -5"),
 		}))
 		if err != nil {
 			t.Fatalf("Prepare() error = %v", err)
@@ -1321,8 +1306,7 @@ func TestRunCmdApprovalDescSurfacesExternalPathRefs(t *testing.T) {
 
 	t.Run("workspace only", func(t *testing.T) {
 		prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-			Program: stringPtr("ls"),
-			Args:    &[]string{root},
+			Command: stringPtr("ls " + root),
 		}))
 		if err != nil {
 			t.Fatalf("Prepare() error = %v", err)
@@ -1334,17 +1318,15 @@ func TestRunCmdApprovalDescSurfacesExternalPathRefs(t *testing.T) {
 }
 
 func TestRunCmdToolApprovalDescShowsDangerousPayloadAndTruncation(t *testing.T) {
-	python := ensurePython3(t)
 	validator, root := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:  process.ExplicitTestSandbox{},
-		LookPath: fixedLookPath(python),
+		LookPath: exec.LookPath,
 	})
 	tool := newTool(t, validator, runner)
-	payload := strings.Repeat("print('boom');", 80)
+	payload := "python3 -c \"" + strings.Repeat("print('boom');", 80) + "\""
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program:        stringPtr("python3"),
-		Args:           &[]string{"-c", payload},
+		Command:        stringPtr(payload),
 		WorkingDir:     stringPtr(root),
 		Env:            &map[string]string{"OPENAI_API_KEY": "super-secret", "VISIBLE_KEY": "visible-secret"},
 		TimeoutMs:      int64Ptr(1234),
@@ -1353,7 +1335,7 @@ func TestRunCmdToolApprovalDescShowsDangerousPayloadAndTruncation(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
-	if !strings.Contains(prepared.ApprovalDesc, "'python3' '-c' 'print('") {
+	if !strings.Contains(prepared.ApprovalDesc, "python3 -c ") {
 		t.Fatalf("approval desc missing dangerous payload prefix: %q", prepared.ApprovalDesc)
 	}
 	if !strings.Contains(prepared.ApprovalDesc, "boom") {
@@ -1371,16 +1353,14 @@ func TestRunCmdToolApprovalDescShowsDangerousPayloadAndTruncation(t *testing.T) 
 }
 
 func TestRunCmdToolRejectsKilledBindingMismatch(t *testing.T) {
-	python := ensurePython3(t)
 	validator, root := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:  process.ExplicitTestSandbox{},
-		LookPath: fixedLookPath(python),
+		LookPath: exec.LookPath,
 	})
 	tool := newTool(t, validator, runner)
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program:        stringPtr("python3"),
-		Args:           &[]string{"-c", "print('ok')"},
+		Command:        stringPtr("python3 -c \"print('ok')\""),
 		WorkingDir:     stringPtr(root),
 		Env:            &map[string]string{},
 		TimeoutMs:      int64Ptr(1000),
@@ -1429,12 +1409,11 @@ func TestRunCmdToolClassifySignalStillSuccess(t *testing.T) {
 				return process.SandboxLaunch{Program: spec.ExecutablePath, Args: append([]string(nil), spec.Args...), Env: append([]string(nil), spec.Env...)}, nil
 			},
 		},
-		LookPath: fixedLookPath(python),
+		LookPath: exec.LookPath,
 	})
 	tool := newTool(t, validator, runner)
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Program:        stringPtr("python3"),
-		Args:           &[]string{"-c", "import os, signal; os.kill(os.getpid(), signal.SIGTERM)"},
+		Command:        stringPtr("exec " + pyCmd(python, "import os, signal; os.kill(os.getpid(), signal.SIGTERM)")),
 		WorkingDir:     stringPtr(root),
 		Env:            &map[string]string{},
 		TimeoutMs:      int64Ptr(1000),

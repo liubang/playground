@@ -261,10 +261,7 @@ func TestToolTargetFromArgs(t *testing.T) {
 		{"command", `{"command":"go test ./..."}`, "go test ./..."},
 		{"pattern", `{"pattern":"**/*.go"}`, "**/*.go"},
 		{"non-string ignored", `{"path":42,"cmd":"ls"}`, "ls"},
-		{"run_cmd program+args", `{"program":"go","args":["test","./..."],"working_dir":"."}`, "go test ./..."},
-		{"run_cmd sh -c script is quoted", `{"program":"sh","args":["-c","echo a; echo b"]}`, "sh -c 'echo a; echo b'"},
-		{"run_cmd program only", `{"program":"ls","working_dir":"."}`, "ls"},
-		{"run_cmd empty program ignored", `{"program":"","args":["x"]}`, ""},
+		{"run_cmd command string", `{"command":"go test ./...","working_dir":"."}`, "go test ./..."},
 		{"empty", `{}`, ""},
 		{"invalid json", `{`, ""},
 	}

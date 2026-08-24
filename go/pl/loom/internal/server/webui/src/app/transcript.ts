@@ -1014,31 +1014,12 @@ export class TranscriptController {
 // --- history (snapshot rebuild) tool block helpers (same logic as legacy
 // blocks.js) ---
 
-// argv display quoting rules: exactly match the Go-side
-// render.CommandLineForDisplay (same safe charset as shlex.join), so the live
-// path and the snapshot rebuild path render identical command lines. Elements
-// containing whitespace/metachars/quotes, or empty strings, are wrapped in
-// single quotes.
-const DISPLAY_SAFE_ARG = /^[A-Za-z0-9_@%+=:,./-]+$/
-function quoteArgForDisplay(arg: string): string {
-  if (DISPLAY_SAFE_ARG.test(arg)) return arg
-  return `'${arg.replaceAll("'", `'"'"'`)}'`
-}
-
 // histTarget extracts the display target from tool_call.arguments (already an
-// object on the wire).
-// run_cmd's arguments are program + args, joined into a command line for
-// display (consistent with the live path and the TUI); other tools are
-// extracted by known keys like path/command/pattern.
+// object on the wire): run_cmd's command line lives in `command`; other
+// tools are extracted by known keys like path/pattern/query.
 export function histTarget(call: { arguments?: Record<string, unknown> }): string {
   const a = call?.arguments
   if (!a || typeof a !== 'object') return ''
-  if (typeof a.program === 'string' && a.program !== '') {
-    const rest = Array.isArray(a.args)
-      ? a.args.filter((x): x is string => typeof x === 'string')
-      : []
-    return [a.program, ...rest].map(quoteArgForDisplay).join(' ')
-  }
   const v = a.path || a.file_path || a.command || a.cmd || a.query || a.pattern || a.url || ''
   return String(v)
 }

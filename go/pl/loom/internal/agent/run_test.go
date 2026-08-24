@@ -2784,7 +2784,7 @@ func TestLoopExecutesElevatedRiskCallAfterApproval(t *testing.T) {
 	r3 := domain.R3
 	tool := newMutableTool(mutableToolConfig{
 		definition:    newTestToolDefinition("run_cmd", []domain.Capability{domain.CapProcessExec}),
-		canonicalArgs: json.RawMessage(`{"program":"weather","args":["--help"]}`),
+		canonicalArgs: json.RawMessage(`{"command":"weather --help"}`),
 		readPaths:     []string{"/workspace"},
 		writePaths:    []string{"/workspace"},
 		approvalDesc:  "Run; 'weather' '--help'; ESCALATED(no-sandbox)[ok?]",
@@ -2802,7 +2802,7 @@ func TestLoopExecutesElevatedRiskCallAfterApproval(t *testing.T) {
 			ToolCalls: []domain.ToolCall{{
 				ID:        callID,
 				Name:      "run_cmd",
-				Arguments: json.RawMessage(`{"program":"weather","args":["--help"]}`),
+				Arguments: json.RawMessage(`{"command":"weather --help"}`),
 			}},
 			StopReason: domain.StopToolUse,
 		},
@@ -3014,8 +3014,8 @@ func TestContinueRunClosesDanglingToolCalls(t *testing.T) {
 			ID: domain.NewMessageID(), Sequence: 2, Role: domain.RoleAssistant,
 			Status: domain.MessageStatusFinal, Revision: 1,
 			Parts: []domain.ContentPart{
-				{Kind: domain.PartToolCall, ToolCall: &domain.ToolCall{ID: callID1, Name: "run_cmd", Arguments: json.RawMessage(`{"program":"weather"}`)}},
-				{Kind: domain.PartToolCall, ToolCall: &domain.ToolCall{ID: callID2, Name: "run_cmd", Arguments: json.RawMessage(`{"program":"weather"}`)}},
+				{Kind: domain.PartToolCall, ToolCall: &domain.ToolCall{ID: callID1, Name: "run_cmd", Arguments: json.RawMessage(`{"command":"weather"}`)}},
+				{Kind: domain.PartToolCall, ToolCall: &domain.ToolCall{ID: callID2, Name: "run_cmd", Arguments: json.RawMessage(`{"command":"weather"}`)}},
 			},
 			CreatedAt: clock.Now(),
 		},

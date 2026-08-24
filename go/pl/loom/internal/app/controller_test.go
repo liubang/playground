@@ -1013,13 +1013,13 @@ func TestToolCallTargetPrefersWritePaths(t *testing.T) {
 		t.Fatalf("target = %q, want empty", got)
 	}
 	// run_cmd always has workspace-root read/write paths; the display
-	// target is the command line reconstructed from the call arguments.
+	// target is the command string from the call arguments.
 	if got := toolCallTarget(toolCallAuditDTO{
 		Tool:       "run_cmd",
 		WritePaths: []string{"/workspace"},
 		ReadPaths:  []string{"/workspace"},
-	}, json.RawMessage(`{"program":"go","args":["test","./..."],"working_dir":"."}`)); got != "go test ./..." {
-		t.Fatalf("run_cmd target = %q, want command line", got)
+	}, json.RawMessage(`{"command":"go test ./...","working_dir":"."}`)); got != "go test ./..." {
+		t.Fatalf("run_cmd target = %q, want the command string", got)
 	}
 	// Without arguments (pending-args cap overflow), fall back to the
 	// approval description.

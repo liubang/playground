@@ -439,45 +439,43 @@
                 "capabilities": [
                   "process.exec"
                 ],
-                "description": "Start a long-running command as a background session inside the sandbox and return a session_id, without waiting for it to finish. Use it for processes that stay alive or need interaction: dev servers, watch-mode test runners, REPLs, database consoles. For one-shot commands that run to completion, prefer run_cmd. Always set working_dir explicitly instead of wrapping the command in 'cd ... \u0026\u0026'. Only 'program' is required: working_dir defaults to '.', yield_time_ms to 1000 (how long to wait for the first output before returning; 0 returns immediately, max 300000), max_output_bytes to 16384. The call returns early with status='running' and the output produced so far; drive the session afterwards with write_stdin (send input, or poll with empty chars). stdout and stderr are merged in arrival order like a terminal. The sandbox denies outbound network (loopback allowed), writes outside the workspace and temp dir, and driving GUI applications (macOS 'open' / Apple Events). When the session's command needs to open a URL or app from inside the sandbox (e.g. a dev server opening the browser), set needs_gui_open=true — after approval the session runs INSIDE the sandbox with GUI-open granted. sandbox_permissions='require_escalated' (with a short justification question) runs the session OUTSIDE the sandbox with the full user environment after explicit approval. Sessions are killed automatically after 30 minutes without any write_stdin interaction — poll long-lived services periodically if they must stay up.",
+                "description": "Start a long-running command as a background session inside the sandbox and return a session_id, without waiting for it to finish. Use it for processes that stay alive or need interaction: dev servers, watch-mode test runners, REPLs, database consoles. For one-shot commands that run to completion, prefer run_cmd. The command runs via 'sh -c' — write it exactly as you would type it in a terminal (e.g. {\"command\":\"npm run dev\",\"working_dir\":\"web\"}). Always set working_dir explicitly instead of wrapping the command in 'cd ... \u0026\u0026'. Only 'command' is required: working_dir defaults to '.', yield_time_ms to 1000 (how long to wait for the first output before returning; 0 returns immediately, max 300000), max_output_bytes to 16384. The call returns early with status='running' and the output produced so far; drive the session afterwards with write_stdin (send input, or poll with empty chars). stdout and stderr are merged in arrival order like a terminal. The sandbox denies outbound network (loopback allowed), writes outside the workspace and temp dir, and driving GUI applications (macOS 'open' / Apple Events). When the session's command needs to open a URL or app from inside the sandbox (e.g. a dev server opening the browser), set needs_gui_open=true — after approval the session runs INSIDE the sandbox with GUI-open granted. sandbox_permissions='require_escalated' (with a short justification question) runs the session OUTSIDE the sandbox with the full user environment after explicit approval. Sessions are killed automatically after 30 minutes without any write_stdin interaction — poll long-lived services periodically if they must stay up.",
                 "input_schema": {
                   "additionalProperties": false,
                   "properties": {
-                    "args": {
-                      "items": {
-                        "maxLength": 8192,
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array"
+                    "command": {
+                      "description": "The shell command to run as a session, exactly as you would type it in a terminal (e.g. \"npm run dev\"). Runs via 'sh -c'.",
+                      "maxLength": 32768,
+                      "minLength": 1,
+                      "type": "string"
                     },
                     "env": {
                       "additionalProperties": {
                         "maxLength": 8192,
                         "type": "string"
                       },
+                      "description": "Extra environment variables (filtered by the sandbox security allowlist).",
                       "maxProperties": 64,
                       "type": "object"
                     },
                     "justification": {
+                      "description": "Short note shown to the user at approval time; required with sandbox_permissions='require_escalated'.",
                       "maxLength": 240,
                       "minLength": 1,
                       "type": "string"
                     },
                     "max_output_bytes": {
+                      "description": "Maximum bytes of merged output returned (default 16384).",
                       "maximum": 65536,
                       "minimum": 0,
                       "type": "integer"
                     },
                     "needs_gui_open": {
+                      "description": "Allow the session to open URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval.",
                       "type": "boolean"
                     },
-                    "program": {
-                      "maxLength": 4096,
-                      "minLength": 1,
-                      "type": "string"
-                    },
                     "sandbox_permissions": {
+                      "description": "'require_escalated' runs the session OUTSIDE the sandbox with the full user environment after explicit approval; requires a justification.",
                       "enum": [
                         "use_default",
                         "require_escalated"
@@ -485,18 +483,20 @@
                       "type": "string"
                     },
                     "working_dir": {
+                      "description": "Directory to run the command in, relative to the workspace root (default '.'). Set this instead of prefixing the command with 'cd ... \u0026\u0026'.",
                       "maxLength": 4096,
                       "minLength": 1,
                       "type": "string"
                     },
                     "yield_time_ms": {
+                      "description": "How long to wait for the first output before returning in milliseconds (default 1000; 0 returns immediately).",
                       "maximum": 300000,
                       "minimum": 0,
                       "type": "integer"
                     }
                   },
                   "required": [
-                    "program"
+                    "command"
                   ],
                   "type": "object"
                 },
@@ -506,7 +506,6 @@
                     "command": {
                       "type": "string"
                     },
-                    "duration_ms": 0,
                     "exit_code": {
                       "type": "integer"
                     },
@@ -1193,7 +1192,6 @@
                     "diagnostics": {
                       "type": "array"
                     },
-                    "duration_ms": 0,
                     "linter": {
                       "type": "string"
                     },
@@ -1629,48 +1627,47 @@
                 "capabilities": [
                   "process.exec"
                 ],
-                "description": "Execute a program in a sandbox. Always set working_dir explicitly instead of wrapping the command in 'cd ... \u0026\u0026' — it keeps the audit trail accurate. Prefer plain argv form (program + args + env) for single commands; use program='sh' with args=['-c','...'] freely when you need pipes, redirection, '\u0026\u0026' chaining, or glob expansion — both forms run sandboxed WITHOUT user approval; only danger-listed patterns (destructive commands, pipes into a shell, writes to sensitive paths) or sandbox escapes ever prompt. argv is executed directly without a shell: wildcards like '*.go' are passed to the program literally, so glob expansion is a legitimate reason to use the 'sh -c' form (or use the glob tool to find files first). Only 'program' is required: working_dir defaults to '.', env to empty, timeout_ms to 120000, max_output_bytes to 65536. Output beyond the limit is stored as an artifact with a head/tail preview. Inside the sandbox, env entries are filtered by a security allowlist; keys that do not survive the filter are reported back in the output's 'note' field (escalated runs inherit the full user environment). The sandbox denies outbound network and DNS but allows loopback networking (bind/listen/connect on localhost), and denies writes outside the workspace and temp dir. When a task-critical command fails (or hangs until the timeout) because the sandbox denied OUTBOUND NETWORK or DNS (SSO/OAuth, HTTP APIs, package downloads), PREFER retrying the same command with needs_network=true: after a lightweight approval it runs INSIDE the sandbox with outbound network granted (credentials stay unreadable), and the user can remember it as a scoped rule. When a command fails because the sandbox denied a WRITE OUTSIDE THE WORKSPACE (a tool dropping logs/config/state in its own directory, e.g. ~/Library/Logs/\u003ctool\u003e or ~/.\u003ctool\u003e), PREFER retrying the same command with writable_paths=[that directory]: after a lightweight approval it runs INSIDE the sandbox with exactly those directories additionally writable, and the user can remember it as a scoped rule. writable_paths accepts absolute paths ('~/' is expanded), never names a credential location (.ssh, .aws, keychains, ...) or one of its ancestors, and combines freely with needs_network/needs_gui_open. When a command fails because it tried to OPEN A GUI APPLICATION (macOS 'open' a URL/app, Apple Events — LaunchServices/NSOSStatusErrorDomain errors), retry with needs_gui_open=true: after approval it runs INSIDE the sandbox with GUI-open granted. Use the same flag to proactively show the user a web page (open \u003curl\u003e). Reserve sandbox_permissions='require_escalated' (with a short justification question) for failures the scoped flags cannot explain — TTY needs, credential files the sandbox hides, Security-framework TLS — it runs OUTSIDE the sandbox with the full user environment after explicit approval (R3). Do not give up or ask the user to run it themselves before offering the matching approval. needs_network, needs_gui_open and writable_paths must NOT be combined with require_escalated (escalated runs already have full network, GUI and write access). 'justification' is an optional short note shown to the user at approval time; it is REQUIRED with sandbox_permissions='require_escalated' and simply informational otherwise.",
+                "description": "Execute a shell command in a sandbox and return its stdout, stderr, exit code and timing. The command runs via 'sh -c' — write it exactly as you would type it in a terminal: pipes, redirection, '\u0026\u0026' chaining, globs and quoting all work. Examples: {\"command\":\"go test ./...\"} · {\"command\":\"python3 plot.py\",\"working_dir\":\"scripts\",\"timeout_ms\":300000} · {\"command\":\"curl -sI https://example.com\",\"needs_network\":true}. Set working_dir explicitly instead of wrapping the command in 'cd ... \u0026\u0026' — it keeps the audit trail accurate. Commands run sandboxed WITHOUT user approval; only danger-listed patterns (destructive commands, pipes into a shell, writes to sensitive paths) or sandbox escapes ever prompt. Only 'command' is required: working_dir defaults to '.', env to empty, timeout_ms to 120000, max_output_bytes to 65536. Output beyond the limit is stored as an artifact with a head/tail preview. Inside the sandbox, env entries are filtered by a security allowlist; keys that do not survive the filter are reported back in the output's 'note' field (escalated runs inherit the full user environment). The sandbox denies outbound network and DNS but allows loopback networking (bind/listen/connect on localhost), and denies writes outside the workspace and temp dir. When a task-critical command fails (or hangs until the timeout) because the sandbox denied OUTBOUND NETWORK or DNS (SSO/OAuth, HTTP APIs, package downloads), PREFER retrying the same command with needs_network=true: after a lightweight approval it runs INSIDE the sandbox with outbound network granted (credentials stay unreadable), and the user can remember it as a scoped rule. When a command fails because the sandbox denied a WRITE OUTSIDE THE WORKSPACE (a tool dropping logs/config/state in its own directory, e.g. ~/Library/Logs/\u003ctool\u003e or ~/.\u003ctool\u003e), PREFER retrying the same command with writable_paths=[that directory]: after a lightweight approval it runs INSIDE the sandbox with exactly those directories additionally writable, and the user can remember it as a scoped rule. writable_paths accepts absolute paths ('~/' is expanded), never names a credential location (.ssh, .aws, keychains, ...) or one of its ancestors, and combines freely with needs_network/needs_gui_open. When a command fails because it tried to OPEN A GUI APPLICATION (macOS 'open' a URL/app, Apple Events — LaunchServices/NSOSStatusErrorDomain errors), retry with needs_gui_open=true: after approval it runs INSIDE the sandbox with GUI-open granted. Use the same flag to proactively show the user a web page (open \u003curl\u003e). Reserve sandbox_permissions='require_escalated' (with a short justification question) for failures the scoped flags cannot explain — TTY needs, credential files the sandbox hides, Security-framework TLS — it runs OUTSIDE the sandbox with the full user environment after explicit approval (R3). Do not give up or ask the user to run it themselves before offering the matching approval. needs_network, needs_gui_open and writable_paths must NOT be combined with require_escalated (escalated runs already have full network, GUI and write access). 'justification' is an optional short note shown to the user at approval time; it is REQUIRED with sandbox_permissions='require_escalated' and simply informational otherwise.",
                 "input_schema": {
                   "additionalProperties": false,
                   "properties": {
-                    "args": {
-                      "items": {
-                        "maxLength": 8192,
-                        "type": "string"
-                      },
-                      "maxItems": 256,
-                      "type": "array"
+                    "command": {
+                      "description": "The shell command to execute, exactly as you would type it in a terminal (e.g. \"go test ./...\" or \"ls -la | head -20\"). Runs via 'sh -c', so pipes, redirection, '\u0026\u0026' chaining, globs and quoting all work.",
+                      "maxLength": 32768,
+                      "minLength": 1,
+                      "type": "string"
                     },
                     "env": {
                       "additionalProperties": {
                         "maxLength": 8192,
                         "type": "string"
                       },
+                      "description": "Extra environment variables. Inside the sandbox they are filtered by a security allowlist; dropped keys are reported in the output's note field.",
                       "maxProperties": 64,
                       "type": "object"
                     },
                     "justification": {
+                      "description": "Short note shown to the user at approval time; required with sandbox_permissions='require_escalated', informational otherwise.",
                       "maxLength": 240,
                       "minLength": 1,
                       "type": "string"
                     },
                     "max_output_bytes": {
+                      "description": "Maximum bytes of stdout/stderr returned inline (default 65536); output beyond the limit is stored as an artifact with a head/tail preview.",
                       "maximum": 1048576,
                       "minimum": 1,
                       "type": "integer"
                     },
                     "needs_gui_open": {
+                      "description": "Allow opening URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval.",
                       "type": "boolean"
                     },
                     "needs_network": {
+                      "description": "Grant outbound network and DNS inside the sandbox after a lightweight approval.",
                       "type": "boolean"
                     },
-                    "program": {
-                      "maxLength": 4096,
-                      "minLength": 1,
-                      "type": "string"
-                    },
                     "sandbox_permissions": {
+                      "description": "'require_escalated' runs OUTSIDE the sandbox with the full user environment after explicit approval and requires a justification; prefer needs_network/writable_paths/needs_gui_open for sandboxed alternatives.",
                       "enum": [
                         "use_default",
                         "require_escalated"
@@ -1678,16 +1675,19 @@
                       "type": "string"
                     },
                     "timeout_ms": {
+                      "description": "Kill the command after this many milliseconds (default 120000).",
                       "maximum": 600000,
                       "minimum": 1,
                       "type": "integer"
                     },
                     "working_dir": {
+                      "description": "Directory to run the command in, relative to the workspace root (default '.'). Set this instead of prefixing the command with 'cd ... \u0026\u0026'.",
                       "maxLength": 4096,
                       "minLength": 1,
                       "type": "string"
                     },
                     "writable_paths": {
+                      "description": "Extra absolute directories ('~/' expands) the command may write after a lightweight approval; never credential locations.",
                       "items": {
                         "maxLength": 4096,
                         "minLength": 1,
@@ -1698,7 +1698,7 @@
                     }
                   },
                   "required": [
-                    "program"
+                    "command"
                   ],
                   "type": "object"
                 },
@@ -1709,7 +1709,6 @@
                     "cancelled": {
                       "type": "boolean"
                     },
-                    "duration_ms": 0,
                     "executable_path": {
                       "type": "string"
                     },
@@ -2268,7 +2267,6 @@
                     "command": {
                       "type": "string"
                     },
-                    "duration_ms": 0,
                     "exit_code": {
                       "type": "integer"
                     },

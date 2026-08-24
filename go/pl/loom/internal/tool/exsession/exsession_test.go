@@ -35,7 +35,7 @@ import (
 func TestExecSessionLifecycle(t *testing.T) {
 	python := ensurePython3(t)
 	validator, root := newValidator(t)
-	manager := newManager(t, validator, python)
+	manager := newManager(t, validator)
 	execTool := newExecSessionTool(t, validator, manager)
 	stdinTool := newWriteStdinTool(t, manager)
 
@@ -46,8 +46,7 @@ func TestExecSessionLifecycle(t *testing.T) {
 		"print('done', flush=True)",
 	})
 	prepared := prepareCall(t, execTool, "exec_session", commandArgs{
-		Program:    "python3",
-		Args:       []string{script},
+		Command:    python + " " + script,
 		WorkingDir: root,
 	})
 	if prepared.Risk != domain.R2 {
@@ -86,7 +85,7 @@ func TestExecSessionLifecycle(t *testing.T) {
 func TestWriteStdinFeedsInteractiveProcess(t *testing.T) {
 	python := ensurePython3(t)
 	validator, root := newValidator(t)
-	manager := newManager(t, validator, python)
+	manager := newManager(t, validator)
 	execTool := newExecSessionTool(t, validator, manager)
 	stdinTool := newWriteStdinTool(t, manager)
 
@@ -96,8 +95,7 @@ func TestWriteStdinFeedsInteractiveProcess(t *testing.T) {
 		"    print('got:' + line.strip(), flush=True)",
 	})
 	prepared := prepareCall(t, execTool, "exec_session", commandArgs{
-		Program:    "python3",
-		Args:       []string{script},
+		Command:    python + " " + script,
 		WorkingDir: root,
 	})
 	started := decodeSuccess(t, execTool.Execute(context.Background(), prepared))
@@ -120,9 +118,8 @@ func TestWriteStdinFeedsInteractiveProcess(t *testing.T) {
 }
 
 func TestWriteStdinUnknownSession(t *testing.T) {
-	python := ensurePython3(t)
 	validator, _ := newValidator(t)
-	manager := newManager(t, validator, python)
+	manager := newManager(t, validator)
 	stdinTool := newWriteStdinTool(t, manager)
 
 	prepared := prepareCall(t, stdinTool, "write_stdin", writeStdinArgs{SessionID: "sess_missing"})
@@ -136,16 +133,14 @@ func TestWriteStdinUnknownSession(t *testing.T) {
 }
 
 func TestExecSessionRiskTiers(t *testing.T) {
-	python := ensurePython3(t)
 	validator, root := newValidator(t)
-	manager := newManager(t, validator, python)
+	manager := newManager(t, validator)
 	execTool := newExecSessionTool(t, validator, manager)
 
-	// Shell interpreters keep the base risk: the sandbox confines them
-	// and the permission layer's AST danger screen handles composition.
+	// Shell commands keep the base risk: the sandbox confines them and
+	// the permission layer's AST danger screen handles composition.
 	shellPrepared := prepareCall(t, execTool, "exec_session", commandArgs{
-		Program:    "sh",
-		Args:       []string{"-c", "echo hi | cat"},
+		Command:    "echo hi | cat",
 		WorkingDir: root,
 	})
 	if shellPrepared.Risk != domain.R2 {
@@ -154,8 +149,7 @@ func TestExecSessionRiskTiers(t *testing.T) {
 
 	// require_escalated without justification is rejected at prepare time.
 	_, err := execTool.Prepare(context.Background(), newCall(t, "exec_session", commandArgs{
-		Program:            "python3",
-		Args:               []string{"-V"},
+		Command:            "python3 -V",
 		WorkingDir:         root,
 		SandboxPermissions: "require_escalated",
 	}))
@@ -165,8 +159,7 @@ func TestExecSessionRiskTiers(t *testing.T) {
 
 	// require_escalated with justification is R3.
 	escalated := prepareCall(t, execTool, "exec_session", commandArgs{
-		Program:            "python3",
-		Args:               []string{"-V"},
+		Command:            "python3 -V",
 		WorkingDir:         root,
 		SandboxPermissions: "require_escalated",
 		Justification:      "need host network",
@@ -180,14 +173,12 @@ func TestExecSessionRiskTiers(t *testing.T) {
 }
 
 func TestExecSessionRejectsTamperedArgsHash(t *testing.T) {
-	python := ensurePython3(t)
 	validator, root := newValidator(t)
-	manager := newManager(t, validator, python)
+	manager := newManager(t, validator)
 	execTool := newExecSessionTool(t, validator, manager)
 
 	prepared := prepareCall(t, execTool, "exec_session", commandArgs{
-		Program:    "python3",
-		Args:       []string{"-V"},
+		Command:    "python3 -V",
 		WorkingDir: root,
 	})
 	prepared.ArgsHash = strings.Repeat("0", 64)
@@ -205,7 +196,7 @@ func TestExecSessionRejectsTamperedArgsHash(t *testing.T) {
 func TestManagerCloseKillsSessions(t *testing.T) {
 	python := ensurePython3(t)
 	validator, root := newValidator(t)
-	manager := newManager(t, validator, python)
+	manager := newManager(t, validator)
 	execTool := newExecSessionTool(t, validator, manager)
 
 	script := writeScript(t, root, "sleep.py", []string{
@@ -214,8 +205,7 @@ func TestManagerCloseKillsSessions(t *testing.T) {
 		"time.sleep(3600)",
 	})
 	prepared := prepareCall(t, execTool, "exec_session", commandArgs{
-		Program:    "python3",
-		Args:       []string{script},
+		Command:    python + " " + script,
 		WorkingDir: root,
 	})
 	started := decodeSuccess(t, execTool.Execute(context.Background(), prepared))
@@ -267,9 +257,20 @@ func newCall[T any](t *testing.T, name string, args T) domain.ToolCall {
 // correct course without guessing.
 func TestValidateCommandArgsErrorNamesWorkingDir(t *testing.T) {
 	validator, _ := newValidator(t)
-	_, err := validateCommandArgs(validator, &commandArgs{Program: "echo", WorkingDir: "no/such/dir"})
+	_, err := validateCommandArgs(validator, &commandArgs{Command: "echo", WorkingDir: "no/such/dir"})
 	if err == nil || !strings.Contains(err.Error(), `working_dir does not exist: "no/such/dir"`) {
 		t.Fatalf("error = %v, want the offending path named", err)
+	}
+}
+
+// A missing command is rejected with the contract stated explicitly
+// (single command string plus an example), not a bare missing-field error.
+func TestValidateCommandArgsMissingCommandError(t *testing.T) {
+	validator, root := newValidator(t)
+	_, err := validateCommandArgs(validator, &commandArgs{WorkingDir: root})
+	if err == nil || !strings.Contains(err.Error(), "single 'command' string") ||
+		!strings.Contains(err.Error(), `{"command":`) {
+		t.Fatalf("error = %v, want the contract stated with an example", err)
 	}
 }
 
@@ -283,12 +284,12 @@ func newValidator(t *testing.T) (*workspacepkg.PathValidator, string) {
 	return validator, root
 }
 
-func newManager(t *testing.T, validator *workspacepkg.PathValidator, python string) *Manager {
+func newManager(t *testing.T, validator *workspacepkg.PathValidator) *Manager {
 	t.Helper()
 	runner, err := process.NewRunner(validator, process.RunnerOptions{
 		Sandbox:      process.ExplicitTestSandbox{},
 		EnvAllowlist: []string{"PATH", "LANG", "TMPDIR", "HOME"},
-		LookPath:     fixedLookPath(python),
+		LookPath:     exec.LookPath,
 	})
 	if err != nil {
 		t.Fatalf("NewRunner() error = %v", err)
@@ -326,10 +327,6 @@ func ensurePython3(t *testing.T) string {
 		t.Skip("python3 not available")
 	}
 	return python
-}
-
-func fixedLookPath(path string) func(string) (string, error) {
-	return func(string) (string, error) { return path, nil }
 }
 
 func writeScript(t *testing.T, root, name string, lines []string) string {

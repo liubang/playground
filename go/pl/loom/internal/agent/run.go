@@ -2038,7 +2038,6 @@ var prepareFailureArgsWhitelist = map[string]bool{
 	"pattern":     true,
 	"working_dir": true,
 	"repo_root":   true,
-	"program":     true,
 	"skill":       true,
 	"name":        true,
 	"query":       true,

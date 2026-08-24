@@ -2817,22 +2817,19 @@ func toolCallTarget(audit toolCallAuditDTO, args json.RawMessage) string {
 	return audit.ApprovalDesc
 }
 
-// runCmdCommandLine reconstructs the displayed command line for a run_cmd
-// call from its arguments: "program arg1 arg2 ..." with ambiguous elements
-// quoted (single home: render.CommandLineForDisplay, mirrored by the WebUI
-// snapshot path in JS).
+// runCmdCommandLine returns the displayed command line for a run_cmd
+// call: the single 'command' string, verbatim.
 func runCmdCommandLine(args json.RawMessage) string {
 	if len(args) == 0 {
 		return ""
 	}
 	var parsed struct {
-		Program string   `json:"program"`
-		Args    []string `json:"args"`
+		Command string `json:"command"`
 	}
-	if err := json.Unmarshal(args, &parsed); err != nil || parsed.Program == "" {
+	if err := json.Unmarshal(args, &parsed); err != nil {
 		return ""
 	}
-	return render.CommandLineForDisplay(append([]string{parsed.Program}, parsed.Args...))
+	return parsed.Command
 }
 
 // Bounds for the tool result preview carried by runtime ToolCompleted

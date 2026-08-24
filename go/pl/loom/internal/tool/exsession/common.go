@@ -30,9 +30,7 @@ import (
 )
 
 const (
-	maxProgramBytes    = 4096
-	maxArgsCount       = 256
-	maxArgBytes        = 8192
+	maxCommandBytes    = 32 * 1024
 	maxWorkingDirBytes = 4096
 	maxEnvVars         = 64
 	maxEnvKeyBytes     = 256
@@ -81,8 +79,7 @@ func (s *signer) verify(expected, actual string) bool {
 
 // commandArgs is the shared command-line shape of exec_session.
 type commandArgs struct {
-	Program            string            `json:"program"`
-	Args               []string          `json:"args,omitempty"`
+	Command            string            `json:"command"`
 	WorkingDir         string            `json:"working_dir,omitempty"`
 	Env                map[string]string `json:"env,omitempty"`
 	YieldTimeMs        int64             `json:"yield_time_ms,omitempty"`
@@ -96,26 +93,15 @@ type commandArgs struct {
 // resolving working_dir against the workspace. It is the session
 // counterpart of run_cmd's validation, minus the timeout field.
 func validateCommandArgs(validator *workspacepkg.PathValidator, args *commandArgs) (absoluteDir string, err error) {
-	args.Program = strings.TrimSpace(args.Program)
-	if args.Program == "" {
-		return "", domain.NewError(domain.ErrInvalidInput, "program is required")
+	args.Command = strings.TrimSpace(args.Command)
+	if args.Command == "" {
+		return "", toolkit.MissingCommandError("exec_session")
 	}
-	if len(args.Program) > maxProgramBytes {
-		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("program exceeds %d bytes", maxProgramBytes))
+	if len(args.Command) > maxCommandBytes {
+		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("command exceeds %d bytes", maxCommandBytes))
 	}
-	if strings.ContainsRune(args.Program, 0) {
-		return "", domain.NewError(domain.ErrInvalidInput, "program contains null byte")
-	}
-	if len(args.Args) > maxArgsCount {
-		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("args exceeds %d items", maxArgsCount))
-	}
-	for i, arg := range args.Args {
-		if len(arg) > maxArgBytes {
-			return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("args[%d] exceeds %d bytes", i, maxArgBytes))
-		}
-		if strings.ContainsRune(arg, 0) {
-			return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("args[%d] contains null byte", i))
-		}
+	if strings.ContainsRune(args.Command, 0) {
+		return "", domain.NewError(domain.ErrInvalidInput, "command contains null byte")
 	}
 	if len(args.Env) > maxEnvVars {
 		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env exceeds %d entries", maxEnvVars))
@@ -309,16 +295,4 @@ func sanitizeUTF8(data string) string {
 		return data
 	}
 	return strings.ToValidUTF8(data, "?")
-}
-
-func displayArgv(program string, args []string) string {
-	parts := append([]string{program}, args...)
-	quoted := make([]string, 0, len(parts))
-	for _, item := range parts {
-		if strings.ContainsAny(item, " \t'\"\\") {
-			item = "'" + strings.ReplaceAll(item, "'", `'"'"'`) + "'"
-		}
-		quoted = append(quoted, item)
-	}
-	return strings.Join(quoted, " ")
 }

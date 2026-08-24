@@ -39,9 +39,7 @@ import (
 )
 
 const (
-	maxProgramBytes                   = 4096
-	maxArgsCount                      = 256
-	maxArgBytes                       = 8192
+	maxCommandBytes                   = 32 * 1024
 	maxWorkingDirBytes                = 4096
 	maxEnvVars                        = 64
 	maxEnvKeyBytes                    = 256
@@ -55,8 +53,7 @@ const (
 )
 
 type rawRunCmdArgs struct {
-	Program            *string            `json:"program"`
-	Args               *[]string          `json:"args"`
+	Command            *string            `json:"command"`
 	WorkingDir         *string            `json:"working_dir"`
 	Env                *map[string]string `json:"env"`
 	TimeoutMs          *int64             `json:"timeout_ms"`
@@ -69,8 +66,7 @@ type rawRunCmdArgs struct {
 }
 
 type runCmdArgs struct {
-	Program            string            `json:"program"`
-	Args               []string          `json:"args"`
+	Command            string            `json:"command"`
 	WorkingDir         string            `json:"working_dir"`
 	Env                map[string]string `json:"env"`
 	TimeoutMs          int64             `json:"timeout_ms"`
@@ -171,12 +167,12 @@ func NewRunCmdToolWithArtifacts(
 	}
 	def := domain.ToolDefinition{
 		Name: "run_cmd",
-		Description: "Execute a program in a sandbox. Always set working_dir explicitly instead of wrapping the command in 'cd ... &&' — it keeps the audit trail accurate. " +
-			"Prefer plain argv form (program + args + env) for single commands; use program='sh' with args=['-c','...'] freely when you need pipes, redirection, '&&' chaining, or glob expansion — " +
-			"both forms run sandboxed WITHOUT user approval; only danger-listed patterns (destructive commands, pipes into a shell, writes to sensitive paths) or sandbox escapes ever prompt. " +
-			"argv is executed directly without a shell: wildcards like '*.go' are passed to the program literally, " +
-			"so glob expansion is a legitimate reason to use the 'sh -c' form (or use the glob tool to find files first). " +
-			"Only 'program' is required: working_dir defaults to '.', env to empty, timeout_ms to 120000, max_output_bytes to 65536. " +
+		Description: "Execute a shell command in a sandbox and return its stdout, stderr, exit code and timing. " +
+			"The command runs via 'sh -c' — write it exactly as you would type it in a terminal: pipes, redirection, '&&' chaining, globs and quoting all work. " +
+			"Examples: {\"command\":\"go test ./...\"} · {\"command\":\"python3 plot.py\",\"working_dir\":\"scripts\",\"timeout_ms\":300000} · {\"command\":\"curl -sI https://example.com\",\"needs_network\":true}. " +
+			"Set working_dir explicitly instead of wrapping the command in 'cd ... &&' — it keeps the audit trail accurate. " +
+			"Commands run sandboxed WITHOUT user approval; only danger-listed patterns (destructive commands, pipes into a shell, writes to sensitive paths) or sandbox escapes ever prompt. " +
+			"Only 'command' is required: working_dir defaults to '.', env to empty, timeout_ms to 120000, max_output_bytes to 65536. " +
 			"Output beyond the limit is stored as an artifact with a head/tail preview. " +
 			"Inside the sandbox, env entries are filtered by a security allowlist; keys that do not survive the filter are reported back in the output's 'note' field (escalated runs inherit the full user environment). " +
 			"The sandbox denies outbound network and DNS but allows loopback networking (bind/listen/connect on localhost), " +
@@ -191,7 +187,7 @@ func NewRunCmdToolWithArtifacts(
 			"Do not give up or ask the user to run it themselves before offering the matching approval. " +
 			"needs_network, needs_gui_open and writable_paths must NOT be combined with require_escalated (escalated runs already have full network, GUI and write access). " +
 			"'justification' is an optional short note shown to the user at approval time; it is REQUIRED with sandbox_permissions='require_escalated' and simply informational otherwise.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"program":{"type":"string","minLength":1,"maxLength":4096},"args":{"type":"array","maxItems":256,"items":{"type":"string","maxLength":8192}},"working_dir":{"type":"string","minLength":1,"maxLength":4096},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192}},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"]},"needs_network":{"type":"boolean"},"needs_gui_open":{"type":"boolean"},"writable_paths":{"type":"array","maxItems":8,"items":{"type":"string","minLength":1,"maxLength":4096}},"justification":{"type":"string","minLength":1,"maxLength":240}},"required":["program"]}`),
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string","minLength":1,"maxLength":32768,"description":"The shell command to execute, exactly as you would type it in a terminal (e.g. \"go test ./...\" or \"ls -la | head -20\"). Runs via 'sh -c', so pipes, redirection, '&&' chaining, globs and quoting all work."},"working_dir":{"type":"string","minLength":1,"maxLength":4096,"description":"Directory to run the command in, relative to the workspace root (default '.'). Set this instead of prefixing the command with 'cd ... &&'."},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192},"description":"Extra environment variables. Inside the sandbox they are filtered by a security allowlist; dropped keys are reported in the output's note field."},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000,"description":"Kill the command after this many milliseconds (default 120000)."},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576,"description":"Maximum bytes of stdout/stderr returned inline (default 65536); output beyond the limit is stored as an artifact with a head/tail preview."},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"],"description":"'require_escalated' runs OUTSIDE the sandbox with the full user environment after explicit approval and requires a justification; prefer needs_network/writable_paths/needs_gui_open for sandboxed alternatives."},"needs_network":{"type":"boolean","description":"Grant outbound network and DNS inside the sandbox after a lightweight approval."},"needs_gui_open":{"type":"boolean","description":"Allow opening URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval."},"writable_paths":{"type":"array","maxItems":8,"items":{"type":"string","minLength":1,"maxLength":4096},"description":"Extra absolute directories ('~/' expands) the command may write after a lightweight approval; never credential locations."},"justification":{"type":"string","minLength":1,"maxLength":240,"description":"Short note shown to the user at approval time; required with sandbox_permissions='require_escalated', informational otherwise."}},"required":["command"]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"stdout":{"type":"string"},"stderr":{"type":"string"},"stdout_bytes":{"type":"integer"},"stderr_bytes":{"type":"integer"},"stdout_preview_truncated":{"type":"boolean"},"stderr_preview_truncated":{"type":"boolean"},"stdout_artifact_truncated":{"type":"boolean"},"stderr_artifact_truncated":{"type":"boolean"},"stdout_artifact":{"type":"object"},"stderr_artifact":{"type":"object"},"stdout_artifact_path":{"type":"string"},"stderr_artifact_path":{"type":"string"},"exit_code":{"type":"integer"},"signal":{"type":"string"},"duration_ms":{"type":"integer"},"timed_out":{"type":"boolean"},"cancelled":{"type":"boolean"},"truncated":{"type":"boolean"},"isolation":{"type":"string"},"executable_path":{"type":"string"},"hash":{"type":"string"},"note":{"type":"string"}},"required":["stdout","stderr","stdout_bytes","stderr_bytes","stdout_preview_truncated","stderr_preview_truncated","stdout_artifact_truncated","stderr_artifact_truncated","exit_code","signal","duration_ms","timed_out","cancelled","truncated","isolation","executable_path","hash"]}`),
 		Capabilities: []domain.Capability{domain.CapProcessExec},
 		Source:       domain.ToolSourceBuiltin,
@@ -256,7 +252,7 @@ func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 		// The typed execution contract the policy layer classifies on
 		// (REVIEW M17/A2); covered by the signature below.
 		ExecRequest: &domain.ExecRequest{
-			Argv:          append([]string{args.Program}, args.Args...),
+			Argv:          []string{"sh", "-c", args.Command},
 			Escalated:     args.SandboxPermissions == sandboxRequireEscalated,
 			NeedsNetwork:  args.NeedsNetwork,
 			NeedsGUIOpen:  args.NeedsGUIOpen,
@@ -344,8 +340,8 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 		GUIOpen:       prepared.Grant.GUIOpen,
 	}
 	runnerResult, err := t.runner.RunWithGrant(ctx, process.CommandSpec{
-		Program:      args.Program,
-		Args:         append([]string(nil), args.Args...),
+		Program:      "sh",
+		Args:         []string{"-c", args.Command},
 		Cwd:          resolvedDir.Absolute,
 		Env:          cloneStringMap(args.Env),
 		Timeout:      time.Duration(args.TimeoutMs) * time.Millisecond,
@@ -461,7 +457,7 @@ func (t *RunCmdTool) signPrepared(prepared domain.PreparedCall) string {
 }
 
 // Default values applied when the model omits optional parameters, keeping
-// run_cmd calls terse (only 'program' is required).
+// run_cmd calls terse (only 'command' is required).
 const (
 	defaultTimeoutMs      int64 = 120000
 	defaultMaxOutputBytes int64 = 64 << 10
@@ -471,13 +467,12 @@ func validateArgs(
 	validator *workspacepkg.PathValidator,
 	raw rawRunCmdArgs,
 ) (runCmdArgs, resolvedWorkingDir, error) {
-	if raw.Program == nil {
-		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "program is required")
+	if raw.Command == nil || strings.TrimSpace(*raw.Command) == "" {
+		return runCmdArgs{}, resolvedWorkingDir{}, toolkit.MissingCommandError("run_cmd")
 	}
 
 	args := runCmdArgs{
-		Program:            strings.TrimSpace(*raw.Program),
-		Args:               []string{},
+		Command:            strings.TrimSpace(*raw.Command),
 		Env:                map[string]string{},
 		TimeoutMs:          defaultTimeoutMs,
 		MaxOutputBytes:     defaultMaxOutputBytes,
@@ -497,9 +492,6 @@ func validateArgs(
 	}
 	if raw.Justification != nil {
 		args.Justification = strings.TrimSpace(*raw.Justification)
-	}
-	if raw.Args != nil {
-		args.Args = append([]string(nil), (*raw.Args)...)
 	}
 	if raw.Env != nil {
 		args.Env = cloneStringMap(*raw.Env)
@@ -530,25 +522,14 @@ func validateCanonicalArgs(
 	if validator == nil {
 		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "path validator is required")
 	}
-	if args.Program == "" {
-		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "program is required")
+	if args.Command == "" {
+		return runCmdArgs{}, resolvedWorkingDir{}, toolkit.MissingCommandError("run_cmd")
 	}
-	if len(args.Program) > maxProgramBytes {
-		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("program exceeds %d bytes", maxProgramBytes))
+	if len(args.Command) > maxCommandBytes {
+		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("command exceeds %d bytes", maxCommandBytes))
 	}
-	if strings.ContainsRune(args.Program, 0) {
-		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "program contains null byte")
-	}
-	if len(args.Args) > maxArgsCount {
-		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("args exceeds %d items", maxArgsCount))
-	}
-	for i, arg := range args.Args {
-		if len(arg) > maxArgBytes {
-			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("args[%d] exceeds %d bytes", i, maxArgBytes))
-		}
-		if strings.ContainsRune(arg, 0) {
-			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("args[%d] contains null byte", i))
-		}
+	if strings.ContainsRune(args.Command, 0) {
+		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "command contains null byte")
 	}
 	resolvedDir, err := resolveWorkingDir(validator, args.WorkingDir)
 	if err != nil {
@@ -761,7 +742,7 @@ func commandNotFoundNote(stderr string, exitCode int, escalated bool, envOverrid
 	return "a program was not found on the sandbox PATH (" + effectivePATH + "). " +
 		"loom launched from a GUI inherits a sparse system PATH without user toolchains. " +
 		"Do NOT retry with sandbox_permissions='require_escalated' for a missing tool — the sandbox is not the problem, the PATH is. " +
-		"Instead: locate the binary and use an absolute program path or pass env={\"PATH\": \"<dir>:...\"} explicitly; " +
+		"Instead: locate the binary and call it by its absolute path, or pass env={\"PATH\": \"<dir>:...\"} explicitly; " +
 		"for a permanent fix, register the directory in tools.path_extra in the loom config (hot-applied on save)."
 }
 
@@ -880,8 +861,8 @@ func classifyRunError(err error) error {
 	}
 	if errors.Is(err, exec.ErrNotFound) {
 		return domain.NewError(domain.ErrInvalidInput,
-			"program could not be resolved on PATH ("+os.Getenv("PATH")+"); "+
-				"use an absolute program path, pass env={\"PATH\": \"<dir>:...\"}, or register the directory in tools.path_extra in the loom config",
+			"the 'sh' interpreter could not be resolved on PATH ("+os.Getenv("PATH")+"); "+
+				"register its directory in tools.path_extra in the loom config",
 			domain.WithCause(err))
 	}
 	if errors.Is(err, process.ErrInvalidCwd) {
@@ -1129,12 +1110,7 @@ func displayPath(rel string) string {
 
 func buildApprovalDesc(args runCmdArgs, prepared domain.PreparedCall, root string) string {
 	parts := []string{"Run"}
-	command := append([]string{args.Program}, args.Args...)
-	quoted := make([]string, 0, len(command))
-	for _, item := range command {
-		quoted = append(quoted, shellQuote(item))
-	}
-	parts = append(parts, strings.Join(quoted, " "))
+	parts = append(parts, shellQuote(args.Command))
 
 	envKeys := sortedEnvKeys(args.Env)
 	if len(envKeys) > 0 {
@@ -1144,9 +1120,9 @@ func buildApprovalDesc(args runCmdArgs, prepared domain.PreparedCall, root strin
 	}
 	parts = append(parts, "cwd="+shellQuote(args.WorkingDir))
 	parts = append(parts, fmt.Sprintf("timeout=%dms", args.TimeoutMs))
-	if process.IsShellProgram(args.Program) {
-		parts = append(parts, "shell=parsed")
-	}
+	// Every call is a shell invocation now; the permission layer's danger
+	// screen AST-parses the script, so the summary always carries the marker.
+	parts = append(parts, "shell=parsed")
 	if args.SandboxPermissions == sandboxRequireEscalated {
 		parts = append(parts, "network=full")
 		parts = append(parts, "ESCALATED(no-sandbox)["+args.Justification+"]")
@@ -1197,20 +1173,13 @@ func buildApprovalDesc(args runCmdArgs, prepared domain.PreparedCall, root strin
 // first). Used only to keep the approval summary honest about what a
 // command may touch; it is not an enforcement boundary.
 func referencedExternalPaths(args runCmdArgs, root string) []string {
-	tokens := append([]string(nil), args.Args...)
-	if process.IsShellProgram(args.Program) {
-		var split []string
-		for _, a := range args.Args {
-			split = append(split, strings.FieldsFunc(a, func(r rune) bool {
-				switch r {
-				case ' ', '\t', '\n', '"', '\'', ';', '|', '&', '(', ')', '<', '>', '=', ',', '`':
-					return true
-				}
-				return false
-			})...)
+	tokens := strings.FieldsFunc(args.Command, func(r rune) bool {
+		switch r {
+		case ' ', '\t', '\n', '"', '\'', ';', '|', '&', '(', ')', '<', '>', '=', ',', '`':
+			return true
 		}
-		tokens = append(tokens, split...)
-	}
+		return false
+	})
 	rootClean := filepath.Clean(root)
 	seen := map[string]bool{}
 	out := make([]string, 0, 4)

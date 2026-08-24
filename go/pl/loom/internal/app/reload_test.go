@@ -185,7 +185,7 @@ func TestRulePackHotReload(t *testing.T) {
 
 	// Before install: go mod download has no rule (baseline).
 	ev := b.Policy.Evaluate(domain.PreparedCall{
-		Call: domain.ToolCall{Name: "run_cmd", Arguments: json.RawMessage(`{"program":"go","args":["mod","download","x"]}`)},
+		Call: domain.ToolCall{Name: "run_cmd", Arguments: json.RawMessage(`{"command":"go mod download x"}`)},
 		Risk: domain.R2,
 	})
 	if ev.Source == permission.SourceRule {
@@ -201,7 +201,7 @@ func TestRulePackHotReload(t *testing.T) {
 		t.Fatalf("install info = %+v", info)
 	}
 	ev = b.Policy.Evaluate(domain.PreparedCall{
-		Call: domain.ToolCall{Name: "run_cmd", Arguments: json.RawMessage(`{"program":"go","args":["mod","download","x"]}`)},
+		Call: domain.ToolCall{Name: "run_cmd", Arguments: json.RawMessage(`{"command":"go mod download x"}`)},
 		Risk: domain.R2,
 	})
 	if ev.Source != permission.SourceRule || ev.Decision != domain.DecisionAllow || !ev.Grant.Unsandboxed {
@@ -213,7 +213,7 @@ func TestRulePackHotReload(t *testing.T) {
 		t.Fatalf("UninstallRulePack: %v", err)
 	}
 	ev = b.Policy.Evaluate(domain.PreparedCall{
-		Call: domain.ToolCall{Name: "run_cmd", Arguments: json.RawMessage(`{"program":"go","args":["mod","download","x"]}`)},
+		Call: domain.ToolCall{Name: "run_cmd", Arguments: json.RawMessage(`{"command":"go mod download x"}`)},
 		Risk: domain.R2,
 	})
 	if ev.Source == permission.SourceRule {

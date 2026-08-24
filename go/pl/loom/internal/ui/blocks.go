@@ -798,9 +798,8 @@ const turnErrorMaxCells = 300
 // (single home, REVIEW R8).
 
 // toolTargetFromArgs extracts the primary display target (path, command or
-// pattern) from raw tool call arguments. For run_cmd the "program" field is
-// the executable, and joining it with "args" produces the command line the
-// user expects to see.
+// pattern) from raw tool call arguments; run_cmd's command line lives in
+// the "command" field, covered by the generic keys.
 func toolTargetFromArgs(args json.RawMessage) string {
 	if len(args) == 0 {
 		return ""
@@ -817,19 +816,6 @@ func toolTargetFromArgs(args json.RawMessage) string {
 		if s, ok := value.(string); ok && s != "" {
 			return s
 		}
-	}
-	// run_cmd: "program" + "args" → "go test ./..." (ambiguous elements
-	// quoted via the shared display rule; mirrors the WebUI paths).
-	if program, ok := parsed["program"].(string); ok && program != "" {
-		argv := []string{program}
-		if argList, ok := parsed["args"].([]any); ok {
-			for _, a := range argList {
-				if s, ok := a.(string); ok {
-					argv = append(argv, s)
-				}
-			}
-		}
-		return render.CommandLineForDisplay(argv)
 	}
 	return ""
 }

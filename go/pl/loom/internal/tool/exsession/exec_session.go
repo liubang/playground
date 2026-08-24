@@ -54,8 +54,10 @@ func NewExecSessionTool(validator *workspacepkg.PathValidator, manager *Manager)
 		Description: "Start a long-running command as a background session inside the sandbox and return a session_id, " +
 			"without waiting for it to finish. Use it for processes that stay alive or need interaction: dev servers, " +
 			"watch-mode test runners, REPLs, database consoles. For one-shot commands that run to completion, prefer run_cmd. " +
+			"The command runs via 'sh -c' — write it exactly as you would type it in a terminal " +
+			"(e.g. {\"command\":\"npm run dev\",\"working_dir\":\"web\"}). " +
 			"Always set working_dir explicitly instead of wrapping the command in 'cd ... &&'. " +
-			"Only 'program' is required: working_dir defaults to '.', yield_time_ms to 1000 (how long to wait for the first " +
+			"Only 'command' is required: working_dir defaults to '.', yield_time_ms to 1000 (how long to wait for the first " +
 			"output before returning; 0 returns immediately, max 300000), max_output_bytes to 16384. " +
 			"The call returns early with status='running' and the output produced so far; drive the session afterwards with " +
 			"write_stdin (send input, or poll with empty chars). stdout and stderr are merged in arrival order like a terminal. " +
@@ -67,7 +69,7 @@ func NewExecSessionTool(validator *workspacepkg.PathValidator, manager *Manager)
 			"sandbox with the full user environment after explicit approval. " +
 			"Sessions are killed automatically after 30 minutes without any write_stdin interaction — poll long-lived " +
 			"services periodically if they must stay up.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"program":{"type":"string","minLength":1,"maxLength":4096},"args":{"type":"array","maxItems":256,"items":{"type":"string","maxLength":8192}},"working_dir":{"type":"string","minLength":1,"maxLength":4096},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192}},"yield_time_ms":{"type":"integer","minimum":0,"maximum":300000},"max_output_bytes":{"type":"integer","minimum":0,"maximum":65536},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"]},"needs_gui_open":{"type":"boolean"},"justification":{"type":"string","minLength":1,"maxLength":240}},"required":["program"]}`),
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string","minLength":1,"maxLength":32768,"description":"The shell command to run as a session, exactly as you would type it in a terminal (e.g. \"npm run dev\"). Runs via 'sh -c'."},"working_dir":{"type":"string","minLength":1,"maxLength":4096,"description":"Directory to run the command in, relative to the workspace root (default '.'). Set this instead of prefixing the command with 'cd ... &&'."},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192},"description":"Extra environment variables (filtered by the sandbox security allowlist)."},"yield_time_ms":{"type":"integer","minimum":0,"maximum":300000,"description":"How long to wait for the first output before returning in milliseconds (default 1000; 0 returns immediately)."},"max_output_bytes":{"type":"integer","minimum":0,"maximum":65536,"description":"Maximum bytes of merged output returned (default 16384)."},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"],"description":"'require_escalated' runs the session OUTSIDE the sandbox with the full user environment after explicit approval; requires a justification."},"needs_gui_open":{"type":"boolean","description":"Allow the session to open URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval."},"justification":{"type":"string","minLength":1,"maxLength":240,"description":"Short note shown to the user at approval time; required with sandbox_permissions='require_escalated'."}},"required":["command"]}`),
 		OutputSchema: json.RawMessage(`{"type":"object","properties":{"session_id":{"type":"string"},"command":{"type":"string"},"status":{"type":"string","enum":["running","exited","killed"]},"exit_code":{"type":"integer"},"signal":{"type":"string"},"output":{"type":"string"},"output_dropped_bytes":{"type":"integer"},"stdout_bytes":{"type":"integer"},"stderr_bytes":{"type":"integer"},"duration_ms":{"type":"integer"},"isolation":{"type":"string"},"stdout_artifact_path":{"type":"string"},"stderr_artifact_path":{"type":"string"},"note":{"type":"string"}},"required":["session_id","command","status","exit_code","output","stdout_bytes","stderr_bytes","duration_ms","isolation"]}`),
 		Capabilities: []domain.Capability{domain.CapProcessExec},
 		Source:       domain.ToolSourceBuiltin,
@@ -109,7 +111,7 @@ func (t *ExecSessionTool) Prepare(ctx context.Context, call domain.ToolCall) (do
 	canonical := json.RawMessage(canonicalBytes)
 
 	risk := riskForCommand(args, t.def.Risk())
-	approvalDesc := fmt.Sprintf("Start session %s; cwd=%s", displayArgv(args.Program, args.Args), args.WorkingDir)
+	approvalDesc := fmt.Sprintf("Start session %s; cwd=%s", args.Command, args.WorkingDir)
 	if args.SandboxPermissions == sandboxRequireEscalated {
 		approvalDesc += "; ESCALATED(no-sandbox)[" + args.Justification + "]"
 	}
@@ -127,7 +129,7 @@ func (t *ExecSessionTool) Prepare(ctx context.Context, call domain.ToolCall) (do
 		// Same typed execution contract as run_cmd: argv rules, the
 		// danger screen, and session memory apply to sessions too.
 		ExecRequest: &domain.ExecRequest{
-			Argv:         append([]string{args.Program}, args.Args...),
+			Argv:         []string{"sh", "-c", args.Command},
 			Escalated:    args.SandboxPermissions == sandboxRequireEscalated,
 			NeedsGUIOpen: args.NeedsGUIOpen,
 		},
@@ -161,11 +163,11 @@ func (t *ExecSessionTool) Execute(ctx context.Context, prepared domain.PreparedC
 		GUIOpen:       prepared.Grant.GUIOpen,
 	}
 	entry, err := t.manager.Start(ctx, process.CommandSpec{
-		Program: args.Program,
-		Args:    append([]string(nil), args.Args...),
+		Program: "sh",
+		Args:    []string{"-c", args.Command},
 		Cwd:     absoluteDir,
 		Env:     args.Env,
-	}, grant, displayArgv(args.Program, args.Args))
+	}, grant, args.Command)
 	if err != nil {
 		return toolkit.ErrorResult(prepared.Call.ID, startedAt, classifyStartError(err))
 	}

@@ -217,6 +217,13 @@ func (n *normalizer) normalize(v any, zeroSequence bool) any {
 		for _, key := range keys {
 			child := node[key]
 			switch {
+			case key == "duration_ms":
+				// Thinking-block wall time is measured per run and the
+				// field is omitempty: zeroing keeps the key present, so a
+				// block timed at 0ms (key absent) and one timed at >=1ms
+				// (key zeroed) would diff spuriously. Drop the key
+				// outright so presence can never flake the golden.
+				continue
 			case timeKeys[key]:
 				out[key] = 0
 			case zeroSequence && key == "sequence":

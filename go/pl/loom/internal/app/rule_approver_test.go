@@ -29,22 +29,22 @@ import (
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
-func argsJSON(t *testing.T, program string, args ...string) json.RawMessage {
+func argsJSON(t *testing.T, command string) json.RawMessage {
 	t.Helper()
-	raw, err := json.Marshal(map[string]any{"program": program, "args": args})
+	raw, err := json.Marshal(map[string]any{"command": command})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return raw
 }
 
-func preparedRunCmd(t *testing.T, program string, args ...string) domain.PreparedCall {
+func preparedRunCmd(t *testing.T, command string) domain.PreparedCall {
 	t.Helper()
 	return domain.PreparedCall{
 		Call: domain.ToolCall{
 			ID:        domain.NewToolCallID(),
 			Name:      "run_cmd",
-			Arguments: argsJSON(t, program, args...),
+			Arguments: argsJSON(t, command),
 		},
 	}
 }
@@ -72,7 +72,7 @@ func TestRuleApproverAutoAllowsRememberedPrefix(t *testing.T) {
 	inner := &recordingApprover{}
 	rules := NewRuleApprover(inner, staticPolicy(permission.NewPackageSet()), nil)
 
-	rule, ok := rules.RememberCall("run_cmd", argsJSON(t, "go", "test", "./pl/loom/..."), "")
+	rule, ok := rules.RememberCall("run_cmd", argsJSON(t, "go test ./pl/loom/..."), "")
 	if !ok {
 		t.Fatal("expected go test to be persistable")
 	}
@@ -82,7 +82,7 @@ func TestRuleApproverAutoAllowsRememberedPrefix(t *testing.T) {
 
 	// A matching later call is auto-approved without touching the user.
 	decision, err := rules.RequestApproval(context.Background(), domain.ApprovalRequest{
-		Call: preparedRunCmd(t, "go", "test", "./go/pl/other/...", "-count=1"),
+		Call: preparedRunCmd(t, "go test ./go/pl/other/... -count=1"),
 	})
 	if err != nil || decision != domain.DecisionAllow {
 		t.Fatalf("decision = %v err = %v, want allow", decision, err)
@@ -95,7 +95,7 @@ func TestRuleApproverAutoAllowsRememberedPrefix(t *testing.T) {
 	// the user (git push needs network + shared-state; the remembered
 	// go test package answers neither).
 	decision, err = rules.RequestApproval(context.Background(), domain.ApprovalRequest{
-		Call: preparedRunCmd(t, "git", "push"),
+		Call: preparedRunCmd(t, "git push"),
 	})
 	if err != nil || decision != domain.DecisionAsk {
 		t.Fatalf("decision = %v err = %v, want delegated ask", decision, err)
@@ -114,7 +114,7 @@ func TestRememberCompoundShell(t *testing.T) {
 	inner := &recordingApprover{}
 	rules := NewRuleApprover(inner, staticPolicy(permission.NewPackageSet()), nil)
 
-	rule, ok := rules.RememberCall("run_cmd", argsJSON(t, "sh", "-c", "go test ./... && git status"), "")
+	rule, ok := rules.RememberCall("run_cmd", argsJSON(t, "go test ./... && git status"), "")
 	if !ok {
 		t.Fatal("a static compound shell must be persistable")
 	}
@@ -127,7 +127,7 @@ func TestRememberCompoundShell(t *testing.T) {
 
 	// A later script combining only remembered steps auto-approves.
 	decision, err := rules.RequestApproval(context.Background(), domain.ApprovalRequest{
-		Call: preparedRunCmd(t, "sh", "-c", "git status && go test ./pl/..."),
+		Call: preparedRunCmd(t, "git status && go test ./pl/..."),
 	})
 	if err != nil || decision != domain.DecisionAllow || inner.calls != 0 {
 		t.Fatalf("remembered combination = %v err=%v inner=%d, want allow without prompting", decision, err, inner.calls)
@@ -137,18 +137,18 @@ func TestRememberCompoundShell(t *testing.T) {
 	// script at an ask (git push needs network + shared-state, which no
 	// remembered package covers).
 	decision, err = rules.RequestApproval(context.Background(), domain.ApprovalRequest{
-		Call: preparedRunCmd(t, "sh", "-c", "go test ./... && git push"),
+		Call: preparedRunCmd(t, "go test ./... && git push"),
 	})
 	if err != nil || decision != domain.DecisionAsk || inner.calls != 1 {
 		t.Fatalf("partially-remembered script = %v err=%v inner=%d, want delegated ask", decision, err, inner.calls)
 	}
 
 	// A fully-covered script after remembering the push too auto-approves.
-	if _, ok := rules.RememberCall("run_cmd", argsJSON(t, "git", "push"), ""); !ok {
+	if _, ok := rules.RememberCall("run_cmd", argsJSON(t, "git push"), ""); !ok {
 		t.Fatal("git push must be persistable")
 	}
 	decision, err = rules.RequestApproval(context.Background(), domain.ApprovalRequest{
-		Call: preparedRunCmd(t, "sh", "-c", "go test ./... && git push"),
+		Call: preparedRunCmd(t, "go test ./... && git push"),
 	})
 	if err != nil || decision != domain.DecisionAllow || inner.calls != 1 {
 		t.Fatalf("fully-remembered script = %v err=%v inner=%d, want allow", decision, err, inner.calls)
@@ -160,9 +160,9 @@ func TestRememberRunCmdRejectsNonPersistable(t *testing.T) {
 	for name, raw := range map[string]json.RawMessage{
 		// A DYNAMIC shell script (variables, substitutions) cannot prove
 		// its steps and stays unpersistable.
-		"dynamic shell":  argsJSON(t, "sh", "-c", "echo hi > $out"),
-		"eval":           argsJSON(t, "python3", "-c", "print(1)"),
-		"heredoc python": argsJSON(t, "bash", "-c", "python3 <<'EOF'\nimport os\nEOF"),
+		"dynamic shell":  argsJSON(t, "echo hi > $out"),
+		"eval":           argsJSON(t, `python3 -c "print(1)"`),
+		"heredoc python": argsJSON(t, "python3 <<'EOF'\nimport os\nEOF"),
 		"other tool":     json.RawMessage(`{"path":"x.go"}`),
 	} {
 		toolName := "run_cmd"
@@ -182,19 +182,19 @@ func TestRememberRunCmdRejectsNonPersistable(t *testing.T) {
 func TestRememberRunCmdGrantDerivation(t *testing.T) {
 	rules := NewRuleApprover(nil, staticPolicy(permission.NewPackageSet()), nil)
 
-	needsNet := json.RawMessage(`{"program":"mycli","args":["query","submit"],"needs_network":true}`)
+	needsNet := json.RawMessage(`{"command":"mycli query submit","needs_network":true}`)
 	rule, ok := rules.RememberCall("run_cmd", needsNet, "")
 	if !ok || !rule.Packages[0].Grant.NetworkFull || rule.Packages[0].Grant.Unsandboxed {
 		t.Fatalf("needs_network remember = ok=%v packages=%+v, want sandboxed network grant", ok, rule.Packages)
 	}
 
-	needsGUI := json.RawMessage(`{"program":"open","args":["https://example.com"],"needs_gui_open":true}`)
+	needsGUI := json.RawMessage(`{"command":"open https://example.com","needs_gui_open":true}`)
 	rule, ok = rules.RememberCall("run_cmd", needsGUI, "")
 	if !ok || !rule.Packages[0].Grant.GUIOpen || rule.Packages[0].Grant.Unsandboxed {
 		t.Fatalf("needs_gui_open remember = ok=%v packages=%+v, want sandboxed gui_open grant", ok, rule.Packages)
 	}
 
-	escalated := json.RawMessage(`{"program":"make","args":["deploy"],"sandbox_permissions":"require_escalated"}`)
+	escalated := json.RawMessage(`{"command":"make deploy","sandbox_permissions":"require_escalated"}`)
 	rule, ok = rules.RememberCall("run_cmd", escalated, "")
 	if !ok || !rule.Packages[0].Grant.NetworkFull || rule.Packages[0].Grant.Unsandboxed {
 		t.Fatalf("escalated minimal flavor = ok=%v packages=%+v, want the network approximation", ok, rule.Packages)
@@ -206,7 +206,7 @@ func TestRememberRunCmdGrantDerivation(t *testing.T) {
 		t.Fatalf("escalated remember (trust flavor) = ok=%v packages=%+v, want unsandboxed", ok, rule.Packages)
 	}
 	// The trust flavor is honored only for escalated calls.
-	rule, ok = rules2.RememberCall("run_cmd", argsJSON(t, "go", "build", "./..."), TrustUnsandboxed)
+	rule, ok = rules2.RememberCall("run_cmd", argsJSON(t, "go build ./..."), TrustUnsandboxed)
 	if !ok || !rule.Packages[0].Grant.IsZero() {
 		t.Fatalf("non-escalated trust flavor = ok=%v packages=%+v, want zero grant", ok, rule.Packages)
 	}
@@ -220,7 +220,7 @@ func TestRememberIndicatedExact(t *testing.T) {
 	inner := &recordingApprover{}
 	rules := NewRuleApprover(inner, staticPolicy(permission.NewPackageSet()), nil)
 
-	sudoArgs := json.RawMessage(`{"program":"sudo","args":["rm","-rf","/tmp/x"],"sandbox_permissions":"require_escalated"}`)
+	sudoArgs := json.RawMessage(`{"command":"sudo rm -rf /tmp/x","sandbox_permissions":"require_escalated"}`)
 	rule, ok := rules.RememberCall("run_cmd", sudoArgs, TrustUnsandboxed)
 	if !ok {
 		t.Fatal("an indicated single command must be exactly memorable")
@@ -240,7 +240,7 @@ func TestRememberIndicatedExact(t *testing.T) {
 	decision, err = rules.RequestApproval(context.Background(), domain.ApprovalRequest{
 		Call: domain.PreparedCall{Call: domain.ToolCall{
 			ID: domain.NewToolCallID(), Name: "run_cmd",
-			Arguments: json.RawMessage(`{"program":"sudo","args":["rm","-rf","/tmp/y"],"sandbox_permissions":"require_escalated"}`),
+			Arguments: json.RawMessage(`{"command":"sudo rm -rf /tmp/y","sandbox_permissions":"require_escalated"}`),
 		}},
 	})
 	if err != nil || decision != domain.DecisionAsk || inner.calls != 1 {
@@ -250,7 +250,7 @@ func TestRememberIndicatedExact(t *testing.T) {
 
 func TestApprovalRulePreview(t *testing.T) {
 	env := permission.DeriveEnv{}
-	preview, grant, ok := ApprovalRulePreview("run_cmd", argsJSON(t, "go", "vet", "./..."), env)
+	preview, grant, ok := ApprovalRulePreview("run_cmd", argsJSON(t, "go vet ./..."), env)
 	if !ok || preview != "go vet" {
 		t.Fatalf("preview = %q ok = %v, want 'go vet'", preview, ok)
 	}
@@ -259,20 +259,20 @@ func TestApprovalRulePreview(t *testing.T) {
 	}
 	// A static compound shell previews one prefix per step; a DYNAMIC
 	// script (unprovable argv) has no preview.
-	preview, _, ok = ApprovalRulePreview("run_cmd", argsJSON(t, "sh", "-c", "go test ./... && git status"), env)
+	preview, _, ok = ApprovalRulePreview("run_cmd", argsJSON(t, "go test ./... && git status"), env)
 	if !ok || preview != "go test && git status" {
 		t.Fatalf("compound shell preview = %q ok=%v, want 'go test && git status'", preview, ok)
 	}
-	if _, _, ok := ApprovalRulePreview("run_cmd", argsJSON(t, "sh", "-c", "echo hi > $out"), env); ok {
+	if _, _, ok := ApprovalRulePreview("run_cmd", argsJSON(t, "echo hi > $out"), env); ok {
 		t.Fatal("dynamic shell must not have a rule preview")
 	}
-	preview, _, ok = ApprovalRulePreview("run_cmd", argsJSON(t, "sh", "-c", "ls -la"), env)
+	preview, _, ok = ApprovalRulePreview("run_cmd", argsJSON(t, "ls -la"), env)
 	if !ok || preview != "ls" {
 		t.Fatalf("simple shell preview = %q ok=%v, want 'ls'", preview, ok)
 	}
 	// Escalated calls have no minimal-capability preview (only the
 	// unsandboxed trust option, surfaced by RunCmdTrustPreview).
-	if _, _, ok := ApprovalRulePreview("run_cmd", json.RawMessage(`{"program":"make","args":["deploy"],"sandbox_permissions":"require_escalated"}`), env); ok {
+	if _, _, ok := ApprovalRulePreview("run_cmd", json.RawMessage(`{"command":"make deploy","sandbox_permissions":"require_escalated"}`), env); ok {
 		t.Fatal("escalated calls must not have a minimal rule preview")
 	}
 	if _, _, ok := ApprovalRulePreview("edit", json.RawMessage(`{}`), env); ok {
@@ -280,7 +280,7 @@ func TestApprovalRulePreview(t *testing.T) {
 	}
 
 	// needs_network previews carry the network grant.
-	_, grant, ok = ApprovalRulePreview("run_cmd", json.RawMessage(`{"program":"mycli","needs_network":true}`), env)
+	_, grant, ok = ApprovalRulePreview("run_cmd", json.RawMessage(`{"command":"mycli","needs_network":true}`), env)
 	if !ok || !grant.NetworkFull {
 		t.Fatalf("needs_network preview grant = %+v ok=%v", grant, ok)
 	}
@@ -324,19 +324,19 @@ func TestRememberWebFetchDomain(t *testing.T) {
 
 func TestRunCmdTrustPreview(t *testing.T) {
 	env := permission.DeriveEnv{}
-	escalated := json.RawMessage(`{"program":"make","args":["deploy"],"sandbox_permissions":"require_escalated"}`)
+	escalated := json.RawMessage(`{"command":"make deploy","sandbox_permissions":"require_escalated"}`)
 	if !RunCmdTrustPreview("run_cmd", escalated, env) {
 		t.Fatal("escalated run_cmd must offer the trust option")
 	}
-	if RunCmdTrustPreview("run_cmd", argsJSON(t, "make", "build"), env) {
+	if RunCmdTrustPreview("run_cmd", argsJSON(t, "make build"), env) {
 		t.Fatal("non-escalated calls must not offer the trust option")
 	}
 	// A static compound shell offers the trust option (one trusted
 	// prefix per step); a dynamic one does not.
-	if !RunCmdTrustPreview("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","make deploy && echo done"],"sandbox_permissions":"require_escalated"}`), env) {
+	if !RunCmdTrustPreview("run_cmd", json.RawMessage(`{"command":"make deploy && echo done","sandbox_permissions":"require_escalated"}`), env) {
 		t.Fatal("static compound shells must offer the trust option")
 	}
-	if RunCmdTrustPreview("run_cmd", json.RawMessage(`{"program":"sh","args":["-c","make $TARGET"],"sandbox_permissions":"require_escalated"}`), env) {
+	if RunCmdTrustPreview("run_cmd", json.RawMessage(`{"command":"make $TARGET","sandbox_permissions":"require_escalated"}`), env) {
 		t.Fatal("dynamic compound shells must not offer the trust option")
 	}
 	if RunCmdTrustPreview("edit", json.RawMessage(`{}`), env) {

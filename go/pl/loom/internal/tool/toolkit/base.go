@@ -118,3 +118,13 @@ func (b *BaseTool) VerifyPreparedCall(prepared domain.PreparedCall) error {
 func (b *BaseTool) VerifyPreparedCallStructural(prepared domain.PreparedCall) error {
 	return b.signer.Verify(prepared, b.Def)
 }
+
+// MissingCommandError builds the model-facing error for shell tools
+// (run_cmd, exec_session) when the required 'command' string is absent.
+// The message states the contract explicitly with an example — a bare
+// "command is required" was observed to cost models multiple blind
+// retries.
+func MissingCommandError(tool string) error {
+	return domain.NewError(domain.ErrInvalidInput,
+		tool+" takes a single 'command' string executed via sh -c — pass the full shell command as one string, e.g. {\"command\": \"python3 script.py --flag\"}")
+}

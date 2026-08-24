@@ -256,7 +256,7 @@ func TestSkillUserSkillScriptExecution(t *testing.T) {
 			UsageOut:   5,
 		},
 		fakes.ScriptEntry{
-			ToolCalls:  []domain.ToolCall{toolCall(t, "run_cmd", map[string]any{"program": script})},
+			ToolCalls:  []domain.ToolCall{toolCall(t, "run_cmd", map[string]any{"command": script})},
 			StopReason: domain.StopToolUse,
 			UsageIn:    15,
 			UsageOut:   6,
