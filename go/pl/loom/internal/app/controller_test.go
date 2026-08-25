@@ -1518,23 +1518,36 @@ func TestControllerSetReasoningAppliesFromNextTurn(t *testing.T) {
 	}
 }
 
-// startPendingApproval registers a web_fetch approval request on approver
-// and returns its binding once the slot is visible.
-func startPendingApproval(t *testing.T, approver *ChannelApprover, url, argsHash string) (ApprovalBinding, <-chan domain.Decision) {
+// startPendingApproval registers a web_fetch approval request on approver,
+// projects the matching approval card into the controller (as the
+// publishing store would), and returns its binding once the slot is
+// visible.
+func startPendingApproval(t *testing.T, approver *ChannelApprover, controller *Controller, url, argsHash string) (ApprovalBinding, <-chan domain.Decision) {
 	t.Helper()
 	approvalID := domain.NewEventID()
 	callID := domain.NewToolCallID()
+	arguments := json.RawMessage(`{"url":` + strconv.Quote(url) + `}`)
 	result := make(chan domain.Decision, 1)
 	go func() {
 		decision, _ := approver.RequestApproval(context.Background(), domain.ApprovalRequest{
 			ID: approvalID,
 			Call: domain.PreparedCall{
-				Call:     domain.ToolCall{ID: callID, Name: "web_fetch", Arguments: json.RawMessage(`{"url":` + strconv.Quote(url) + `}`)},
+				Call:     domain.ToolCall{ID: callID, Name: "web_fetch", Arguments: arguments},
 				ArgsHash: argsHash,
 			},
 		})
 		result <- decision
 	}()
+	controller.mu.Lock()
+	controller.pendingCards[approvalID] = runtimeevent.ApprovalRequestedPayload{
+		ApprovalID: approvalID,
+		CallID:     callID,
+		ToolName:   "web_fetch",
+		Source:     domain.ToolSourceBuiltin,
+		ArgsHash:   argsHash,
+		Arguments:  arguments,
+	}
+	controller.mu.Unlock()
 	deadline := time.After(2 * time.Second)
 	for {
 		if _, ok := approver.PendingBinding(approvalID); ok {
@@ -1707,11 +1720,8 @@ func TestControllerResolveApprovalRemembersBeforeWakingLoop(t *testing.T) {
 	}
 	forceAwaitingApproval(controller)
 
-	binding, result := startPendingApproval(t, approver, "https://example.com/a", "hash-a")
-	note, err := controller.ResolveApproval(ctx, binding, domain.DecisionAllow, &ApprovalRuleHint{
-		ToolName:  "web_fetch",
-		Arguments: json.RawMessage(`{"url":"https://example.com/a"}`),
-	})
+	binding, result := startPendingApproval(t, approver, controller, "https://example.com/a", "hash-a")
+	note, err := controller.ResolveApproval(ctx, binding, domain.DecisionAllow, &ApprovalRuleHint{})
 	if err != nil {
 		t.Fatalf("ResolveApproval: %v", err)
 	}
@@ -1782,13 +1792,10 @@ func TestControllerResolveApprovalMismatchedBindingDoesNotRemember(t *testing.T)
 	}
 	forceAwaitingApproval(controller)
 
-	binding, result := startPendingApproval(t, approver, "https://example.com/a", "hash-a")
+	binding, result := startPendingApproval(t, approver, controller, "https://example.com/a", "hash-a")
 	tampered := binding
 	tampered.ArgsHash = "tampered"
-	if _, err := controller.ResolveApproval(ctx, tampered, domain.DecisionAllow, &ApprovalRuleHint{
-		ToolName:  "web_fetch",
-		Arguments: json.RawMessage(`{"url":"https://example.com/a"}`),
-	}); err == nil {
+	if _, err := controller.ResolveApproval(ctx, tampered, domain.DecisionAllow, &ApprovalRuleHint{}); err == nil {
 		t.Fatal("mismatched binding was accepted")
 	}
 	if hasSessionHostPackage(controller, "example.com") {

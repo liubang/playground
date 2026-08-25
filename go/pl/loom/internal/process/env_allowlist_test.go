@@ -13,27 +13,26 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/07/24
+// Created: 2026/07/31
 
-package webfetch
+package process
 
 import (
-	"github.com/liubang/playground/go/pl/loom/internal/domain"
-	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
+	"testing"
 )
 
-// baseTool embeds the shared toolkit.BaseTool skeleton (definition +
-// signer + prepare/verify protocol, REVIEW R3); webfetch has no
-// tool-specific dependencies beyond it. The URLRequest fingerprint is
-// passed through PrepareOptions at call time.
-type baseTool struct {
-	toolkit.BaseTool
-}
-
-func newBaseTool(def domain.ToolDefinition) (baseTool, error) {
-	bt, err := toolkit.NewBaseTool(def)
-	if err != nil {
-		return baseTool{}, err
+func TestEnvAllowlistNodeOptionsAndSkillPrefix(t *testing.T) {
+	allowlist := makeEnvAllowlist(nil)
+	for _, key := range []string{"PATH", "HOME", "NODE_OPTIONS", "SKILL_REGION", "SKILL_SCENE"} {
+		if !allowedEnvKey(key, allowlist) {
+			t.Errorf("allowedEnvKey(%q) = false, want true", key)
+		}
 	}
-	return baseTool{BaseTool: bt}, nil
+	// The deny list still wins inside the SKILL_ namespace, and unknown
+	// keys stay dropped.
+	for _, key := range []string{"SKILL_SECRET_SAUCE", "SKILL_API_TOKEN", "AWS_ACCESS_KEY_ID", "NOT_LISTED"} {
+		if allowedEnvKey(key, allowlist) {
+			t.Errorf("allowedEnvKey(%q) = true, want false", key)
+		}
+	}
 }

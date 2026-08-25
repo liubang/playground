@@ -245,9 +245,6 @@ func (e *Env) OpenStoreReadOnly(t *testing.T) *session.SQLiteStore {
 	return store
 }
 
-// Recorder returns the record-mode recorder (nil in other modes).
-func (e *Env) Recorder() *replay.Recorder { return e.recorder }
-
 // ReplayModel returns the replay-mode model (nil in other modes).
 func (e *Env) ReplayModel() *replay.ReplayModel { return e.replayModel }
 
@@ -441,18 +438,11 @@ func ReadRealUserConfig(t *testing.T) []byte {
 	return raw
 }
 
-// LoadIsolatedConfig copies raw into a fresh temp loom home and loads it
-// from there, so every writable location derives from the temp home and
-// the user's stores stay untouched. Returns the temp home and the
+// LoadIsolatedConfigAt copies raw into a fresh temp loom home (or the
+// explicit home, wiped first so no state leaks between runs) and loads
+// it from there, so every writable location derives from the temp home
+// and the user's stores stay untouched. Returns the temp home and the
 // resolved config.
-func LoadIsolatedConfig(t *testing.T, raw []byte) (string, *config.ResolvedConfig) {
-	t.Helper()
-	return LoadIsolatedConfigAt(t, "", raw)
-}
-
-// LoadIsolatedConfigAt is LoadIsolatedConfig with an optional explicit
-// home (empty picks a fresh t.TempDir). An explicit home is wiped first
-// so no state leaks between runs.
 func LoadIsolatedConfigAt(t *testing.T, home string, raw []byte) (string, *config.ResolvedConfig) {
 	t.Helper()
 	if home == "" {

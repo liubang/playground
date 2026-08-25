@@ -240,9 +240,15 @@ type ModelRequestRetryingPayload struct {
 
 // ApprovalRequestedPayload describes an approval request.
 type ApprovalRequestedPayload struct {
-	ApprovalID  domain.EventID    `json:"approval_id"`
-	CallID      domain.ToolCallID `json:"call_id"`
-	ToolName    string            `json:"tool_name"`
+	ApprovalID domain.EventID    `json:"approval_id"`
+	CallID     domain.ToolCallID `json:"call_id"`
+	ToolName   string            `json:"tool_name"`
+	// Source is the tool's origin (builtin / MCP / subagent). It must
+	// survive the approval boundary: a remembered decision derives the
+	// call's effect from this payload, and an MCP tool re-derived from
+	// raw arguments alone would lose its identity (classified by
+	// argument shape instead of as an unauditable third-party tool).
+	Source      domain.ToolSource `json:"source,omitempty"`
 	Risk        domain.RiskLevel  `json:"risk"`
 	Description string            `json:"description"`
 	ArgsHash    string            `json:"args_hash"`

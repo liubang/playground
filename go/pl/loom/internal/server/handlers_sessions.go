@@ -383,10 +383,13 @@ type resolveApprovalRequest struct {
 	CallID   string `json:"call_id"`
 	ArgsHash string `json:"args_hash"`
 	Decision string `json:"decision"`
+	// RuleHint carries ONLY the trust flavor of an "allow always"
+	// decision. The call's identity is reconstructed server-side from
+	// the projected approval card whose hash matches the binding —
+	// client-supplied tool names or arguments are never trusted as
+	// the basis for a standing approval.
 	RuleHint *struct {
-		ToolName  string          `json:"tool_name"`
-		Arguments json.RawMessage `json:"arguments"`
-		Trust     string          `json:"trust,omitempty"`
+		Trust string `json:"trust,omitempty"`
 	} `json:"rule_hint,omitempty"`
 	Client string `json:"client,omitempty"`
 }
@@ -419,7 +422,7 @@ func (s *Server) handleResolveApproval(w http.ResponseWriter, r *http.Request) {
 	}
 	var hint *app.ApprovalRuleHint
 	if req.RuleHint != nil {
-		hint = &app.ApprovalRuleHint{ToolName: req.RuleHint.ToolName, Arguments: req.RuleHint.Arguments, Trust: req.RuleHint.Trust}
+		hint = &app.ApprovalRuleHint{Trust: req.RuleHint.Trust}
 	}
 	note, err := s.svc.ResolveApproval(r.Context(), id, app.ApprovalBinding{
 		ApprovalID: approvalID, CallID: callID, ArgsHash: req.ArgsHash,

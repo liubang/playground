@@ -26,6 +26,7 @@ import (
 	"log/slog"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
 // PolicyDecision represents allow/deny/ask.
@@ -46,6 +47,11 @@ type Policy struct {
 	// (interactive modes only). The host snapshot is rebound from the
 	// live transcript once per routing pass via WithUserIntent.
 	UserIntent bool
+	// Workspace is the canonical root of the workspace this policy
+	// decides for: the capability set is process-shared, and
+	// workspace-scoped packages (project rules, session memory) tagged
+	// with a different workspace are invisible to Evaluate.
+	Workspace string
 	// intentHosts is the current host snapshot (nil until rebound).
 	intentHosts map[string]struct{}
 }
@@ -65,7 +71,7 @@ func (p Policy) Evaluate(call domain.PreparedCall) domain.Verdict {
 	if p.UserIntent && p.Mode != ModeNever {
 		hosts = p.intentHosts
 	}
-	return p.Packages.Decide(d, p.Mode, hosts)
+	return p.Packages.Decide(d, p.Mode, hosts, p.Workspace)
 }
 
 // DeriveCall exposes the derivation for the approval flow (the ask
@@ -102,16 +108,21 @@ type PackageLoadOptions struct {
 // capability set — the embedded builtin set, the user layer (userDir,
 // i.e. <loom home>/rules), the project layer
 // (<workspace>/.loom/rules), and the SQLite remembered store under
-// userDir — atomically replacing every non-session package, so config
-// hot-reloads and rule-file edits take effect while the session's
-// in-memory approvals survive. Loading never fails the agent — broken
-// files/stores are logged and skipped.
+// userDir — atomically replacing the global layers plus THIS
+// workspace's project layer, so config hot-reloads and rule-file edits
+// take effect while other workspaces' project rules and every
+// session's in-memory approvals survive. Loading never fails the agent
+// — broken files/stores are logged and skipped.
 func AttachPackages(ctx context.Context, set *PackageSet, workspaceRoot, userDir string, opts PackageLoadOptions, logger *slog.Logger) {
 	if set == nil {
 		return
 	}
+	workspace := ""
+	if workspaceRoot != "" {
+		workspace = workspacepkg.Canonicalize(workspaceRoot)
+	}
 	if !opts.Enabled {
-		set.ReplaceLayers()
+		set.ReplaceLayers(workspace)
 		return
 	}
 	var loaded []Package
@@ -140,15 +151,24 @@ func AttachPackages(ctx context.Context, set *PackageSet, workspaceRoot, userDir
 			loaded = append(loaded, remembered...)
 		}
 	}
-	set.ReplaceLayers(loaded...)
+	// The set is process-shared: project-layer packages belong to THIS
+	// workspace, so one workspace's rules never decide another's calls.
+	for i := range loaded {
+		if loaded[i].Scope == ScopeProject {
+			loaded[i].Workspace = workspace
+		}
+	}
+	set.ReplaceLayers(workspace, loaded...)
 	if len(loaded) > 0 {
 		logger.Info("loom packages loaded", "packages", len(loaded))
 	}
 }
 
-// ReplaceLayers atomically swaps every non-session package (the
-// declarative layers) while keeping the session's in-memory approvals.
-func (s *PackageSet) ReplaceLayers(pkgs ...Package) {
+// ReplaceLayers atomically swaps the global declarative layers
+// (builtin / user / remembered) plus the given workspace's project
+// layer, while keeping session approvals and OTHER workspaces'
+// project rules intact.
+func (s *PackageSet) ReplaceLayers(workspace string, pkgs ...Package) {
 	if s == nil {
 		return
 	}
@@ -158,6 +178,10 @@ func (s *PackageSet) ReplaceLayers(pkgs ...Package) {
 	for _, p := range s.packages {
 		if p.Scope == ScopeSession {
 			kept = append(kept, p)
+			continue
+		}
+		if p.Scope == ScopeProject && p.Workspace != "" && p.Workspace != workspace {
+			kept = append(kept, p) // another workspace's project layer
 		}
 	}
 	s.packages = append(kept, pkgs...)
@@ -175,7 +199,8 @@ func (s *PackageSet) RememberSession(pkg Package) bool {
 	defer s.mu.Unlock()
 	pkg.Scope = ScopeSession
 	for i, existing := range s.packages {
-		if bindingsEqual(existing.Bind, pkg.Bind) && existing.Scope == ScopeSession {
+		if bindingsEqual(existing.Bind, pkg.Bind) && existing.Scope == ScopeSession &&
+			existing.Workspace == pkg.Workspace {
 			s.packages[i] = pkg // latest approval wins
 			return true
 		}
@@ -184,16 +209,18 @@ func (s *PackageSet) RememberSession(pkg Package) bool {
 	return true
 }
 
-// ForgetSession removes a session-scope package by binding. ok=false
-// means the binding was not remembered this session.
-func (s *PackageSet) ForgetSession(bind Binding) bool {
+// ForgetSession removes a session-scope package by binding, scoped to
+// the owning workspace (the set is process-shared: an untagged forget
+// could evict a neighbor workspace's twin). ok=false means the binding
+// was not remembered this session.
+func (s *PackageSet) ForgetSession(bind Binding, workspace string) bool {
 	if s == nil {
 		return false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i, p := range s.packages {
-		if p.Scope == ScopeSession && bindingsEqual(p.Bind, bind) {
+		if p.Scope == ScopeSession && p.Workspace == workspace && bindingsEqual(p.Bind, bind) {
 			s.packages = append(s.packages[:i], s.packages[i+1:]...)
 			return true
 		}

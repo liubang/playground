@@ -34,22 +34,6 @@ import (
 
 // --- helpers ---
 
-func toolCallMessage(name string) domain.Message {
-	return domain.Message{
-		ID:   domain.NewMessageID(),
-		Role: domain.RoleAssistant,
-		Parts: []domain.ContentPart{{
-			Kind: domain.PartToolCall,
-			ToolCall: &domain.ToolCall{
-				ID:        domain.NewToolCallID(),
-				Name:      name,
-				Arguments: json.RawMessage(`{}`),
-			},
-		}},
-		CreatedAt: time.Now(),
-	}
-}
-
 func toolResultMessage(output string) domain.Message {
 	return domain.Message{
 		ID:   domain.NewMessageID(),

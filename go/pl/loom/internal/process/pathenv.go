@@ -317,6 +317,14 @@ var toolchainCacheDirs = []string{
 	"~/.cache/mise",             // mise exec-env cache (Linux)
 }
 
+// SandboxWritableLiterals are the exact device paths every sandboxed
+// command may write regardless of roots — the sandbox profile's literal
+// exemptions. The profile generator (sandbox_darwin.go) and the
+// permission derivation (permission.redirectEffect) both consume this
+// single list, so the execution boundary and the policy layer can never
+// disagree about everyday redirects like 2>/dev/null.
+var SandboxWritableLiterals = []string{"/dev/null"}
+
 // ExtraWritableDirs returns the canonical directories every sandboxed
 // command may write beyond the workspace: the system scratch dirs
 // (workspace.ScratchDirs — $TMPDIR and /tmp) plus the regenerable

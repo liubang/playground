@@ -167,9 +167,10 @@ func deriveStdinProgram(base string, step ExecStep) (Effect, bool) {
 		reason = base + " executes a here-string program whose content is not statically analyzable"
 	}
 	return Effect{
-		Proven:     false,
-		Reason:     reason,
-		Indicators: []string{base + " executes program text from its stdin (pipe/heredoc) — the code cannot be screened"},
+		Proven:        false,
+		Reason:        reason,
+		OpaquePayload: true,
+		Indicators:    []string{base + " executes program text from its stdin (pipe/heredoc) — the code cannot be screened"},
 	}, true
 }
 

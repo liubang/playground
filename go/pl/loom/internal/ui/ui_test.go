@@ -2229,8 +2229,8 @@ func TestApprovalOverlayStructuresRunCmdDescription(t *testing.T) {
 		CallID:     domain.NewToolCallID(),
 		ToolName:   "run_cmd",
 		Risk:       domain.R3,
-		Description: "Run; 'sh' '-c' 'which weather'; env[none]; cwd='.'; timeout=120000ms; " +
-			"network=loopback-only; shell=R3; note[检查 weather 是否安装]; args_hash=a47946448cfa",
+		Description: "Run; 'sh' '-c' 'which mycli'; env[none]; cwd='.'; timeout=120000ms; " +
+			"network=loopback-only; shell=R3; note[检查 mycli 是否安装]; args_hash=a47946448cfa",
 		ReadPaths:  []string{"/ws"},
 		WritePaths: []string{"/ws"},
 	}
@@ -2238,9 +2238,9 @@ func TestApprovalOverlayStructuresRunCmdDescription(t *testing.T) {
 	// Action keeps the command, metadata folds into one dim row, the note
 	// stands alone, and the workspace root collapses to a relative label.
 	for _, want := range []string{
-		"Run 'sh' '-c' 'which weather'",
+		"Run 'sh' '-c' 'which mycli'",
 		"cwd=. · timeout=120000ms · network=loopback-only",
-		"检查 weather 是否安装",
+		"检查 mycli 是否安装",
 		"workspace (.)",
 	} {
 		if !strings.Contains(view, want) {

@@ -56,14 +56,14 @@ func TestRenderEmptyCatalog(t *testing.T) {
 
 func TestRenderFullListWithinBudget(t *testing.T) {
 	cat := makeCatalog(
-		testSkill("weather", "查询 apikey 归属与监控指标", ScopeUser),
+		testSkill("weather", "查询天气与趋势数据", ScopeUser),
 		testSkill("review", "code review helper", ScopeRepo),
 	)
 	body := Render(cat, 200_000)
 	if !strings.Contains(body, "- review: code review helper (file: /skills/review/SKILL.md)") {
 		t.Fatalf("body missing repo skill line:\n%s", body)
 	}
-	if !strings.Contains(body, "- weather: 查询 apikey 归属与监控指标 (file: /skills/weather/SKILL.md)") {
+	if !strings.Contains(body, "- weather: 查询天气与趋势数据 (file: /skills/weather/SKILL.md)") {
 		t.Fatalf("body missing user skill line:\n%s", body)
 	}
 	// repo sorts before user.

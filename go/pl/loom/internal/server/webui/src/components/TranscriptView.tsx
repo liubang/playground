@@ -145,17 +145,26 @@ const BlockView = memo(
 // so the virtualizer can maintain per-block offsets. The wrapper carries the
 // flex-column context (so .block-user's align-self:flex-end still works) and the
 // inter-block margin.
+//
+// seenIds tracks ids that have already been mounted once: the .block fadein
+// entrance animation is meant for genuinely new blocks, but virtualization
+// remounts blocks every time they re-enter the render window — without this
+// gate the animation replays on every scroll, visible as flickering.
 function MeasuredBlock({
   id,
   measure,
+  seenIds,
   children,
 }: {
   id: string
   measure: (id: string, h: number) => void
+  seenIds: Set<string>
   children: ReactNode
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  const seen = seenIds.has(id)
   useLayoutEffect(() => {
+    seenIds.add(id)
     const el = ref.current
     if (!el) return
     const ro = new ResizeObserver(() => {
@@ -163,9 +172,9 @@ function MeasuredBlock({
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [id, measure])
+  }, [id, measure, seenIds])
   return (
-    <div ref={ref} className="block-wrap" data-block-id={id}>
+    <div ref={ref} className={seen ? 'block-wrap seen' : 'block-wrap'} data-block-id={id}>
       {children}
     </div>
   )
@@ -209,20 +218,33 @@ export function TranscriptView({
   const following = useStore(controller.store, (s) => s.following)
   const followSeq = useStore(controller.store, (s) => s.followSeq)
   const scrollerRef = useRef<HTMLDivElement>(null)
+  // Ids that have entered the render window at least once (fadein gate — see
+  // MeasuredBlock). Lives here so it survives block remounts.
+  const seenIdsRef = useRef<Set<string>>(new Set())
 
   // --- virtual scroll state ---
   const heightsRef = useRef<Map<string, number>>(new Map())
   const [measureTick, setMeasureTick] = useState(0)
   const [viewport, setViewport] = useState({ top: 0, height: 0 })
 
-  const measure = useCallback((id: string, h: number) => {
-    const map = heightsRef.current
-    const prev = map.get(id)
-    if (prev == null || Math.abs(prev - h) > 1) {
-      map.set(id, h)
-      setMeasureTick((t) => t + 1)
-    }
-  }, [])
+  const measure = useCallback(
+    (id: string, h: number) => {
+      const map = heightsRef.current
+      const prev = map.get(id)
+      if (prev == null || Math.abs(prev - h) > 1) {
+        map.set(id, h)
+        setMeasureTick((t) => t + 1)
+        // Pure-DOM resizes of the last block (e.g. the reasoning <details>
+        // being toggled) produce no store update, so no follow request is
+        // scheduled — re-snap here when following to keep the bottom pinned.
+        const st = controller.store.get()
+        if (st.following && st.blocks[st.blocks.length - 1]?.id === id) {
+          controller.followNow()
+        }
+      }
+    },
+    [controller],
+  )
 
   // Track the container size and initial scroll position.
   useLayoutEffect(() => {
@@ -247,7 +269,13 @@ export function TranscriptView({
   useLayoutEffect(() => {
     if (followSeq === 0) return
     const el = scrollerRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+    // Sync the virtualizer's viewport immediately instead of waiting for the
+    // async scroll event: the blocks at the snap target must enter the render
+    // range in this same commit, otherwise the bottom block can stay
+    // unrendered (blank) until the browser dispatches the scroll event.
+    setViewport({ top: el.scrollTop, height: el.clientHeight })
   }, [followSeq])
 
   // resync 保留滚动：AppController 在 applySnapshot 前写入 preserveScrollTop，
@@ -311,7 +339,7 @@ export function TranscriptView({
       <div id="blocks" className="transcript-inner">
         {topPad > 0 && <div style={{ height: topPad }} aria-hidden="true" />}
         {visible.map((b) => (
-          <MeasuredBlock key={b.id} id={b.id} measure={measure}>
+          <MeasuredBlock key={b.id} id={b.id} measure={measure} seenIds={seenIdsRef.current}>
             <BlockView block={b} io={io} />
           </MeasuredBlock>
         ))}

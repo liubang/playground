@@ -26,6 +26,7 @@ package permission
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -36,10 +37,27 @@ import (
 // reach arbitrary hosts); Hosts lists canonical hostnames (lowercase, no
 // port) when the targets are statically provable. Any and Hosts are
 // mutually exclusive — a requirement is either fully enumerated or it is
-// not, never both.
+// not, never both. Loopback hosts never appear here: the default sandbox
+// permits loopback unconditionally, so loopback egress is not a
+// requirement (named loopback targets stay in NamedHosts for deny
+// matching).
 type HostSet struct {
 	Any   bool     `json:"any,omitempty"`
 	Hosts []string `json:"hosts,omitempty"`
+}
+
+// isLoopbackHost reports whether h names a loopback endpoint the default
+// sandbox already permits (localhost, 127.0.0.0/8, ::1). Requiring a
+// network capability for loopback would prompt for what the sandbox
+// already treats as confined.
+func isLoopbackHost(h string) bool {
+	if h == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(h); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
 }
 
 // IsZero reports whether no network is required.
@@ -152,6 +170,15 @@ type Effect struct {
 	// carrying indicators is never covered silently by categorical
 	// packages — only by an exact-binding approval of the same shape.
 	Indicators []string
+	// OpaquePayload marks a step that EXECUTES content not present in
+	// its argv: a container image (docker run), a package downloaded at
+	// runtime (npm exec), a payload tunneled into a cluster (kubectl
+	// exec), or program text arriving on stdin. The sandbox does not
+	// bound such payloads (the docker daemon and the cluster are outside
+	// it), so an approval of this shape may never be remembered
+	// categorically — a later invocation with a different payload would
+	// spuriously match the prefix.
+	OpaquePayload bool
 }
 
 // ZeroEffect is the fully-confined effect: no capabilities, confined
@@ -243,6 +270,7 @@ func joinEffects(steps []Effect) Effect {
 		}
 		out.GUIOpen = out.GUIOpen || s.GUIOpen
 		out.Unsandboxed = out.Unsandboxed || s.Unsandboxed
+		out.OpaquePayload = out.OpaquePayload || s.OpaquePayload
 		if s.Consequence > out.Consequence {
 			out.Consequence = s.Consequence
 		}

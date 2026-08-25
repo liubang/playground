@@ -2595,7 +2595,7 @@ func (m Model) resolveApprovalCmd(payload *runtimeevent.ApprovalRequestedPayload
 	return func() tea.Msg {
 		var hint *app.ApprovalRuleHint
 		if remember && decision == domain.DecisionAllow {
-			hint = &app.ApprovalRuleHint{ToolName: payload.ToolName, Arguments: payload.Arguments, Trust: trust}
+			hint = &app.ApprovalRuleHint{Trust: trust}
 		}
 		note, err := m.controller.ResolveApproval(context.Background(), approvalBinding(payload), decision, hint)
 		return approvalResolvedMsg{err: err, ruleNote: note}

@@ -242,15 +242,15 @@ type Rules struct {
 }
 
 // Approval configures the baseline approval strategy
-// (docs/PERMISSION_DESIGN.md §4.3). Mode selects how calls with no rule
-// or session memory are decided: "on-request" (default: everything the
+// (docs/PERMISSION_DESIGN.md §4.3). Mode selects how calls no capability
+// package covers are decided: "on-request" (default: everything the
 // sandbox or path validator confines runs without prompting; escalation,
-// network widening, and danger-listed commands prompt),
-// "unless-dangerous" (blacklist mode: additionally grants declared
-// network needs silently; only the danger screen and escalations
-// prompt), or "never" (unattended: sandboxed calls run, escalations and
-// dangerous commands are denied outright so a run can never hang on a
-// prompt).
+// boundary crossings, and indicated shapes prompt),
+// "unless-dangerous" (additionally grants confined network needs
+// silently; indicators, escalations, and extra writes still prompt), or
+// "never" (unattended: sandboxed calls run, escalations and
+// above-confined consequences are denied outright so a run can never
+// hang on a prompt).
 type Approval struct {
 	Mode string `yaml:"mode,omitempty"`
 	// TrustUserURLs auto-allows fetching a host the user mentioned in the

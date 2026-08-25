@@ -53,13 +53,13 @@ go_library(
 go_test(
     name = "process_test",
     srcs = [
+        "env_allowlist_test.go",
         "pathenv_test.go",
         "runner_seatbelt_test.go",
         "runner_test.go",
         "sandbox_grant_test.go",
         "session_test.go",
         "shell_analyze_test.go",
-        "shell_unwrap_test.go",
         "shellprobe_test.go",
     ],
     embed = [":process_lib"],

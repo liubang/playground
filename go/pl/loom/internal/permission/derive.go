@@ -29,9 +29,11 @@ import (
 	"encoding/json"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/process"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -234,13 +236,20 @@ func (d *Derivation) redirectEffect(env DeriveEnv) Effect {
 			}
 			continue
 		}
-		clean := filepath.Clean(expanded)
+		// Canonicalize, not just Clean: the roots are canonical (macOS
+		// /tmp and /var are symlinks into /private), so a literal /tmp
+		// target must resolve before the prefix check or every scratch
+		// write looks boundary-crossing.
+		clean := workspacepkg.Canonicalize(expanded)
 		// The sensitive check runs BEFORE the confined check: a redirect
 		// into the workspace's own .git/hooks is sandbox-blocked, but it
 		// is a persistence ATTEMPT and must be surfaced, not just
 		// confined.
 		if reason := sensitiveRedirectTarget(clean); reason != "" {
 			e.Indicators = append(e.Indicators, reason)
+		}
+		if slices.Contains(process.SandboxWritableLiterals, clean) {
+			continue // device sinks the sandbox always allows (2>/dev/null)
 		}
 		if pathUnderRoots(env.Roots, clean) {
 			continue
@@ -264,8 +273,13 @@ func (d *Derivation) deriveURL(req *domain.URLRequest) {
 	e := Effect{
 		Proven:      true,
 		Consequence: ConsequenceConfined,
-		Network:     HostSet{Hosts: []string{req.Host}},
 		Reason:      "fetch " + req.Host,
+	}
+	// Loopback egress is permitted by the default sandbox — it is not a
+	// capability requirement. The host still lands in d.Host for deny
+	// bindings and user-intent matching.
+	if !isLoopbackHost(req.Host) {
+		e.Network = HostSet{Hosts: []string{req.Host}}
 	}
 	if req.RealIdentity {
 		e.Indicators = append(e.Indicators,
@@ -371,13 +385,17 @@ func expandTilde(p string) string {
 }
 
 // DeriveRawArgs derives the call shape from raw arguments — the
-// approval-UI boundary, where only the event payload's raw arguments
-// survive. It is DeriveEffect with a minimal call wrapper: the raw
-// fallback lives in the single entry point, so both paths classify
-// identically.
-func DeriveRawArgs(toolName string, raw json.RawMessage, env DeriveEnv) Derivation {
+// approval-UI boundary, where only the event payload survives. It is
+// DeriveEffect with a minimal call wrapper: the raw fallback lives in
+// the single entry point, so both paths classify identically. The tool
+// source must be carried through from the producing tool: without it an
+// MCP call would be re-derived from its argument shape (a "program"
+// field becomes an exec effect, a "url" field a host binding) instead
+// of keeping its third-party identity.
+func DeriveRawArgs(toolName string, source domain.ToolSource, raw json.RawMessage, env DeriveEnv) Derivation {
 	return DeriveEffect(domain.PreparedCall{
-		Call: domain.ToolCall{Name: toolName, Arguments: raw},
+		Call:       domain.ToolCall{Name: toolName, Arguments: raw},
+		Definition: domain.ToolDefinition{Name: toolName, Source: source},
 	}, env)
 }
 

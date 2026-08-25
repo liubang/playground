@@ -237,7 +237,7 @@ export function createApi({ getToken, onUnauthorized }: ApiOptions) {
         callId?: string
         argsHash?: string
         decision: 'allow' | 'deny'
-        ruleHint?: { tool_name?: string; arguments?: Record<string, unknown>; trust?: string }
+        ruleHint?: { trust?: string }
       },
     ) =>
       req('POST', `/v1/sessions/${id}/approvals/${approvalId}`, {

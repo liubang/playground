@@ -257,12 +257,12 @@ func TestDeriveMCP(t *testing.T) {
 
 func TestDeriveRawArgs(t *testing.T) {
 	raw, _ := json.Marshal(map[string]any{"command": "git push --force"})
-	d := DeriveRawArgs("run_cmd", raw, DeriveEnv{Roots: []string{"/ws"}})
+	d := DeriveRawArgs("run_cmd", domain.ToolSourceBuiltin, raw, DeriveEnv{Roots: []string{"/ws"}})
 	if d.Effect.Consequence != ConsequenceSharedDestructive {
 		t.Fatalf("raw-args derivation = %s", d.Effect.Consequence)
 	}
 	raw, _ = json.Marshal(map[string]string{"url": "https://Example.com/x"})
-	d = DeriveRawArgs("web_fetch", raw, DeriveEnv{})
+	d = DeriveRawArgs("web_fetch", domain.ToolSourceBuiltin, raw, DeriveEnv{})
 	if d.Host != "example.com" {
 		t.Fatalf("raw url host = %q", d.Host)
 	}

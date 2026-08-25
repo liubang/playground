@@ -51,13 +51,19 @@ const TrustUnsandboxed = "unsandboxed"
 // shapes, ineligible tools).
 //
 //   - trust=unsandboxed on an escalated call → L2 full trust (the ONLY
-//     rememberable flavor that answers an escalation);
-//   - otherwise → exactly the effect's gap grant (an escalated call's
-//     minimal flavor approximates to the network grant: the most common
-//     escalation cause, and the package then covers the model's
-//     sandboxed needs_network retry).
+//     rememberable flavor for an escalation); an escalated call has NO
+//     minimal flavor — remembering one categorically without the
+//     unsandboxed grant would bless a command that cannot actually run
+//     as remembered;
+//   - otherwise → exactly the effect's gap grant.
 func MemoryPackages(d Derivation, trust string) ([]Package, bool) {
 	e := d.Effect
+	if e.Unsandboxed && trust != TrustUnsandboxed {
+		// A model-level invariant, not a UI convention: no code path may
+		// write a categorical standing approval for an escalated call
+		// short of explicit L2 full trust.
+		return nil, false
+	}
 	grant := packageGrantFromEffect(e, trust)
 	switch {
 	case len(d.Plan.Steps) > 0:
@@ -140,19 +146,11 @@ func execMemoryPackages(d Derivation, grant PackageGrant) ([]Package, bool) {
 }
 
 // packageGrantFromEffect computes the grant a remembered package should
-// carry for the given trust flavor.
+// carry for the given trust flavor: the L2 full-trust grant for an
+// escalated call, otherwise exactly the effect's gap grant.
 func packageGrantFromEffect(e Effect, trust string) PackageGrant {
 	if trust == TrustUnsandboxed && e.Unsandboxed {
 		return PackageGrant{Unsandboxed: true}
-	}
-	if e.Unsandboxed {
-		// The minimal flavor of an escalated call approximates to the
-		// network grant (the most common escalation cause).
-		return PackageGrant{
-			NetworkFull:   true,
-			WritablePaths: append([]string(nil), e.Writes.Paths...),
-			GUIOpen:       e.GUIOpen,
-		}
 	}
 	return PackageGrant{
 		NetworkFull:   !e.Network.IsZero(),
@@ -198,7 +196,7 @@ func bindingLabel(b Binding) string {
 	return ""
 }
 
-// grantLabel renders a package grant for display ("+网络, +写 ~/.mycli").
+// grantLabel renders a package grant for display ("+网络, +写 ~/.myapp").
 func grantLabel(g PackageGrant) string {
 	if g.Unsandboxed {
 		return "出沙箱（完整权限）"

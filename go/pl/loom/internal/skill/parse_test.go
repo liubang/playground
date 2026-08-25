@@ -42,8 +42,8 @@ func parseErr(t *testing.T, contents string) string {
 
 func TestParseSkill(t *testing.T) {
 	t.Run("valid frontmatter", func(t *testing.T) {
-		s := parseOK(t, "---\nname: weather\ndescription: 查询 apikey 归属与监控指标\n---\n\n# body\n")
-		if s.Name != "weather" || s.Description != "查询 apikey 归属与监控指标" {
+		s := parseOK(t, "---\nname: weather\ndescription: 查询天气与趋势数据\n---\n\n# body\n")
+		if s.Name != "weather" || s.Description != "查询天气与趋势数据" {
 			t.Fatalf("unexpected skill: %+v", s)
 		}
 		if s.Dir != "/skills/demo" || s.Path != "/skills/demo/SKILL.md" || s.Scope != ScopeUser {

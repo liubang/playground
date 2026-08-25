@@ -298,6 +298,7 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		Env:        permission.DeriveEnv{Roots: append([]string{validator.Root()}, process.ExtraWritableDirs()...)},
 		Mode:       resolved.Approval.Mode,
 		UserIntent: resolved.Approval.TrustUserURLs,
+		Workspace:  workspace.Canonicalize(cfg.WorkspaceRoot),
 	}
 	decider := wirePolicy(policy)
 
@@ -622,6 +623,7 @@ func (b *Bootstrap) ReloadPolicy(ctx context.Context) error {
 		Env:        env,
 		Mode:       mode,
 		UserIntent: resolved.Approval.TrustUserURLs,
+		Workspace:  workspace.Canonicalize(b.WorkspaceRoot),
 	}
 	b.policyMu.Lock()
 	defer b.policyMu.Unlock()

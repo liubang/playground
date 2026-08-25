@@ -74,12 +74,14 @@ func ParseApprovalMode(s string) (ApprovalMode, error) {
 }
 
 // Decide resolves the verdict for one derivation. It never returns an
-// empty decision.
-func (s *PackageSet) Decide(d Derivation, mode ApprovalMode, intentHosts map[string]struct{}) domain.Verdict {
+// empty decision. workspace is the canonical root of the deciding
+// workspace: workspace-scoped packages (project rules, session memory)
+// tagged with a different workspace are invisible to this decision.
+func (s *PackageSet) Decide(d Derivation, mode ApprovalMode, intentHosts map[string]struct{}, workspace string) domain.Verdict {
 	e := d.Effect
 
 	// 1. Deny bindings always win (any layer).
-	if pkg, ok := s.matchDecision(d, domain.DecisionDeny); ok {
+	if pkg, ok := s.matchDecision(d, domain.DecisionDeny, workspace); ok {
 		return domain.Verdict{
 			Decision: domain.DecisionDeny,
 			Source:   SourceRule,
@@ -89,7 +91,7 @@ func (s *PackageSet) Decide(d Derivation, mode ApprovalMode, intentHosts map[str
 
 	// 2. Forced-ask bindings: explicit user policy that this shape must
 	// always be confirmed.
-	if pkg, ok := s.matchDecision(d, domain.DecisionAsk); ok {
+	if pkg, ok := s.matchDecision(d, domain.DecisionAsk, workspace); ok {
 		return domain.Verdict{
 			Decision: domain.DecisionAsk,
 			Grant:    e.GapGrant(),
@@ -119,7 +121,7 @@ func (s *PackageSet) Decide(d Derivation, mode ApprovalMode, intentHosts map[str
 	// covered by categorical packages or the default sandbox — only by
 	// an exact-binding approval of the same shape.
 	if len(e.Indicators) > 0 {
-		if pkg, ok := s.exactCover(d); ok {
+		if pkg, ok := s.exactCover(d, workspace); ok {
 			return allowFromPackage(pkg, e)
 		}
 		if mode == ModeNever {
@@ -142,7 +144,7 @@ func (s *PackageSet) Decide(d Derivation, mode ApprovalMode, intentHosts map[str
 	// provider quota spenders): capability packages may still cover
 	// them by tool binding.
 	if d.ForcedAsk != "" {
-		if pkg, ok := s.categoricalCover(d); ok {
+		if pkg, ok := s.categoricalCover(d, workspace); ok {
 			return allowFromPackage(pkg, e)
 		}
 		if mode == ModeNever {
@@ -163,7 +165,7 @@ func (s *PackageSet) Decide(d Derivation, mode ApprovalMode, intentHosts map[str
 
 	// 6. THE inclusion test: some allow package binds this call and
 	// covers the effect.
-	if pkg, ok := s.categoricalCover(d); ok {
+	if pkg, ok := s.categoricalCover(d, workspace); ok {
 		return allowFromPackage(pkg, e)
 	}
 
@@ -263,30 +265,30 @@ func askGapVerdict(e Effect) domain.Verdict {
 // ExplainMatch returns the package that would decide this derivation,
 // mirroring Decide's match order (deny → forced-ask → indicator-exact →
 // categorical cover). It backs `loom rules check`'s diagnostics.
-func (s *PackageSet) ExplainMatch(d Derivation) (Package, bool) {
-	if pkg, ok := s.matchDecision(d, domain.DecisionDeny); ok {
+func (s *PackageSet) ExplainMatch(d Derivation, workspace string) (Package, bool) {
+	if pkg, ok := s.matchDecision(d, domain.DecisionDeny, workspace); ok {
 		return pkg, true
 	}
-	if pkg, ok := s.matchDecision(d, domain.DecisionAsk); ok {
+	if pkg, ok := s.matchDecision(d, domain.DecisionAsk, workspace); ok {
 		return pkg, true
 	}
 	if len(d.Effect.Indicators) > 0 {
-		return s.exactCover(d)
+		return s.exactCover(d, workspace)
 	}
-	return s.categoricalCover(d)
+	return s.categoricalCover(d, workspace)
 }
 
 // matchDecision finds the strictest matching package with the given
 // decision. Deny/ask bindings match on ANY visible argv (one matching
 // step is enough — strictest-wins must bite).
-func (s *PackageSet) matchDecision(d Derivation, decision domain.Decision) (Package, bool) {
+func (s *PackageSet) matchDecision(d Derivation, decision domain.Decision, workspace string) (Package, bool) {
 	if s == nil {
 		return Package{}, false
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, p := range s.packages {
-		if p.Decision != decision {
+		if p.Decision != decision || !p.visibleTo(workspace) {
 			continue
 		}
 		if packageBinds(p, d, false) {
@@ -308,14 +310,14 @@ func (s *PackageSet) matchDecision(d Derivation, decision domain.Decision) (Pack
 //     by some allow package covering THAT step's effect, and the
 //     covering grants' union answers the joined effect (the grant a
 //     composed call was approved with).
-func (s *PackageSet) categoricalCover(d Derivation) (Package, bool) {
+func (s *PackageSet) categoricalCover(d Derivation, workspace string) (Package, bool) {
 	if s == nil {
 		return Package{}, false
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, p := range s.packages {
-		if p.Decision != domain.DecisionAllow || p.Implicit {
+		if p.Decision != domain.DecisionAllow || p.Implicit || !p.visibleTo(workspace) {
 			continue
 		}
 		if p.Bind.Kind == BindHost {
@@ -342,7 +344,7 @@ func (s *PackageSet) categoricalCover(d Derivation) (Package, bool) {
 		}
 	}
 	if len(d.Argvs) > 1 && d.StaticPlan && len(d.StepEffects) == len(d.Plan.Steps) {
-		if pkg, ok := s.stepCoverLocked(d); ok {
+		if pkg, ok := s.stepCoverLocked(d, workspace); ok {
 			return pkg, true
 		}
 	}
@@ -351,7 +353,7 @@ func (s *PackageSet) categoricalCover(d Derivation) (Package, bool) {
 
 // stepCoverLocked evaluates per-step coverage of a composed exec call.
 // The caller holds the read lock.
-func (s *PackageSet) stepCoverLocked(d Derivation) (Package, bool) {
+func (s *PackageSet) stepCoverLocked(d Derivation, workspace string) (Package, bool) {
 	var (
 		union      PackageGrant
 		maxCeiling Consequence
@@ -363,7 +365,7 @@ func (s *PackageSet) stepCoverLocked(d Derivation) (Package, bool) {
 		}
 		stepOK := false
 		for _, p := range s.packages {
-			if p.Decision != domain.DecisionAllow || p.Implicit || p.Bind.Kind != BindArgv {
+			if p.Decision != domain.DecisionAllow || p.Implicit || p.Bind.Kind != BindArgv || !p.visibleTo(workspace) {
 				continue
 			}
 			if !argvBindsPrefix(step.Argv, p.Bind.Argv) || !p.covers(d.StepEffects[i]) {
@@ -404,14 +406,14 @@ func (s *PackageSet) stepCoverLocked(d Derivation) (Package, bool) {
 // exactCover finds an allow package whose binding is EXACT (the full
 // argv, or the exact host/path/tool) and which covers the effect — the
 // only coverage an indicated effect accepts.
-func (s *PackageSet) exactCover(d Derivation) (Package, bool) {
+func (s *PackageSet) exactCover(d Derivation, workspace string) (Package, bool) {
 	if s == nil {
 		return Package{}, false
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, p := range s.packages {
-		if p.Decision != domain.DecisionAllow || p.Implicit {
+		if p.Decision != domain.DecisionAllow || p.Implicit || !p.visibleTo(workspace) {
 			continue
 		}
 		if p.Bind.Kind != BindArgvExact {

@@ -48,9 +48,10 @@ func loadCheckPolicy() (permission.Policy, error) {
 		Roots: append([]string{workspacepkg.Canonicalize(root)}, process.ExtraWritableDirs()...),
 	}
 	return permission.Policy{
-		Packages: set,
-		Env:      env,
-		Mode:     resolved.Approval.Mode,
+		Packages:  set,
+		Env:       env,
+		Mode:      resolved.Approval.Mode,
+		Workspace: workspacepkg.Canonicalize(root),
 	}, nil
 }
 
@@ -194,7 +195,7 @@ func checkRules(argv []string) error {
 		fmt.Printf("reason: %s\n", verdict.Reason)
 	}
 	printEffect(d)
-	if pkg, ok := policy.Packages.ExplainMatch(d); ok {
+	if pkg, ok := policy.Packages.ExplainMatch(d, policy.Workspace); ok {
 		fmt.Printf("matched package: %s -> %s (%s, %s)\n", bindingText(pkg.Bind), pkg.Decision, pkg.Scope, pkg.Source)
 		if pkg.Justification != "" {
 			fmt.Printf("justification: %s\n", pkg.Justification)

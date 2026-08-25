@@ -227,9 +227,10 @@ export class AppController {
           callId: payload.call_id,
           argsHash: payload.args_hash,
           decision,
-          ruleHint: always
-            ? { tool_name: payload.tool_name, arguments: payload.arguments, trust }
-            : undefined,
+          // The server reconstructs the call's identity from the
+          // projected approval card; the hint carries only the
+          // trust flavor.
+          ruleHint: always ? { trust } : undefined,
         }),
       answerQuestion: (questionId, answer) =>
         this.api.answerQuestion(this.store.get().sessionId || '', questionId, answer),

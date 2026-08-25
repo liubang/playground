@@ -370,7 +370,7 @@ func (c *httpClient) ResolveApproval(ctx context.Context, binding ApprovalBindin
 		"decision":  string(decision),
 	}
 	if hint != nil {
-		body["rule_hint"] = map[string]any{"tool_name": hint.ToolName, "arguments": hint.Arguments, "trust": hint.Trust}
+		body["rule_hint"] = map[string]any{"trust": hint.Trust}
 	}
 	var out struct {
 		Note string `json:"note"`

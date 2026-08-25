@@ -281,8 +281,8 @@ func migrateRememberedDB(ctx context.Context, dbPath string) (bool, int, error) 
 	}
 	for _, r := range ruleRows {
 		var prefix []string
-		if err := json.Unmarshal([]byte(r.prefix), &prefix); err != nil {
-			continue // skip malformed rows
+		if err := json.Unmarshal([]byte(r.prefix), &prefix); err != nil || len(prefix) == 0 {
+			continue // skip malformed rows (an empty prefix binds everything)
 		}
 		p := Package{
 			Bind:           Binding{Kind: BindArgv, Argv: prefix},
@@ -311,14 +311,27 @@ func migrateRememberedDB(ctx context.Context, dbPath string) (bool, int, error) 
 		}
 		n++
 	}
-	// domains / paths / tools → confined ceiling.
+	// domains / paths / tools → confined ceiling. Every value is
+	// normalized with the same rules as package files: a v2 row naming a
+	// sensitive location ancestor or a malformed host must not become a
+	// standing v3 grant (such rows are skipped, and dropped with the v2
+	// tables).
 	simple := []struct {
 		table, keyCol string
-		bind          func(string) Binding
+		bind          func(string) (Binding, error)
 	}{
-		{"remembered_domains", "host", func(v string) Binding { return Binding{Kind: BindHost, Host: v} }},
-		{"remembered_paths", "path", func(v string) Binding { return Binding{Kind: BindPath, Path: v} }},
-		{"remembered_tools", "name", func(v string) Binding { return Binding{Kind: BindTool, Tool: v} }},
+		{"remembered_domains", "host", func(v string) (Binding, error) {
+			host, err := normalizeHostPattern(v)
+			return Binding{Kind: BindHost, Host: host}, err
+		}},
+		{"remembered_paths", "path", func(v string) (Binding, error) {
+			path, err := normalizePackagePath(v)
+			return Binding{Kind: BindPath, Path: path}, err
+		}},
+		{"remembered_tools", "name", func(v string) (Binding, error) {
+			tool, err := normalizeToolName(v)
+			return Binding{Kind: BindTool, Tool: tool}, err
+		}},
 	}
 	for _, spec := range simple {
 		type row struct{ value, justif string }
@@ -335,8 +348,12 @@ func migrateRememberedDB(ctx context.Context, dbPath string) (bool, int, error) 
 			return false, 0, err
 		}
 		for _, r := range rows {
+			bind, err := spec.bind(r.value)
+			if err != nil {
+				continue // invalid v2 value: skip (dropped with the table)
+			}
 			if err := store.Remember(ctx, Package{
-				Bind:           spec.bind(r.value),
+				Bind:           bind,
 				Decision:       domain.DecisionAllow,
 				Justification:  r.justif,
 				MaxConsequence: ConsequenceConfined,

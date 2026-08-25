@@ -739,6 +739,14 @@ button {
   flex-direction: column;
   margin-bottom: 20px;
 }
+/* The .block fadein entrance is for genuinely new blocks: virtualization
+   remounts a block every time it re-enters the render window, which would
+   replay the animation on each scroll (visible as flickering, e.g. the
+   thinking dots strobing). Blocks already mounted once get .seen (tracked by
+   id in TranscriptView) and skip the replay. */
+.block-wrap.seen .block {
+  animation: none;
+}
 .empty-state {
   text-align: center;
   padding: 80px 20px;

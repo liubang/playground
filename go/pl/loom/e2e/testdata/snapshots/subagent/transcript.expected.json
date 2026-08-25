@@ -2434,6 +2434,7 @@
           "args_hash": "{{hash:15}}",
           "call_id": "call_c89b7e0e5f7d4c9c98561948",
           "risk": 1,
+          "source": "subagent",
           "tool": "delegate_task"
         },
         "sequence": 8,
@@ -2462,6 +2463,7 @@
           "args_hash": "{{hash:15}}",
           "call_id": "call_c89b7e0e5f7d4c9c98561948",
           "risk": 1,
+          "source": "subagent",
           "tool": "delegate_task"
         },
         "sequence": 10,
@@ -3864,6 +3866,7 @@
             "{{cwd}}/marker.txt"
           ],
           "risk": 1,
+          "source": "builtin",
           "tool": "read_file"
         },
         "sequence": 9,
@@ -3895,6 +3898,7 @@
             "{{cwd}}/marker.txt"
           ],
           "risk": 1,
+          "source": "builtin",
           "tool": "read_file"
         },
         "sequence": 11,

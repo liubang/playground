@@ -832,6 +832,7 @@ func (r *Run) MarkPersisted(newVersion int64, events []domain.Event) {
 type toolCallAuditPayload struct {
 	CallID       domain.ToolCallID    `json:"call_id"`
 	Tool         string               `json:"tool"`
+	Source       domain.ToolSource    `json:"source,omitempty"`
 	Risk         domain.RiskLevel     `json:"risk"`
 	ArgsHash     string               `json:"args_hash,omitempty"`
 	ReadPaths    []string             `json:"read_paths,omitempty"`
@@ -3226,6 +3227,7 @@ func makeToolCallAuditPayload(prepared domain.PreparedCall) toolCallAuditPayload
 	return toolCallAuditPayload{
 		CallID:       prepared.Call.ID,
 		Tool:         prepared.Definition.Name,
+		Source:       prepared.Definition.Source,
 		Risk:         prepared.Risk,
 		ArgsHash:     prepared.ArgsHash,
 		ReadPaths:    cloneStrings(prepared.ReadPaths),

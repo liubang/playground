@@ -331,6 +331,35 @@ func validateGrant(p *Package) error {
 	return nil
 }
 
+// validateLoadedPackage re-validates a package read from a mutable store
+// (the remembered SQLite DB). The store is writable by any local process,
+// so rows must pass the same normalization and grant invariants as
+// package FILES — a hand-edited row must never smuggle in a sensitive
+// path grant or a malformed binding that parsePackageFile would reject.
+func validateLoadedPackage(p *Package) error {
+	switch p.Bind.Kind {
+	case BindArgv, BindArgvExact:
+		if len(p.Bind.Argv) == 0 {
+			return fmt.Errorf("empty argv binding")
+		}
+	case BindHost:
+		if _, err := normalizeHostPattern(p.Bind.Host); err != nil {
+			return err
+		}
+	case BindPath:
+		if _, err := normalizePackagePath(p.Bind.Path); err != nil {
+			return err
+		}
+	case BindTool:
+		if _, err := normalizeToolName(p.Bind.Tool); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("unknown binding kind %d", p.Bind.Kind)
+	}
+	return validateGrant(p)
+}
+
 // selfTest runs the match/not_match examples (argv bindings only).
 func (p Package) selfTest(match, notMatch []ArgvExample) error {
 	if p.Bind.Kind != BindArgv {

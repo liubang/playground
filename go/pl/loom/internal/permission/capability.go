@@ -33,6 +33,7 @@ import (
 	"sync"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/process"
 )
 
 // BindKind identifies which call shape a package binds.
@@ -142,6 +143,12 @@ type Package struct {
 	Implicit bool `json:"-"`
 	// Scope records the trust layer (loading rules depend on it).
 	Scope Scope `json:"-"`
+	// Workspace tags packages that belong to one workspace (project
+	// layer, session memory): the capability set is process-shared, and
+	// without the tag one workspace's project rules or session
+	// approvals would decide another workspace's calls. Empty means
+	// global (builtin / user / remembered layers).
+	Workspace string `json:"-"`
 	// Justification is the human-readable rationale (approval prompts,
 	// `loom rules list`).
 	Justification string `json:"justification,omitempty"`
@@ -313,9 +320,19 @@ func (s *PackageSet) HasAny() bool {
 	return len(s.packages) > 0
 }
 
-// matchCall collects every package whose binding applies to the call
-// shape described by d (the derivation carries the normalized argvs,
-// host, write path, and tool name). Binding semantics per kind:
+// visibleTo reports whether the package participates in decisions for
+// the given workspace: workspace-scoped layers (project rules, session
+// memory) only see their own workspace; global layers see all.
+func (p Package) visibleTo(workspace string) bool {
+	if p.Scope != ScopeProject && p.Scope != ScopeSession {
+		return true
+	}
+	return p.Workspace == "" || p.Workspace == workspace
+}
+
+// packageBinds reports whether p's binding applies to the call. The
+// caller filters workspace visibility (Package.visibleTo) first.
+// Binding semantics per kind:
 //
 //   - BindArgv: a single-argv call matches on prefix; a composed shell
 //     call matches only when EVERY step argv carries the prefix (an
@@ -326,22 +343,6 @@ func (s *PackageSet) HasAny() bool {
 //     bound argv token-for-token.
 //   - BindHost / BindPath / BindTool: match the call's host / write
 //     target's directory / tool name.
-func (s *PackageSet) matchCall(d Derivation, allowRequiresAllSteps bool) []Package {
-	if s == nil {
-		return nil
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	var out []Package
-	for _, p := range s.packages {
-		if packageBinds(p, d, allowRequiresAllSteps) {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
-// packageBinds reports whether p's binding applies to the call.
 func packageBinds(p Package, d Derivation, allowRequiresAllSteps bool) bool {
 	switch p.Bind.Kind {
 	case BindArgv:
@@ -369,6 +370,13 @@ func packageBinds(p Package, d Derivation, allowRequiresAllSteps bool) bool {
 		// condition; without it a dynamic step could hide inside the
 		// plan while the static subset matched exactly.
 		if !d.StaticPlan || len(d.Plan.Steps) != 1 || len(d.Argvs) != 1 || len(p.Bind.Argv) == 0 {
+			return false
+		}
+		// Symmetric with the creation side: the exact argv describes
+		// the whole invocation only when nothing rides stdin and no
+		// redirect writes a file (a heredoc body or redirect target
+		// would differ without the argv changing).
+		if d.Plan.Steps[0].Stdin != process.StdinNone || len(d.Plan.WriteRedirects) > 0 {
 			return false
 		}
 		if stringSliceEqual(d.Argvs[0], p.Bind.Argv) {

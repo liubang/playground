@@ -20,6 +20,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
@@ -56,7 +57,7 @@ func (r *RuleApprover) RequestApproval(ctx context.Context, req domain.ApprovalR
 		policy := r.policy()
 		if policy.Packages != nil {
 			d := deriveForApproval(req.Call, policy.Env)
-			if v := policy.Packages.Decide(d, policy.Mode, nil); v.Decision == domain.DecisionAllow {
+			if v := policy.Packages.Decide(d, policy.Mode, nil, policy.Workspace); v.Decision == domain.DecisionAllow {
 				return domain.DecisionAllow, nil
 			}
 		}
@@ -76,11 +77,12 @@ func deriveForApproval(call domain.PreparedCall, env permission.DeriveEnv) permi
 	return permission.DeriveEffect(call, env)
 }
 
-// ApprovalRuleHint carries the raw call arguments the frontend got with
-// the approval request, so a remembered decision can derive packages.
+// ApprovalRuleHint carries the trust flavor the frontend chose with an
+// "allow always" decision. It carries ONLY the flavor: the call's
+// identity (tool name, source, raw arguments) is taken from the
+// projected approval card, never from the client, so a remembered
+// decision always derives from exactly what the user was shown.
 type ApprovalRuleHint struct {
-	ToolName  string
-	Arguments json.RawMessage
 	// Trust selects the remembered flavor: "" remembers the derived
 	// minimal-capability grant (recommended), "unsandboxed" remembers
 	// L2 full trust (only meaningful for escalated calls).
@@ -95,9 +97,12 @@ const TrustUnsandboxed = permission.TrustUnsandboxed
 // RememberedRule is the display-facing summary of what an "allow
 // always" approval recorded: a human label plus the packages that were
 // written (session scope, and persisted when a store is configured).
+// PersistFailed reports that the store write failed — the packages are
+// session-effective but will not survive a restart.
 type RememberedRule struct {
-	Label    string
-	Packages []permission.Package
+	Label         string
+	Packages      []permission.Package
+	PersistFailed bool
 }
 
 // RememberCall derives and stores the capability packages for an
@@ -105,7 +110,12 @@ type RememberedRule struct {
 // shells, eval forms, multi-step indicated shapes, ineligible tools).
 // The memory shape is derived from the call's DERIVATION
 // (permission.DeriveRawArgs) — this layer never switches on tool names.
-func (r *RuleApprover) RememberCall(toolName string, arguments json.RawMessage, trust string) (RememberedRule, bool) {
+// The tool source preserves MCP identity across the approval boundary.
+//
+// Persistence failures are reported, not swallowed: the session package
+// is already effective either way, and the user deserves an honest note
+// when the approval will not survive a restart.
+func (r *RuleApprover) RememberCall(toolName string, source domain.ToolSource, arguments json.RawMessage, trust string) (RememberedRule, bool) {
 	if r.policy == nil {
 		return RememberedRule{}, false
 	}
@@ -113,21 +123,25 @@ func (r *RuleApprover) RememberCall(toolName string, arguments json.RawMessage, 
 	if policy.Packages == nil {
 		return RememberedRule{}, false
 	}
-	d := permission.DeriveRawArgs(toolName, arguments, policy.Env)
+	d := permission.DeriveRawArgs(toolName, source, arguments, policy.Env)
 	label, pkgs, ok := permission.MemoryPreviewLabel(d, trust)
 	if !ok {
 		return RememberedRule{}, false
 	}
+	persistErr := false
 	for _, pkg := range pkgs {
+		// The capability set is process-shared: session memory belongs
+		// to THIS workspace, never to a neighbor workspace's calls.
+		pkg.Workspace = policy.Workspace
 		policy.Packages.RememberSession(pkg)
 		if r.store != nil {
-			// Persistence is best-effort: the session package is
-			// already effective, and a store hiccup must not lose the
-			// user's approval.
-			_ = r.store.Remember(context.Background(), pkg)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			err := r.store.Remember(ctx, pkg)
+			cancel()
+			persistErr = persistErr || err != nil
 		}
 	}
-	return RememberedRule{Label: label, Packages: pkgs}, true
+	return RememberedRule{Label: label, Packages: pkgs, PersistFailed: persistErr}, true
 }
 
 // ApprovalRulePreview renders the packages that "allow always" would
@@ -136,8 +150,8 @@ func (r *RuleApprover) RememberCall(toolName string, arguments json.RawMessage, 
 // bare tool name. ok=false means the call cannot be remembered — for
 // escalated calls the minimal flavor is hidden by design (only the
 // explicit unsandboxed trust option is offered).
-func ApprovalRulePreview(toolName string, arguments json.RawMessage, env permission.DeriveEnv) (preview string, grant domain.ExecGrant, ok bool) {
-	d := permission.DeriveRawArgs(toolName, arguments, env)
+func ApprovalRulePreview(toolName string, source domain.ToolSource, arguments json.RawMessage, env permission.DeriveEnv) (preview string, grant domain.ExecGrant, ok bool) {
+	d := permission.DeriveRawArgs(toolName, source, arguments, env)
 	if d.Effect.Unsandboxed {
 		return "", domain.ExecGrant{}, false
 	}
@@ -151,8 +165,8 @@ func ApprovalRulePreview(toolName string, arguments json.RawMessage, env permiss
 // RunCmdTrustPreview reports whether the approval overlay should offer
 // the "always trust (unsandboxed)" option: escalated exec calls whose
 // memory shape is derivable.
-func RunCmdTrustPreview(toolName string, arguments json.RawMessage, env permission.DeriveEnv) bool {
-	d := permission.DeriveRawArgs(toolName, arguments, env)
+func RunCmdTrustPreview(toolName string, source domain.ToolSource, arguments json.RawMessage, env permission.DeriveEnv) bool {
+	d := permission.DeriveRawArgs(toolName, source, arguments, env)
 	if !d.Effect.Unsandboxed {
 		return false
 	}
@@ -163,8 +177,8 @@ func RunCmdTrustPreview(toolName string, arguments json.RawMessage, env permissi
 // approvalConsequence renders the consequence-oriented summary of a
 // call's derived effect for the approval card: what the operation DOES
 // (plus any danger indicators), empty when the call is fully confined.
-func approvalConsequence(toolName string, arguments json.RawMessage, env permission.DeriveEnv) string {
-	d := permission.DeriveRawArgs(toolName, arguments, env)
+func approvalConsequence(toolName string, source domain.ToolSource, arguments json.RawMessage, env permission.DeriveEnv) string {
+	d := permission.DeriveRawArgs(toolName, source, arguments, env)
 	e := d.Effect
 	if !e.CrossesBoundary() && e.Consequence == permission.ConsequenceConfined && len(e.Indicators) == 0 && e.Proven {
 		return ""

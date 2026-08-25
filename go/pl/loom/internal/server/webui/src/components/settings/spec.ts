@@ -359,16 +359,18 @@ export const TABS: TabSpec[] = [
             options: [
               ['', '默认（on-request）'],
               ['on-request', 'on-request · 沙箱内/工作区内免审批'],
-              ['unless-dangerous', 'unless-dangerous · 黑名单模式'],
+              ['unless-dangerous', 'unless-dangerous · 沙箱内联网免审批'],
               ['never', 'never · 无人值守'],
             ],
             hint: '无规则/记忆命中时的决策策略',
             optionHints: {
-              '': 'on-request（默认）：沙箱内命令、工作区内读写免审批；仅出沙箱提权/网络放宽/危险清单弹审批',
-              'on-request': '沙箱内命令、工作区内读写免审批；仅出沙箱提权/网络放宽/危险清单弹审批',
+              '': 'on-request（默认）：沙箱内命令、工作区内读写免审批；出沙箱提权/越界写入/外网/危险信号弹审批',
+              'on-request':
+                '沙箱内命令、工作区内读写免审批；出沙箱提权/越界写入/外网/危险信号弹审批',
               'unless-dangerous':
-                '黑名单模式：仅危险清单和出沙箱提权弹审批，needs_network 直接放网',
-              never: '无人值守：沙箱内放行，提权与危险命令直接拒绝，永不阻塞等待审批',
+                '沙箱内的联网需求直接放行；危险信号、出沙箱提权、越界写入仍弹审批',
+              never:
+                '无人值守：沙箱内放行，提权、越界写入与破坏性/共享状态操作直接拒绝，永不阻塞等待审批',
             },
           },
         ],

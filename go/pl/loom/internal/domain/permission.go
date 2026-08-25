@@ -46,7 +46,7 @@ func (g ExecGrant) IsZero() bool {
 }
 
 // Summary renders the grant for approval prompts and audit logs, e.g.
-// "+网络, +写 ~/.mycli" or "出沙箱". Empty for the zero grant.
+// "+网络, +写 ~/.myapp" or "出沙箱". Empty for the zero grant.
 func (g ExecGrant) Summary() string {
 	if g.Unsandboxed {
 		return "出沙箱（完整权限）"

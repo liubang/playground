@@ -226,8 +226,29 @@ export const ReasoningBlock = memo(function ReasoningBlock({
       : 'reasoning'
   const summary = !active ? reasoningExcerpt(text, false) : ''
   const tail = active ? reasoningExcerpt(text, true) : ''
+  // The expanded body is a 320px-capped inner scroll container: while live, pin
+  // it to the bottom on each delta so the newest thinking is visible (native
+  // scroll never follows appended content). stick tracks whether the user has
+  // scrolled up inside the body — same semantics as the outer transcript's
+  // following flag; expanding always re-pins to the latest first.
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const stickRef = useRef(true)
+  useEffect(() => {
+    const body = bodyRef.current
+    if (!active || !body || !stickRef.current) return
+    body.scrollTop = body.scrollHeight
+  }, [text, active])
   return (
-    <details className={'block block-reasoning disclosure' + (active ? ' is-live' : '')}>
+    <details
+      className={'block block-reasoning disclosure' + (active ? ' is-live' : '')}
+      onToggle={(e) => {
+        if ((e.target as HTMLDetailsElement).open && active) {
+          stickRef.current = true
+          const body = bodyRef.current
+          if (body) body.scrollTop = body.scrollHeight
+        }
+      }}
+    >
       <summary>
         <Icon name="lightbulb" />
         {/* key=text.length: each delta remounts the element, refilling the bounded
@@ -243,7 +264,16 @@ export const ReasoningBlock = memo(function ReasoningBlock({
           {tail}
         </div>
       )}
-      <div className="body">{text}</div>
+      <div
+        className="body"
+        ref={bodyRef}
+        onScroll={(e) => {
+          const el = e.currentTarget
+          stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+        }}
+      >
+        {text}
+      </div>
     </details>
   )
 })

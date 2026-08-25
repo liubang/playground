@@ -68,7 +68,7 @@ type CapabilityGrant struct {
 ```
 
 - L0：`CapabilityGrant{}`（零值）
-- L1：`{NetworkFull: true, WritablePaths: ["~/.mycli"]}` 等
+- L1：`{NetworkFull: true, WritablePaths: ["~/.myapp"]}` 等
 - L2：`{Unsandboxed: true}`（其余字段无意义，加载时校验互斥）
 
 `process.SeatbeltSandbox` 现有 `AllowNetwork`/`WritablePaths` 选项天然可消费该结构，执行层改动很小（§6.4）。
@@ -169,7 +169,7 @@ chain := permission.Chain{
       "network": "full",
       "write": ["/Users/liubang/.mycli"]
     },
-    "match": ["/Users/liubang/.mycli/bin/mycli query submit --scene SKILL"],
+    "match": ["/Users/liubang/.mycli/bin/mycli query submit --scene REPORT"],
     "not_match": ["mycli"]
   },
   {

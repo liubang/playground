@@ -184,7 +184,7 @@ func TestCoversSensitiveLocation(t *testing.T) {
 		// descendant of /tmp and /tmp is correctly an ancestor of sensitive
 		// locations — a platform-independent directory gives a stable verdict.
 		{filepath.Join(canonicalHome, "Library", "Logs", "myapp"), false},
-		{filepath.Join(canonicalHome, ".mycli"), false},
+		{filepath.Join(canonicalHome, ".myapp"), false},
 		{filepath.Join(canonicalHome, "projects", "repo"), false},
 		{"/opt", false},
 		{"/usr/local/share", false},

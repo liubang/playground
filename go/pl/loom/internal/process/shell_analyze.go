@@ -372,29 +372,3 @@ func resolveWord(w *syntax.Word) (string, bool) {
 	}
 	return b.String(), true
 }
-
-// UnwrapSimpleShell rewrites a shell -c invocation (any supported -c flag
-// form) into the plain argv the script denotes — but only when the script
-// is provably ONE static command: no pipes, redirections, sequencing,
-// substitutions, control flow, env-assignment prefixes, or stdin feeds.
-// Execution is unaffected — the command still runs through the shell; the
-// unwrapped argv only feeds effect derivation and package binding.
-func UnwrapSimpleShell(argv []string) ([]string, bool) {
-	script, ok := ShellScriptForm(argv)
-	if !ok {
-		return nil, false
-	}
-	analysis, ok := AnalyzeShellScript(script)
-	if !ok || !analysis.Static {
-		return nil, false
-	}
-	if len(analysis.Commands) != 1 || len(analysis.Pipes) > 0 ||
-		len(analysis.WriteRedirects) > 0 || analysis.DynamicWrites {
-		return nil, false
-	}
-	cmd := analysis.Commands[0]
-	if len(cmd.Argv) == 0 || cmd.Stdin != StdinNone {
-		return nil, false
-	}
-	return cmd.Argv, true
-}

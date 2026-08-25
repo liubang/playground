@@ -218,8 +218,8 @@ var npmSubcommands = map[string]Effect{
 	"i":         {Proven: true, Consequence: ConsequenceConfined, Network: HostSet{Any: true}, Reason: "installs dependencies from the registry"},
 	"add":       {Proven: true, Consequence: ConsequenceConfined, Network: HostSet{Any: true}, Reason: "installs dependencies from the registry"},
 	"update":    {Proven: true, Consequence: ConsequenceConfined, Network: HostSet{Any: true}, Reason: "updates dependencies from the registry"},
-	"exec":      {Proven: false, Reason: "executes package code downloaded at runtime"},
-	"dlx":       {Proven: false, Reason: "executes package code downloaded at runtime"},
+	"exec":      {Proven: false, OpaquePayload: true, Reason: "executes package code downloaded at runtime"},
+	"dlx":       {Proven: false, OpaquePayload: true, Reason: "executes package code downloaded at runtime"},
 	"uninstall": {Proven: true, Consequence: ConsequenceConfined, Reason: "removes installed dependencies"},
 }
 
@@ -299,7 +299,11 @@ func semDeriveDocker(argv []string) (Effect, bool) {
 				}, true
 			}
 		}
-		return Effect{Proven: false, Reason: "docker " + argv[1] + " executes container content not statically analyzable"}, true
+		return Effect{
+			Proven:        false,
+			OpaquePayload: true,
+			Reason:        "docker " + argv[1] + " executes container content not statically analyzable (the container runtime is outside the sandbox)",
+		}, true
 	}
 	return Effect{
 		Proven: true, Consequence: ConsequenceConfined,
@@ -330,10 +334,11 @@ func semDeriveKubectl(argv []string) (Effect, bool) {
 		// Remote execution / arbitrary data movement inside the
 		// cluster: the payload is not statically analyzable.
 		return Effect{
-			Proven:     false,
-			Network:    HostSet{Any: true},
-			Reason:     "kubectl " + argv[1] + " executes or tunnels into the cluster (payload not analyzable)",
-			Indicators: []string{"kubectl " + argv[1] + " runs commands or copies data inside the cluster, beyond the sandbox"},
+			Proven:        false,
+			OpaquePayload: true,
+			Network:       HostSet{Any: true},
+			Reason:        "kubectl " + argv[1] + " executes or tunnels into the cluster (payload not analyzable)",
+			Indicators:    []string{"kubectl " + argv[1] + " runs commands or copies data inside the cluster, beyond the sandbox"},
 		}, true
 	}
 	return Effect{

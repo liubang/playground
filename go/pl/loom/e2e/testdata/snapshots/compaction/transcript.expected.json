@@ -2428,6 +2428,7 @@
             "{{cwd}}/band.txt"
           ],
           "risk": 1,
+          "source": "builtin",
           "tool": "read_file"
         },
         "sequence": 8,
@@ -2459,6 +2460,7 @@
             "{{cwd}}/band.txt"
           ],
           "risk": 1,
+          "source": "builtin",
           "tool": "read_file"
         },
         "sequence": 10,
@@ -5081,6 +5083,7 @@
             "{{cwd}}/small.txt"
           ],
           "risk": 1,
+          "source": "builtin",
           "tool": "read_file"
         },
         "sequence": 28,
@@ -5112,6 +5115,7 @@
             "{{cwd}}/small.txt"
           ],
           "risk": 1,
+          "source": "builtin",
           "tool": "read_file"
         },
         "sequence": 30,

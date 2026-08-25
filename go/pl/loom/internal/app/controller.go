@@ -1089,7 +1089,7 @@ func (c *Controller) ForgetPackage(ctx context.Context, bind permission.Binding)
 		return fmt.Errorf("package %v not found in remembered store", bind)
 	}
 	if c.packages != nil {
-		c.packages.ForgetSession(bind)
+		c.packages.ForgetSession(bind, c.bootstrap.CurrentPermissionPolicy().Workspace)
 	}
 	if err := c.bootstrap.ReloadPolicy(ctx); err != nil {
 		return fmt.Errorf("reload policy: %w", err)
@@ -1744,18 +1744,13 @@ func (c *Controller) handleResolveApproval(cmd controllerCommand) {
 	// loop: the woken loop immediately re-evaluates the batch's remaining
 	// calls against session memory, and a late memory re-prompts calls the
 	// user just approved categorically (the duplicate request then
-	// auto-resolves underneath its still-visible card). Remembering is
-	// skipped only when the binding provably cannot be accepted — a pending
-	// request holding a DIFFERENT binding; with no pending slot the decision
-	// is early-cached (or the card is stale, where remembering is idempotent
-	// anyway), so the user's explicit intent is honored either way.
+	// auto-resolves underneath its still-visible card). The memory is
+	// derived from the projected card — the exact call the user was
+	// shown — never from client-supplied arguments, and only when the
+	// card's identity matches the binding being resolved.
 	var note string
-	rememberable := cmd.Decision == domain.DecisionAllow && cmd.RuleHint != nil
-	if pending, ok := c.approver.PendingBinding(cmd.Approval.ApprovalID); ok && pending != cmd.Approval {
-		rememberable = false
-	}
-	if rememberable {
-		note = c.rememberApprovalRule(cmd.RuleHint)
+	if cmd.Decision == domain.DecisionAllow && cmd.RuleHint != nil {
+		note = c.rememberApprovalRule(cmd.Approval, cmd.RuleHint.Trust)
 	}
 
 	// Record the actor BEFORE resolving: the resolution wakes the turn
@@ -1789,11 +1784,24 @@ func (c *Controller) handleResolveApproval(cmd controllerCommand) {
 // an approved call (session scope in the shared set, persisted when a
 // remembered store is configured; rules.persist_remembered=false opts
 // out by not opening one). Returns the display note, empty when the
-// call is not rememberable.
-func (c *Controller) rememberApprovalRule(hint *ApprovalRuleHint) string {
-	rule, ok := c.rulesApprover.RememberCall(hint.ToolName, hint.Arguments, hint.Trust)
+// call is not rememberable. The derivation input is the projected
+// approval card whose identity matches the binding — never the client's
+// rule hint, which carries only the trust flavor.
+func (c *Controller) rememberApprovalRule(binding ApprovalBinding, trust string) string {
+	c.mu.Lock()
+	card, ok := c.pendingCards[binding.ApprovalID]
+	c.mu.Unlock()
+	if !ok || card.CallID != binding.CallID || card.ArgsHash != binding.ArgsHash {
+		// No card (stale/early resolution) or a card for a DIFFERENT
+		// call: there is nothing trustworthy to derive memory from.
+		return ""
+	}
+	rule, ok := c.rulesApprover.RememberCall(card.ToolName, card.Source, card.Arguments, trust)
 	if !ok {
 		return ""
+	}
+	if rule.PersistFailed {
+		return rule.Label + "（仅本次会话生效：持久化失败）"
 	}
 	if store := c.rememberedStore(); store != nil {
 		return rule.Label + " (saved to " + store.Path() + ")"
@@ -2489,6 +2497,7 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				ApprovalID:  ev.ID,
 				CallID:      payload.CallID,
 				ToolName:    payload.Tool,
+				Source:      payload.Source,
 				Risk:        payload.Risk,
 				Description: payload.ApprovalDesc,
 				ArgsHash:    payload.ArgsHash,
@@ -2501,16 +2510,16 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 			// L2 trust option for escalated calls, and the derived consequence
 			// description — what the operation DOES, not its text.
 			env := s.controller.deriveEnv()
-			if preview, _, ok := ApprovalRulePreview(payload.Tool, card.Arguments, env); ok {
+			if preview, _, ok := ApprovalRulePreview(payload.Tool, payload.Source, card.Arguments, env); ok {
 				card.RulePreview = preview
 			}
-			if RunCmdTrustPreview(payload.Tool, card.Arguments, env) {
-				d := permission.DeriveRawArgs(payload.Tool, card.Arguments, env)
+			if RunCmdTrustPreview(payload.Tool, payload.Source, card.Arguments, env) {
+				d := permission.DeriveRawArgs(payload.Tool, payload.Source, card.Arguments, env)
 				if label, _, ok := permission.MemoryPreviewLabel(d, TrustUnsandboxed); ok {
 					card.TrustPreview = label
 				}
 			}
-			card.Consequence = approvalConsequence(payload.Tool, card.Arguments, env)
+			card.Consequence = approvalConsequence(payload.Tool, payload.Source, card.Arguments, env)
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindApprovalRequested, card)
 			// Project the card so reconnecting clients can rebuild it from
 			// the snapshot (the requested event itself is not replayed into
@@ -2768,6 +2777,7 @@ type contextCompactedDTO struct {
 type toolCallAuditDTO struct {
 	CallID       domain.ToolCallID `json:"call_id"`
 	Tool         string            `json:"tool"`
+	Source       domain.ToolSource `json:"source,omitempty"`
 	Risk         domain.RiskLevel  `json:"risk"`
 	ArgsHash     string            `json:"args_hash,omitempty"`
 	ReadPaths    []string          `json:"read_paths,omitempty"`

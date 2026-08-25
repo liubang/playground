@@ -131,6 +131,7 @@ var subcommandToken = regexp.MustCompile(`^[a-z][a-z0-9_+-]*$`)
 var neverPersistPrograms = map[string]struct{}{
 	"rm": {}, "rmdir": {}, "unlink": {}, "sudo": {}, "su": {}, "doas": {},
 	"dd": {}, "mkfs": {}, "shred": {}, "fdisk": {}, "diskutil": {},
+	"newfs_hfs": {}, "hdiutil": {},
 }
 
 // interpreterPrograms are memory-eligible ONLY when invoking a script
@@ -160,7 +161,7 @@ func scriptFileToken(arg string) bool {
 var subcommandedPrograms = map[string]struct{}{
 	"go": {}, "npm": {}, "npx": {}, "pnpm": {}, "yarn": {}, "cargo": {},
 	"git": {}, "bazel": {}, "docker": {}, "kubectl": {}, "helm": {}, "gh": {},
-	"golangci-lint": {}, "ruff": {}, "eslint": {}, "tsc": {}, "mycli": {},
+	"golangci-lint": {}, "ruff": {}, "eslint": {}, "tsc": {},
 }
 
 // DeriveMemoryPrefixes computes the categorical prefixes an exec call
@@ -174,7 +175,15 @@ func DeriveMemoryPrefixes(d Derivation) ([][]string, bool) {
 		return nil, false
 	}
 	var prefixes [][]string
-	for _, argv := range d.Argvs {
+	for i, argv := range d.Argvs {
+		// A step that executes content not present in its argv (a
+		// container image, a runtime-downloaded package, a cluster
+		// payload, stdin-fed program text) must never be remembered
+		// categorically: the prefix would bless every future payload.
+		// StepEffects align with Argvs index-by-index on a static plan.
+		if i < len(d.StepEffects) && d.StepEffects[i].OpaquePayload {
+			return nil, false
+		}
 		prefix, ok := deriveArgvPrefix(argv)
 		if !ok {
 			return nil, false

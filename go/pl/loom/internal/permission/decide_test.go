@@ -26,7 +26,7 @@ import (
 // decide is the test shorthand: derive + decide an argv in the given mode.
 func decide(set *PackageSet, mode ApprovalMode, argv ...string) domain.Verdict {
 	d := deriveExec(argv)
-	return set.Decide(d, mode, nil)
+	return set.Decide(d, mode, nil, "")
 }
 
 func allowPkg(prefix []string, grant PackageGrant, ceiling Consequence) Package {
@@ -124,13 +124,13 @@ func TestDecideNetworkResidual(t *testing.T) {
 	set := NewPackageSet()
 	argv := []string{"mycli", "sync"}
 	d := deriveExec(argv, needsNet)
-	if v := set.Decide(d, ModeOnRequest, nil); v.Decision != domain.DecisionAsk {
+	if v := set.Decide(d, ModeOnRequest, nil, ""); v.Decision != domain.DecisionAsk {
 		t.Fatalf("needs_network on-request = %s, want ask", v.Decision)
 	}
-	if v := set.Decide(d, ModeUnlessDangerous, nil); v.Decision != domain.DecisionAllow || !v.Grant.NetworkFull {
+	if v := set.Decide(d, ModeUnlessDangerous, nil, ""); v.Decision != domain.DecisionAllow || !v.Grant.NetworkFull {
 		t.Fatalf("needs_network unless-dangerous = %s grant %+v", v.Decision, v.Grant)
 	}
-	if v := set.Decide(d, ModeNever, nil); v.Decision != domain.DecisionAllow || !v.Grant.NetworkFull {
+	if v := set.Decide(d, ModeNever, nil, ""); v.Decision != domain.DecisionAllow || !v.Grant.NetworkFull {
 		t.Fatalf("needs_network never = %s grant %+v", v.Decision, v.Grant)
 	}
 }
@@ -138,15 +138,15 @@ func TestDecideNetworkResidual(t *testing.T) {
 func TestDecideEscalationResidual(t *testing.T) {
 	set := NewPackageSet()
 	d := deriveExec([]string{"make", "deploy"}, escalated)
-	if v := set.Decide(d, ModeOnRequest, nil); v.Decision != domain.DecisionAsk || !v.Grant.Unsandboxed {
+	if v := set.Decide(d, ModeOnRequest, nil, ""); v.Decision != domain.DecisionAsk || !v.Grant.Unsandboxed {
 		t.Fatalf("escalation on-request = %s grant %+v", v.Decision, v.Grant)
 	}
-	if v := set.Decide(d, ModeNever, nil); v.Decision != domain.DecisionDeny {
+	if v := set.Decide(d, ModeNever, nil, ""); v.Decision != domain.DecisionDeny {
 		t.Fatalf("escalation never = %s, want deny", v.Decision)
 	}
 	// An unsandboxed package covers it.
 	set.Add(allowPkg([]string{"make", "deploy"}, PackageGrant{Unsandboxed: true}, ConsequenceConfined))
-	if v := set.Decide(d, ModeOnRequest, nil); v.Decision != domain.DecisionAllow || !v.Grant.Unsandboxed {
+	if v := set.Decide(d, ModeOnRequest, nil, ""); v.Decision != domain.DecisionAllow || !v.Grant.Unsandboxed {
 		t.Fatalf("escalation with L2 package = %s grant %+v", v.Decision, v.Grant)
 	}
 }
@@ -164,19 +164,19 @@ func TestDecideHostPackages(t *testing.T) {
 		Call:       domain.ToolCall{Name: "web_fetch"},
 		URLRequest: &domain.URLRequest{Host: "api.example.com"},
 	}, DeriveEnv{})
-	if v := set.Decide(d, ModeOnRequest, nil); v.Decision != domain.DecisionAllow {
+	if v := set.Decide(d, ModeOnRequest, nil, ""); v.Decision != domain.DecisionAllow {
 		t.Fatalf("allowed host web_fetch = %s", v.Decision)
 	}
 	// curl to the same host: the host package covers the network
 	// portion of the exec effect (domain-level authorization).
 	d = deriveExec([]string{"curl", "-s", "https://api.example.com/x"})
-	v := set.Decide(d, ModeOnRequest, nil)
+	v := set.Decide(d, ModeOnRequest, nil, "")
 	if v.Decision != domain.DecisionAllow || !v.Grant.NetworkFull {
 		t.Fatalf("allowed host curl = %s grant %+v", v.Decision, v.Grant)
 	}
 	// An unknown host asks in on-request.
 	d = deriveExec([]string{"curl", "-s", "https://other.example.com/x"})
-	if v := set.Decide(d, ModeOnRequest, nil); v.Decision != domain.DecisionAsk {
+	if v := set.Decide(d, ModeOnRequest, nil, ""); v.Decision != domain.DecisionAsk {
 		t.Fatalf("unknown host curl = %s, want ask", v.Decision)
 	}
 	// A deny host wins even over the allow.
@@ -185,7 +185,7 @@ func TestDecideHostPackages(t *testing.T) {
 		Decision: domain.DecisionDeny, Scope: ScopeUser,
 	})
 	d = deriveExec([]string{"curl", "-s", "https://api.example.com/x"})
-	if v := set.Decide(d, ModeOnRequest, nil); v.Decision != domain.DecisionDeny {
+	if v := set.Decide(d, ModeOnRequest, nil, ""); v.Decision != domain.DecisionDeny {
 		t.Fatal("host deny must win")
 	}
 }
@@ -199,11 +199,11 @@ func TestDecideHostWildcard(t *testing.T) {
 		Scope:          ScopeUser,
 	})
 	d := deriveExec([]string{"curl", "-s", "https://a.b.example.com/x"})
-	if v := set.Decide(d, ModeOnRequest, nil); v.Decision != domain.DecisionAllow {
+	if v := set.Decide(d, ModeOnRequest, nil, ""); v.Decision != domain.DecisionAllow {
 		t.Fatalf("wildcard subdomain must be covered: %s", v.Decision)
 	}
 	d = deriveExec([]string{"curl", "-s", "https://example.com/x"})
-	if v := set.Decide(d, ModeOnRequest, nil); v.Decision != domain.DecisionAsk {
+	if v := set.Decide(d, ModeOnRequest, nil, ""); v.Decision != domain.DecisionAsk {
 		t.Fatalf("wildcard must NOT cover the apex: %s", v.Decision)
 	}
 }
@@ -216,10 +216,10 @@ func TestDecideMCP(t *testing.T) {
 		Risk:       domain.R3,
 	}
 	d := DeriveEffect(mcp, DeriveEnv{})
-	if v := set.Decide(d, ModeOnRequest, nil); v.Decision != domain.DecisionAsk {
+	if v := set.Decide(d, ModeOnRequest, nil, ""); v.Decision != domain.DecisionAsk {
 		t.Fatalf("MCP R3 on-request = %s, want ask", v.Decision)
 	}
-	if v := set.Decide(d, ModeNever, nil); v.Decision != domain.DecisionDeny {
+	if v := set.Decide(d, ModeNever, nil, ""); v.Decision != domain.DecisionDeny {
 		t.Fatalf("MCP R3 never = %s, want deny", v.Decision)
 	}
 	// A tool-name package covers it.
@@ -229,14 +229,14 @@ func TestDecideMCP(t *testing.T) {
 		MaxConsequence: ConsequenceConfined,
 		Scope:          ScopeUser,
 	})
-	if v := set.Decide(d, ModeOnRequest, nil); v.Decision != domain.DecisionAllow {
+	if v := set.Decide(d, ModeOnRequest, nil, ""); v.Decision != domain.DecisionAllow {
 		t.Fatal("tool package must cover the MCP call")
 	}
 	// Read-only MCP (R1) auto-allows even with no package at all.
 	fresh := NewPackageSet()
 	mcp.Risk = domain.R1
 	d = DeriveEffect(mcp, DeriveEnv{})
-	if v := fresh.Decide(d, ModeOnRequest, nil); v.Decision != domain.DecisionAllow {
+	if v := fresh.Decide(d, ModeOnRequest, nil, ""); v.Decision != domain.DecisionAllow {
 		t.Fatalf("read-only MCP = %s, want allow", v.Decision)
 	}
 }
@@ -265,13 +265,13 @@ func TestDecideUserIntent(t *testing.T) {
 		URLRequest: &domain.URLRequest{Host: "docs.example.com"},
 	}, DeriveEnv{})
 	hosts := map[string]struct{}{"docs.example.com": {}}
-	if v := set.Decide(d, ModeOnRequest, hosts); v.Decision != domain.DecisionAllow || v.Source != SourceUserIntent {
+	if v := set.Decide(d, ModeOnRequest, hosts, ""); v.Decision != domain.DecisionAllow || v.Source != SourceUserIntent {
 		t.Fatalf("user-mentioned host = %s (%s)", v.Decision, v.Source)
 	}
 	// never mode keeps its strict contract: intent hosts are ignored
 	// by the caller (nil), so the fetch asks' never-mode residual
 	// grants network silently (the sandbox contract).
-	if v := set.Decide(d, ModeNever, nil); v.Decision != domain.DecisionAllow {
+	if v := set.Decide(d, ModeNever, nil, ""); v.Decision != domain.DecisionAllow {
 		t.Fatalf("never mode web_fetch = %s", v.Decision)
 	}
 	// A deny still wins over user intent.
@@ -279,7 +279,7 @@ func TestDecideUserIntent(t *testing.T) {
 		Bind:     Binding{Kind: BindHost, Host: "docs.example.com"},
 		Decision: domain.DecisionDeny, Scope: ScopeUser,
 	})
-	if v := set.Decide(d, ModeOnRequest, hosts); v.Decision != domain.DecisionDeny {
+	if v := set.Decide(d, ModeOnRequest, hosts, ""); v.Decision != domain.DecisionDeny {
 		t.Fatal("deny must win over user intent")
 	}
 }
@@ -290,10 +290,10 @@ func TestDecideWriteOutside(t *testing.T) {
 		Call:         domain.ToolCall{Name: "write"},
 		WriteRequest: &domain.WriteRequest{Path: "/outside/notes/x.md"},
 	}, DeriveEnv{Roots: []string{"/ws"}})
-	if v := set.Decide(d, ModeOnRequest, nil); v.Decision != domain.DecisionAsk {
+	if v := set.Decide(d, ModeOnRequest, nil, ""); v.Decision != domain.DecisionAsk {
 		t.Fatalf("outside write on-request = %s, want ask", v.Decision)
 	}
-	if v := set.Decide(d, ModeNever, nil); v.Decision != domain.DecisionDeny {
+	if v := set.Decide(d, ModeNever, nil, ""); v.Decision != domain.DecisionDeny {
 		t.Fatalf("outside write never = %s, want deny", v.Decision)
 	}
 	// A path package covers the directory.
@@ -303,7 +303,7 @@ func TestDecideWriteOutside(t *testing.T) {
 		MaxConsequence: ConsequenceConfined,
 		Scope:          ScopeUser,
 	})
-	if v := set.Decide(d, ModeOnRequest, nil); v.Decision != domain.DecisionAllow {
+	if v := set.Decide(d, ModeOnRequest, nil, ""); v.Decision != domain.DecisionAllow {
 		t.Fatal("path package must cover the outside write")
 	}
 }
@@ -312,7 +312,7 @@ func TestDecideGUIAlwaysAsks(t *testing.T) {
 	set := NewPackageSet()
 	d := deriveExec([]string{"open", "https://example.com"}, needsGUI)
 	for _, mode := range []ApprovalMode{ModeOnRequest, ModeUnlessDangerous, ModeNever} {
-		v := set.Decide(d, mode, nil)
+		v := set.Decide(d, mode, nil, "")
 		want := domain.DecisionAsk
 		if mode == ModeNever {
 			want = domain.DecisionDeny

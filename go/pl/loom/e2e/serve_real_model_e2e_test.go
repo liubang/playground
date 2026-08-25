@@ -325,8 +325,8 @@ func TestServeRealModelPrepareFailureE2E(t *testing.T) {
 // run_cmd writable_paths scoped grant: a command that drops a file OUTSIDE
 // the workspace must be completed WITHOUT leaving the sandbox — the model
 // is expected to declare writable_paths (the scoped in-sandbox widening)
-// instead of require_escalated, exactly the behavior the myapp/mycli
-// approval-storm session motivated.
+// instead of require_escalated — the behavior a real approval-storm
+// session motivated.
 //
 // Acceptance coverage:
 //  1. the file lands on disk with the expected content (real write through

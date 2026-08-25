@@ -31,7 +31,7 @@ import (
 // credentialPathHints are path fragments whose presence in a network
 // tool's argv suggests credential exfiltration.
 var credentialPathHints = []string{
-	".ssh", ".aws", ".kube", ".gnupg", ".my_sso_config", "id_rsa", "id_ed25519",
+	".ssh", ".aws", ".kube", ".gnupg", ".azure", "id_rsa", "id_ed25519",
 	"credentials", "/etc/shadow", "/etc/passwd", ".netrc", ".git-credentials",
 }
 
@@ -136,7 +136,11 @@ func semDeriveCurl(argv []string) (Effect, bool) {
 	e := Effect{Proven: true, Consequence: ConsequenceConfined, Reason: "curl"}
 	for _, pos := range opts.Positional {
 		if host, isURL := hostOfURL(pos); isURL {
-			e.Network.Hosts = unionStrings(e.Network.Hosts, []string{host})
+			// Loopback targets are sandbox-permitted: not a network
+			// requirement, but kept in NamedHosts for deny matching.
+			if !isLoopbackHost(host) {
+				e.Network.Hosts = unionStrings(e.Network.Hosts, []string{host})
+			}
 			e.NamedHosts = unionStrings(e.NamedHosts, []string{host})
 		}
 	}
@@ -146,7 +150,7 @@ func semDeriveCurl(argv []string) (Effect, bool) {
 		// but NamedHosts keeps the argv-visible targets for deny
 		// matching.
 		e.Network = HostSet{Any: true}
-	} else if len(e.Network.Hosts) == 0 && !opts.Has("--version", "-V", "--help", "-h", "--manual", "-M") {
+	} else if len(e.NamedHosts) == 0 && !opts.Has("--version", "-V", "--help", "-h", "--manual", "-M") {
 		// curl without a URL reads config/stdin for targets — the
 		// destination is not statically provable.
 		e.Network = HostSet{Any: true}
@@ -210,14 +214,16 @@ func semDeriveWget(argv []string) (Effect, bool) {
 	e := Effect{Proven: true, Consequence: ConsequenceConfined, Reason: "wget"}
 	for _, pos := range opts.Positional {
 		if host, isURL := hostOfURL(pos); isURL {
-			e.Network.Hosts = unionStrings(e.Network.Hosts, []string{host})
+			if !isLoopbackHost(host) {
+				e.Network.Hosts = unionStrings(e.Network.Hosts, []string{host})
+			}
 			e.NamedHosts = unionStrings(e.NamedHosts, []string{host})
 		}
 	}
 	if opts.Has("--config", "-e", "--execute", "--proxy-user") {
 		// A config file / command file can inject additional URLs.
 		e.Network = HostSet{Any: true}
-	} else if len(e.Network.Hosts) == 0 && !opts.Has("--version", "-V", "--help", "-h") {
+	} else if len(e.NamedHosts) == 0 && !opts.Has("--version", "-V", "--help", "-h") {
 		e.Network = HostSet{Any: true}
 	}
 	for _, arg := range credentialArgs(argv[1:]) {

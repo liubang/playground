@@ -122,6 +122,16 @@ func (s SeatbeltSandbox) Prepare(spec SandboxSpec) (SandboxLaunch, error) {
 	}, nil
 }
 
+// sandboxLiteralRule renders seatbelt literal filters for a list of
+// exact paths, e.g. (literal "/dev/null").
+func sandboxLiteralRule(paths []string) string {
+	parts := make([]string, 0, len(paths))
+	for _, p := range paths {
+		parts = append(parts, "(literal "+seatbeltQuote(p)+")")
+	}
+	return strings.Join(parts, " ")
+}
+
 func (s SeatbeltSandbox) profile(spec SandboxSpec) (string, error) {
 	if strings.TrimSpace(spec.ExecutablePath) == "" {
 		return "", fmt.Errorf("executable path is required")
@@ -173,8 +183,10 @@ func (s SeatbeltSandbox) profile(spec SandboxSpec) (string, error) {
 		"(allow network-outbound (remote ip \"localhost:*\"))",
 		// Countless tools redirect output to /dev/null (git included) and
 		// read randomness at startup; denying them breaks everyday commands
-		// for no security gain.
-		"(allow file-read* file-write* (literal \"/dev/null\"))",
+		// for no security gain. The writable literals come from
+		// SandboxWritableLiterals — the single source the permission
+		// derivation also consults.
+		"(allow file-read* file-write* "+sandboxLiteralRule(SandboxWritableLiterals)+")",
 		"(allow file-read* (literal \"/dev/zero\") (literal \"/dev/random\") (literal \"/dev/urandom\"))",
 	)
 	for _, rule := range sensitiveReadDenies() {

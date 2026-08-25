@@ -84,6 +84,13 @@ func OpenRememberedStore(ctx context.Context, path string) (*RememberedStore, er
 		_ = db.Close()
 		return nil, err
 	}
+	// The authorization database must not be world-readable: the file
+	// is created with the process umask (typically 0644), so tighten it
+	// explicitly (the parent directory is already 0700).
+	if err := os.Chmod(path, 0o600); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("restrict remembered store permissions: %w", err)
+	}
 	return store, nil
 }
 
@@ -157,10 +164,15 @@ func decodeBinding(kind, value string) (Binding, error) {
 
 // Remember upserts one approval as a user-scope allow package. The
 // latest approval wins: re-remembering the same binding updates grant,
-// consequence ceiling, and justification.
+// consequence ceiling, and justification. The package is validated with
+// the same invariants as package files, so every writer — not just the
+// approval path — is held to the binding/grant rules.
 func (s *RememberedStore) Remember(ctx context.Context, pkg Package) error {
 	if pkg.Decision != domain.DecisionAllow {
 		return fmt.Errorf("only allow packages can be remembered")
+	}
+	if err := validateLoadedPackage(&pkg); err != nil {
+		return fmt.Errorf("remember package: %w", err)
 	}
 	kind, value, err := encodeBinding(pkg.Bind)
 	if err != nil {
@@ -303,6 +315,13 @@ func queryRememberedPackages(ctx context.Context, db *sql.DB) ([]Package, error)
 			continue
 		}
 		p.MaxConsequence = c
+		// The DB is writable by any local process: rows must pass the
+		// same validation as package files, or a hand-edited row becomes
+		// a channel that bypasses binding/grant invariants (sensitive
+		// path grants, malformed hosts, unsandboxed on odd bindings).
+		if err := validateLoadedPackage(&p); err != nil {
+			continue
+		}
 		out = append(out, p)
 	}
 	if err := rows.Err(); err != nil {
