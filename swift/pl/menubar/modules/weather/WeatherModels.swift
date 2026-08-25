@@ -2,10 +2,14 @@ import Foundation
 
 /// A resolved place to fetch weather for. Codable so it persists in
 /// UserDefaults once resolved from a city name.
-struct WeatherLocation: Equatable, Sendable, Codable {
+struct WeatherLocation: Equatable, Sendable, Codable, Identifiable {
     var name: String
     var latitude: Double
     var longitude: Double
+
+    var id: String {
+        "\(latitude),\(longitude)"
+    }
 }
 
 /// Unified weather condition across providers. Open-Meteo's WMO codes and

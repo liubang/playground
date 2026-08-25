@@ -20,5 +20,7 @@
 	<true/>
 	<key>NSCalendarsUsageDescription</key>
 	<string>AuraBar 需要读取你的日历，以便在日历面板中显示日程。</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>AuraBar 需要获取你的位置，以便自动显示当前城市的天气。</string>
 </dict>
 </plist>

@@ -83,8 +83,7 @@ struct WeatherPopover: View {
         return VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(snapshot.location.name)
-                        .font(.system(.headline, design: .rounded))
+                    locationMenu(snapshot)
                     Text("\(current.condition.label) · 体感 \(Int(current.apparentTemperature.rounded()))°")
                         .font(.caption)
                         .foregroundStyle(theme.textSecondary)
@@ -112,6 +111,49 @@ struct WeatherPopover: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardStyle()
+    }
+
+    /// Location name with a quick-switch dropdown: auto-location plus
+    /// every saved city.
+    private func locationMenu(_ snapshot: WeatherSnapshot) -> some View {
+        Menu {
+            Button {
+                store.setAutoLocation(true)
+            } label: {
+                HStack {
+                    Label("自动定位", systemImage: "location")
+                    if store.autoLocation {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+            if !store.savedLocations.isEmpty {
+                Divider()
+                ForEach(store.savedLocations) { loc in
+                    Button {
+                        store.selectLocation(loc)
+                    } label: {
+                        HStack {
+                            Text(loc.name)
+                            if loc == snapshot.location, !store.autoLocation {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Text(snapshot.location.name)
+                    .font(.system(.headline, design: .rounded))
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(theme.textSecondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
     }
 
     // MARK: - 24h curve
@@ -254,8 +296,19 @@ struct WeatherPopover: View {
                     .labelsHidden()
                     .pickerStyle(.segmented)
 
-                    SettingsField(prompt: "城市（如 北京 / 上海）", text: $cityDraft) {
-                        Task { await store.setCity(cityDraft) }
+                    Toggle("自动定位", isOn: autoLocationBinding)
+                        .font(.caption)
+                        .tint(theme.accent)
+
+                    if store.autoLocation {
+                        autoLocationStatus
+                    } else {
+                        SettingsField(prompt: "添加城市（如 北京 / 上海）", text: $cityDraft) {
+                            Task { await store.setCity(cityDraft) }
+                        }
+                        if !store.savedLocations.isEmpty {
+                            savedLocationList
+                        }
                     }
 
                     if store.providerKind == .qweather {
@@ -264,12 +317,6 @@ struct WeatherPopover: View {
                             Task { await store.refresh() }
                         }
                     }
-
-                    if let location = store.location {
-                        Text("当前定位：\(location.name)")
-                            .font(.caption2)
-                            .foregroundStyle(theme.textSecondary)
-                    }
                 }
                 .padding(.top, 4)
                 .transition(.opacity.combined(with: .move(edge: .top)))
@@ -277,6 +324,78 @@ struct WeatherPopover: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 2)
+    }
+
+    private var autoLocationBinding: Binding<Bool> {
+        Binding(
+            get: { store.autoLocation },
+            set: { store.setAutoLocation($0) },
+        )
+    }
+
+    /// Status line for auto mode: locating spinner, permission hint with
+    /// a shortcut to System Settings, or the resolved place name.
+    private var autoLocationStatus: some View {
+        HStack(spacing: 6) {
+            if store.locationService.isLocating {
+                ProgressView().controlSize(.small)
+                Text("定位中…")
+            } else if store.locationService.authorizationDenied {
+                Image(systemName: "location.slash")
+                    .foregroundStyle(theme.warning)
+                Text("定位未授权")
+                Spacer()
+                Button("去设置") {
+                    if let url = URL(
+                        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices",
+                    ) {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(theme.accent)
+            } else {
+                Image(systemName: "location")
+                Text(store.location.map { "当前：\($0.name)" } ?? "待定位")
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(theme.textSecondary)
+    }
+
+    /// Saved cities: click to select, × to remove.
+    private var savedLocationList: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach(store.savedLocations) { loc in
+                HStack(spacing: 6) {
+                    Button {
+                        store.selectLocation(loc)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(theme.accent)
+                                .opacity(loc == store.location && !store.autoLocation ? 1 : 0)
+                            Text(loc.name)
+                                .foregroundStyle(theme.textPrimary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                    Button {
+                        store.removeLocation(loc)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 8))
+                            .foregroundStyle(theme.textSecondary)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .font(.caption)
+            }
+        }
     }
 
     // MARK: - Footer

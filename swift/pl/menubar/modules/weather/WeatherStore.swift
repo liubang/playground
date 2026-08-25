@@ -1,8 +1,9 @@
 import AppKit
 import Foundation
 
-/// Owns the weather module's state: the resolved location, the latest
-/// snapshot, loading/error feedback, and the refresh cadence.
+/// Owns the weather module's state: the location mode (auto via
+/// CoreLocation, or a manually picked city), the saved city list, the
+/// latest snapshot, loading/error feedback, and the refresh cadence.
 ///
 /// Refresh triggers: a 30-minute repeating timer (heavily tolerated so it
 /// coalesces with other system work), app launch, wake from sleep, and
@@ -28,7 +29,27 @@ final class WeatherStore: ObservableObject {
         }
     }
 
+    /// Auto-location mode: the effective location is resolved via
+    /// CoreLocation on every refresh. Persisted.
+    @Published private(set) var autoLocation: Bool {
+        didSet {
+            UserDefaults.standard.set(autoLocation, forKey: Self.autoLocationKey)
+        }
+    }
+
+    /// Cities the user added; persisted. The selected one is used when
+    /// autoLocation is off.
+    @Published private(set) var savedLocations: [WeatherLocation]
+
+    /// The city used when autoLocation is off; persisted.
+    @Published private(set) var manualSelection: WeatherLocation
+
+    /// The location the current snapshot was fetched for.
     @Published private(set) var location: WeatherLocation?
+
+    /// CoreLocation front-end for auto mode; exposed for the popover's
+    /// permission UI.
+    let locationService = LocationService()
 
     var lastUpdated: Date? {
         snapshot?.fetchedAt
@@ -40,6 +61,8 @@ final class WeatherStore: ObservableObject {
     private static let providerKey = "AuraBar.weather.provider"
     private static let qweatherKeyKey = "AuraBar.weather.qweatherKey"
     private static let locationKey = "AuraBar.weather.location"
+    private static let autoLocationKey = "AuraBar.weather.autoLocation"
+    private static let savedLocationsKey = "AuraBar.weather.savedLocations"
     private static let refreshInterval: TimeInterval = 30 * 60
 
     /// Fallback before the user picks a city.
@@ -50,25 +73,42 @@ final class WeatherStore: ObservableObject {
     )
 
     init() {
+        let defaults = UserDefaults.standard
         providerKind = WeatherProviderKind(
-            rawValue: UserDefaults.standard.string(forKey: Self.providerKey) ?? "",
+            rawValue: defaults.string(forKey: Self.providerKey) ?? "",
         ) ?? .openMeteo
-        qweatherKey = UserDefaults.standard.string(forKey: Self.qweatherKeyKey) ?? ""
-        if let data = UserDefaults.standard.data(forKey: Self.locationKey),
-           let saved = try? JSONDecoder().decode(WeatherLocation.self, from: data)
-        {
-            location = saved
-        } else {
-            location = Self.defaultLocation
-        }
+        qweatherKey = defaults.string(forKey: Self.qweatherKeyKey) ?? ""
+        autoLocation = defaults.bool(forKey: Self.autoLocationKey)
+
+        let saved = Self.decode(WeatherLocation.self, forKey: Self.locationKey)
+            ?? Self.defaultLocation
+        manualSelection = saved
+        // Migration: previously a single stored location — seed the list
+        // with it.
+        savedLocations = Self.decode([WeatherLocation].self, forKey: Self.savedLocationsKey)
+            ?? [saved]
+        location = saved
 
         NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main,
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main,
         ) { [weak self] _ in
             Task { @MainActor in await self?.refresh() }
         }
         startTimer()
         Task { await refresh() }
+    }
+
+    private static func decode<T: Decodable>(_: T.Type, forKey key: String) -> T? {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(T.self, from: data)
+    }
+
+    private static func encode(_ value: some Encodable, forKey key: String) {
+        if let data = try? JSONEncoder().encode(value) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
     }
 
     private func startTimer() {
@@ -87,7 +127,28 @@ final class WeatherStore: ObservableObject {
         }
     }
 
-    /// Resolve a free-form city name, persist the best match and refetch.
+    // MARK: - Location management
+
+    /// Switch auto-location mode on/off and refetch.
+    func setAutoLocation(_ enabled: Bool) {
+        autoLocation = enabled
+        if !enabled {
+            location = manualSelection
+        }
+        Task { await refresh() }
+    }
+
+    /// Select a city from the saved list (turns auto mode off).
+    func selectLocation(_ loc: WeatherLocation) {
+        manualSelection = loc
+        Self.encode(loc, forKey: Self.locationKey)
+        autoLocation = false
+        location = loc
+        Task { await refresh() }
+    }
+
+    /// Geocode a free-form city name, add the best match to the saved
+    /// list, select it and refetch.
     func setCity(_ city: String) async {
         let trimmed = city.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -99,27 +160,60 @@ final class WeatherStore: ObservableObject {
                 lastError = WeatherError.cityNotFound(trimmed).localizedDescription
                 return
             }
-            location = first
-            if let data = try? JSONEncoder().encode(first) {
-                UserDefaults.standard.set(data, forKey: Self.locationKey)
+            if !savedLocations.contains(first) {
+                savedLocations.append(first)
+                Self.encode(savedLocations, forKey: Self.savedLocationsKey)
             }
             isLoading = false
-            await refresh()
+            selectLocation(first)
         } catch {
             lastError = error.localizedDescription
         }
     }
 
-    func refresh() async {
-        guard let location else {
-            lastError = "请先在设置中填写城市"
-            return
+    /// Remove a city from the saved list; falls back to the first
+    /// remaining city when the selected one is removed.
+    func removeLocation(_ loc: WeatherLocation) {
+        savedLocations.removeAll { $0 == loc }
+        Self.encode(savedLocations, forKey: Self.savedLocationsKey)
+        guard manualSelection == loc else { return }
+        manualSelection = savedLocations.first ?? Self.defaultLocation
+        Self.encode(manualSelection, forKey: Self.locationKey)
+        if !autoLocation {
+            location = manualSelection
+            Task { await refresh() }
         }
+    }
+
+    // MARK: - Refresh
+
+    /// The location to fetch for, resolving CoreLocation in auto mode.
+    private func effectiveTarget() async -> WeatherLocation? {
+        guard autoLocation else { return manualSelection }
+        guard let fix = await locationService.locate() else {
+            if locationService.authorizationDenied {
+                lastError = "定位未授权，可在系统设置中开启"
+            } else {
+                lastError = locationService.lastError ?? "无法获取当前位置"
+            }
+            return nil
+        }
+        let name = await locationService.placeName(for: fix) ?? "当前位置"
+        return WeatherLocation(
+            name: name,
+            latitude: fix.coordinate.latitude,
+            longitude: fix.coordinate.longitude,
+        )
+    }
+
+    func refresh() async {
         guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
+        guard let target = await effectiveTarget() else { return }
+        location = target
         do {
-            let snap = try await makeProvider().fetch(location: location)
+            let snap = try await makeProvider().fetch(location: target)
             snapshot = snap
             lastError = nil
             // Green checkmark flash in the refresh button.
