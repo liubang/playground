@@ -2229,9 +2229,7 @@
                 "source": "builtin"
               },
               {
-                "capabilities": [
-                  "process.exec"
-                ],
+                "capabilities": null,
                 "description": "Write characters to a running exec_session's stdin and return the output produced since the last call. Send shell-style input (remember the trailing newline); control characters work too (e.g. '\\u0003' for Ctrl-C). With empty chars the call is a pure poll that waits up to yield_time_ms for new output (default 5000 when polling, 250 after a write; max 300000). The result reports status ('running', 'exited', or 'killed'), the exit code once finished, and the merged stdout/stderr produced since the previous call. Keep polling a session you started until it exits or is no longer needed — it stays alive otherwise.",
                 "input_schema": {
                   "additionalProperties": false,
@@ -4883,9 +4881,7 @@
                 "source": "builtin"
               },
               {
-                "capabilities": [
-                  "process.exec"
-                ],
+                "capabilities": null,
                 "description": "Write characters to a running exec_session's stdin and return the output produced since the last call. Send shell-style input (remember the trailing newline); control characters work too (e.g. '\\u0003' for Ctrl-C). With empty chars the call is a pure poll that waits up to yield_time_ms for new output (default 5000 when polling, 250 after a write; max 300000). The result reports status ('running', 'exited', or 'killed'), the exit code once finished, and the merged stdout/stderr produced since the previous call. Keep polling a session you started until it exits or is no longer needed — it stays alive otherwise.",
                 "input_schema": {
                   "additionalProperties": false,
@@ -7611,9 +7607,7 @@
                 "source": "builtin"
               },
               {
-                "capabilities": [
-                  "process.exec"
-                ],
+                "capabilities": null,
                 "description": "Write characters to a running exec_session's stdin and return the output produced since the last call. Send shell-style input (remember the trailing newline); control characters work too (e.g. '\\u0003' for Ctrl-C). With empty chars the call is a pure poll that waits up to yield_time_ms for new output (default 5000 when polling, 250 after a write; max 300000). The result reports status ('running', 'exited', or 'killed'), the exit code once finished, and the merged stdout/stderr produced since the previous call. Keep polling a session you started until it exits or is no longer needed — it stays alive otherwise.",
                 "input_schema": {
                   "additionalProperties": false,

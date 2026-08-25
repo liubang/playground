@@ -117,6 +117,31 @@ func TestWriteStdinFeedsInteractiveProcess(t *testing.T) {
 	}
 }
 
+// TestWriteStdinRiskNeverBelowDefinitionDefault pins the contract the
+// agent loop's prepared-call drift check enforces
+// (agent.validatePreparedExecution): a per-call tier below the
+// definition's static default fails closed with a security error.
+// write_stdin pins R1 per call (the process was approved at exec_session
+// time), so its definition must stay capability-free (static R0) —
+// declaring CapProcessExec would grade the definition R2 and reject
+// every write_stdin call before execution.
+func TestWriteStdinRiskNeverBelowDefinitionDefault(t *testing.T) {
+	validator, _ := newValidator(t)
+	manager := newManager(t, validator)
+	stdinTool := newWriteStdinTool(t, manager)
+
+	if got := stdinTool.Definition().Risk(); got != domain.R0 {
+		t.Fatalf("definition Risk() = %v, want R0 (capability-free)", got)
+	}
+	prepared := prepareCall(t, stdinTool, "write_stdin", writeStdinArgs{SessionID: "sess_probe"})
+	if prepared.Risk != domain.R1 {
+		t.Fatalf("prepared Risk = %v, want R1", prepared.Risk)
+	}
+	if prepared.Risk < prepared.Definition.Risk() {
+		t.Fatalf("per-call risk %v must not sit below definition default %v", prepared.Risk, prepared.Definition.Risk())
+	}
+}
+
 func TestWriteStdinUnknownSession(t *testing.T) {
 	validator, _ := newValidator(t)
 	manager := newManager(t, validator)
