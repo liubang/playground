@@ -10,6 +10,7 @@
 #   JS/CSS/HTML→ prettier（multitool 锁定的 nodejs + prettier，配置见根 .prettierrc）
 #   Java       → google-java-format（maven 锁定的 jar，google 风格 2 空格）
 #   Starlark   → buildifier（buildifier_prebuilt）
+#   Swift      → swiftformat（multitool 锁定的 SwiftFormat 0.62.1 预编译二进制）
 #
 # 排除规则：.gitattributes 的 rules-lint-ignored / linguist-generated，
 # 以及各工具自身的 ignore 文件（如 .prettierignore）。
@@ -80,5 +81,6 @@ format_multirun(
     python = "@aspect_rules_lint//format:ruff",
     shell = "@aspect_rules_lint//format:shfmt",
     starlark = "@buildifier_prebuilt//:buildifier",
+    swift = "@multitool//tools/swiftformat",
     yaml = "@aspect_rules_lint//format:yamlfmt",
 )

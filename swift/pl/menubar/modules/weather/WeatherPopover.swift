@@ -1,0 +1,319 @@
+import Charts
+import SwiftUI
+
+extension WeatherCondition {
+    /// Semantic color per Everforest: warm yellow sun, teal rain, aqua
+    /// snow, muted grays for gloom, red thunder.
+    func color(_ theme: Theme) -> Color {
+        switch self {
+        case .clear: theme.warning
+        case .partlyCloudy: theme.orange
+        case .overcast, .fog, .haze: theme.textSecondary
+        case .drizzle, .rain, .heavyRain: theme.accent
+        case .sleet, .snow, .hail: theme.aqua
+        case .thunder: theme.rest
+        case .unknown: theme.textSecondary
+        }
+    }
+}
+
+/// The popover shown when the weather menu bar item is clicked: a
+/// current-conditions card, a 24h temperature curve, a 7-day forecast
+/// list, a collapsible settings section and a compact footer.
+struct WeatherPopover: View {
+    @ObservedObject var store: WeatherStore
+
+    @AppStorage("themePreference") private var themePreference = ThemePreference.system.rawValue
+    @Environment(\.colorScheme) private var colorScheme
+
+    @State private var settingsExpanded = false
+    @State private var settingsError: String?
+    /// Drafts applied to the store only on submit, so typing doesn't
+    /// trigger a geocoding request per keystroke.
+    @State private var cityDraft = ""
+    @State private var keyDraft = ""
+
+    private var theme: Theme {
+        (ThemePreference(rawValue: themePreference) ?? .system).theme(for: colorScheme)
+    }
+
+    private var pinnedColorScheme: ColorScheme? {
+        (ThemePreference(rawValue: themePreference) ?? .system).pinnedColorScheme
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let snapshot = store.snapshot {
+                currentCard(snapshot)
+                hourlyCard(snapshot)
+                dailyCard(snapshot)
+            } else {
+                placeholder
+            }
+            if let error = store.lastError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(theme.rest)
+            }
+            settingsSection
+            if let settingsError {
+                Text(settingsError)
+                    .font(.caption)
+                    .foregroundStyle(theme.rest)
+            }
+            footer
+        }
+        .padding(12)
+        .frame(width: 316)
+        .foregroundStyle(theme.textPrimary)
+        .background(theme.background)
+        .environment(\.theme, theme)
+        .preferredColorScheme(pinnedColorScheme)
+        .animation(.easeInOut(duration: 0.25), value: store.snapshot != nil)
+        .onAppear {
+            cityDraft = store.location?.name ?? ""
+            keyDraft = store.qweatherKey
+        }
+    }
+
+    // MARK: - Current conditions
+
+    private func currentCard(_ snapshot: WeatherSnapshot) -> some View {
+        let current = snapshot.current
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(snapshot.location.name)
+                        .font(.system(.headline, design: .rounded))
+                    Text("\(current.condition.label) · 体感 \(Int(current.apparentTemperature.rounded()))°")
+                        .font(.caption)
+                        .foregroundStyle(theme.textSecondary)
+                }
+                Spacer()
+                Image(systemName: current.condition.symbolName)
+                    .font(.system(size: 28))
+                    .foregroundStyle(current.condition.color(theme))
+            }
+            Text("\(Int(current.temperature.rounded()))°")
+                .font(.system(size: 42, weight: .light, design: .rounded))
+                .contentTransition(.numericText())
+            HStack(spacing: 10) {
+                Label("湿度 \(Int(current.humidity.rounded()))%", systemImage: "humidity")
+                Label("\(Int(current.windSpeedKmh.rounded())) km/h", systemImage: "wind")
+                if let today = snapshot.daily.first {
+                    Label(
+                        "\(Int(today.tempMin.rounded()))~\(Int(today.tempMax.rounded()))°",
+                        systemImage: "thermometer.medium",
+                    )
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(theme.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardStyle()
+    }
+
+    // MARK: - 24h curve
+
+    private func hourlyCard(_ snapshot: WeatherSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("未来 24 小时")
+                .font(.caption)
+                .foregroundStyle(theme.textSecondary)
+            Chart(snapshot.hourly) { point in
+                AreaMark(
+                    x: .value("时间", point.date),
+                    y: .value("温度", point.temperature),
+                )
+                .interpolationMethod(.catmullRom)
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [theme.accent.opacity(0.30), theme.accent.opacity(0.02)],
+                        startPoint: .top,
+                        endPoint: .bottom,
+                    ),
+                )
+                LineMark(
+                    x: .value("时间", point.date),
+                    y: .value("温度", point.temperature),
+                )
+                .interpolationMethod(.catmullRom)
+                .foregroundStyle(theme.accent)
+                .lineStyle(StrokeStyle(lineWidth: 1.6))
+            }
+            .chartYAxis(.hidden)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .hour, count: 6)) { value in
+                    AxisValueLabel {
+                        if let date = value.as(Date.self) {
+                            Text("\(CalendarModel.calendar.component(.hour, from: date))时")
+                                .font(.system(size: 9))
+                                .foregroundStyle(theme.textSecondary)
+                        }
+                    }
+                }
+            }
+            .frame(height: 72)
+        }
+        .cardStyle()
+    }
+
+    // MARK: - 7-day outlook
+
+    private func dailyCard(_ snapshot: WeatherSnapshot) -> some View {
+        let weekMin = snapshot.daily.map(\.tempMin).min() ?? 0
+        let weekMax = snapshot.daily.map(\.tempMax).max() ?? 1
+        return VStack(alignment: .leading, spacing: 7) {
+            Text("未来 7 天")
+                .font(.caption)
+                .foregroundStyle(theme.textSecondary)
+            ForEach(snapshot.daily) { day in
+                HStack(spacing: 8) {
+                    Text(weekdayLabel(day.date))
+                        .frame(width: 34, alignment: .leading)
+                    Image(systemName: day.condition.symbolName)
+                        .foregroundStyle(day.condition.color(theme))
+                        .frame(width: 18)
+                    Spacer()
+                    Text("\(Int(day.tempMin.rounded()))°")
+                        .foregroundStyle(theme.textSecondary)
+                    rangeBar(day, weekMin: weekMin, weekMax: weekMax)
+                    Text("\(Int(day.tempMax.rounded()))°")
+                }
+                .font(.callout)
+                .monospacedDigit()
+            }
+        }
+        .cardStyle()
+    }
+
+    private func weekdayLabel(_ date: Date) -> String {
+        let cal = CalendarModel.calendar
+        if cal.isDateInToday(date) {
+            return "今天"
+        }
+        let names = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+        return names[cal.component(.weekday, from: date) - 1]
+    }
+
+    /// iOS-Weather-style temperature range bar: the day's [min, max]
+    /// interval positioned within the week's overall span.
+    private func rangeBar(_ day: DayForecast, weekMin: Double, weekMax: Double) -> some View {
+        let span = max(weekMax - weekMin, 1)
+        let start = (day.tempMin - weekMin) / span
+        let length = max((day.tempMax - day.tempMin) / span, 0.06)
+        return GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(theme.background)
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [theme.aqua, theme.orange],
+                            startPoint: .leading,
+                            endPoint: .trailing,
+                        ),
+                    )
+                    .frame(width: geo.size.width * length)
+                    .offset(x: geo.size.width * start)
+            }
+        }
+        .frame(width: 72, height: 4)
+    }
+
+    // MARK: - Placeholder
+
+    private var placeholder: some View {
+        HStack(spacing: 8) {
+            if store.isLoading {
+                ProgressView().controlSize(.small)
+                Text("正在获取天气…")
+            } else {
+                Image(systemName: "exclamationmark.triangle")
+                Text(store.lastError ?? "暂无数据")
+            }
+        }
+        .font(.callout)
+        .foregroundStyle(theme.textSecondary)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 28)
+    }
+
+    // MARK: - Settings
+
+    private var settingsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            CollapsibleHeader(title: "天气设置", expanded: $settingsExpanded)
+            if settingsExpanded {
+                VStack(alignment: .leading, spacing: 6) {
+                    Picker("数据源", selection: $store.providerKind) {
+                        ForEach(WeatherProviderKind.allCases, id: \.rawValue) { kind in
+                            Text(kind.label).tag(kind)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+
+                    SettingsField(prompt: "城市（如 北京 / 上海）", text: $cityDraft) {
+                        Task { await store.setCity(cityDraft) }
+                    }
+
+                    if store.providerKind == .qweather {
+                        SettingsField(prompt: "和风天气 API Key", text: $keyDraft) {
+                            store.qweatherKey = keyDraft
+                            Task { await store.refresh() }
+                        }
+                    }
+
+                    if let location = store.location {
+                        Text("当前定位：\(location.name)")
+                            .font(.caption2)
+                            .foregroundStyle(theme.textSecondary)
+                    }
+                }
+                .padding(.top, 4)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 2)
+    }
+
+    // MARK: - Footer
+
+    private var footer: some View {
+        HStack(spacing: 10) {
+            Text(store.lastUpdated.map { "更新于 \($0.formatted(date: .omitted, time: .shortened))" } ?? "未更新")
+                .font(.caption)
+                .foregroundStyle(theme.textSecondary)
+                .contentTransition(.numericText())
+            Spacer()
+            RefreshButton(isLoading: store.isLoading, justRefreshed: store.justRefreshed) {
+                Task { await store.refresh() }
+            }
+            settingsMenu
+        }
+        .padding(.horizontal, 2)
+    }
+
+    private var settingsMenu: some View {
+        Menu {
+            Picker("主题", selection: $themePreference) {
+                ForEach(ThemePreference.allCases, id: \.rawValue) { preference in
+                    Text(preference.label).tag(preference.rawValue)
+                }
+            }
+            Divider()
+            ModuleToggles(current: "weather")
+            Toggle("开机自启", isOn: LaunchAtLogin.binding { settingsError = $0 })
+            Divider()
+            Button("退出 AuraBar", role: .destructive, action: quitApp)
+        } label: {
+            Image(nsImage: TintedSymbol.make("gearshape", color: theme.textSecondary))
+                .frame(width: 18, height: 14)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+    }
+}

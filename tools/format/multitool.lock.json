@@ -36,6 +36,42 @@
       }
     ]
   },
+  "swiftformat": {
+    "binaries": [
+      {
+        "kind": "archive",
+        "url": "https://github.com/nicklockwood/SwiftFormat/releases/download/0.62.1/swiftformat.zip",
+        "file": "swiftformat",
+        "sha256": "7cb1cb1fae04932047c7015441c543848e8e60e1572d808d080e0a1f1661114a",
+        "os": "macos",
+        "cpu": "arm64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://github.com/nicklockwood/SwiftFormat/releases/download/0.62.1/swiftformat.zip",
+        "file": "swiftformat",
+        "sha256": "7cb1cb1fae04932047c7015441c543848e8e60e1572d808d080e0a1f1661114a",
+        "os": "macos",
+        "cpu": "x86_64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://github.com/nicklockwood/SwiftFormat/releases/download/0.62.1/swiftformat_linux.zip",
+        "file": "swiftformat",
+        "sha256": "61ff55f3581e2144a4ad114831167102c38be853df75c1477d20b40a8e8120aa",
+        "os": "linux",
+        "cpu": "x86_64"
+      },
+      {
+        "kind": "archive",
+        "url": "https://github.com/nicklockwood/SwiftFormat/releases/download/0.62.1/swiftformat_linux_aarch64.zip",
+        "file": "swiftformat",
+        "sha256": "374b1975082970ac17c9b307639dbc0a148656434cd612cff06957e279020f34",
+        "os": "linux",
+        "cpu": "arm64"
+      }
+    ]
+  },
   "prettier": {
     "binaries": [
       {

@@ -1,0 +1,60 @@
+# Copyright (c) 2024 The Authors. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Authors: liubang (it.liubang@gmail.com)
+
+load("@rules_apple//apple:macos.bzl", "macos_application")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+
+swift_library(
+    name = "menubar_lib",
+    srcs = glob([
+        "app/*.swift",
+        "core/*.swift",
+        "modules/calendar/*.swift",
+        "modules/stats/*.swift",
+        "modules/weather/*.swift",
+    ]),
+    module_name = "AuraBar",
+    target_compatible_with = ["@platforms//os:macos"],
+)
+
+macos_application(
+    name = "AuraBar",
+    bundle_id = "com.liubang.aurabar",
+    bundle_name = "AuraBar",
+    infoplists = ["resources/Info.plist"],
+    minimum_os_version = "14.0",
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = [":menubar_lib"],
+)
+
+# bazel run //swift/pl/menubar:install — unzip, re-sign (when
+# AURABAR_SIGN_IDENTITY is set) and install to /Applications.
+sh_binary(
+    name = "install",
+    srcs = ["install.sh"],
+    args = ["$(location :AuraBar)"],
+    data = [":AuraBar"],
+    target_compatible_with = ["@platforms//os:macos"],
+)
+
+# bazel run //swift/pl/menubar:make-signing-cert — create the local
+# self-signed codesigning identity (idempotent, once per machine).
+sh_binary(
+    name = "make-signing-cert",
+    srcs = ["make-signing-cert.sh"],
+    target_compatible_with = ["@platforms//os:macos"],
+)

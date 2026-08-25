@@ -127,3 +127,4 @@ python/manim/manimations/media/
 # ==============================================================================
 *.old
 .codegraph/
+.bazelrc.user

@@ -90,3 +90,6 @@ test:ci --test_output=errors
 # Version stamping: date + git hash (tools/workspace_status.sh); consumed by
 # go_binary x_defs and the info_plist genrule.
 build --workspace_status_command=tools/workspace_status.sh
+
+# Per-user local overrides (not checked in).
+try-import %workspace%/.bazelrc.user
