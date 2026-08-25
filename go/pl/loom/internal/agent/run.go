@@ -1963,6 +1963,21 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 			}
 			continue
 		}
+		// The malformed-arguments placeholder must never reach a tool:
+		// built-in decoders reject it during Prepare, but pass-through
+		// tools (MCP adapters) would forward the internal marker to the
+		// server verbatim. Intercept it here so every source gets the
+		// same recoverable prepare failure with the actionable hint
+		// (docs/CONTEXT_DESIGN.md §4.6).
+		if hint, malformed := malformedArgumentsHint(tc.Arguments); malformed {
+			rawHash := rawArgsHash(tc.Arguments)
+			l.appendPrepareFailureEvents(tc, rawHash)
+			l.recordToolError(ctx, tc, "prepare_failed", hint)
+			if reason := l.runaway.trackToolCall(l.runawayConfig(), tc.Name, tc.Arguments, &l.notices, l.Run.Clock); reason != "" {
+				return l.terminateRunaway(ctx, reason)
+			}
+			continue
+		}
 		prepared, err := tool.Prepare(ctx, tc)
 		if err != nil {
 			rawHash := rawArgsHash(tc.Arguments)

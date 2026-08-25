@@ -2873,6 +2873,70 @@ func TestValidatePreparedExecutionRiskTiers(t *testing.T) {
 	}
 }
 
+// Regression: the malformed-arguments placeholder must be intercepted by
+// the loop before Prepare. Pass-through tools (MCP adapters) used to
+// forward the internal marker to the server verbatim, and the model got
+// back the server's confusing "unknown field" rejection for a field it
+// never sent (docs/CONTEXT_DESIGN.md §4.6).
+func TestLoopMalformedArgumentsNeverReachTool(t *testing.T) {
+	callID := domain.NewToolCallID()
+	def := newTestToolDefinition("mcp__demo__search", nil)
+	def.Source = domain.ToolSourceMCP
+	tool := newMutableTool(mutableToolConfig{
+		definition: def,
+		result: domain.ToolResult{
+			Status:  domain.ToolStatusSuccess,
+			Content: []domain.ContentPart{{Kind: domain.PartText, Text: "ok"}},
+		},
+	})
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls: []domain.ToolCall{{
+				ID:   callID,
+				Name: "mcp__demo__search",
+				Arguments: json.RawMessage(
+					`{"__malformed_arguments":"{bad json","error":"model emitted invalid arguments JSON; re-issue the tool call with valid arguments"}`,
+				),
+			}},
+			StopReason: domain.StopToolUse,
+		},
+		fakes.ScriptEntry{Text: "recovered", StopReason: domain.StopEndTurn},
+	)
+	store := fakes.NewFakeStore()
+	run := newTestRun(domain.DefaultLimits())
+	mustCreateSession(t, store, run.SessionID)
+	addUserTextMessage(run, "search")
+
+	registry := NewToolRegistry()
+	if err := registry.Register(tool); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	loop := &Loop{Run: run, Model: model, Store: store, Approver: fakes.NewFakeApprover(domain.DecisionAllow), Registry: registry, Logger: slog.Default()}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if got := tool.PrepareCount(); got != 0 {
+		t.Fatalf("Prepare calls = %d, want 0 (placeholder must be intercepted before Prepare)", got)
+	}
+	if got := tool.ExecuteCount(); got != 0 {
+		t.Fatalf("Execute calls = %d, want 0 (placeholder must never reach the tool)", got)
+	}
+	result, ok := findToolResult(run, callID)
+	if !ok {
+		t.Fatalf("tool result missing for %s", callID)
+	}
+	if result.Error == nil {
+		t.Fatalf("malformed call must surface a tool error, got %+v", result)
+	}
+	if !strings.Contains(result.Error.Message, "re-issue the tool call with valid arguments") {
+		t.Fatalf("error message = %q, want the actionable hint", result.Error.Message)
+	}
+	if strings.Contains(result.Error.Message, "__malformed_arguments") {
+		t.Fatalf("error message leaks the internal marker: %q", result.Error.Message)
+	}
+}
+
 func TestLoopUsesInjectedPolicyDecisions(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
@@ -3202,6 +3266,7 @@ type mutableTool struct {
 	argsHash      string
 	result        domain.ToolResult
 	risk          *domain.RiskLevel
+	prepareCalls  int
 	executeCalls  int
 }
 
@@ -3232,6 +3297,7 @@ func (t *mutableTool) SetDefinition(def domain.ToolDefinition) {
 
 func (t *mutableTool) Prepare(_ context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
 	t.mu.Lock()
+	t.prepareCalls++
 	def := cloneToolDefinition(t.definition)
 	canonicalArgs := append(json.RawMessage(nil), t.canonicalArgs...)
 	readPaths := append([]string(nil), t.readPaths...)
@@ -3290,6 +3356,12 @@ func (t *mutableTool) ExecuteCount() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.executeCalls
+}
+
+func (t *mutableTool) PrepareCount() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.prepareCalls
 }
 
 type fixedPolicy domain.Decision
