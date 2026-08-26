@@ -217,7 +217,12 @@ std::shared_ptr<ObjectValue> join_rows(const std::string& left_name,
     auto group_props = join_group_properties(
         left, right, left_name, right_name, on_column_set, overlapping_columns);
     props.reserve(left_columns.size() + right_columns.size() + group_props.size() + 1);
+    // Track emitted property names in a set: deduping via a linear scan of
+    // `props` makes each joined row O(K^2) in the number of columns.
+    std::unordered_set<std::string> present;
+    present.reserve(left_columns.size() + right_columns.size() + group_props.size() + 1);
     for (const auto& [key, value] : group_props) {
+        present.insert(key);
         props.emplace_back(key, value);
     }
     for (const auto& column : on_columns) {
@@ -225,12 +230,8 @@ std::shared_ptr<ObjectValue> join_rows(const std::string& left_name,
         if (value == nullptr && right != nullptr) {
             value = right->lookup(column);
         }
-        if (value != nullptr) {
-            const bool already_present = std::ranges::any_of(
-                props, [&](const auto& property) { return property.first == column; });
-            if (!already_present) {
-                props.emplace_back(column, *value);
-            }
+        if (value != nullptr && present.insert(column).second) {
+            props.emplace_back(column, *value);
         }
     }
 
@@ -244,9 +245,7 @@ std::shared_ptr<ObjectValue> join_rows(const std::string& left_name,
             const std::string output_key = overlapping_columns.count(column) != 0
                                                ? joined_property_name(table_name, column)
                                                : column;
-            const bool already_present = std::ranges::any_of(
-                props, [&](const auto& property) { return property.first == output_key; });
-            if (already_present) {
+            if (!present.insert(output_key).second) {
                 continue;
             }
             const Value* value = row != nullptr ? row->lookup(column) : nullptr;

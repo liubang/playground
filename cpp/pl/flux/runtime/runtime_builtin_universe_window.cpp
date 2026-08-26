@@ -76,47 +76,58 @@ absl::StatusOr<Value> builtin_elapsed(const std::vector<Value>& args) {
         unit_seconds = unit_or->seconds;
     }
 
-    std::unordered_map<std::string, int64_t> previous_time_by_group;
-    std::vector<std::shared_ptr<ObjectValue>> rows;
-    rows.reserve((*table_or)->rows.size());
-    for (const auto& row : (*table_or)->rows) {
-        if (row == nullptr) {
-            continue;
-        }
-        const Value* time_value = row->lookup(*time_column_or);
-        if (time_value == nullptr) {
-            return absl::InvalidArgumentError(
-                absl::StrCat("elapsed requires `", *time_column_or, "` on every row"));
-        }
+    // Preserve logical table (chunk) boundaries: per-group state must not leak
+    // across chunks, and the result keeps one chunk per input chunk instead of
+    // flattening the stream into a single table.
+    std::vector<TableChunk> chunks;
+    chunks.reserve((*table_or)->table_count());
+    for (const auto& chunk : (*table_or)->tables) {
+        TableChunk next;
+        next.rows.reserve(chunk.rows.size());
+        std::unordered_map<std::string, int64_t> previous_time_by_group;
+        for (const auto& row : chunk.rows) {
+            if (row == nullptr) {
+                continue;
+            }
+            const Value* time_value = row->lookup(*time_column_or);
+            if (time_value == nullptr) {
+                return absl::InvalidArgumentError(
+                    absl::StrCat("elapsed requires `", *time_column_or, "` on every row"));
+            }
 
-        std::string literal;
-        if (time_value->type() == Value::Type::Time) {
-            literal = time_value->as_time().literal;
-        } else if (time_value->type() == Value::Type::String) {
-            literal = time_value->as_string();
-        } else {
-            return absl::InvalidArgumentError(
-                absl::StrCat("elapsed `", *time_column_or, "` must be a time or string"));
-        }
-        auto seconds_or = detail::parse_rfc3339_seconds(literal);
-        if (!seconds_or.has_value()) {
-            return absl::InvalidArgumentError(
-                absl::StrCat("elapsed could not parse RFC3339 time: ", literal));
-        }
+            std::string literal;
+            if (time_value->type() == Value::Type::Time) {
+                literal = time_value->as_time().literal;
+            } else if (time_value->type() == Value::Type::String) {
+                literal = time_value->as_string();
+            } else {
+                return absl::InvalidArgumentError(
+                    absl::StrCat("elapsed `", *time_column_or, "` must be a time or string"));
+            }
+            auto seconds_or = detail::parse_rfc3339_seconds(literal);
+            if (!seconds_or.has_value()) {
+                return absl::InvalidArgumentError(
+                    absl::StrCat("elapsed could not parse RFC3339 time: ", literal));
+            }
 
-        const std::string group_key = detail::group_key_for_row(*row);
-        if (const auto previous = previous_time_by_group.find(group_key);
-            previous != previous_time_by_group.end()) {
-            auto updated = detail::object_with_upserted_property(
-                *row,
-                *column_name_or,
-                Value::integer((*seconds_or - previous->second) / unit_seconds));
-            rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
+            const std::string group_key = detail::group_key_for_row(*row);
+            if (const auto previous = previous_time_by_group.find(group_key);
+                previous != previous_time_by_group.end()) {
+                auto updated = detail::object_with_upserted_property(
+                    *row,
+                    *column_name_or,
+                    Value::integer((*seconds_or - previous->second) / unit_seconds));
+                next.rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
+            }
+            previous_time_by_group[group_key] = *seconds_or;
         }
-        previous_time_by_group[group_key] = *seconds_or;
+        if (next.rows.empty()) {
+            next.group_key = chunk.group_key;
+            next.columns = chunk.columns;
+        }
+        chunks.push_back(std::move(next));
     }
-    auto result = Value::table(
-        (*table_or)->bucket, std::move(rows), (*table_or)->range_start, (*table_or)->range_stop);
+    auto result = detail::table_with_chunks_like(**table_or, std::move(chunks));
     return detail::with_materialization_barrier(std::move(result), **table_or, "elapsed");
 }
 
@@ -151,48 +162,58 @@ absl::StatusOr<Value> builtin_difference(const std::vector<Value>& args) {
         return keep_first_or.status();
     }
 
-    std::unordered_map<std::string, Value> previous_by_group;
-    std::vector<std::shared_ptr<ObjectValue>> rows;
-    rows.reserve((*table_or)->rows.size());
-    for (const auto& row : (*table_or)->rows) {
-        if (row == nullptr) {
-            continue;
-        }
-        const Value* current = row->lookup(*column_or);
-        if (current == nullptr) {
-            return absl::InvalidArgumentError(
-                absl::StrCat("difference requires `", *column_or, "` on every row"));
-        }
-        if (!detail::is_numeric_value(*current)) {
-            return absl::InvalidArgumentError(
-                absl::StrCat("difference `", *column_or, "` must be numeric"));
-        }
-
-        const std::string group_key = detail::group_key_for_row(*row);
-        if (const auto previous = previous_by_group.find(group_key);
-            previous != previous_by_group.end()) {
-            const double delta =
-                detail::numeric_value(*current) - detail::numeric_value(previous->second);
-            Value difference = Value::null();
-            if (!*non_negative_or || delta >= 0.0) {
-                if (current->type() == Value::Type::Float ||
-                    previous->second.type() == Value::Type::Float) {
-                    difference = Value::floating(delta);
-                } else {
-                    difference = Value::integer(static_cast<int64_t>(delta));
-                }
+    // Preserve logical table (chunk) boundaries, same as `elapsed`.
+    std::vector<TableChunk> chunks;
+    chunks.reserve((*table_or)->table_count());
+    for (const auto& chunk : (*table_or)->tables) {
+        TableChunk next;
+        next.rows.reserve(chunk.rows.size());
+        std::unordered_map<std::string, Value> previous_by_group;
+        for (const auto& row : chunk.rows) {
+            if (row == nullptr) {
+                continue;
             }
-            auto updated =
-                detail::object_with_upserted_property(*row, *column_or, std::move(difference));
-            rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
-        } else if (*keep_first_or) {
-            auto updated = detail::object_with_upserted_property(*row, *column_or, Value::null());
-            rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
+            const Value* current = row->lookup(*column_or);
+            if (current == nullptr) {
+                return absl::InvalidArgumentError(
+                    absl::StrCat("difference requires `", *column_or, "` on every row"));
+            }
+            if (!detail::is_numeric_value(*current)) {
+                return absl::InvalidArgumentError(
+                    absl::StrCat("difference `", *column_or, "` must be numeric"));
+            }
+
+            const std::string group_key = detail::group_key_for_row(*row);
+            if (const auto previous = previous_by_group.find(group_key);
+                previous != previous_by_group.end()) {
+                const double delta =
+                    detail::numeric_value(*current) - detail::numeric_value(previous->second);
+                Value difference = Value::null();
+                if (!*non_negative_or || delta >= 0.0) {
+                    if (current->type() == Value::Type::Float ||
+                        previous->second.type() == Value::Type::Float) {
+                        difference = Value::floating(delta);
+                    } else {
+                        difference = Value::integer(static_cast<int64_t>(delta));
+                    }
+                }
+                auto updated =
+                    detail::object_with_upserted_property(*row, *column_or, std::move(difference));
+                next.rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
+            } else if (*keep_first_or) {
+                auto updated =
+                    detail::object_with_upserted_property(*row, *column_or, Value::null());
+                next.rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
+            }
+            previous_by_group[group_key] = *current;
         }
-        previous_by_group[group_key] = *current;
+        if (next.rows.empty()) {
+            next.group_key = chunk.group_key;
+            next.columns = chunk.columns;
+        }
+        chunks.push_back(std::move(next));
     }
-    auto result = Value::table(
-        (*table_or)->bucket, std::move(rows), (*table_or)->range_start, (*table_or)->range_stop);
+    auto result = detail::table_with_chunks_like(**table_or, std::move(chunks));
     return detail::with_materialization_barrier(std::move(result), **table_or, "difference");
 }
 
@@ -245,74 +266,84 @@ absl::StatusOr<Value> builtin_derivative(const std::vector<Value>& args) {
         unit_seconds = unit_or->seconds;
     }
 
-    std::unordered_map<std::string, Value> previous_value_by_group;
-    std::unordered_map<std::string, int64_t> previous_time_by_group;
-    std::vector<std::shared_ptr<ObjectValue>> rows;
-    rows.reserve((*table_or)->rows.size());
-    for (const auto& row : (*table_or)->rows) {
-        if (row == nullptr) {
-            continue;
-        }
-        const Value* current = row->lookup(*column_or);
-        if (current == nullptr) {
-            return absl::InvalidArgumentError(
-                absl::StrCat("derivative requires `", *column_or, "` on every row"));
-        }
-        if (!detail::is_numeric_value(*current)) {
-            return absl::InvalidArgumentError(
-                absl::StrCat("derivative `", *column_or, "` must be numeric"));
-        }
-
-        const Value* time_value = row->lookup(*time_column_or);
-        if (time_value == nullptr) {
-            return absl::InvalidArgumentError(
-                absl::StrCat("derivative requires `", *time_column_or, "` on every row"));
-        }
-
-        std::string literal;
-        if (time_value->type() == Value::Type::Time) {
-            literal = time_value->as_time().literal;
-        } else if (time_value->type() == Value::Type::String) {
-            literal = time_value->as_string();
-        } else {
-            return absl::InvalidArgumentError(
-                absl::StrCat("derivative `", *time_column_or, "` must be a time or string"));
-        }
-        auto seconds_or = detail::parse_rfc3339_seconds(literal);
-        if (!seconds_or.has_value()) {
-            return absl::InvalidArgumentError(
-                absl::StrCat("derivative could not parse RFC3339 time: ", literal));
-        }
-
-        const std::string group_key = detail::group_key_for_row(*row);
-        auto previous_value = previous_value_by_group.find(group_key);
-        auto previous_time = previous_time_by_group.find(group_key);
-        if (previous_value != previous_value_by_group.end() &&
-            previous_time != previous_time_by_group.end()) {
-            const int64_t delta_seconds = *seconds_or - previous_time->second;
-            if (delta_seconds == 0) {
+    // Preserve logical table (chunk) boundaries, same as `elapsed`.
+    std::vector<TableChunk> chunks;
+    chunks.reserve((*table_or)->table_count());
+    for (const auto& chunk : (*table_or)->tables) {
+        TableChunk next;
+        next.rows.reserve(chunk.rows.size());
+        std::unordered_map<std::string, Value> previous_value_by_group;
+        std::unordered_map<std::string, int64_t> previous_time_by_group;
+        for (const auto& row : chunk.rows) {
+            if (row == nullptr) {
+                continue;
+            }
+            const Value* current = row->lookup(*column_or);
+            if (current == nullptr) {
                 return absl::InvalidArgumentError(
-                    "derivative requires strictly increasing time within each group");
+                    absl::StrCat("derivative requires `", *column_or, "` on every row"));
             }
-            const double raw_delta =
-                detail::numeric_value(*current) - detail::numeric_value(previous_value->second);
-            Value rate = Value::null();
-            if (!*non_negative_or || raw_delta >= 0.0) {
-                rate = Value::floating(raw_delta * static_cast<double>(unit_seconds) /
-                                       static_cast<double>(delta_seconds));
-            } else if (*initial_zero_or) {
-                rate = Value::floating(detail::numeric_value(*current) *
-                                       static_cast<double>(unit_seconds) /
-                                       static_cast<double>(delta_seconds));
+            if (!detail::is_numeric_value(*current)) {
+                return absl::InvalidArgumentError(
+                    absl::StrCat("derivative `", *column_or, "` must be numeric"));
             }
-            auto updated = detail::object_with_upserted_property(*row, *column_or, std::move(rate));
-            rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
+
+            const Value* time_value = row->lookup(*time_column_or);
+            if (time_value == nullptr) {
+                return absl::InvalidArgumentError(
+                    absl::StrCat("derivative requires `", *time_column_or, "` on every row"));
+            }
+
+            std::string literal;
+            if (time_value->type() == Value::Type::Time) {
+                literal = time_value->as_time().literal;
+            } else if (time_value->type() == Value::Type::String) {
+                literal = time_value->as_string();
+            } else {
+                return absl::InvalidArgumentError(
+                    absl::StrCat("derivative `", *time_column_or, "` must be a time or string"));
+            }
+            auto seconds_or = detail::parse_rfc3339_seconds(literal);
+            if (!seconds_or.has_value()) {
+                return absl::InvalidArgumentError(
+                    absl::StrCat("derivative could not parse RFC3339 time: ", literal));
+            }
+
+            const std::string group_key = detail::group_key_for_row(*row);
+            auto previous_value = previous_value_by_group.find(group_key);
+            auto previous_time = previous_time_by_group.find(group_key);
+            if (previous_value != previous_value_by_group.end() &&
+                previous_time != previous_time_by_group.end()) {
+                const int64_t delta_seconds = *seconds_or - previous_time->second;
+                if (delta_seconds == 0) {
+                    return absl::InvalidArgumentError(
+                        "derivative requires strictly increasing time within each group");
+                }
+                const double raw_delta =
+                    detail::numeric_value(*current) - detail::numeric_value(previous_value->second);
+                Value rate = Value::null();
+                if (!*non_negative_or || raw_delta >= 0.0) {
+                    rate = Value::floating(raw_delta * static_cast<double>(unit_seconds) /
+                                           static_cast<double>(delta_seconds));
+                } else if (*initial_zero_or) {
+                    rate = Value::floating(detail::numeric_value(*current) *
+                                           static_cast<double>(unit_seconds) /
+                                           static_cast<double>(delta_seconds));
+                }
+                auto updated =
+                    detail::object_with_upserted_property(*row, *column_or, std::move(rate));
+                next.rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
+            }
+            previous_value_by_group[group_key] = *current;
+            previous_time_by_group[group_key] = *seconds_or;
         }
-        previous_value_by_group[group_key] = *current;
-        previous_time_by_group[group_key] = *seconds_or;
+        if (next.rows.empty()) {
+            next.group_key = chunk.group_key;
+            next.columns = chunk.columns;
+        }
+        chunks.push_back(std::move(next));
     }
-    auto result = Value::table(
-        (*table_or)->bucket, std::move(rows), (*table_or)->range_start, (*table_or)->range_stop);
+    auto result = detail::table_with_chunks_like(**table_or, std::move(chunks));
     return detail::with_materialization_barrier(std::move(result), **table_or, "derivative");
 }
 

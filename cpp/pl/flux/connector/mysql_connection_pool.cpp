@@ -42,14 +42,6 @@ namespace {
 
 namespace mysql = boost::mysql;
 
-std::string mysql_error_message(const mysql::error_with_diagnostics& err) {
-    const auto server_message = err.get_diagnostics().server_message();
-    if (server_message.empty()) {
-        return err.what();
-    }
-    return absl::StrCat(err.what(), ": ", std::string(server_message));
-}
-
 absl::StatusOr<mysql::pool_params> pool_params_from_dsn(const std::string& dsn,
                                                         size_t max_pool_size) {
     auto config_or = ParseMySQLDsn(dsn);
@@ -148,7 +140,7 @@ absl::StatusOr<MySQLBoostConnectionPool::Lease> MySQLBoostConnectionPool::Acquir
         return Lease(std::move(conn));
     } catch (const mysql::error_with_diagnostics& err) {
         return absl::InvalidArgumentError(
-            absl::StrCat("mysql pooled connection failed: ", mysql_error_message(err)));
+            absl::StrCat("mysql pooled connection failed: ", MySQLErrorMessage(err)));
     } catch (const boost::system::system_error& err) {
         return absl::InvalidArgumentError(
             absl::StrCat("mysql pooled connection failed: ", err.what()));

@@ -1877,5 +1877,74 @@ next = 42
     EXPECT_EQ("42", next->init->string());
 }
 
+TEST(FluxParserTest, ParseSinglePackageToleratesMissingPackageClause) {
+    // NB: the parser's scanner references the input buffer, so the source
+    // string must outlive the parser.
+    const std::string source = "x = 1\n";
+    Parser parser(source);
+
+    auto package = parser.parse_single_package("", "nopkg.flux");
+
+    ASSERT_NE(package, nullptr);
+    EXPECT_TRUE(package->package.empty());
+    ASSERT_EQ(1, package->files.size());
+}
+
+TEST(FluxParserTest, InvalidEscapeInImportPathRecordsErrorWithoutCrashing) {
+    const std::string source = "package main\nimport \"bad\\xpath\"\n";
+    Parser parser(source);
+
+    auto file = parser.parse_file("bad_import.flux");
+
+    ASSERT_NE(file, nullptr);
+    EXPECT_FALSE(parser.errors().empty());
+    ASSERT_EQ(1, file->imports.size());
+    // The import path literal must never be null: downstream consumers
+    // dereference it unconditionally.
+    EXPECT_NE(file->imports[0]->path, nullptr);
+}
+
+TEST(FluxParserTest, OverflowingDurationLiteralProducesBadExpressionWithoutCrash) {
+    const std::string source = "x = 99999999999999999999999999s\n";
+    Parser parser(source);
+
+    auto file = parser.parse_file("overflow.flux");
+
+    ASSERT_NE(file, nullptr);
+    EXPECT_TRUE(ErrorContains(parser.errors(), "overflows int64"));
+    ASSERT_EQ(1, file->body.size());
+    const auto& assignment = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(assignment, nullptr);
+    EXPECT_EQ(Expression::Type::BadExpr, assignment->init->type);
+}
+
+TEST(FluxParserTest, ExcessivelyNestedExpressionReportsDepthErrorAndRecovers) {
+    std::string source = "x = ";
+    for (int i = 0; i < 200; ++i) {
+        source += "(";
+    }
+    source += "1";
+    for (int i = 0; i < 200; ++i) {
+        source += ")";
+    }
+    source += "\ny = 2\n";
+
+    Parser parser(source);
+    auto file = parser.parse_file("deep.flux");
+
+    ASSERT_NE(file, nullptr);
+    EXPECT_TRUE(ErrorContains(parser.errors(), "nested too deep"));
+    // The depth counter must roll back after the failing statement so that
+    // the following statement at normal depth still parses: the last
+    // statement must be the `y = 2` assignment, not a BadStatement produced
+    // by a stuck depth counter.
+    ASSERT_FALSE(file->body.empty());
+    EXPECT_EQ(Statement::Type::VariableAssignment, file->body.back()->type);
+    const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body.back()->stmt);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ("y", next->id->name);
+    EXPECT_EQ("2", next->init->string());
+}
+
 } // namespace
 } // namespace pl::flux::syntax

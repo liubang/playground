@@ -18,14 +18,26 @@
 #pragma once
 
 #include <boost/mysql/connection_pool.hpp>
+#include <boost/mysql/error_with_diagnostics.hpp>
 #include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
 
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 
 namespace pl::flux::connector {
+
+// Formats a boost::mysql error, appending the server diagnostics message when
+// available. Shared by the connection pool and the MySQL source.
+inline std::string MySQLErrorMessage(const boost::mysql::error_with_diagnostics& err) {
+    const auto server_message = err.get_diagnostics().server_message();
+    if (server_message.empty()) {
+        return err.what();
+    }
+    return absl::StrCat(err.what(), ": ", std::string(server_message));
+}
 
 class MySQLBoostConnectionPool final {
 public:

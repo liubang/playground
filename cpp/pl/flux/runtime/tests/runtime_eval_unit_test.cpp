@@ -2301,5 +2301,145 @@ TEST(RuntimeEvalTest, ReportsMissingBindings) {
     EXPECT_EQ(absl::StatusCode::kNotFound, result.status().code());
 }
 
+TEST(RuntimeEvalTest, FillPreservesLogicalTableChunks) {
+    Environment env;
+    InstallBuiltinsAndArrayPackage(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = array.from(
+            bucket: "telegraf",
+            rows: [
+                {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
+                {_time: 2024-01-01T00:01:00Z, host: "a"},
+                {_time: 2024-01-01T00:02:00Z, host: "b"},
+                {_time: 2024-01-01T00:03:00Z, host: "b", _value: 40.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> fill(usePrevious: true)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    // One output chunk per input chunk: the stream must not be flattened.
+    ASSERT_EQ(2, result->as_table().table_count());
+    ASSERT_EQ(2, result->as_table().tables[0].rows.size());
+    ASSERT_EQ(2, result->as_table().tables[1].rows.size());
+    // `usePrevious` state must not leak across chunks: the first row of the
+    // "b" chunk stays empty instead of inheriting 10.0 from the "a" chunk.
+    EXPECT_EQ("10", result->as_table().tables[0].rows[1]->lookup("_value")->string());
+    EXPECT_EQ(nullptr, result->as_table().tables[1].rows[0]->lookup("_value"));
+    EXPECT_EQ("40", result->as_table().tables[1].rows[1]->lookup("_value")->string());
+}
+
+TEST(RuntimeEvalTest, ElapsedPreservesLogicalTableChunks) {
+    Environment env;
+    InstallBuiltinsAndArrayPackage(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = array.from(
+            bucket: "telegraf",
+            rows: [
+                {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
+                {_time: 2024-01-01T00:00:10Z, host: "b", _value: 20.0},
+                {_time: 2024-01-01T00:00:30Z, host: "a", _value: 30.0},
+                {_time: 2024-01-01T00:01:00Z, host: "b", _value: 40.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> elapsed()
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(2, result->as_table().table_count());
+    ASSERT_EQ(1, result->as_table().tables[0].rows.size());
+    ASSERT_EQ(1, result->as_table().tables[1].rows.size());
+    EXPECT_EQ("\"a\"", result->as_table().tables[0].rows[0]->lookup("host")->string());
+    EXPECT_EQ("30", result->as_table().tables[0].rows[0]->lookup("elapsed")->string());
+    EXPECT_EQ("\"b\"", result->as_table().tables[1].rows[0]->lookup("host")->string());
+    EXPECT_EQ("50", result->as_table().tables[1].rows[0]->lookup("elapsed")->string());
+}
+
+TEST(RuntimeEvalTest, DifferencePreservesLogicalTableChunks) {
+    Environment env;
+    InstallBuiltinsAndArrayPackage(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = array.from(
+            bucket: "telegraf",
+            rows: [
+                {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
+                {_time: 2024-01-01T00:00:10Z, host: "b", _value: 20.0},
+                {_time: 2024-01-01T00:00:30Z, host: "a", _value: 17.0},
+                {_time: 2024-01-01T00:01:00Z, host: "b", _value: 15.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> difference()
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(2, result->as_table().table_count());
+    ASSERT_EQ(1, result->as_table().tables[0].rows.size());
+    ASSERT_EQ(1, result->as_table().tables[1].rows.size());
+    EXPECT_EQ("\"a\"", result->as_table().tables[0].rows[0]->lookup("host")->string());
+    EXPECT_EQ("7", result->as_table().tables[0].rows[0]->lookup("_value")->string());
+    EXPECT_EQ("\"b\"", result->as_table().tables[1].rows[0]->lookup("host")->string());
+    EXPECT_EQ("-5", result->as_table().tables[1].rows[0]->lookup("_value")->string());
+}
+
+TEST(RuntimeEvalTest, DerivativePreservesLogicalTableChunks) {
+    Environment env;
+    InstallBuiltinsAndArrayPackage(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = array.from(
+            bucket: "telegraf",
+            rows: [
+                {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
+                {_time: 2024-01-01T00:00:10Z, host: "b", _value: 20.0},
+                {_time: 2024-01-01T00:00:30Z, host: "a", _value: 17.0},
+                {_time: 2024-01-01T00:01:00Z, host: "b", _value: 15.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> derivative(unit: 10s)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(2, result->as_table().table_count());
+    ASSERT_EQ(1, result->as_table().tables[0].rows.size());
+    ASSERT_EQ(1, result->as_table().tables[1].rows.size());
+    EXPECT_EQ("\"a\"", result->as_table().tables[0].rows[0]->lookup("host")->string());
+    EXPECT_EQ("\"b\"", result->as_table().tables[1].rows[0]->lookup("host")->string());
+}
+
+TEST(RuntimeEvalTest, SortOrdersTimeColumnByInstantAcrossZoneOffsets) {
+    Environment env;
+    InstallBuiltinsAndArrayPackage(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = array.from(
+            bucket: "telegraf",
+            rows: [
+                {_time: 2024-01-01T09:00:00+08:00, _value: 2.0},
+                {_time: 2024-01-01T02:00:00Z, _value: 1.0},
+            ],
+        )
+            |> sort(columns: ["_time"])
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(2, result->as_table().rows.size());
+    // 2024-01-01T09:00:00+08:00 is 01:00:00Z, earlier than 02:00:00Z, even
+    // though its literal sorts after the Zulu one lexicographically.
+    EXPECT_EQ("2", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("1", result->as_table().rows[1]->lookup("_value")->string());
+}
+
 } // namespace
 } // namespace pl::flux::runtime

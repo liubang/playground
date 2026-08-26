@@ -117,6 +117,12 @@ struct Pipeline {
     std::string id;
     std::string name;
     std::string role;
+    // Data-flow edges to producer pipelines, NOT execution barriers: dependent
+    // pipelines run concurrently with their producers and synchronize through
+    // the ExchangeBuffer between them (blocking reads with backpressure). The
+    // scheduler only uses this to validate the DAG (missing/cyclic edges) and
+    // to render the execution profile; serializing dependents after their
+    // dependencies would deadlock producer/consumer pipelines.
     std::vector<std::string> dependencies;
     std::vector<std::string> operators;
     std::optional<ExchangeDistributionProfile> distribution;

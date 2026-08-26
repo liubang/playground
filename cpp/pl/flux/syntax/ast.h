@@ -18,7 +18,6 @@
 #pragma once
 
 #include <ctime>
-#include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -669,30 +668,6 @@ enum class Operator {
     RegexpMatchOperator,
     NotRegexpMatchOperator,
     InvalidOperator,
-};
-
-static std::unordered_map<std::string, Operator> operator_map = {
-    {"*", Operator::MultiplicationOperator},
-    {"/", Operator::DivisionOperator},
-    {"%", Operator::ModuloOperator},
-    {"^", Operator::PowerOperator},
-    {"+", Operator::AdditionOperator},
-    {"-", Operator::SubtractionOperator},
-    {"<=", Operator::LessThanEqualOperator},
-    {"<", Operator::LessThanOperator},
-    {">=", Operator::GreaterThanEqualOperator},
-    {">", Operator::GreaterThanOperator},
-    {"startswith", Operator::StartsWithOperator},
-    {"in", Operator::InOperator},
-    {"not", Operator::NotOperator},
-    {"exists", Operator::ExistsOperator},
-    {"not empty", Operator::NotEmptyOperator},
-    {"empty", Operator::EmptyOperator},
-    {"==", Operator::EqualOperator},
-    {"!=", Operator::NotEqualOperator},
-    {"=~", Operator::RegexpMatchOperator},
-    {"!~", Operator::NotRegexpMatchOperator},
-    {"<INVALID_OP>", Operator::InvalidOperator},
 };
 
 inline std::string op_string(Operator op) {

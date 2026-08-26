@@ -51,7 +51,7 @@ public:
     [[nodiscard]] const std::vector<std::string>& errors() const { return errs_; }
 
 private:
-    constexpr static char METADATA[] = "parser-type=rust";
+    constexpr static char METADATA[] = "parser-type=cpp";
     constexpr static uint32_t MAX_DEPTH = 80;
 
     // scan will read the next token from the Scanner. If peek has been used,
@@ -144,7 +144,7 @@ private:
     std::optional<LogicalOperator> parse_and_operator();
 
     std::unique_ptr<PipeLit> parse_pipe_literal();
-    std::unique_ptr<RegexpLit> parse_regexp_literral();
+    std::unique_ptr<RegexpLit> parse_regexp_literal();
     std::unique_ptr<StringLit> parse_string_literal();
     std::unique_ptr<StringLit> new_string_literal(std::unique_ptr<Token> t);
     std::unique_ptr<Identifier> parse_identifier();
@@ -253,6 +253,9 @@ private:
     template <typename T, typename Fn> std::optional<T> depth_guard(Fn&& fn) {
         ++depth_;
         if (depth_ > MAX_DEPTH) {
+            // Roll the counter back on the early-return path as well, or every
+            // subsequent sibling parse would keep failing once the limit is hit.
+            --depth_;
             errs_.emplace_back("Program is nested too deep");
             return std::nullopt;
         }

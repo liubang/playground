@@ -80,5 +80,65 @@ TEST(StrConvTest, ParseUnitRejectsDanglingMicrosecondPrefix) {
     EXPECT_NE(unit.status().message().find("unterminated microsecond unit"), std::string::npos);
 }
 
+TEST(StrConvTest, ParseTimeAcceptsZoneOffsetAndNormalizesToUtc) {
+    auto offset = StrConv::parse_time("2024-01-01T08:30:00+08:00");
+
+    ASSERT_TRUE(offset.ok()) << offset.status();
+    // 08:30 at +08:00 is 00:30 UTC.
+    EXPECT_EQ(2024 - 1900, offset->tm_year);
+    EXPECT_EQ(0, offset->tm_mon);
+    EXPECT_EQ(1, offset->tm_mday);
+    EXPECT_EQ(0, offset->tm_hour);
+    EXPECT_EQ(30, offset->tm_min);
+    EXPECT_EQ(0, offset->tm_sec);
+
+    auto crossing = StrConv::parse_time("2024-01-01T00:30:00+08:00");
+
+    ASSERT_TRUE(crossing.ok()) << crossing.status();
+    // Crosses the day boundary: 2023-12-31T16:30:00Z.
+    EXPECT_EQ(2023 - 1900, crossing->tm_year);
+    EXPECT_EQ(11, crossing->tm_mon);
+    EXPECT_EQ(31, crossing->tm_mday);
+    EXPECT_EQ(16, crossing->tm_hour);
+    EXPECT_EQ(30, crossing->tm_min);
+
+    auto negative = StrConv::parse_time("2024-01-01T00:30:00-01:00");
+
+    ASSERT_TRUE(negative.ok()) << negative.status();
+    EXPECT_EQ(1, negative->tm_hour);
+    EXPECT_EQ(30, negative->tm_min);
+}
+
+TEST(StrConvTest, ParseTimeAcceptsFractionalSecondsAndMissingOffset) {
+    auto fractional = StrConv::parse_time("2024-01-01T00:00:00.500Z");
+
+    ASSERT_TRUE(fractional.ok()) << fractional.status();
+    EXPECT_EQ(0, fractional->tm_hour);
+    EXPECT_EQ(0, fractional->tm_sec);
+
+    // The scanner accepts a date-time without any zone offset; it is treated
+    // as UTC rather than rejected.
+    auto naive = StrConv::parse_time("2024-01-01T12:34:56");
+
+    ASSERT_TRUE(naive.ok()) << naive.status();
+    EXPECT_EQ(12, naive->tm_hour);
+    EXPECT_EQ(34, naive->tm_min);
+    EXPECT_EQ(56, naive->tm_sec);
+}
+
+TEST(StrConvTest, ParseTimeRejectsGarbage) {
+    EXPECT_FALSE(StrConv::parse_time("2024-13-01T00:00:00Z").ok());
+    EXPECT_FALSE(StrConv::parse_time("not-a-time").ok());
+    EXPECT_FALSE(StrConv::parse_time("2024-01-01T99:00:00Z").ok());
+}
+
+TEST(StrConvTest, ParseMagnitudeRejectsOverflow) {
+    size_t index = 0;
+    auto parsed = StrConv::parse_magnitude("99999999999999999999999999s", index);
+
+    ASSERT_FALSE(parsed.ok());
+    EXPECT_NE(parsed.status().message().find("overflows int64"), std::string::npos);
+}
+
 } // namespace
 } // namespace pl::flux::syntax

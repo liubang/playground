@@ -106,7 +106,11 @@ inline int64_t days_from_civil(int year, unsigned month, unsigned day) {
 inline std::optional<int64_t> parse_rfc3339_seconds(const std::string& literal) {
     absl::Time timestamp;
     std::string error;
-    if (!absl::ParseTime(absl::RFC3339_full, literal, &timestamp, &error)) {
+    // Accept date-only literals (midnight UTC) as well so callers comparing
+    // time bounds do not silently fall back to string comparison for inputs
+    // the scanner accepts.
+    if (!absl::ParseTime(absl::RFC3339_full, literal, &timestamp, &error) &&
+        !absl::ParseTime("%Y-%m-%d", literal, &timestamp, &error)) {
         return std::nullopt;
     }
     return absl::ToUnixSeconds(timestamp);

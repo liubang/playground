@@ -697,6 +697,13 @@ inline int compare_values(const Value* lhs, const Value* rhs) {
         const auto right = numeric_value(*rhs);
         return left < right ? -1 : left > right ? 1 : 0;
     }
+    if (lhs->type() == Value::Type::Time && rhs->type() == Value::Type::Time) {
+        // TimeValue::operator<=> compares by instant, not literal text, so
+        // equivalent timestamps with different zone offsets order correctly.
+        const auto& left = lhs->as_time();
+        const auto& right = rhs->as_time();
+        return left < right ? -1 : left > right ? 1 : 0;
+    }
     const auto left = lhs->type() == Value::Type::String ? lhs->as_string() : lhs->string();
     const auto right = rhs->type() == Value::Type::String ? rhs->as_string() : rhs->string();
     return left < right ? -1 : left > right ? 1 : 0;

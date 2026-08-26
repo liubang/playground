@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <compare>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -54,7 +55,12 @@ struct TimeValue {
     std::string literal;
 
     [[nodiscard]] std::string string() const;
-    auto operator<=>(const TimeValue&) const = default;
+    // Time values compare by the instant they denote, not by their literal
+    // text: equivalent timestamps with different zone offsets must compare
+    // equal. Literals that fail to parse fall back to lexicographic order so
+    // the comparison stays total and deterministic.
+    std::strong_ordering operator<=>(const TimeValue& other) const;
+    bool operator==(const TimeValue& other) const;
 };
 
 struct RegexValue {

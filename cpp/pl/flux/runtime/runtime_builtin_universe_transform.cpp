@@ -1161,41 +1161,52 @@ absl::StatusOr<Value> builtin_fill(const std::vector<Value>& args) {
     }
     const TableValue* table = *materialized_or;
 
-    std::vector<std::shared_ptr<ObjectValue>> rows;
-    rows.reserve(table->rows.size());
-    std::unordered_map<std::string, Value> previous_by_group;
-    for (const auto& row : table->rows) {
-        if (row == nullptr) {
-            continue;
-        }
-        const Value* current = row->lookup(*column_or);
-        const bool needs_fill = current == nullptr || current->is_null();
-        auto next_row = detail::clone_row(*row);
-        const std::string group_key = detail::group_key_for_row(*row);
+    // Preserve logical table (chunk) boundaries: `usePrevious` state must not
+    // leak across chunks, and the result must keep one chunk per input chunk
+    // instead of flattening the stream into a single table.
+    std::vector<TableChunk> chunks;
+    chunks.reserve(table->table_count());
+    for (const auto& chunk : table->tables) {
+        TableChunk next;
+        next.rows.reserve(chunk.rows.size());
+        std::unordered_map<std::string, Value> previous_by_group;
+        for (const auto& row : chunk.rows) {
+            if (row == nullptr) {
+                continue;
+            }
+            const Value* current = row->lookup(*column_or);
+            const bool needs_fill = current == nullptr || current->is_null();
+            auto next_row = detail::clone_row(*row);
+            const std::string group_key = detail::group_key_for_row(*row);
 
-        if (needs_fill) {
-            std::optional<Value> replacement;
-            if (*use_previous_or) {
-                if (const auto previous = previous_by_group.find(group_key);
-                    previous != previous_by_group.end()) {
-                    replacement = previous->second;
+            if (needs_fill) {
+                std::optional<Value> replacement;
+                if (*use_previous_or) {
+                    if (const auto previous = previous_by_group.find(group_key);
+                        previous != previous_by_group.end()) {
+                        replacement = previous->second;
+                    }
+                } else if (explicit_value != nullptr) {
+                    replacement = *explicit_value;
                 }
-            } else if (explicit_value != nullptr) {
-                replacement = *explicit_value;
+                if (replacement.has_value()) {
+                    auto updated =
+                        detail::object_with_upserted_property(*next_row, *column_or, *replacement);
+                    next_row = std::make_shared<ObjectValue>(updated.as_object());
+                    previous_by_group[group_key] = *replacement;
+                }
+            } else {
+                previous_by_group[group_key] = *current;
             }
-            if (replacement.has_value()) {
-                auto updated =
-                    detail::object_with_upserted_property(*next_row, *column_or, *replacement);
-                next_row = std::make_shared<ObjectValue>(updated.as_object());
-                previous_by_group[group_key] = *replacement;
-            }
-        } else {
-            previous_by_group[group_key] = *current;
+            next.rows.push_back(next_row);
         }
-        rows.push_back(next_row);
+        if (next.rows.empty()) {
+            next.group_key = chunk.group_key;
+            next.columns = chunk.columns;
+        }
+        chunks.push_back(std::move(next));
     }
-    auto result =
-        Value::table(table->bucket, std::move(rows), table->range_start, table->range_stop);
+    auto result = detail::table_with_chunks_like(*table, std::move(chunks));
     return detail::with_materialization_barrier(std::move(result), **table_or, "fill");
 }
 

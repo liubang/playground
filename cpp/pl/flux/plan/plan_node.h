@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -232,48 +233,125 @@ struct PlanNode {
     // -- Typed accessors (const & mutable) ----------------------------------
     // These provide the same ergonomics as direct field access.
 
+    // Typed accessors assert the node kind in debug builds: calling the wrong
+    // accessor is a programming error, and a plain std::get would surface it
+    // only as an opaque std::bad_variant_access throw.
     [[nodiscard]] const SourceScanSpec& source_scan() const {
+        assert(kind == PlanNodeKind::SourceScan);
         return std::get<SourceScanSpec>(spec);
     }
-    SourceScanSpec& source_scan() { return std::get<SourceScanSpec>(spec); }
+    SourceScanSpec& source_scan() {
+        assert(kind == PlanNodeKind::SourceScan);
+        return std::get<SourceScanSpec>(spec);
+    }
 
-    [[nodiscard]] const RangeSpec& range() const { return std::get<RangeSpec>(spec); }
-    RangeSpec& range() { return std::get<RangeSpec>(spec); }
+    [[nodiscard]] const RangeSpec& range() const {
+        assert(kind == PlanNodeKind::Range);
+        return std::get<RangeSpec>(spec);
+    }
+    RangeSpec& range() {
+        assert(kind == PlanNodeKind::Range);
+        return std::get<RangeSpec>(spec);
+    }
 
-    [[nodiscard]] const FilterSpec& filter() const { return std::get<FilterSpec>(spec); }
-    FilterSpec& filter() { return std::get<FilterSpec>(spec); }
+    [[nodiscard]] const FilterSpec& filter() const {
+        assert(kind == PlanNodeKind::Filter);
+        return std::get<FilterSpec>(spec);
+    }
+    FilterSpec& filter() {
+        assert(kind == PlanNodeKind::Filter);
+        return std::get<FilterSpec>(spec);
+    }
 
-    [[nodiscard]] const ProjectSpec& project() const { return std::get<ProjectSpec>(spec); }
-    ProjectSpec& project() { return std::get<ProjectSpec>(spec); }
+    [[nodiscard]] const ProjectSpec& project() const {
+        assert(kind == PlanNodeKind::Project);
+        return std::get<ProjectSpec>(spec);
+    }
+    ProjectSpec& project() {
+        assert(kind == PlanNodeKind::Project);
+        return std::get<ProjectSpec>(spec);
+    }
 
-    [[nodiscard]] const RenameSpec& rename() const { return std::get<RenameSpec>(spec); }
-    RenameSpec& rename() { return std::get<RenameSpec>(spec); }
+    [[nodiscard]] const RenameSpec& rename() const {
+        assert(kind == PlanNodeKind::Rename);
+        return std::get<RenameSpec>(spec);
+    }
+    RenameSpec& rename() {
+        assert(kind == PlanNodeKind::Rename);
+        return std::get<RenameSpec>(spec);
+    }
 
-    [[nodiscard]] const LimitSpec& limit() const { return std::get<LimitSpec>(spec); }
-    LimitSpec& limit() { return std::get<LimitSpec>(spec); }
+    [[nodiscard]] const LimitSpec& limit() const {
+        assert(kind == PlanNodeKind::Limit);
+        return std::get<LimitSpec>(spec);
+    }
+    LimitSpec& limit() {
+        assert(kind == PlanNodeKind::Limit);
+        return std::get<LimitSpec>(spec);
+    }
 
-    [[nodiscard]] const SortSpec& sort() const { return std::get<SortSpec>(spec); }
-    SortSpec& sort() { return std::get<SortSpec>(spec); }
+    [[nodiscard]] const SortSpec& sort() const {
+        assert(kind == PlanNodeKind::Sort);
+        return std::get<SortSpec>(spec);
+    }
+    SortSpec& sort() {
+        assert(kind == PlanNodeKind::Sort);
+        return std::get<SortSpec>(spec);
+    }
 
-    [[nodiscard]] const GroupSpec& group() const { return std::get<GroupSpec>(spec); }
-    GroupSpec& group() { return std::get<GroupSpec>(spec); }
+    [[nodiscard]] const GroupSpec& group() const {
+        assert(kind == PlanNodeKind::Group);
+        return std::get<GroupSpec>(spec);
+    }
+    GroupSpec& group() {
+        assert(kind == PlanNodeKind::Group);
+        return std::get<GroupSpec>(spec);
+    }
 
-    [[nodiscard]] const AggregateSpec& aggregate() const { return std::get<AggregateSpec>(spec); }
-    AggregateSpec& aggregate() { return std::get<AggregateSpec>(spec); }
+    [[nodiscard]] const AggregateSpec& aggregate() const {
+        assert(kind == PlanNodeKind::Aggregate);
+        return std::get<AggregateSpec>(spec);
+    }
+    AggregateSpec& aggregate() {
+        assert(kind == PlanNodeKind::Aggregate);
+        return std::get<AggregateSpec>(spec);
+    }
 
-    [[nodiscard]] const DistinctSpec& distinct() const { return std::get<DistinctSpec>(spec); }
-    DistinctSpec& distinct() { return std::get<DistinctSpec>(spec); }
+    [[nodiscard]] const DistinctSpec& distinct() const {
+        assert(kind == PlanNodeKind::Distinct);
+        return std::get<DistinctSpec>(spec);
+    }
+    DistinctSpec& distinct() {
+        assert(kind == PlanNodeKind::Distinct);
+        return std::get<DistinctSpec>(spec);
+    }
 
-    [[nodiscard]] const JoinSpec& join() const { return std::get<JoinSpec>(spec); }
-    JoinSpec& join() { return std::get<JoinSpec>(spec); }
+    [[nodiscard]] const JoinSpec& join() const {
+        assert(kind == PlanNodeKind::Join);
+        return std::get<JoinSpec>(spec);
+    }
+    JoinSpec& join() {
+        assert(kind == PlanNodeKind::Join);
+        return std::get<JoinSpec>(spec);
+    }
 
-    [[nodiscard]] const ExchangeSpec& exchange() const { return std::get<ExchangeSpec>(spec); }
-    ExchangeSpec& exchange() { return std::get<ExchangeSpec>(spec); }
+    [[nodiscard]] const ExchangeSpec& exchange() const {
+        assert(kind == PlanNodeKind::Exchange);
+        return std::get<ExchangeSpec>(spec);
+    }
+    ExchangeSpec& exchange() {
+        assert(kind == PlanNodeKind::Exchange);
+        return std::get<ExchangeSpec>(spec);
+    }
 
     [[nodiscard]] const MaterializeSpec& materialize() const {
+        assert(kind == PlanNodeKind::Materialize);
         return std::get<MaterializeSpec>(spec);
     }
-    MaterializeSpec& materialize() { return std::get<MaterializeSpec>(spec); }
+    MaterializeSpec& materialize() {
+        assert(kind == PlanNodeKind::Materialize);
+        return std::get<MaterializeSpec>(spec);
+    }
 };
 
 // ---------------------------------------------------------------------------

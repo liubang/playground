@@ -18,6 +18,7 @@
 #include "cpp/pl/flux/analysis/builtin_metadata.h"
 
 #include <algorithm>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace pl::flux::analysis {
@@ -586,13 +587,28 @@ const std::vector<BuiltinSignature>& AllBuiltinSignatures() {
     return signatures();
 }
 
-const BuiltinSignature* FindBuiltinSignature(std::string_view package, std::string_view name) {
-    for (const auto& sig : signatures()) {
-        if (sig.package == package && sig.name == name) {
-            return &sig;
+namespace {
+
+// Lookup index over the static signature table: LSP completion queries this
+// frequently, and a linear scan over 80+ signatures per lookup is wasteful.
+const std::unordered_map<std::string, const BuiltinSignature*>& signature_index() {
+    static const auto* index = [] {
+        auto* map = new std::unordered_map<std::string, const BuiltinSignature*>();
+        for (const auto& sig : signatures()) {
+            // '\x1f' cannot appear in a package or builtin name.
+            map->emplace(std::string(sig.package) + '\x1f' + std::string(sig.name), &sig);
         }
-    }
-    return nullptr;
+        return map;
+    }();
+    return *index;
+}
+
+} // namespace
+
+const BuiltinSignature* FindBuiltinSignature(std::string_view package, std::string_view name) {
+    const auto key = std::string(package) + '\x1f' + std::string(name);
+    const auto it = signature_index().find(key);
+    return it != signature_index().end() ? it->second : nullptr;
 }
 
 const BuiltinSignature* FindUniverseBuiltinSignature(std::string_view name) {

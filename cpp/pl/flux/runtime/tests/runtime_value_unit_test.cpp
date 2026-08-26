@@ -123,5 +123,29 @@ TEST(RuntimeValueTest, CreatesTableValuesWithMetadata) {
         table.string());
 }
 
+TEST(RuntimeValueTest, ComparesTimeValuesByInstant) {
+    const auto zulu = Value::time("2024-01-01T00:00:00Z");
+    const auto offset = Value::time("2024-01-01T08:00:00+08:00");
+    const auto later = Value::time("2024-01-01T00:00:01Z");
+    const auto date_only = Value::time("2024-01-01");
+
+    // Same instant with different literals/zone offsets compares equal.
+    EXPECT_EQ(zulu, offset);
+    // A date-only literal denotes midnight UTC of that day.
+    EXPECT_EQ(zulu, date_only);
+    EXPECT_NE(zulu, later);
+    EXPECT_TRUE(zulu.as_time() < later.as_time());
+    EXPECT_TRUE(offset.as_time() < later.as_time());
+    EXPECT_FALSE(later.as_time() < zulu.as_time());
+}
+
+TEST(RuntimeValueTest, TimeComparisonFallsBackToLexicographicWhenUnparseable) {
+    const auto a = Value::time("not-a-time-a");
+    const auto b = Value::time("not-a-time-b");
+
+    EXPECT_TRUE(a.as_time() < b.as_time());
+    EXPECT_NE(a, b);
+}
+
 } // namespace
 } // namespace pl::flux::runtime

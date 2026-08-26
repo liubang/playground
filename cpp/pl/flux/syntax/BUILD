@@ -74,6 +74,7 @@ cc_library(
         "//cpp/pl/lang",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:strings",
+        "@abseil-cpp//absl/time:time",
     ],
 )
 

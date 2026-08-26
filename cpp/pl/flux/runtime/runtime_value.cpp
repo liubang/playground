@@ -22,11 +22,27 @@
 #include <stdexcept>
 #include <unordered_set>
 
+#include "absl/time/time.h"
 #include "cpp/pl/flux/common/compat.h"
 
 namespace pl::flux::runtime {
 
 namespace {
+
+// Parses a time literal into an instant. Accepts full RFC3339 (including
+// `+HH:MM` offsets and fractional seconds) as well as date-only literals
+// (interpreted as midnight UTC), mirroring the scanner's grammar.
+std::optional<absl::Time> parse_time_literal_instant(const std::string& literal) {
+    absl::Time timestamp;
+    std::string error;
+    if (absl::ParseTime(absl::RFC3339_full, literal, &timestamp, &error)) {
+        return timestamp;
+    }
+    if (absl::ParseTime("%Y-%m-%d", literal, &timestamp, &error)) {
+        return timestamp;
+    }
+    return std::nullopt;
+}
 
 template <typename T>
 const T& checked_get(const Value::Storage& storage, Value::Type actual, Value::Type expected) {
@@ -113,6 +129,26 @@ std::string DurationValue::string() const {
 
 std::string TimeValue::string() const {
     return literal;
+}
+
+std::strong_ordering TimeValue::operator<=>(const TimeValue& other) const {
+    const auto lhs = parse_time_literal_instant(literal);
+    const auto rhs = parse_time_literal_instant(other.literal);
+    if (lhs.has_value() && rhs.has_value()) {
+        if (*lhs < *rhs) {
+            return std::strong_ordering::less;
+        }
+        if (*lhs > *rhs) {
+            return std::strong_ordering::greater;
+        }
+        return std::strong_ordering::equal;
+    }
+    // Unparseable literals keep a total, deterministic lexicographic order.
+    return literal <=> other.literal;
+}
+
+bool TimeValue::operator==(const TimeValue& other) const {
+    return (*this <=> other) == std::strong_ordering::equal;
 }
 
 std::string RegexValue::string() const {

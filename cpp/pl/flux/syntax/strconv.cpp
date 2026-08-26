@@ -18,8 +18,11 @@
 #include "strconv.h"
 
 #include <cctype>
+#include <cstdint>
 #include <iomanip>
 #include <sstream>
+
+#include "absl/time/time.h"
 
 namespace pl::flux::syntax {
 
@@ -164,19 +167,30 @@ absl::StatusOr<std::string> StrConv::parse_regex(const std::string& lit) {
 }
 
 absl::StatusOr<std::tm> StrConv::parse_time(const std::string& lit) {
-    std::istringstream s(lit);
-    std::tm t = {};
     if (lit.find('T') == std::string::npos) {
+        std::istringstream s(lit);
+        std::tm t = {};
         constexpr char datefmt[] = "%Y-%m-%d";
         s >> std::get_time(&t, datefmt);
-    } else {
-        constexpr char rfc3339[] = "%Y-%m-%dT%H:%M:%SZ";
-        s >> std::get_time(&t, rfc3339);
+        if (s.fail() || !s.eof()) {
+            return absl::InvalidArgumentError("fail to parse time " + lit);
+        }
+        return t;
     }
-    if (s.fail()) {
-        return absl::InvalidArgumentError("fail to parse time " + lit);
+    // The scanner accepts full RFC3339 timestamps with fractional seconds and
+    // `+HH:MM`/`-HH:MM` zone offsets, so parsing must accept them too. The
+    // result is normalized to UTC: `std::tm` carries no zone, and
+    // `DateTimeLit::string()` always renders the value with a `Z` suffix.
+    absl::Time timestamp;
+    std::string error;
+    if (!absl::ParseTime(absl::RFC3339_full, lit, &timestamp, &error)) {
+        // The scanner also accepts a date-time without any zone offset; treat
+        // it as UTC instead of rejecting a token the scanner produced.
+        if (!absl::ParseTime("%Y-%m-%dT%H:%M:%E*S", lit, &timestamp, &error)) {
+            return absl::InvalidArgumentError("fail to parse time " + lit);
+        }
     }
-    return t;
+    return absl::ToTM(timestamp, absl::UTCTimeZone());
 }
 
 absl::StatusOr<std::vector<std::shared_ptr<Duration>>> StrConv::parse_duration(
@@ -209,7 +223,12 @@ absl::StatusOr<int64_t> StrConv::parse_magnitude(const std::string& str, size_t&
         if (std::isdigit(digit) == 0) {
             break;
         }
-        value = (value * 10) + static_cast<int64_t>(digit - static_cast<unsigned char>('0'));
+        const int64_t d = static_cast<int64_t>(digit - static_cast<unsigned char>('0'));
+        // Guard against signed overflow (UB) on absurdly large magnitudes.
+        if (value > (INT64_MAX - d) / 10) {
+            return absl::InvalidArgumentError("duration magnitude overflows int64");
+        }
+        value = (value * 10) + d;
         ++i;
     }
     return value;

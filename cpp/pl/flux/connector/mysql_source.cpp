@@ -323,14 +323,6 @@ absl::StatusOr<MySQLConnectionConfig> parse_tcp_dsn(std::string_view dsn) {
     };
 }
 
-std::string mysql_error_message(const mysql::error_with_diagnostics& err) {
-    const auto server_message = err.get_diagnostics().server_message();
-    if (server_message.empty()) {
-        return err.what();
-    }
-    return absl::StrCat(err.what(), ": ", std::string(server_message));
-}
-
 absl::StatusOr<mysql::any_connection> open_connection(asio::io_context* ctx,
                                                       const std::string& dsn) {
     auto config_or = ParseMySQLDsn(dsn);
@@ -354,7 +346,7 @@ absl::StatusOr<mysql::any_connection> open_connection(asio::io_context* ctx,
         return conn;
     } catch (const mysql::error_with_diagnostics& err) {
         return absl::InvalidArgumentError(
-            absl::StrCat("mysql connect failed: ", mysql_error_message(err)));
+            absl::StrCat("mysql connect failed: ", MySQLErrorMessage(err)));
     } catch (const std::exception& err) {
         return absl::InvalidArgumentError(absl::StrCat("mysql connect failed: ", err.what()));
     }
@@ -369,7 +361,7 @@ absl::StatusOr<mysql::results> execute_query(mysql::any_connection* conn,
         return result;
     } catch (const mysql::error_with_diagnostics& err) {
         return absl::InvalidArgumentError(
-            absl::StrCat("mysql ", context, " failed: ", mysql_error_message(err)));
+            absl::StrCat("mysql ", context, " failed: ", MySQLErrorMessage(err)));
     } catch (const std::exception& err) {
         return absl::InvalidArgumentError(absl::StrCat("mysql ", context, " failed: ", err.what()));
     }
@@ -1376,7 +1368,7 @@ absl::Status MySQLPageSource::Initialize() {
         }
     } catch (const mysql::error_with_diagnostics& err) {
         return absl::InvalidArgumentError(
-            absl::StrCat("mysql scan start failed: ", mysql_error_message(err)));
+            absl::StrCat("mysql scan start failed: ", MySQLErrorMessage(err)));
     } catch (const std::exception& err) {
         return absl::InvalidArgumentError(absl::StrCat("mysql scan start failed: ", err.what()));
     }
@@ -1448,7 +1440,7 @@ absl::StatusOr<std::optional<runtime::Page>> MySQLPageSource::NextPage() {
         }
     } catch (const mysql::error_with_diagnostics& err) {
         return absl::InvalidArgumentError(
-            absl::StrCat("mysql scan read failed: ", mysql_error_message(err)));
+            absl::StrCat("mysql scan read failed: ", MySQLErrorMessage(err)));
     } catch (const std::exception& err) {
         return absl::InvalidArgumentError(absl::StrCat("mysql scan read failed: ", err.what()));
     }

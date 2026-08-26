@@ -84,7 +84,11 @@ std::unique_ptr<Package> Parser::parse_single_package(const std::string& pkgpath
                                                       const std::string& fname) {
     std::shared_ptr<File> ast_file = parse_file(fname);
     auto package = std::make_unique<Package>();
-    package->package = ast_file->package->name->name;
+    // A file without a `package` clause parses to a null PackageClause; guard
+    // against dereferencing it instead of crashing.
+    if (ast_file->package != nullptr && ast_file->package->name != nullptr) {
+        package->package = ast_file->package->name->name;
+    }
     package->path = pkgpath;
     package->files.emplace_back(ast_file);
     return package;
@@ -1064,7 +1068,11 @@ std::unique_ptr<Property> Parser::create_bad_property(std::string_view key,
 std::unique_ptr<StringLit> Parser::new_string_literal(std::unique_ptr<Token> t) {
     auto result = StrConv::parse_string(t->lit);
     if (!result.ok()) {
-        return nullptr;
+        // Do not silently return nullptr: callers dereference the result
+        // unconditionally (e.g. parse_label_literal, import paths, property
+        // keys). Record the error and produce an empty literal instead.
+        errs_.emplace_back(missing_at_message(result.status().message(), t->start_pos));
+        return std::make_unique<StringLit>(std::string());
     }
     return std::make_unique<StringLit>(result.value());
 }
@@ -1323,7 +1331,7 @@ std::unique_ptr<Expression> Parser::parse_conditional_expression() {
     return parse_logical_or_expression();
 }
 
-std::unique_ptr<RegexpLit> Parser::parse_regexp_literral() {
+std::unique_ptr<RegexpLit> Parser::parse_regexp_literal() {
     auto t = expect(TokenType::Regex);
     auto value = StrConv::parse_regex(t->lit);
     auto ret = std::make_unique<RegexpLit>();
@@ -1352,7 +1360,10 @@ std::tuple<std::unique_ptr<DurationLit>, TokenError> Parser::parse_duration_lite
         auto dl = std::make_unique<DurationLit>(value.value());
         return {std::move(dl), TokenError()};
     }
-    return {nullptr, TokenError()};
+    // Keep the offending token in the error: callers pass it to
+    // create_bad_expression, which dereferences it unconditionally.
+    errs_.emplace_back(missing_at_message(value.status().message(), t->start_pos));
+    return {nullptr, TokenError(std::move(t))};
 }
 
 std::unique_ptr<PipeLit> Parser::parse_pipe_literal() {
@@ -2206,7 +2217,7 @@ std::unique_ptr<Expression> Parser::parse_primary_expression() {
         }
         case TokenType::Regex:
             ret->type = Expression::Type::RegexpLit;
-            ret->expr = parse_regexp_literral();
+            ret->expr = parse_regexp_literal();
             break;
         case TokenType::Time: {
             std::unique_ptr<DateTimeLit> lit;

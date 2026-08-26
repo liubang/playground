@@ -124,5 +124,14 @@ TEST(FluxScannerTest, ReturnsIllegalTokenForUnexpectedCharacters) {
     EXPECT_EQ(TokenType::Eof, eof->tok);
 }
 
+TEST(FluxScannerTest, TokenToStringNamesBracesAndBracketsCorrectly) {
+    // Regression: LBrace used to stringify as "LBrack", which made error
+    // messages and AST dumps show `{` as `[`.
+    EXPECT_EQ("LBrace", token_to_string(TokenType::LBrace));
+    EXPECT_EQ("RBrace", token_to_string(TokenType::RBrace));
+    EXPECT_EQ("LBrack", token_to_string(TokenType::LBrack));
+    EXPECT_EQ("RBrack", token_to_string(TokenType::RBrack));
+}
+
 } // namespace
 } // namespace pl::flux::syntax

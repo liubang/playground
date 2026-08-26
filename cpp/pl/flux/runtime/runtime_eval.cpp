@@ -17,6 +17,8 @@
 
 #include "cpp/pl/flux/runtime/runtime_eval.h"
 
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <regex>
 #include <sstream>
@@ -46,6 +48,21 @@ absl::Status unsupported(const syntax::Expression& expr, const std::string& what
 absl::Status type_error(const syntax::Expression& expr, const std::string& detail) {
     return absl::InvalidArgumentError(
         absl::StrCat("invalid expression ", detail, " at ", expr_tag(expr)));
+}
+
+// Compiling a std::regex is expensive; `=~` is evaluated per row on filter
+// hot paths, so compiled patterns are cached. The number of distinct patterns
+// is bounded by the regex literals present in the program.
+std::shared_ptr<const std::regex> compiled_regex(const std::string& pattern) {
+    static std::mutex cache_mu;
+    static std::unordered_map<std::string, std::shared_ptr<const std::regex>> cache;
+    std::scoped_lock lock(cache_mu);
+    if (const auto it = cache.find(pattern); it != cache.end()) {
+        return it->second;
+    }
+    auto compiled = std::make_shared<const std::regex>(pattern);
+    cache.emplace(pattern, compiled);
+    return compiled;
 }
 
 std::string string_payload(const Value& value) {
@@ -808,7 +825,7 @@ absl::StatusOr<Value> eval_binary(const syntax::BinaryExpr& binary,
             if (pattern.size() >= 2 && pattern.front() == '/' && pattern.back() == '/') {
                 pattern = pattern.substr(1, pattern.size() - 2);
             }
-            bool matched = std::regex_search(left.as_string(), std::regex(pattern));
+            bool matched = std::regex_search(left.as_string(), *compiled_regex(pattern));
             return Value::boolean(binary.op == syntax::Operator::RegexpMatchOperator ? matched
                                                                                      : !matched);
         }

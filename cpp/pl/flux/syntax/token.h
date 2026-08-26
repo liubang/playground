@@ -182,7 +182,7 @@ inline std::string token_to_string(TokenType token) {
         case TokenType::RBrack:
             return "RBrack";
         case TokenType::LBrace:
-            return "LBrack";
+            return "LBrace";
         case TokenType::RBrace:
             return "RBrace";
         case TokenType::Comma:
