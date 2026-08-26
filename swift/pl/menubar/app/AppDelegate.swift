@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cpuController: StatusItemController?
     private var memoryController: StatusItemController?
     private var networkController: StatusItemController?
+    private var batteryController: StatusItemController?
 
     func applicationDidFinishLaunching(_: Notification) {
         _ = AppNapDisabler.shared
@@ -17,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // EventStore feeds system-calendar events into the popover;
         // HolidaySync keeps the statutory-holiday table fresh remotely.
         let clock = MenuBarClock()
+        AppRegistry.clock = clock
         let eventStore = EventStore()
         let holidaySync = HolidaySync()
         let calendar = StatusItemController(
@@ -41,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Weather: condition symbol + temperature.
         let weather = WeatherStore()
+        AppRegistry.weather = weather
         let weatherItem = StatusItemController(
             autosaveName: "AuraBar.weather",
             visibilityKey: ModuleVisibility.weatherKey,
@@ -130,5 +133,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             open ? stats?.popoverDidOpen() : stats?.popoverDidClose()
         }
         networkController = networkItem
+
+        // Battery: level glyph + percentage, 30s cadence. Hidden module
+        // shows nothing on machines without a battery.
+        let battery = BatteryStore()
+        let batteryItem = StatusItemController(
+            autosaveName: "AuraBar.battery",
+            visibilityKey: ModuleVisibility.batteryKey,
+            content: BatteryPopover(store: battery),
+        )
+        batteryItem.bindLabel(to: battery.$info) { button, info in
+            guard let button else { return }
+            button.image = StatsGlyphs.makeBattery(
+                fraction: Double(info?.percentage ?? 0) / 100,
+                charging: info?.isCharging ?? false,
+                value: info.map { "\($0.percentage)%" } ?? "--",
+            )
+            button.imagePosition = .imageOnly
+            button.title = ""
+            button.toolTip = info.map { "电池 \($0.percentage)%" }
+        }
+        batteryController = batteryItem
     }
 }

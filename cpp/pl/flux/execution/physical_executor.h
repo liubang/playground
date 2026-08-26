@@ -17,7 +17,10 @@
 
 #pragma once
 
+#include <algorithm>
+#include <condition_variable>
 #include <cstddef>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -25,8 +28,10 @@
 #include <string>
 #include <vector>
 
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "cpp/pl/flux/connector/connector_runtime.h"
+#include "cpp/pl/flux/execution/page_budget.h"
 #include "cpp/pl/flux/plan/plan_node.h"
 #include "cpp/pl/flux/runtime/runtime_page.h"
 #include "cpp/pl/flux/runtime/runtime_value.h"
@@ -99,6 +104,127 @@ public:
     virtual void CollectSplitStats(std::vector<connector::ConnectorSplitStats>*) const {}
     virtual void CollectAccumulatorStats(std::vector<AccumulatorStats>*) const {}
     virtual void CollectExchangePartitionStats(std::vector<ExchangePartitionStats>*) const {}
+};
+
+// Bounded blocking queue connecting producer and consumer pipelines.
+// Producers block in AddPage when the buffer is full (backpressure);
+// consumers block in PopPage until a page arrives, an error is marked, or all
+// producers finished. This is the synchronization point that makes it safe
+// for dependent pipelines to run concurrently.
+class ExchangeBuffer {
+public:
+    explicit ExchangeBuffer(size_t max_pages = 1024, size_t max_buffered_bytes = 64 * 1024 * 1024)
+        : max_pages_(std::max<size_t>(1, max_pages)),
+          max_buffered_bytes_(std::max<size_t>(1, max_buffered_bytes)) {}
+
+    void SetProducerCount(size_t producer_count) {
+        std::scoped_lock lock(mu_);
+        producer_count_ = std::max<size_t>(1, producer_count);
+    }
+
+    absl::Status AddPage(runtime::Page page) {
+        const size_t page_bytes = EstimatePageBytes(page);
+        std::unique_lock<std::mutex> lock(mu_);
+        cv_.wait(lock, [this, page_bytes]() {
+            return closed_ || finished_ || error_.has_value() ||
+                   (pages_.size() < max_pages_ &&
+                    (pages_.empty() || buffered_bytes_ + page_bytes <= max_buffered_bytes_));
+        });
+        if (closed_) {
+            return absl::FailedPreconditionError("exchange buffer is closed");
+        }
+        if (finished_) {
+            return absl::FailedPreconditionError("exchange buffer is finished");
+        }
+        if (error_.has_value()) {
+            return absl::FailedPreconditionError(*error_);
+        }
+        rows_ += page.row_count();
+        buffered_bytes_ += page_bytes;
+        pages_.push_back(std::move(page));
+        lock.unlock();
+        cv_.notify_all();
+        return absl::OkStatus();
+    }
+
+    absl::StatusOr<std::optional<runtime::Page>> PopPage() {
+        std::unique_lock<std::mutex> lock(mu_);
+        cv_.wait(lock, [this]() { return !pages_.empty() || finished_ || error_.has_value(); });
+        if (error_.has_value()) {
+            return absl::FailedPreconditionError(*error_);
+        }
+        if (pages_.empty()) {
+            return std::nullopt;
+        }
+        runtime::Page page = std::move(pages_.front());
+        pages_.pop_front();
+        const size_t page_bytes = EstimatePageBytes(page);
+        buffered_bytes_ = page_bytes > buffered_bytes_ ? 0 : buffered_bytes_ - page_bytes;
+        lock.unlock();
+        cv_.notify_all();
+        return page;
+    }
+
+    [[nodiscard]] size_t page_count() const {
+        std::scoped_lock lock(mu_);
+        return pages_.size();
+    }
+    [[nodiscard]] size_t row_count() const {
+        std::scoped_lock lock(mu_);
+        return rows_;
+    }
+    [[nodiscard]] bool finished() const {
+        std::scoped_lock lock(mu_);
+        return finished_;
+    }
+    [[nodiscard]] bool closed() const {
+        std::scoped_lock lock(mu_);
+        return closed_;
+    }
+
+    absl::Status Finish() {
+        std::scoped_lock lock(mu_);
+        if (closed_) {
+            return absl::FailedPreconditionError("exchange buffer is closed");
+        }
+        if (error_.has_value()) {
+            return absl::FailedPreconditionError(*error_);
+        }
+        ++finished_producers_;
+        if (finished_producers_ >= producer_count_) {
+            finished_ = true;
+        }
+        cv_.notify_all();
+        return absl::OkStatus();
+    }
+
+    void MarkError(const absl::Status& status) {
+        std::scoped_lock lock(mu_);
+        error_ = status.ToString();
+        finished_ = true;
+        cv_.notify_all();
+    }
+
+    void Close() {
+        std::scoped_lock lock(mu_);
+        closed_ = true;
+        finished_ = true;
+        cv_.notify_all();
+    }
+
+private:
+    mutable std::mutex mu_;
+    std::condition_variable cv_;
+    std::deque<runtime::Page> pages_;
+    size_t max_pages_ = 1024;
+    size_t max_buffered_bytes_ = size_t{64} * 1024 * 1024;
+    size_t buffered_bytes_ = 0;
+    size_t producer_count_ = 1;
+    size_t finished_producers_ = 0;
+    size_t rows_ = 0;
+    bool finished_ = false;
+    bool closed_ = false;
+    std::optional<std::string> error_;
 };
 
 struct Pipeline {

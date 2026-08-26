@@ -51,13 +51,6 @@ struct WeatherPopover: View {
     @AppStorage("themePreference") private var themePreference = ThemePreference.system.rawValue
     @Environment(\.colorScheme) private var colorScheme
 
-    @State private var settingsExpanded = false
-    @State private var settingsError: String?
-    /// Drafts applied to the store only on submit, so typing doesn't
-    /// trigger a geocoding request per keystroke.
-    @State private var cityDraft = ""
-    @State private var keyDraft = ""
-
     private var theme: Theme {
         (ThemePreference(rawValue: themePreference) ?? .system).theme(for: colorScheme)
     }
@@ -80,12 +73,6 @@ struct WeatherPopover: View {
                     .font(.caption)
                     .foregroundStyle(theme.rest)
             }
-            settingsSection
-            if let settingsError {
-                Text(settingsError)
-                    .font(.caption)
-                    .foregroundStyle(theme.rest)
-            }
             footer
         }
         .padding(12)
@@ -95,10 +82,6 @@ struct WeatherPopover: View {
         .environment(\.theme, theme)
         .preferredColorScheme(pinnedColorScheme)
         .animation(.easeInOut(duration: 0.25), value: store.snapshot != nil)
-        .onAppear {
-            cityDraft = store.location?.name ?? ""
-            keyDraft = store.qweatherKey
-        }
     }
 
     // MARK: - Current conditions
@@ -121,6 +104,27 @@ struct WeatherPopover: View {
             Text("\(Int(current.temperature.rounded()))°")
                 .font(.system(size: 42, weight: .light, design: .rounded))
                 .contentTransition(.numericText())
+            // Tomorrow in one line: condition, range, delta vs today,
+            // rain heads-up — the "do I need an umbrella" line.
+            if let today = snapshot.daily.first,
+               let tomorrow = snapshot.daily.dropFirst().first
+            {
+                let delta = ((tomorrow.tempMax + tomorrow.tempMin)
+                    - (today.tempMax + today.tempMin)) / 2
+                HStack(spacing: 4) {
+                    Text("明天 \(tomorrow.condition.label) \(Int(tomorrow.tempMin.rounded()))~\(Int(tomorrow.tempMax.rounded()))°")
+                    if abs(delta) >= 1 {
+                        Text("· 比今天\(delta > 0 ? "高" : "低") \(Int(abs(delta).rounded()))°")
+                            .foregroundStyle(delta > 0 ? theme.orange : theme.accent)
+                    }
+                    if let pop = tomorrow.precipProbability, pop >= 30 {
+                        Text("· 降水 \(pop)%")
+                            .foregroundStyle(theme.accent)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(theme.textSecondary)
+            }
             HStack(spacing: 10) {
                 Label("湿度 \(Int(current.humidity.rounded()))%", systemImage: "humidity")
                 Label("\(Int(current.windSpeedKmh.rounded())) km/h", systemImage: "wind")
@@ -375,123 +379,6 @@ struct WeatherPopover: View {
         .padding(.vertical, 28)
     }
 
-    // MARK: - Settings
-
-    private var settingsSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            CollapsibleHeader(title: "天气设置", expanded: $settingsExpanded)
-            if settingsExpanded {
-                VStack(alignment: .leading, spacing: 6) {
-                    Picker("数据源", selection: $store.providerKind) {
-                        ForEach(WeatherProviderKind.allCases, id: \.rawValue) { kind in
-                            Text(kind.label).tag(kind)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-
-                    Toggle("自动定位", isOn: autoLocationBinding)
-                        .font(.caption)
-                        .tint(theme.accent)
-
-                    if store.autoLocation {
-                        autoLocationStatus
-                    } else {
-                        SettingsField(prompt: "添加城市（如 北京 / 上海）", text: $cityDraft) {
-                            Task { await store.setCity(cityDraft) }
-                        }
-                        if !store.savedLocations.isEmpty {
-                            savedLocationList
-                        }
-                    }
-
-                    if store.providerKind == .qweather {
-                        SettingsField(prompt: "和风天气 API Key", text: $keyDraft) {
-                            store.qweatherKey = keyDraft
-                            Task { await store.refresh() }
-                        }
-                    }
-                }
-                .padding(.top, 4)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 2)
-    }
-
-    private var autoLocationBinding: Binding<Bool> {
-        Binding(
-            get: { store.autoLocation },
-            set: { store.setAutoLocation($0) },
-        )
-    }
-
-    /// Status line for auto mode: locating spinner, permission hint with
-    /// a shortcut to System Settings, or the resolved place name.
-    private var autoLocationStatus: some View {
-        HStack(spacing: 6) {
-            if store.locationService.isLocating {
-                ProgressView().controlSize(.small)
-                Text("定位中…")
-            } else if store.locationService.authorizationDenied {
-                Image(systemName: "location.slash")
-                    .foregroundStyle(theme.warning)
-                Text("定位未授权")
-                Spacer()
-                Button("去设置") {
-                    if let url = URL(
-                        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices",
-                    ) {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(theme.accent)
-            } else {
-                Image(systemName: "location")
-                Text(store.location.map { "当前：\($0.name)" } ?? "待定位")
-            }
-        }
-        .font(.caption)
-        .foregroundStyle(theme.textSecondary)
-    }
-
-    /// Saved cities: click to select, × to remove.
-    private var savedLocationList: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            ForEach(store.savedLocations) { loc in
-                HStack(spacing: 6) {
-                    Button {
-                        store.selectLocation(loc)
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundStyle(theme.accent)
-                                .opacity(loc == store.location && !store.autoLocation ? 1 : 0)
-                            Text(loc.name)
-                                .foregroundStyle(theme.textPrimary)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    Spacer()
-                    Button {
-                        store.removeLocation(loc)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 8))
-                            .foregroundStyle(theme.textSecondary)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                .font(.caption)
-            }
-        }
-    }
-
     // MARK: - Footer
 
     private var footer: some View {
@@ -511,14 +398,9 @@ struct WeatherPopover: View {
 
     private var settingsMenu: some View {
         Menu {
-            Picker("主题", selection: $themePreference) {
-                ForEach(ThemePreference.allCases, id: \.rawValue) { preference in
-                    Text(preference.label).tag(preference.rawValue)
-                }
+            Button("设置…") {
+                SettingsWindowController.shared.show()
             }
-            Divider()
-            ModuleToggles(current: "weather")
-            Toggle("开机自启", isOn: LaunchAtLogin.binding { settingsError = $0 })
             Divider()
             Button("退出 AuraBar", role: .destructive, action: quitApp)
         } label: {

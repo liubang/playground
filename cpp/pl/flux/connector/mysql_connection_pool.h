@@ -19,6 +19,7 @@
 
 #include <boost/mysql/connection_pool.hpp>
 #include <boost/mysql/error_with_diagnostics.hpp>
+#include <chrono>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -59,7 +60,14 @@ public:
         std::optional<boost::mysql::pooled_connection> conn_;
     };
 
-    MySQLBoostConnectionPool(std::string dsn, size_t max_pool_size);
+    // Bounded wait for a pooled connection: boost::mysql's pool keeps
+    // retrying forever when the server rejects credentials, so acquiring
+    // without a timeout would hang the query indefinitely.
+    static constexpr std::chrono::milliseconds kDefaultAcquireTimeout{30000};
+
+    MySQLBoostConnectionPool(std::string dsn,
+                             size_t max_pool_size,
+                             std::chrono::milliseconds acquire_timeout = kDefaultAcquireTimeout);
     ~MySQLBoostConnectionPool();
 
     [[nodiscard]] absl::StatusOr<Lease> Acquire();
@@ -69,10 +77,13 @@ private:
     struct Impl;
     std::string dsn_;
     size_t max_pool_size_ = 0;
+    std::chrono::milliseconds acquire_timeout_ = kDefaultAcquireTimeout;
     std::unique_ptr<Impl> impl_;
 };
 
 absl::StatusOr<std::shared_ptr<MySQLBoostConnectionPool>> MakeMySQLBoostConnectionPool(
-    std::string dsn, size_t max_pool_size);
+    std::string dsn,
+    size_t max_pool_size,
+    std::chrono::milliseconds acquire_timeout = MySQLBoostConnectionPool::kDefaultAcquireTimeout);
 
 } // namespace pl::flux::connector

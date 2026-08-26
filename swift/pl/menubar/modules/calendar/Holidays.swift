@@ -38,6 +38,44 @@ enum Holidays {
         remoteTable = entries
     }
 
+    /// A consecutive run of rest days sharing one name.
+    struct HolidayBlock: Equatable, Sendable {
+        let name: String
+        let start: Date
+        let end: Date
+
+        var days: Int {
+            (CalendarModel.calendar.dateComponents([.day], from: start, to: end).day ?? 0) + 1
+        }
+    }
+
+    /// The holiday block `date` falls inside of, or the next one after
+    /// it. Rest-kind entries only — shifted workdays are ignored.
+    static func nextHoliday(from date: Date) -> HolidayBlock? {
+        let cal = CalendarModel.calendar
+        let today = cal.startOfDay(for: date)
+        var merged = table
+        merged.merge(remoteTable) { _, remote in remote }
+        let restDays = merged.filter { $0.value.kind == .rest }.keys.sorted()
+        guard let first = restDays.first(where: { $0 >= today }) else { return nil }
+
+        let name = merged[first]?.name ?? ""
+        // If today sits inside a block, walk back to its first day.
+        var start = first
+        while let prev = cal.date(byAdding: .day, value: -1, to: start),
+              merged[prev]?.name == name, merged[prev]?.kind == .rest
+        {
+            start = prev
+        }
+        var end = first
+        while let next = cal.date(byAdding: .day, value: 1, to: end),
+              merged[next]?.name == name, merged[next]?.kind == .rest
+        {
+            end = next
+        }
+        return HolidayBlock(name: name, start: start, end: end)
+    }
+
     private static let table: [Date: Entry] = buildTable()
 
     private static func buildTable() -> [Date: Entry] {

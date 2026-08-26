@@ -23,6 +23,52 @@ enum ClockFormat: String, CaseIterable, Sendable {
     }
 }
 
+/// Optional second time zone appended to the menu bar clock.
+enum SecondTimeZone: String, CaseIterable, Sendable {
+    case off = ""
+    case utc = "UTC"
+    case newYork = "America/New_York"
+    case losAngeles = "America/Los_Angeles"
+    case london = "Europe/London"
+    case paris = "Europe/Paris"
+    case tokyo = "Asia/Tokyo"
+    case singapore = "Asia/Singapore"
+    case sydney = "Australia/Sydney"
+
+    var label: String {
+        switch self {
+        case .off: "关闭"
+        case .utc: "UTC"
+        case .newYork: "纽约"
+        case .losAngeles: "旧金山"
+        case .london: "伦敦"
+        case .paris: "巴黎"
+        case .tokyo: "东京"
+        case .singapore: "新加坡"
+        case .sydney: "悉尼"
+        }
+    }
+
+    /// Compact code shown in the menu bar label.
+    var code: String {
+        switch self {
+        case .off: ""
+        case .utc: "UTC"
+        case .newYork: "NYC"
+        case .losAngeles: "SFO"
+        case .london: "LON"
+        case .paris: "PAR"
+        case .tokyo: "TYO"
+        case .singapore: "SIN"
+        case .sydney: "SYD"
+        }
+    }
+
+    var timeZone: TimeZone? {
+        rawValue.isEmpty ? nil : TimeZone(identifier: rawValue)
+    }
+}
+
 /// Owns the menu bar text: a formatted clock refreshed on a timer.
 ///
 /// Two measures keep the label from lagging the wall clock:
@@ -45,7 +91,16 @@ final class MenuBarClock: ObservableObject {
         }
     }
 
+    /// Second time zone shown after the main clock; "off" hides it.
+    @Published var secondTimeZone: SecondTimeZone {
+        didSet {
+            UserDefaults.standard.set(secondTimeZone.rawValue, forKey: Self.secondTimeZoneKey)
+            restart()
+        }
+    }
+
     private static let formatKey = "AuraBar.calendar.clockFormat"
+    private static let secondTimeZoneKey = "AuraBar.calendar.secondTimeZone"
     private var timer: Timer?
 
     private let formatter: DateFormatter = {
@@ -54,9 +109,18 @@ final class MenuBarClock: ObservableObject {
         return f
     }()
 
+    private let secondFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
     init() {
         let saved = UserDefaults.standard.string(forKey: Self.formatKey) ?? ""
         format = ClockFormat(rawValue: saved) ?? .full
+        secondTimeZone = SecondTimeZone(
+            rawValue: UserDefaults.standard.string(forKey: Self.secondTimeZoneKey) ?? "",
+        ) ?? .off
 
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main,
@@ -92,6 +156,11 @@ final class MenuBarClock: ObservableObject {
 
     private func update() {
         formatter.dateFormat = format.rawValue
-        labelText = formatter.string(from: Date())
+        var text = formatter.string(from: Date())
+        if let timeZone = secondTimeZone.timeZone {
+            secondFormatter.timeZone = timeZone
+            text += " \(secondTimeZone.code) \(secondFormatter.string(from: Date()))"
+        }
+        labelText = text
     }
 }

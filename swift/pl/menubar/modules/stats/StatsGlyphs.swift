@@ -72,6 +72,60 @@ enum StatsGlyphs {
         }
     }
 
+    // MARK: - Battery
+
+    /// Battery outline + nub + fill level + "BAT" caption + percentage.
+    /// Charging draws a bolt: punched through the fill when there's
+    /// enough of it, solid on an empty battery.
+    static func makeBattery(fraction: Double, charging: Bool, value: String) -> NSImage {
+        let fraction = min(max(fraction, 0), 1)
+        return makeLabeled(caption: "BAT", value: value) { rect in
+            let body = rect.insetBy(dx: 1.2, dy: 4.2)
+            let outline = NSBezierPath(roundedRect: body, xRadius: 2.2, yRadius: 2.2)
+            outline.lineWidth = 1.4
+            NSColor.black.setStroke()
+            outline.stroke()
+
+            // Nub on the right edge.
+            let nub = NSRect(x: body.maxX + 0.6, y: body.midY - 1.8, width: 1.4, height: 3.6)
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: nub, xRadius: 0.7, yRadius: 0.7).fill()
+
+            // Fill level.
+            let inner = body.insetBy(dx: 1.4, dy: 1.4)
+            let fillWidth = inner.width * fraction
+            if fillWidth > 0.4 {
+                NSBezierPath(
+                    roundedRect: NSRect(x: inner.minX, y: inner.minY, width: fillWidth, height: inner.height),
+                    xRadius: 1,
+                    yRadius: 1,
+                ).fill()
+            }
+
+            if charging {
+                let cx = body.midX
+                let cy = body.midY
+                let bolt = NSBezierPath()
+                bolt.move(to: NSPoint(x: cx + 1.4, y: cy + 3.4))
+                bolt.line(to: NSPoint(x: cx - 1.8, y: cy + 0.3))
+                bolt.line(to: NSPoint(x: cx - 0.1, y: cy + 0.3))
+                bolt.line(to: NSPoint(x: cx - 1.4, y: cy - 3.4))
+                bolt.line(to: NSPoint(x: cx + 1.8, y: cy - 0.3))
+                bolt.line(to: NSPoint(x: cx + 0.1, y: cy - 0.3))
+                bolt.close()
+                if let context = NSGraphicsContext.current {
+                    let cg = context.cgContext
+                    cg.saveGState()
+                    // Punch the bolt through as a hole when the fill
+                    // covers it; draw it solid otherwise.
+                    cg.setBlendMode(fraction > 0.25 ? .clear : .normal)
+                    bolt.fill()
+                    cg.restoreGState()
+                }
+            }
+        }
+    }
+
     // MARK: - Network
 
     /// Two value lines (up over down) — no leading glyph, the ↑/↓ in the

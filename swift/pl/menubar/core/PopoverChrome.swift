@@ -65,41 +65,14 @@ enum LaunchAtLogin {
 // MARK: - Module visibility
 
 /// Status-item visibility keys shared by the StatusItemControllers and
-/// the per-popover settings menus.
+/// the settings window.
 enum ModuleVisibility {
     static let calendarKey = "AuraBar.module.calendar"
     static let weatherKey = "AuraBar.module.weather"
     static let cpuKey = "AuraBar.module.cpu"
     static let memoryKey = "AuraBar.module.memory"
     static let networkKey = "AuraBar.module.network"
-}
-
-/// Toggles for each module's menu bar item. The module hosting the menu
-/// can't be disabled while it's the last one visible — with no status
-/// item left there would be no UI to turn anything back on.
-struct ModuleToggles: View {
-    /// Identifier of the module hosting this menu: "calendar" / "weather"
-    /// / "cpu" / "memory" / "network".
-    let current: String
-
-    @AppStorage(ModuleVisibility.calendarKey) private var calendar = true
-    @AppStorage(ModuleVisibility.weatherKey) private var weather = true
-    @AppStorage(ModuleVisibility.cpuKey) private var cpu = true
-    @AppStorage(ModuleVisibility.memoryKey) private var memory = true
-    @AppStorage(ModuleVisibility.networkKey) private var network = true
-
-    var body: some View {
-        Toggle("显示日历", isOn: $calendar)
-            .disabled(current == "calendar" && ![weather, cpu, memory, network].contains(true))
-        Toggle("显示天气", isOn: $weather)
-            .disabled(current == "weather" && ![calendar, cpu, memory, network].contains(true))
-        Toggle("CPU", isOn: $cpu)
-            .disabled(current == "cpu" && ![calendar, weather, memory, network].contains(true))
-        Toggle("内存", isOn: $memory)
-            .disabled(current == "memory" && ![calendar, weather, cpu, network].contains(true))
-        Toggle("网络", isOn: $network)
-            .disabled(current == "network" && ![calendar, weather, cpu, memory].contains(true))
-    }
+    static let batteryKey = "AuraBar.module.battery"
 }
 
 // MARK: - Themed settings field
@@ -172,36 +145,6 @@ struct RefreshButton: View {
         .animation(.easeOut(duration: 0.15), value: hover)
         .animation(.easeInOut(duration: 0.2), value: isLoading)
         .help("刷新")
-    }
-}
-
-// MARK: - Collapsible section header
-
-/// Custom collapsible group header: DisclosureGroup's chevron is
-/// AppKit-rendered and ignores our theme inside the MenuBarExtra window.
-struct CollapsibleHeader: View {
-    let title: String
-    @Binding var expanded: Bool
-
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.18)) {
-                expanded.toggle()
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
-                    .rotationEffect(.degrees(expanded ? 90 : 0))
-                Text(title)
-                    .font(.caption)
-            }
-            .foregroundStyle(theme.textSecondary)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 }
 

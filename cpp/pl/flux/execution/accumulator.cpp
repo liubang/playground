@@ -129,15 +129,18 @@ absl::Status account_accumulator_memory(AccumulatorStats* stats,
     if (stats == nullptr || bytes == 0) {
         return absl::OkStatus();
     }
-    stats->memory_bytes += bytes;
     if (memory_context != nullptr) {
         auto status = memory_context->Reserve(bytes);
         stats->memory_limit_bytes = memory_context->limit_bytes();
         if (!status.ok()) {
+            // Do not count the bytes: the reservation was rolled back, and
+            // release_accumulator_memory releases exactly stats->memory_bytes,
+            // so counting failed reservations would leak quota on release.
             stats->memory_limited = true;
             return status;
         }
     }
+    stats->memory_bytes += bytes;
     if (stats->memory_limit_bytes != 0 && stats->memory_bytes > stats->memory_limit_bytes) {
         stats->memory_limited = true;
         return absl::ResourceExhaustedError(

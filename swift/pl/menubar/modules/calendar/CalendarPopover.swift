@@ -17,7 +17,6 @@ struct CalendarPopover: View {
 
     @State private var displayed = YearMonth.containing(Date())
     @State private var selected = CalendarModel.calendar.startOfDay(for: Date())
-    @State private var settingsError: String?
     /// Precomputed cell view models; rebuilt only when an input changes
     /// (month, week start, lunar toggle) — never on routine re-renders
     /// like selection or the menu bar clock tick.
@@ -87,12 +86,8 @@ struct CalendarPopover: View {
             }
             Divider().overlay(theme.cardBorder)
             detail
+            holidayCountdown
             eventsSection
-            if let settingsError {
-                Text(settingsError)
-                    .font(.caption)
-                    .foregroundStyle(theme.rest)
-            }
             footer
         }
         .padding(12)
@@ -271,6 +266,40 @@ struct CalendarPopover: View {
             .padding(.horizontal, 2)
     }
 
+    /// "距 国庆节 还有 23 天"（或假期中的第 N 天）——法节假表已有数据
+    /// 的最强心智信息。
+    private var holidayCountdown: some View {
+        guard let block = Holidays.nextHoliday(from: Date()) else {
+            return AnyView(EmptyView())
+        }
+        let cal = CalendarModel.calendar
+        let today = cal.startOfDay(for: Date())
+        let delta = cal.dateComponents([.day], from: today, to: block.start).day ?? 0
+        var text: Text
+        if delta > 0 {
+            text = Text("距 ").foregroundStyle(theme.textSecondary)
+                + Text(block.name).foregroundStyle(theme.rest)
+                + Text(" 还有 \(delta) 天").foregroundStyle(theme.textPrimary)
+                + Text(" · \(formatDay(block.start))-\(formatDay(block.end)) 共 \(block.days) 天")
+                .foregroundStyle(theme.textSecondary)
+        } else {
+            let nth = (cal.dateComponents([.day], from: block.start, to: today).day ?? 0) + 1
+            text = Text(block.name).foregroundStyle(theme.rest)
+                + Text(" 假期中 · 第 \(nth)/\(block.days) 天").foregroundStyle(theme.textPrimary)
+        }
+        return AnyView(
+            text
+                .font(.caption)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 2),
+        )
+    }
+
+    private func formatDay(_ date: Date) -> String {
+        let cal = CalendarModel.calendar
+        return "\(cal.component(.month, from: date)).\(cal.component(.day, from: date))"
+    }
+
     // MARK: - Events
 
     /// The selected day's system-calendar events, or a compact permission
@@ -375,25 +404,9 @@ struct CalendarPopover: View {
 
     private var settingsMenu: some View {
         Menu {
-            Picker("主题", selection: $themePreference) {
-                ForEach(ThemePreference.allCases, id: \.rawValue) { preference in
-                    Text(preference.label).tag(preference.rawValue)
-                }
+            Button("设置…") {
+                SettingsWindowController.shared.show()
             }
-            Picker("菜单栏格式", selection: clockFormat) {
-                ForEach(ClockFormat.allCases, id: \.rawValue) { format in
-                    Text(format.label).tag(format.rawValue)
-                }
-            }
-            Picker("每周第一天", selection: $weekStartRaw) {
-                ForEach(WeekStart.allCases, id: \.rawValue) { start in
-                    Text(start.label).tag(start.rawValue)
-                }
-            }
-            Toggle("显示农历", isOn: $showLunar)
-            Divider()
-            ModuleToggles(current: "calendar")
-            Toggle("开机自启", isOn: LaunchAtLogin.binding { settingsError = $0 })
             Divider()
             Button("退出 AuraBar", role: .destructive, action: quitApp)
         } label: {
@@ -403,12 +416,5 @@ struct CalendarPopover: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-    }
-
-    private var clockFormat: Binding<String> {
-        Binding(
-            get: { clock.format.rawValue },
-            set: { clock.format = ClockFormat(rawValue: $0) ?? .full },
-        )
     }
 }

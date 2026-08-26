@@ -29,6 +29,7 @@
 #include <boost/mysql/results.hpp>
 #include <boost/mysql/ssl_mode.hpp>
 #include <boost/system/system_error.hpp>
+#include <chrono>
 #include <exception>
 #include <future>
 #include <utility>
@@ -115,8 +116,12 @@ void MySQLBoostConnectionPool::Lease::Release() {
     conn_.reset();
 }
 
-MySQLBoostConnectionPool::MySQLBoostConnectionPool(std::string dsn, size_t max_pool_size)
-    : dsn_(std::move(dsn)), max_pool_size_(std::max<size_t>(1, max_pool_size)) {
+MySQLBoostConnectionPool::MySQLBoostConnectionPool(std::string dsn,
+                                                   size_t max_pool_size,
+                                                   std::chrono::milliseconds acquire_timeout)
+    : dsn_(std::move(dsn)),
+      max_pool_size_(std::max<size_t>(1, max_pool_size)),
+      acquire_timeout_(acquire_timeout) {
     auto params_or = pool_params_from_dsn(dsn_, max_pool_size_);
     if (!params_or.ok()) {
         return;
@@ -133,6 +138,14 @@ absl::StatusOr<MySQLBoostConnectionPool::Lease> MySQLBoostConnectionPool::Acquir
     try {
         std::future<mysql::pooled_connection> future =
             impl_->pool.async_get_connection(boost::asio::use_future);
+        if (future.wait_for(acquire_timeout_) != std::future_status::ready) {
+            // The pool keeps retrying in the background (e.g. when the server
+            // rejects credentials); fail the query instead of hanging forever.
+            return absl::DeadlineExceededError(
+                absl::StrCat("mysql pooled connection acquire timed out after ",
+                             acquire_timeout_.count(),
+                             "ms (server unreachable or credentials rejected)"));
+        }
         mysql::pooled_connection conn = future.get();
         conn->set_meta_mode(mysql::metadata_mode::full);
         mysql::results result;
@@ -151,12 +164,13 @@ absl::StatusOr<MySQLBoostConnectionPool::Lease> MySQLBoostConnectionPool::Acquir
 }
 
 absl::StatusOr<std::shared_ptr<MySQLBoostConnectionPool>> MakeMySQLBoostConnectionPool(
-    std::string dsn, size_t max_pool_size) {
+    std::string dsn, size_t max_pool_size, std::chrono::milliseconds acquire_timeout) {
     auto params_or = pool_params_from_dsn(dsn, max_pool_size);
     if (!params_or.ok()) {
         return params_or.status();
     }
-    return std::make_shared<MySQLBoostConnectionPool>(std::move(dsn), max_pool_size);
+    return std::make_shared<MySQLBoostConnectionPool>(
+        std::move(dsn), max_pool_size, acquire_timeout);
 }
 
 } // namespace pl::flux::connector

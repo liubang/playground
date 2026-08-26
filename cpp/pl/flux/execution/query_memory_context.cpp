@@ -61,9 +61,13 @@ absl::Status QueryMemoryContext::Reserve(size_t bytes) {
     used_bytes_ += bytes;
     peak_bytes_ = std::max(peak_bytes_, used_bytes_);
     if (limit_bytes_ != 0 && used_bytes_ > limit_bytes_) {
+        // Roll the reservation back: only successful reservations may be
+        // released later, so a failed Reserve must not hold quota. The
+        // `limited_` flag stays set to record that the limit was hit.
         limited_ = true;
+        used_bytes_ -= bytes;
         return absl::ResourceExhaustedError(absl::StrCat("query memory limit exceeded: estimated=",
-                                                         used_bytes_,
+                                                         used_bytes_ + bytes,
                                                          " bytes, limit=",
                                                          limit_bytes_,
                                                          " bytes"));

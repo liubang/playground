@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Shared theme plumbing for the three stats popovers.
-private protocol StatsPopoverContent: View {
+protocol StatsPopoverContent: View {
     var themePreference: String { get }
     var colorScheme: ColorScheme { get }
 }
@@ -353,8 +353,7 @@ private func chartTimeLabels(count: Int) -> [String] {
 
 /// A top-10 process list card: process name on the left (middle-
 /// truncated), a mini proportion bar and the colored value on the
-/// right. Collapses to the top 5 with an expand toggle so the popover
-/// stays a reasonable height.
+/// right.
 private struct TopProcessesCard: View {
     let title: String
     let processes: [ProcessSample]
@@ -364,20 +363,13 @@ private struct TopProcessesCard: View {
     let valueRatio: (ProcessSample) -> Double
 
     @Environment(\.theme) private var theme
-    @State private var expanded = false
-
-    private static let collapsedCount = 5
-
-    private var visible: [ProcessSample] {
-        expanded ? processes : Array(processes.prefix(Self.collapsedCount))
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(theme.textSecondary)
-            ForEach(visible) { process in
+            ForEach(processes) { process in
                 HStack(spacing: 8) {
                     Text(process.name)
                         .font(.caption)
@@ -391,18 +383,6 @@ private struct TopProcessesCard: View {
                         .foregroundStyle(valueColor)
                         .frame(minWidth: 46, alignment: .trailing)
                 }
-            }
-            if processes.count > Self.collapsedCount {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        expanded.toggle()
-                    }
-                } label: {
-                    Text(expanded ? "收起" : "展开全部 \(processes.count) 个")
-                        .font(.caption2)
-                        .foregroundStyle(theme.accent)
-                }
-                .buttonStyle(.plain)
             }
         }
         .cardStyle()
@@ -421,42 +401,29 @@ private struct TopProcessesCard: View {
 
 /// Footer shared by the three stats popovers: cadence note on the left,
 /// settings menu on the right.
-private struct StatsFooter: View, StatsPopoverContent {
-    /// Module identifier for ModuleToggles ("cpu"/"memory"/"network").
+struct StatsFooter: View, StatsPopoverContent {
+    /// Module identifier, kept for footer labelling.
     let current: String
 
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
     @Environment(\.colorScheme) var colorScheme
-    @State private var settingsError: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if let settingsError {
-                Text(settingsError)
-                    .font(.caption)
-                    .foregroundStyle(theme.rest)
-            }
-            HStack(spacing: 10) {
-                Text("2s 采样 · 2 分钟窗口")
-                    .font(.caption)
-                    .foregroundStyle(theme.textSecondary)
-                Spacer()
-                settingsMenu
-            }
+        HStack(spacing: 10) {
+            Text("2s 采样 · 2 分钟窗口")
+                .font(.caption)
+                .foregroundStyle(theme.textSecondary)
+            Spacer()
+            settingsMenu
         }
         .padding(.horizontal, 2)
     }
 
     private var settingsMenu: some View {
         Menu {
-            Picker("主题", selection: $themePreference) {
-                ForEach(ThemePreference.allCases, id: \.rawValue) { preference in
-                    Text(preference.label).tag(preference.rawValue)
-                }
+            Button("设置…") {
+                SettingsWindowController.shared.show()
             }
-            Divider()
-            ModuleToggles(current: current)
-            Toggle("开机自启", isOn: LaunchAtLogin.binding { settingsError = $0 })
             Divider()
             Button("退出 AuraBar", role: .destructive, action: quitApp)
         } label: {
