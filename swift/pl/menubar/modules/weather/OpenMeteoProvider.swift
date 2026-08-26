@@ -46,6 +46,9 @@ struct OpenMeteoProvider: WeatherProvider {
             URLQueryItem(name: "timezone", value: "auto"),
             URLQueryItem(name: "forecast_days", value: "7"),
         ]
+        // Air quality rides along concurrently; it's best-effort — a
+        // failure must not take the main forecast down with it.
+        async let airQuality = fetchAirQuality(location: location)
         let (data, _) = try await session.data(from: comps.url!)
         let response = try JSONDecoder().decode(ForecastResponse.self, from: data)
 
@@ -106,13 +109,33 @@ struct OpenMeteoProvider: WeatherProvider {
             ))
         }
 
-        return WeatherSnapshot(
+        return await WeatherSnapshot(
             location: location,
             current: current,
             hourly: hourly,
             daily: daily,
             fetchedAt: Date(),
+            airQuality: airQuality,
         )
+    }
+
+    /// US AQI + PM2.5 from the air-quality API. Nil on any failure.
+    private func fetchAirQuality(location: WeatherLocation) async -> AirQuality? {
+        var comps = URLComponents(string: "https://air-quality-api.open-meteo.com/v1/air-quality")!
+        comps.queryItems = [
+            URLQueryItem(name: "latitude", value: String(location.latitude)),
+            URLQueryItem(name: "longitude", value: String(location.longitude)),
+            URLQueryItem(name: "current", value: "us_aqi,pm2_5"),
+            URLQueryItem(name: "timezone", value: "auto"),
+        ]
+        guard let (data, _) = try? await session.data(from: comps.url!),
+              let response = try? JSONDecoder().decode(AirQualityResponse.self, from: data),
+              let aqi = response.current.usAqi,
+              let pm25 = response.current.pm25
+        else {
+            return nil
+        }
+        return AirQuality(aqi: Int(aqi.rounded()), pm25: pm25)
     }
 
     /// WMO weather interpretation codes → unified condition.
@@ -134,6 +157,20 @@ struct OpenMeteoProvider: WeatherProvider {
     }
 
     // MARK: - Wire models
+
+    private struct AirQualityResponse: Decodable {
+        struct Current: Decodable {
+            let usAqi: Double?
+            let pm25: Double?
+
+            enum CodingKeys: String, CodingKey {
+                case usAqi = "us_aqi"
+                case pm25 = "pm2_5"
+            }
+        }
+
+        let current: Current
+    }
 
     private struct GeocodeResponse: Decodable {
         struct Result: Decodable {

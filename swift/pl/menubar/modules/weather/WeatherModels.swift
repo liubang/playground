@@ -109,6 +109,14 @@ struct DayForecast: Equatable, Sendable, Identifiable {
     }
 }
 
+/// Air quality reading, US EPA AQI scale (Open-Meteo air-quality API).
+struct AirQuality: Equatable, Sendable {
+    /// US EPA AQI.
+    var aqi: Int
+    /// µg/m³.
+    var pm25: Double
+}
+
 /// One full fetch result: current conditions, the next 24 hourly points
 /// and a 7-day outlook.
 struct WeatherSnapshot: Equatable, Sendable {
@@ -117,6 +125,8 @@ struct WeatherSnapshot: Equatable, Sendable {
     var hourly: [HourPoint]
     var daily: [DayForecast]
     var fetchedAt: Date
+    /// Best-effort extra; only Open-Meteo provides it for now.
+    var airQuality: AirQuality?
 }
 
 enum WeatherError: LocalizedError {

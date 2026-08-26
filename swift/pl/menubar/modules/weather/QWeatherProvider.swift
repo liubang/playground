@@ -50,6 +50,7 @@ struct QWeatherProvider: WeatherProvider {
             hourly: hourly,
             daily: daily,
             fetchedAt: Date(),
+            airQuality: nil,
         )
     }
 

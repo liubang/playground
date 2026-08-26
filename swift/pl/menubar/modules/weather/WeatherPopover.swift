@@ -1,6 +1,31 @@
 import Charts
 import SwiftUI
 
+extension AirQuality {
+    /// US EPA AQI category, 优 → 严重.
+    var category: String {
+        switch aqi {
+        case ...50: "优"
+        case ...100: "良"
+        case ...150: "轻度"
+        case ...200: "中度"
+        case ...300: "重度"
+        default: "严重"
+        }
+    }
+
+    /// Semantic color per Everforest: green ok, yellow moderate, orange
+    /// light pollution, red beyond.
+    func color(_ theme: Theme) -> Color {
+        switch aqi {
+        case ...50: theme.ok
+        case ...100: theme.warning
+        case ...150: theme.orange
+        default: theme.rest
+        }
+    }
+}
+
 extension WeatherCondition {
     /// Semantic color per Everforest: warm yellow sun, teal rain, aqua
     /// snow, muted grays for gloom, red thunder.
@@ -108,13 +133,24 @@ struct WeatherPopover: View {
             }
             .font(.caption2)
             .foregroundStyle(theme.textSecondary)
-            if let today = snapshot.daily.first,
-               let sunrise = today.sunrise,
-               let sunset = today.sunset
-            {
+            let today = snapshot.daily.first
+            if today?.sunrise != nil || today?.sunset != nil || snapshot.airQuality != nil {
                 HStack(spacing: 10) {
-                    Label("日出 \(Self.clockTime(sunrise))", systemImage: "sunrise")
-                    Label("日落 \(Self.clockTime(sunset))", systemImage: "sunset")
+                    if let sunrise = today?.sunrise {
+                        Label("日出 \(Self.clockTime(sunrise))", systemImage: "sunrise")
+                    }
+                    if let sunset = today?.sunset {
+                        Label("日落 \(Self.clockTime(sunset))", systemImage: "sunset")
+                    }
+                    if let aq = snapshot.airQuality {
+                        Spacer()
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(aq.color(theme))
+                                .frame(width: 6, height: 6)
+                            Text("AQI \(aq.aqi) · \(aq.category)")
+                        }
+                    }
                 }
                 .font(.caption2)
                 .foregroundStyle(theme.textSecondary)
