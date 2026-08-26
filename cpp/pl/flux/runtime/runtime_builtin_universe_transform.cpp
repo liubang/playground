@@ -543,8 +543,11 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
     auto result_or = detail::transform_rows_preserving_chunks(
         **table_or,
         [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
-            auto keep_or =
-                ExpressionEvaluator::Invoke(**fn_or, {Value::object(detail::clone_row(row))});
+            // Clone once and share it between the `fn` invocation and the kept
+            // output row: rows are treated as immutable values, so the second
+            // clone is pure waste on filter hot paths.
+            auto cloned = detail::clone_row(row);
+            auto keep_or = ExpressionEvaluator::Invoke(**fn_or, {Value::object(cloned)});
             if (!keep_or.ok()) {
                 return keep_or.status();
             }
@@ -554,7 +557,7 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
             if (!keep_or->as_bool()) {
                 return std::shared_ptr<ObjectValue>{};
             }
-            return detail::clone_row(row);
+            return cloned;
         },
         empty_policy);
     if (!result_or.ok()) {

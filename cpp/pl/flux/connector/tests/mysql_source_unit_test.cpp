@@ -15,10 +15,12 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/09
 
+#include <chrono>
 #include <cstdlib>
 #include <optional>
 #include <ranges>
 
+#include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/connector/mysql_connection_pool.h"
 #include "cpp/pl/flux/connector/mysql_source.h"
 #include "gtest/gtest.h"
@@ -63,6 +65,35 @@ TEST(MySQLSourceTest, RejectsInvalidDsnPort) {
 
     ASSERT_FALSE(config_or.ok());
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, config_or.status().code());
+}
+
+TEST(MySQLSourceTest, AcquireTimesOutWhenServerRejectsCredentials) {
+    auto dsn = mysql_test_dsn();
+    if (!dsn.has_value()) {
+        GTEST_SKIP() << "set FLUX_MYSQL_TEST_DSN to run MySQL integration tests";
+    }
+    auto config_or = ParseMySQLDsn(*dsn);
+    ASSERT_TRUE(config_or.ok()) << config_or.status();
+    const std::string bad_dsn = absl::StrCat("mysql://",
+                                             config_or->user,
+                                             ":wrong-password@",
+                                             config_or->host,
+                                             ":",
+                                             config_or->port,
+                                             "/",
+                                             config_or->database);
+    // The pool retries forever when the server rejects credentials; Acquire
+    // must surface a bounded timeout error instead of hanging the query.
+    auto pool_or = MakeMySQLBoostConnectionPool(bad_dsn, 1, std::chrono::milliseconds(500));
+    ASSERT_TRUE(pool_or.ok()) << pool_or.status();
+
+    const auto started = std::chrono::steady_clock::now();
+    auto lease_or = (*pool_or)->Acquire();
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+
+    ASSERT_FALSE(lease_or.ok());
+    EXPECT_EQ(absl::StatusCode::kDeadlineExceeded, lease_or.status().code());
+    EXPECT_LT(elapsed, std::chrono::seconds(10));
 }
 
 TEST(MySQLSourceTest, ScansFixtureTableIntoTableValue) {

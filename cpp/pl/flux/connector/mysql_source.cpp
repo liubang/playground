@@ -908,35 +908,83 @@ absl::StatusOr<TableStatistics> MySQLSource::Statistics() const {
     auto schema_or = Schema();
     if (schema_or.ok()) {
         statistics.columns.reserve(schema_or->columns.size());
-        for (const auto& column : schema_or->columns) {
-            auto column_stats_or =
-                execute_query(conn_or->connection(),
-                              absl::StrCat("SELECT COUNT(DISTINCT ",
-                                           quote_identifier(column.name),
-                                           "), SUM(CASE WHEN ",
-                                           quote_identifier(column.name),
-                                           " IS NULL THEN 1 ELSE 0 END), AVG(CHAR_LENGTH(CAST(",
-                                           quote_identifier(column.name),
-                                           " AS CHAR))) FROM (",
-                                           query_,
-                                           ") AS flux_source"),
-                              "column statistics query");
+        // Column aggregate SQL for one column: COUNT(DISTINCT), null count and
+        // average CHAR_LENGTH, in this fixed order.
+        auto column_aggregate_sql = [](const std::string& name) {
+            const std::string quoted = quote_identifier(name);
+            return absl::StrCat("COUNT(DISTINCT ",
+                                quoted,
+                                "), SUM(CASE WHEN ",
+                                quoted,
+                                " IS NULL THEN 1 ELSE 0 END), AVG(CHAR_LENGTH(CAST(",
+                                quoted,
+                                " AS CHAR)))");
+        };
+        // Fetch all per-column aggregates in a single round trip instead of
+        // one serial query per column, which is painful on wide tables. Fall
+        // back to per-column queries if the merged statement fails.
+        std::optional<mysql::row> merged_row;
+        if (!schema_or->columns.empty()) {
+            std::string merged_sql = "SELECT ";
+            for (size_t index = 0; index < schema_or->columns.size(); ++index) {
+                if (index > 0) {
+                    merged_sql += ", ";
+                }
+                merged_sql += column_aggregate_sql(schema_or->columns[index].name);
+            }
+            absl::StrAppend(&merged_sql, " FROM (", query_, ") AS flux_source");
+            auto merged_or =
+                execute_query(conn_or->connection(), merged_sql, "column statistics query");
+            if (merged_or.ok() && !merged_or->rows().empty() &&
+                merged_or->rows()[0].size() >= schema_or->columns.size() * 3) {
+                merged_row.emplace(merged_or->rows()[0]);
+            }
+        }
+        auto column_stats_fields = [&](size_t column_index)
+            -> std::optional<
+                std::tuple<std::optional<double>, std::optional<double>, std::optional<double>>> {
+            const auto& column = schema_or->columns[column_index];
+            if (merged_row.has_value()) {
+                const auto& row = *merged_row;
+                const size_t offset = column_index * 3;
+                return std::make_tuple(numeric_from_mysql_field(row.at(offset)),
+                                       numeric_from_mysql_field(row.at(offset + 1)),
+                                       numeric_from_mysql_field(row.at(offset + 2)));
+            }
+            auto column_stats_or = execute_query(conn_or->connection(),
+                                                 absl::StrCat("SELECT ",
+                                                              column_aggregate_sql(column.name),
+                                                              " FROM (",
+                                                              query_,
+                                                              ") AS flux_source"),
+                                                 "column statistics query");
             if (!column_stats_or.ok() || column_stats_or->rows().empty() ||
                 column_stats_or->rows()[0].size() < 3) {
+                return std::nullopt;
+            }
+            const auto row = column_stats_or->rows()[0];
+            return std::make_tuple(numeric_from_mysql_field(row.at(0)),
+                                   numeric_from_mysql_field(row.at(1)),
+                                   numeric_from_mysql_field(row.at(2)));
+        };
+        for (size_t column_index = 0; column_index < schema_or->columns.size(); ++column_index) {
+            const auto& column = schema_or->columns[column_index];
+            auto fields_or = column_stats_fields(column_index);
+            if (!fields_or.has_value()) {
                 statistics.columns.push_back({.name = column.name});
                 continue;
             }
-            const auto row = column_stats_or->rows()[0];
-            const auto distinct_values = numeric_from_mysql_field(row.at(0));
+            const auto& [distinct_values_opt, null_count_opt, average_width_opt] = *fields_or;
+            const auto distinct_values = distinct_values_opt;
             std::optional<double> null_fraction;
-            const auto null_count = numeric_from_mysql_field(row.at(1));
+            const auto null_count = null_count_opt;
             if (statistics.row_count.has_value() && *statistics.row_count > 0.0 &&
                 null_count.has_value()) {
                 null_fraction = *null_count / *statistics.row_count;
             } else if (statistics.row_count.has_value() && *statistics.row_count == 0.0) {
                 null_fraction = 0.0;
             }
-            auto average_width_bytes = numeric_from_mysql_field(row.at(2));
+            auto average_width_bytes = average_width_opt;
             if (!average_width_bytes.has_value() && statistics.row_count.value_or(0.0) == 0.0) {
                 average_width_bytes = 0.0;
             }

@@ -15,7 +15,7 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2026/05/10 23:13
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
     "COPTS",
@@ -55,5 +55,17 @@ cc_library(
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "execution_unit_test",
+    srcs = ["tests/execution_unit_test.cpp"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":execution",
+        "//cpp/pl/flux/runtime:runtime_value",
+        "@googletest//:gtest_main",
     ],
 )
