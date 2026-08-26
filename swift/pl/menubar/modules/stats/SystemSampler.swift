@@ -1,3 +1,4 @@
+import CoreWLAN
 import Darwin
 import Foundation
 
@@ -152,6 +153,88 @@ enum SystemSampler {
         var short = [CChar](repeating: 0, count: 64)
         proc_name(pid, &short, 64)
         return String(cString: short)
+    }
+
+    // MARK: - Interface info
+
+    /// Snapshot of the primary network interface for the "current
+    /// connection" card.
+    struct InterfaceInfo {
+        enum Kind {
+            case wifi
+            case ethernet
+            case other
+        }
+
+        var kind: Kind
+        /// SSID on Wi-Fi (nil without location permission — macOS 14
+        /// treats SSID as location privacy), or the interface name.
+        var title: String
+        /// dBm, Wi-Fi only.
+        var rssi: Int?
+        /// Link rate in Mbps, Wi-Fi only.
+        var transmitRate: Double?
+        /// IPv4 of the primary interface.
+        var localIP: String?
+    }
+
+    static func interfaceInfo() -> InterfaceInfo {
+        if let iface = CWWiFiClient.shared().interface() {
+            // ssid() returns nil when the app lacks location permission.
+            let ssid = iface.ssid()
+            return InterfaceInfo(
+                kind: .wifi,
+                title: ssid ?? "Wi-Fi",
+                rssi: iface.rssiValue(),
+                transmitRate: iface.transmitRate(),
+                localIP: primaryIPv4(preferred: iface.interfaceName),
+            )
+        }
+        let ip = primaryIPv4(preferred: nil)
+        return InterfaceInfo(
+            kind: .ethernet,
+            title: "以太网",
+            rssi: nil,
+            transmitRate: nil,
+            localIP: ip,
+        )
+    }
+
+    /// IPv4 address of the preferred interface, else the first
+    /// non-loopback one.
+    private static func primaryIPv4(preferred: String?) -> String? {
+        var addrs: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&addrs) == 0 else { return nil }
+        defer { freeifaddrs(addrs) }
+
+        var fallback: String?
+        var ptr = addrs
+        while let iface = ptr?.pointee {
+            defer { ptr = iface.ifa_next }
+            guard let addr = iface.ifa_addr,
+                  Int32(addr.pointee.sa_family) == AF_INET else { continue }
+            let name = String(cString: iface.ifa_name)
+            guard name != "lo0" else { continue }
+            var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            let rc = getnameinfo(
+                addr,
+                socklen_t(MemoryLayout<sockaddr_in>.stride),
+                &host,
+                socklen_t(host.count),
+                nil,
+                0,
+                NI_NUMERICHOST,
+            )
+            guard rc == 0 else { continue }
+            let ip = String(cString: host)
+            if name == preferred {
+                return ip
+            }
+            if fallback == nil {
+                fallback = ip
+            }
+        }
+        return fallback
     }
 
     // MARK: - Network

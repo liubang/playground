@@ -36,6 +36,12 @@ final class SystemStatsStore: ObservableObject {
     /// Cumulative bytes since boot.
     @Published private(set) var downTotal: UInt64 = 0
 
+    /// Primary interface snapshot (SSID / signal / local IP), refreshed
+    /// every ~10s while any stats popover is visible.
+    @Published private(set) var interfaceInfo: SystemSampler.InterfaceInfo?
+    /// Best-effort public IP, refreshed every ~10 minutes.
+    @Published private(set) var publicIP: String?
+
     /// Smoothed Y domain for the network chart: jumps up instantly when
     /// traffic spikes, decays slowly afterwards, so the axis doesn't
     /// flicker between samples.
@@ -68,6 +74,8 @@ final class SystemStatsStore: ObservableObject {
     /// bar labels keep updating regardless.
     private var openPopovers = 0
     private var processTick = 0
+    private var netInfoTick = 0
+    private var publicIPTick = 0
 
     private var anyPopoverOpen: Bool {
         openPopovers > 0
@@ -88,6 +96,7 @@ final class SystemStatsStore: ObservableObject {
     init() {
         sample()
         backfillHistories()
+        fetchPublicIP()
         let t = Timer(timeInterval: Self.sampleInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.sample() }
         }
@@ -189,6 +198,40 @@ final class SystemStatsStore: ObservableObject {
         if processTick % 2 == 1 {
             sampleProcesses()
         }
+        // Interface info changes slowly — every ~10s is plenty.
+        netInfoTick &+= 1
+        if netInfoTick % 5 == 1 {
+            Task.detached(priority: .utility) { [weak self] in
+                let info = SystemSampler.interfaceInfo()
+                await self?.setInterfaceInfo(info)
+            }
+        }
+        // Public IP: every ~10 minutes.
+        publicIPTick &+= 1
+        if publicIPTick % 300 == 1 {
+            fetchPublicIP()
+        }
+    }
+
+    private func setInterfaceInfo(_ info: SystemSampler.InterfaceInfo) {
+        interfaceInfo = info
+    }
+
+    private func fetchPublicIP() {
+        Task.detached(priority: .utility) { [weak self] in
+            for endpoint in publicIPEndpoints {
+                guard let url = URL(string: endpoint),
+                      let (data, _) = try? await URLSession.shared.data(from: url),
+                      let text = String(data: data, encoding: .utf8),
+                      let ip = extractIPv4(from: text) else { continue }
+                await self?.setPublicIP(ip)
+                return
+            }
+        }
+    }
+
+    private func setPublicIP(_ ip: String) {
+        publicIP = ip
     }
 
     // MARK: - Process sampling
@@ -248,6 +291,31 @@ final class SystemStatsStore: ObservableObject {
             downHistory.removeFirst()
         }
     }
+}
+
+/// Public IP providers in fallback order: some are unreachable
+/// depending on the network (proxy/GFW), first valid IPv4 wins.
+private let publicIPEndpoints = [
+    "https://api.ipify.org",
+    "https://checkip.amazonaws.com",
+    "https://myip.ipip.net",
+]
+
+/// First IPv4-looking token in the response body (endpoints return
+/// either a bare IP or a sentence containing one).
+private func extractIPv4(from text: String) -> String? {
+    for token in text.split(whereSeparator: { !$0.isNumber && $0 != "." }) {
+        let parts = token.split(separator: ".")
+        let isIPv4 = parts.count == 4 && parts.allSatisfy { part in
+            !part.isEmpty && part.count <= 3
+                && part.allSatisfy(\.isNumber)
+                && (Int(part) ?? 256) <= 255
+        }
+        if isIPv4 {
+            return String(token)
+        }
+    }
+    return nil
 }
 
 /// One row in the popovers' top-10 process lists.

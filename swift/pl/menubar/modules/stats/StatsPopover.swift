@@ -204,6 +204,7 @@ struct NetworkPopover: View, StatsPopoverContent {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            connectionCard
             ratesCard
             totalsCard
             StatsFooter(current: "network")
@@ -214,6 +215,66 @@ struct NetworkPopover: View, StatsPopoverContent {
         .background(theme.background)
         .environment(\.theme, theme)
         .preferredColorScheme(pinnedColorScheme)
+    }
+
+    /// The "current connection" card: interface kind + SSID (or generic
+    /// name), Wi-Fi signal strength, local and public IP.
+    private var connectionCard: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                Image(systemName: store.interfaceInfo?.kind == .wifi ? "wifi" : "cable.connector")
+                    .foregroundStyle(theme.accent)
+                Text(store.interfaceInfo?.title ?? "未连接")
+                    .font(.callout)
+                    .fontWeight(.medium)
+                Spacer()
+                if let rssi = store.interfaceInfo?.rssi {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(signalColor(rssi))
+                            .frame(width: 6, height: 6)
+                        Text("\(rssi) dBm · \(signalLabel(rssi))")
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(theme.textSecondary)
+                }
+            }
+            HStack {
+                Text(store.interfaceInfo?.localIP ?? "—")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(theme.textPrimary)
+                Spacer()
+                if let publicIP = store.publicIP {
+                    Text("公网 \(publicIP)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(theme.textSecondary)
+                }
+            }
+        }
+        .cardStyle()
+    }
+
+    private func signalColor(_ rssi: Int) -> Color {
+        if rssi >= -60 {
+            return theme.ok
+        }
+        if rssi >= -70 {
+            return theme.warning
+        }
+        return theme.rest
+    }
+
+    private func signalLabel(_ rssi: Int) -> String {
+        if rssi >= -50 {
+            return "极强"
+        }
+        if rssi >= -60 {
+            return "良好"
+        }
+        if rssi >= -70 {
+            return "一般"
+        }
+        return "较差"
     }
 
     private var ratesCard: some View {
