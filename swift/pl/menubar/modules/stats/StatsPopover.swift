@@ -1,4 +1,3 @@
-import Charts
 import SwiftUI
 
 /// Shared theme plumbing for the three stats popovers.
@@ -55,10 +54,11 @@ struct CPUPopover: View, StatsPopoverContent {
                     .monospacedDigit()
                     .contentTransition(.numericText())
             }
-            GrafanaChart(
-                series: [GrafanaSeries(color: theme.accent, values: store.cpuHistory)],
+            TimeSeriesChart(
+                series: [TimeSeriesChart.Series(color: theme.accent, values: store.cpuHistory, fill: true)],
                 maxY: 1,
                 yLabel: { "\(Int($0 * 100))" },
+                xLabels: chartTimeLabels(count: store.cpuHistory.count),
             )
         }
         .cardStyle()
@@ -94,6 +94,7 @@ struct CPUPopover: View, StatsPopoverContent {
             processes: store.topCPU,
             valueColor: theme.accent,
             valueText: { Formatters.percent($0.cpuPercent) },
+            valueRatio: { $0.cpuPercent / max(store.topCPU.first?.cpuPercent ?? 1, 1) },
         )
     }
 }
@@ -173,6 +174,7 @@ struct MemoryPopover: View, StatsPopoverContent {
             processes: store.topMemory,
             valueColor: theme.orange,
             valueText: { Formatters.bytes($0.memory) },
+            valueRatio: { Double($0.memory) / Double(max(store.topMemory.first?.memory ?? 1, 1)) },
         )
     }
 
@@ -223,7 +225,7 @@ struct NetworkPopover: View, StatsPopoverContent {
                 Spacer()
                 HStack(spacing: 8) {
                     Text("↑\(Formatters.rate(store.upRate))")
-                        .foregroundStyle(theme.aqua)
+                        .foregroundStyle(theme.orange)
                     Text("↓\(Formatters.rate(store.downRate))")
                         .foregroundStyle(theme.accent)
                 }
@@ -231,17 +233,14 @@ struct NetworkPopover: View, StatsPopoverContent {
                 .monospacedDigit()
                 .contentTransition(.numericText())
             }
-            GrafanaChart(
+            TimeSeriesChart(
                 series: [
-                    GrafanaSeries(color: theme.aqua, values: store.upHistory),
-                    GrafanaSeries(color: theme.accent, values: store.downHistory),
+                    TimeSeriesChart.Series(color: theme.accent, values: store.downHistory, fill: true),
+                    TimeSeriesChart.Series(color: theme.orange, values: store.upHistory),
                 ],
-                maxY: max(
-                    store.upHistory.max() ?? 0,
-                    store.downHistory.max() ?? 0,
-                    1024,
-                ),
+                maxY: store.networkYMax,
                 yLabel: { Formatters.rate($0) },
+                xLabels: chartTimeLabels(count: store.downHistory.count),
             )
         }
         .cardStyle()
@@ -274,110 +273,50 @@ struct NetworkPopover: View, StatsPopoverContent {
 
 // MARK: - Shared pieces
 
-/// One colored series in a GrafanaChart.
-private struct GrafanaSeries {
-    let color: Color
-    let values: [Double]
-}
+private let chartTimeFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "HH:mm:ss"
+    return formatter
+}()
 
-/// Grafana-styled time series: subtle grid lines, small axis labels
-/// (values on the left, wall-clock times at the bottom), a crisp line
-/// with a soft gradient fill underneath. X positions are indices into
-/// the 2s-cadence history window, labeled as clock times.
-private struct GrafanaChart: View {
-    let series: [GrafanaSeries]
-    let maxY: Double
-    let yLabel: (Double) -> String
-
-    @Environment(\.theme) private var theme
-
-    private static let sampleInterval: TimeInterval = 2
-    private static let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        return formatter
-    }()
-
-    var body: some View {
-        Chart {
-            ForEach(Array(series.enumerated()), id: \.offset) { _, item in
-                plot(for: item)
-            }
-        }
-        .chartYScale(domain: 0 ... maxY)
-        .chartYAxis {
-            AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                    .foregroundStyle(theme.cardBorder.opacity(0.55))
-                AxisValueLabel {
-                    if let v = value.as(Double.self) {
-                        Text(yLabel(v))
-                            .font(.system(size: 8))
-                            .foregroundStyle(theme.textSecondary)
-                    }
-                }
-            }
-        }
-        .chartXAxis {
-            AxisMarks(values: .stride(by: 15)) { value in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                    .foregroundStyle(theme.cardBorder.opacity(0.55))
-                AxisValueLabel {
-                    if let index = value.as(Int.self) {
-                        Text(xLabel(index))
-                            .font(.system(size: 8))
-                            .foregroundStyle(theme.textSecondary)
-                    }
-                }
-            }
-        }
-        .frame(height: 64)
-    }
-
-    private func xLabel(_ index: Int) -> String {
-        let count = series.map(\.values.count).max() ?? 0
-        let date = Date().addingTimeInterval(-Double(count - 1 - index) * Self.sampleInterval)
-        return Self.timeFormatter.string(from: date)
-    }
-
-    /// One series' area + line, extracted so the compiler can type-check
-    /// the chart content in reasonable time.
-    @ChartContentBuilder
-    private func plot(for item: GrafanaSeries) -> some ChartContent {
-        ForEach(item.values.indices, id: \.self) { index in
-            AreaMark(x: .value("t", index), y: .value("v", item.values[index]))
-                .interpolationMethod(.catmullRom)
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [item.color.opacity(0.22), item.color.opacity(0.02)],
-                        startPoint: .top,
-                        endPoint: .bottom,
-                    ),
-                )
-            LineMark(x: .value("t", index), y: .value("v", item.values[index]))
-                .interpolationMethod(.catmullRom)
-                .foregroundStyle(item.color)
-                .lineStyle(StrokeStyle(lineWidth: 1.4))
-        }
+/// Four bottom time labels at quarter positions of the history window
+/// (indices 0/15/30/45; the newest point at index 59 stays unlabeled).
+private func chartTimeLabels(count: Int) -> [String] {
+    guard count > 1 else { return [] }
+    return [0, 15, 30, 45].map { index in
+        let clamped = min(index, count - 1)
+        let date = Date().addingTimeInterval(-Double(count - 1 - clamped) * 2)
+        return chartTimeFormatter.string(from: date)
     }
 }
 
 /// A top-10 process list card: process name on the left (middle-
-/// truncated), colored value on the right.
+/// truncated), a mini proportion bar and the colored value on the
+/// right. Collapses to the top 5 with an expand toggle so the popover
+/// stays a reasonable height.
 private struct TopProcessesCard: View {
     let title: String
     let processes: [ProcessSample]
     let valueColor: Color
     let valueText: (ProcessSample) -> String
+    /// 0...1 fill ratio for the proportion bar.
+    let valueRatio: (ProcessSample) -> Double
 
     @Environment(\.theme) private var theme
+    @State private var expanded = false
+
+    private static let collapsedCount = 5
+
+    private var visible: [ProcessSample] {
+        expanded ? processes : Array(processes.prefix(Self.collapsedCount))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(theme.textSecondary)
-            ForEach(processes) { process in
+            ForEach(visible) { process in
                 HStack(spacing: 8) {
                     Text(process.name)
                         .font(.caption)
@@ -385,13 +324,37 @@ private struct TopProcessesCard: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer(minLength: 8)
+                    ratioBar(valueRatio(process))
                     Text(valueText(process))
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(valueColor)
+                        .frame(minWidth: 46, alignment: .trailing)
                 }
+            }
+            if processes.count > Self.collapsedCount {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        expanded.toggle()
+                    }
+                } label: {
+                    Text(expanded ? "收起" : "展开全部 \(processes.count) 个")
+                        .font(.caption2)
+                        .foregroundStyle(theme.accent)
+                }
+                .buttonStyle(.plain)
             }
         }
         .cardStyle()
+    }
+
+    private func ratioBar(_ ratio: Double) -> some View {
+        ZStack(alignment: .leading) {
+            Capsule().fill(theme.background)
+            Capsule()
+                .fill(valueColor.opacity(0.75))
+                .frame(width: 28 * min(max(ratio, 0), 1))
+        }
+        .frame(width: 28, height: 3)
     }
 }
 

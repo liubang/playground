@@ -25,6 +25,9 @@ struct CalendarPopover: View {
     /// Year/month quick picker state; replaces the grid while active.
     @State private var picking = false
     @State private var pickerYear = YearMonth.containing(Date()).year
+    /// Day the current grid was built for; compared against the clock to
+    /// rebuild at midnight.
+    @State private var lastGridDay = Date.distantPast
 
     private var theme: Theme {
         (ThemePreference(rawValue: themePreference) ?? .system).theme(for: colorScheme)
@@ -42,6 +45,7 @@ struct CalendarPopover: View {
     /// the expensive part (Chinese calendar conversion), so it happens
     /// exactly here — 42 conversions per input change, not per render.
     private func rebuildCells() {
+        lastGridDay = CalendarModel.calendar.startOfDay(for: Date())
         let grid = CalendarModel.monthGrid(displayed, weekStart: weekStart)
         // Dot markers need one range query covering the whole grid.
         let eventDays: Set<Date> = {
@@ -103,6 +107,13 @@ struct CalendarPopover: View {
         .onChange(of: showLunar) { rebuildCells() }
         .onChange(of: eventStore.revision) { rebuildCells() }
         .onChange(of: holidaySync.revision) { rebuildCells() }
+        // Midnight rollover: move the today marker with the clock tick.
+        .onChange(of: clock.labelText) {
+            let today = CalendarModel.calendar.startOfDay(for: Date())
+            if today != lastGridDay {
+                rebuildCells()
+            }
+        }
         // The MenuBarExtra window is kept alive between opens, so @State
         // survives dismissal. Reset to today's view whenever the popover
         // loses key status (= it was dismissed), so every reopen starts

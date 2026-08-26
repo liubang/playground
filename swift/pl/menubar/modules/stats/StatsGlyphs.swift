@@ -78,8 +78,10 @@ enum StatsGlyphs {
     /// text already say it. A direction with no traffic right now (<1K/s)
     /// is dimmed.
     static func makeNetwork(up: Double, down: Double) -> NSImage {
-        let upText = "↑\(Formatters.rate(up))"
-        let downText = "↓\(Formatters.rate(down))"
+        // Pad rates to a fixed width with figure spaces so the item
+        // doesn't jitter its neighbors as numbers change length.
+        let upText = "↑\(padded(Formatters.rate(up)))"
+        let downText = "↓\(padded(Formatters.rate(down)))"
         let upAttrs = valueAttributes(size: 8.5, dimmed: up < 1024)
         let downAttrs = valueAttributes(size: 8.5, dimmed: down < 1024)
         let width = max(textWidth(upText, upAttrs), textWidth(downText, downAttrs))
@@ -134,6 +136,13 @@ enum StatsGlyphs {
 
     private static func textWidth(_ text: String, _ attributes: [NSAttributedString.Key: Any]) -> CGFloat {
         ceil((text as NSString).size(withAttributes: attributes).width)
+    }
+
+    /// Left-pads to 4 characters with figure spaces (digit-width, so the
+    /// label stays visually monospaced).
+    private static func padded(_ text: String) -> String {
+        let missing = 4 - text.count
+        return missing > 0 ? String(repeating: "\u{2007}", count: missing) + text : text
     }
 
     /// Draws a single text line. AppKit's NSString drawing auto-adjusts

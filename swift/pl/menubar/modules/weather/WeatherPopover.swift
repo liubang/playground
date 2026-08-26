@@ -108,9 +108,30 @@ struct WeatherPopover: View {
             }
             .font(.caption2)
             .foregroundStyle(theme.textSecondary)
+            if let today = snapshot.daily.first,
+               let sunrise = today.sunrise,
+               let sunset = today.sunset
+            {
+                HStack(spacing: 10) {
+                    Label("日出 \(Self.clockTime(sunrise))", systemImage: "sunrise")
+                    Label("日落 \(Self.clockTime(sunset))", systemImage: "sunset")
+                }
+                .font(.caption2)
+                .foregroundStyle(theme.textSecondary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardStyle()
+    }
+
+    private static let clockFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
+    private static func clockTime(_ date: Date) -> String {
+        clockFormatter.string(from: date)
     }
 
     /// Location name with a quick-switch dropdown: auto-location plus
@@ -163,26 +184,54 @@ struct WeatherPopover: View {
             Text("未来 24 小时")
                 .font(.caption)
                 .foregroundStyle(theme.textSecondary)
-            Chart(snapshot.hourly) { point in
-                AreaMark(
-                    x: .value("时间", point.date),
-                    y: .value("温度", point.temperature),
-                )
-                .interpolationMethod(.catmullRom)
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [theme.accent.opacity(0.30), theme.accent.opacity(0.02)],
-                        startPoint: .top,
-                        endPoint: .bottom,
-                    ),
-                )
-                LineMark(
-                    x: .value("时间", point.date),
-                    y: .value("温度", point.temperature),
-                )
-                .interpolationMethod(.catmullRom)
-                .foregroundStyle(theme.accent)
-                .lineStyle(StrokeStyle(lineWidth: 1.6))
+            Chart {
+                ForEach(snapshot.hourly) { point in
+                    AreaMark(
+                        x: .value("时间", point.date),
+                        y: .value("温度", point.temperature),
+                    )
+                    .interpolationMethod(.catmullRom)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [theme.accent.opacity(0.30), theme.accent.opacity(0.02)],
+                            startPoint: .top,
+                            endPoint: .bottom,
+                        ),
+                    )
+                    LineMark(
+                        x: .value("时间", point.date),
+                        y: .value("温度", point.temperature),
+                    )
+                    .interpolationMethod(.catmullRom)
+                    .foregroundStyle(theme.accent)
+                    .lineStyle(StrokeStyle(lineWidth: 1.6))
+                }
+                if let top = snapshot.hourly.max(by: { $0.temperature < $1.temperature }) {
+                    PointMark(
+                        x: .value("时间", top.date),
+                        y: .value("温度", top.temperature),
+                    )
+                    .foregroundStyle(theme.rest)
+                    .symbolSize(18)
+                    .annotation(position: .top, spacing: 0) {
+                        Text("\(Int(top.temperature.rounded()))°")
+                            .font(.system(size: 8))
+                            .foregroundStyle(theme.textSecondary)
+                    }
+                }
+                if let bottom = snapshot.hourly.min(by: { $0.temperature < $1.temperature }) {
+                    PointMark(
+                        x: .value("时间", bottom.date),
+                        y: .value("温度", bottom.temperature),
+                    )
+                    .foregroundStyle(theme.aqua)
+                    .symbolSize(18)
+                    .annotation(position: .bottom, spacing: 0) {
+                        Text("\(Int(bottom.temperature.rounded()))°")
+                            .font(.system(size: 8))
+                            .foregroundStyle(theme.textSecondary)
+                    }
+                }
             }
             .chartYAxis(.hidden)
             .chartXAxis {
@@ -217,6 +266,15 @@ struct WeatherPopover: View {
                     Image(systemName: day.condition.symbolName)
                         .foregroundStyle(day.condition.color(theme))
                         .frame(width: 18)
+                    HStack(spacing: 1) {
+                        Image(systemName: "drop.fill")
+                            .font(.system(size: 7))
+                        Text("\(day.precipProbability ?? 0)%")
+                    }
+                    .font(.system(size: 9))
+                    .foregroundStyle(theme.accent)
+                    .frame(width: 32, alignment: .leading)
+                    .opacity((day.precipProbability ?? 0) >= 30 ? 1 : 0)
                     Spacer()
                     Text("\(Int(day.tempMin.rounded()))°")
                         .foregroundStyle(theme.textSecondary)

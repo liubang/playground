@@ -111,8 +111,24 @@ struct QWeatherProvider: WeatherProvider {
                 condition: Self.condition(for: d.iconDay),
                 tempMin: Double(d.tempMin) ?? 0,
                 tempMax: Double(d.tempMax) ?? 0,
+                precipProbability: Int(d.pop ?? ""),
+                sunrise: Self.dayTime(d.sunrise, on: date),
+                sunset: Self.dayTime(d.sunset, on: date),
             )
         }
+    }
+
+    /// Combines an "HH:mm" clock string with a day's local start.
+    private static func dayTime(_ clock: String?, on day: Date) -> Date? {
+        guard let clock else { return nil }
+        let parts = clock.split(separator: ":").compactMap { Int($0) }
+        guard parts.count == 2 else { return nil }
+        return Calendar.current.date(
+            bySettingHour: parts[0],
+            minute: parts[1],
+            second: 0,
+            of: day,
+        )
     }
 
     /// 和风天气 icon codes → unified condition.
@@ -182,6 +198,9 @@ struct QWeatherProvider: WeatherProvider {
             let tempMax: String
             let tempMin: String
             let iconDay: String
+            let pop: String?
+            let sunrise: String?
+            let sunset: String?
         }
 
         let code: String

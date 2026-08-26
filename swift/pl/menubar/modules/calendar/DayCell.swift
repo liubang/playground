@@ -90,6 +90,8 @@ struct DayCell: View, Equatable {
             .background {
                 if isSelected, !data.isToday {
                     RoundedRectangle(cornerRadius: 7)
+                        .fill(theme.cardBackground)
+                    RoundedRectangle(cornerRadius: 7)
                         .stroke(theme.cardBorder, lineWidth: 1)
                 }
             }

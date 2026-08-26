@@ -60,17 +60,27 @@ final class EventStore: ObservableObject {
         return store.events(matching: predicate)
     }
 
+    /// Single-day lookup cache: the popover asks on every re-render
+    /// (selection change, clock tick), but events only change with
+    /// `revision` or the selected day.
+    private var dayCache: (day: Date, revision: Int, events: [EKEvent])?
+
     /// Events on a single day: all-day first, then by start time.
     func events(on day: Date) -> [EKEvent] {
         let cal = CalendarModel.calendar
         let start = cal.startOfDay(for: day)
+        if let cache = dayCache, cache.day == start, cache.revision == revision {
+            return cache.events
+        }
         guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return [] }
-        return events(from: start, to: end).sorted {
+        let sorted = events(from: start, to: end).sorted {
             if $0.isAllDay != $1.isAllDay {
                 return $0.isAllDay
             }
             return $0.startDate < $1.startDate
         }
+        dayCache = (start, revision, sorted)
+        return sorted
     }
 
     /// Local start-of-day dates within the range having at least one

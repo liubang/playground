@@ -14,7 +14,7 @@ final class AppNapDisabler {
 
     private init() {
         activity = ProcessInfo.processInfo.beginActivity(
-            options: [.userInitiatedAllowingIdleSystemSleep],
+            options: [.userInitiated],
             reason: "Menu bar updates",
         )
     }

@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
             button.title = text
+            button.toolTip = Date.now.formatted(date: .complete, time: .omitted)
         }
         calendarController = calendar
 
@@ -59,6 +60,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             image?.isTemplate = true
             button.image = image
             button.title = snapshot.map { "\(Int($0.current.temperature.rounded()))°" } ?? "--°"
+            button.toolTip = snapshot.map {
+                "\($0.location.name) · \($0.current.condition.label) \(Int($0.current.temperature.rounded()))°"
+            }
         }
         weatherController = weatherItem
 
@@ -83,6 +87,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.title = ""
             button.toolTip = "CPU：\(Int((usage * 100).rounded()))%"
         }
+        cpuItem.onVisibilityChange = { [weak stats] open in
+            open ? stats?.popoverDidOpen() : stats?.popoverDidClose()
+        }
         cpuController = cpuItem
 
         let memoryItem = StatusItemController(
@@ -101,6 +108,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.title = ""
             button.toolTip = "内存：\(Formatters.usagePair(used, total))"
         }
+        memoryItem.onVisibilityChange = { [weak stats] open in
+            open ? stats?.popoverDidOpen() : stats?.popoverDidClose()
+        }
         memoryController = memoryItem
 
         let networkItem = StatusItemController(
@@ -115,6 +125,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.imagePosition = .imageOnly
             button.title = ""
             button.toolTip = "\u{2191}\(Formatters.rate(up))/s \u{2193}\(Formatters.rate(down))/s"
+        }
+        networkItem.onVisibilityChange = { [weak stats] open in
+            open ? stats?.popoverDidOpen() : stats?.popoverDidClose()
         }
         networkController = networkItem
     }

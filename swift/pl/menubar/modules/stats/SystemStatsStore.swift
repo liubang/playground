@@ -36,6 +36,11 @@ final class SystemStatsStore: ObservableObject {
     /// Cumulative bytes since boot.
     @Published private(set) var downTotal: UInt64 = 0
 
+    /// Smoothed Y domain for the network chart: jumps up instantly when
+    /// traffic spikes, decays slowly afterwards, so the axis doesn't
+    /// flicker between samples.
+    @Published private(set) var networkYMax: Double = 4096
+
     // MARK: - Processes
 
     /// Top 10 by current CPU% (Activity Monitor semantics: can exceed
@@ -58,9 +63,31 @@ final class SystemStatsStore: ObservableObject {
     private var lastCPU: [SystemSampler.CPUTicks]?
     private var lastNet: (rx: UInt64, tx: UInt64, at: Date)?
     private var lastProcTicks: [Int32: (ticks: UInt64, at: Date)] = [:]
+    /// Number of currently open stats popovers (0-3). Histories,
+    /// breakdowns and process enumeration only run while > 0 — the menu
+    /// bar labels keep updating regardless.
+    private var openPopovers = 0
+    private var processTick = 0
+
+    private var anyPopoverOpen: Bool {
+        openPopovers > 0
+    }
+
+    func popoverDidOpen() {
+        openPopovers += 1
+        // No immediate sample here: sampling right after the timer's own
+        // tick would diff against a tiny dt and inflate the rates into
+        // bogus spikes. Histories are always warm anyway (they append
+        // regardless of visibility), so the charts open populated.
+    }
+
+    func popoverDidClose() {
+        openPopovers = max(0, openPopovers - 1)
+    }
 
     init() {
         sample()
+        backfillHistories()
         let t = Timer(timeInterval: Self.sampleInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.sample() }
         }
@@ -69,9 +96,30 @@ final class SystemStatsStore: ObservableObject {
         timer = t
     }
 
+    /// Pre-fills the 2-minute window with the current reading at launch,
+    /// so charts open full-width with complete axis labels from the very
+    /// first second — new samples then slide in from the right. Without
+    /// this the first two minutes after a restart show a few points
+    /// squished against the left edge.
+    private func backfillHistories() {
+        cpuHistory = Array(repeating: cpuUsage, count: Self.historyCapacity)
+        memoryHistory = Array(
+            repeating: Double(memoryUsed) / Double(memoryTotal),
+            count: Self.historyCapacity,
+        )
+        upHistory = Array(repeating: upRate, count: Self.historyCapacity)
+        downHistory = Array(repeating: downRate, count: Self.historyCapacity)
+        updateNetworkYMax()
+    }
+
     // MARK: - Sampling
 
     private func sample() {
+        // Label-critical readings are always sampled; popover-only state
+        // (histories, breakdowns, process lists) pauses while no stats
+        // popover is open.
+        let detailed = anyPopoverOpen
+
         if let cores = SystemSampler.cpuTicks() {
             if let last = lastCPU, last.count == cores.count {
                 var busyAll = 0.0
@@ -87,7 +135,9 @@ final class SystemStatsStore: ObservableObject {
                 if totalAll > 0 {
                     cpuUsage = busyAll / totalAll
                 }
-                perCoreUsage = perCore
+                if detailed {
+                    perCoreUsage = perCore
+                }
             }
             lastCPU = cores
         }
@@ -95,29 +145,50 @@ final class SystemStatsStore: ObservableObject {
         if let mem = SystemSampler.memory() {
             memoryUsed = mem.used
             memoryTotal = max(mem.total, 1)
-            memoryApp = mem.app
-            memoryWired = mem.wired
-            memoryCompressed = mem.compressed
+            if detailed {
+                memoryApp = mem.app
+                memoryWired = mem.wired
+                memoryCompressed = mem.compressed
+            }
         }
 
         let net = SystemSampler.networkBytes()
         let now = Date()
-        downTotal = net.rx
-        upTotal = net.tx
+        if detailed {
+            downTotal = net.rx
+            upTotal = net.tx
+        }
         if let last = lastNet {
             let dt = now.timeIntervalSince(last.at)
             // A decreasing counter means the 32-bit counter wrapped (or an
             // interface reset) — skip the sample rather than reporting a
-            // huge spike.
-            if dt > 0, net.rx >= last.rx, net.tx >= last.tx {
-                downRate = Double(net.rx - last.rx) / dt
-                upRate = Double(net.tx - last.tx) / dt
+            // huge spike. A sub-half-second window exaggerates burst
+            // jitter into bogus spikes, so it gets a floor too.
+            if dt >= 0.5, net.rx >= last.rx, net.tx >= last.tx {
+                // EMA-smooth the instantaneous rate (α=0.4): 2s samples
+                // are bursty, and smoothing turns needle spikes into
+                // readable bumps — much closer to a Grafana panel.
+                let instantDown = Double(net.rx - last.rx) / dt
+                let instantUp = Double(net.tx - last.tx) / dt
+                downRate = downRate * 0.6 + instantDown * 0.4
+                upRate = upRate * 0.6 + instantUp * 0.4
             }
         }
         lastNet = (net.rx, net.tx, now)
 
+        // Histories are ~240 Doubles — appending them is free, and it
+        // keeps the charts warm for the next popover open.
         appendHistory()
-        sampleProcesses()
+        updateNetworkYMax()
+
+        // Process enumeration is the only genuinely expensive sampler
+        // (~1k syscalls) — run it at half cadence (~4s) and only while
+        // a stats popover is visible.
+        guard detailed else { return }
+        processTick &+= 1
+        if processTick % 2 == 1 {
+            sampleProcesses()
+        }
     }
 
     // MARK: - Process sampling
@@ -156,6 +227,15 @@ final class SystemStatsStore: ObservableObject {
         topMemory = samples.sorted { $0.memory > $1.memory }.prefix(10).map(\.self)
     }
 
+    private func updateNetworkYMax() {
+        let current = max(
+            upHistory.max() ?? 0,
+            downHistory.max() ?? 0,
+            1024,
+        )
+        networkYMax = max(current, networkYMax * 0.94)
+    }
+
     private func appendHistory() {
         cpuHistory.append(cpuUsage)
         memoryHistory.append(Double(memoryUsed) / Double(memoryTotal))
@@ -188,6 +268,9 @@ struct ProcessSample: Identifiable, Equatable {
 enum Formatters {
     /// "12G" / "512M" — one decimal below 100, integer above.
     static func bytes(_ value: UInt64) -> String {
+        if value == 0 {
+            return "0"
+        }
         let units = ["B", "K", "M", "G", "T"]
         var v = Double(value)
         var i = 0

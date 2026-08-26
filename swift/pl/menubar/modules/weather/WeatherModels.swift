@@ -99,6 +99,10 @@ struct DayForecast: Equatable, Sendable, Identifiable {
     var tempMin: Double
     /// °C.
     var tempMax: Double
+    /// Percent 0-100, when the provider offers it (Open-Meteo only).
+    var precipProbability: Int?
+    var sunrise: Date?
+    var sunset: Date?
 
     var id: Date {
         date

@@ -39,7 +39,10 @@ struct OpenMeteoProvider: WeatherProvider {
                 value: "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m",
             ),
             URLQueryItem(name: "hourly", value: "temperature_2m,weather_code,precipitation_probability"),
-            URLQueryItem(name: "daily", value: "weather_code,temperature_2m_max,temperature_2m_min"),
+            URLQueryItem(
+                name: "daily",
+                value: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset",
+            ),
             URLQueryItem(name: "timezone", value: "auto"),
             URLQueryItem(name: "forecast_days", value: "7"),
         ]
@@ -94,6 +97,12 @@ struct OpenMeteoProvider: WeatherProvider {
                 condition: Self.condition(for: response.daily.weatherCode[i]),
                 tempMin: response.daily.temperature2mMin[i],
                 tempMax: response.daily.temperature2mMax[i],
+                precipProbability: i < response.daily.precipitationProbabilityMax.count
+                    ? response.daily.precipitationProbabilityMax[i] : nil,
+                sunrise: i < response.daily.sunrise.count
+                    ? parser.date(from: response.daily.sunrise[i]) : nil,
+                sunset: i < response.daily.sunset.count
+                    ? parser.date(from: response.daily.sunset[i]) : nil,
             ))
         }
 
@@ -176,12 +185,18 @@ struct OpenMeteoProvider: WeatherProvider {
             let weatherCode: [Int]
             let temperature2mMax: [Double]
             let temperature2mMin: [Double]
+            let precipitationProbabilityMax: [Int?]
+            let sunrise: [String]
+            let sunset: [String]
 
             enum CodingKeys: String, CodingKey {
                 case time
                 case weatherCode = "weather_code"
                 case temperature2mMax = "temperature_2m_max"
                 case temperature2mMin = "temperature_2m_min"
+                case precipitationProbabilityMax = "precipitation_probability_max"
+                case sunrise
+                case sunset
             }
         }
 

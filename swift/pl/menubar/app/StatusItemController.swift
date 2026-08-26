@@ -32,6 +32,24 @@ final class StatusItemController: NSObject {
     private var cancellables = Set<AnyCancellable>()
     /// Global mouse-down monitor, installed only while the popover shows.
     private var clickMonitor: Any?
+    /// Local ESC monitor, installed only while the popover shows.
+    private var keyMonitor: Any?
+
+    /// Called with `true` when the popover opens and `false` when it
+    /// closes (by any path). Stores use this to pause work that only
+    /// matters while visible. Reports are deduplicated by popoverOpen,
+    /// so redundant or asynchronously reordered close paths (e.g. the
+    /// willShow broadcast landing after the open report) can't corrupt
+    /// the listener's open-count.
+    var onVisibilityChange: ((Bool) -> Void)?
+
+    private var popoverOpen = false
+
+    private func reportVisibility(_ open: Bool) {
+        guard popoverOpen != open else { return }
+        popoverOpen = open
+        onVisibilityChange?(open)
+    }
 
     /// The status item is inserted while `visibilityKey` is true in
     /// UserDefaults (absent = true) and removed when it flips to false;
@@ -62,13 +80,16 @@ final class StatusItemController: NSObject {
             Task { @MainActor in self?.closePopover() }
         }
         // Popover closed by any path (transient behavior, toggle, monitor)
-        // — drop the click monitor with it.
+        // — drop the monitors and report with it.
         center.addObserver(
             forName: NSPopover.didCloseNotification,
             object: popover,
             queue: .main,
         ) { [weak self] _ in
-            Task { @MainActor in self?.stopClickMonitor() }
+            Task { @MainActor in
+                self?.stopMonitors()
+                self?.reportVisibility(false)
+            }
         }
         applyVisibility()
     }
@@ -119,30 +140,43 @@ final class StatusItemController: NSObject {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             // Bring the popover forward so text fields can take focus.
             NSApp.activate()
-            startClickMonitor()
+            startMonitors()
+            reportVisibility(true)
         }
     }
 
     private func closePopover() {
         popover.performClose(nil)
-        stopClickMonitor()
+        stopMonitors()
+        reportVisibility(false)
     }
 
-    // MARK: - Click-outside dismissal
+    // MARK: - Dismissal monitors
 
-    private func startClickMonitor() {
-        stopClickMonitor()
+    private func startMonitors() {
+        stopMonitors()
+        // Click delivered to another app (desktop included) → close.
         clickMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown],
         ) { [weak self] _ in
             Task { @MainActor in self?.closePopover() }
         }
+        // ESC → close.
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 53 else { return event }
+            Task { @MainActor in self?.closePopover() }
+            return nil
+        }
     }
 
-    private func stopClickMonitor() {
+    private func stopMonitors() {
         if let clickMonitor {
             NSEvent.removeMonitor(clickMonitor)
             self.clickMonitor = nil
+        }
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+            self.keyMonitor = nil
         }
     }
 }
