@@ -89,7 +89,11 @@ private struct GeneralTab: View {
                     moduleToggle("CPU", $cpu, "cpu")
                     moduleToggle("内存", $memory, "memory")
                     moduleToggle("网络", $network, "network")
-                    moduleToggle("电池", $battery, "battery")
+                    // On machines without an internal battery the module
+                    // simply doesn't exist as an option.
+                    if AppRegistry.hasBattery {
+                        moduleToggle("电池", $battery, "battery")
+                    }
                 }
             }
             SettingsSection(title: "系统") {

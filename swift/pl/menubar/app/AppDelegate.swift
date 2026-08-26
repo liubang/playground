@@ -134,25 +134,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         networkController = networkItem
 
-        // Battery: level glyph + percentage, 30s cadence. Hidden module
-        // shows nothing on machines without a battery.
+        // Battery: level glyph + percentage, 30s cadence. The module is
+        // skipped entirely on machines without an internal battery
+        // (Mac mini, Mac Studio) instead of showing a meaningless "--".
         let battery = BatteryStore()
-        let batteryItem = StatusItemController(
-            autosaveName: "AuraBar.battery",
-            visibilityKey: ModuleVisibility.batteryKey,
-            content: BatteryPopover(store: battery),
-        )
-        batteryItem.bindLabel(to: battery.$info) { button, info in
-            guard let button else { return }
-            button.image = StatsGlyphs.makeBattery(
-                fraction: Double(info?.percentage ?? 0) / 100,
-                charging: info?.isCharging ?? false,
-                value: info.map { "\($0.percentage)%" } ?? "--",
+        AppRegistry.hasBattery = battery.info != nil
+        if battery.info != nil {
+            let batteryItem = StatusItemController(
+                autosaveName: "AuraBar.battery",
+                visibilityKey: ModuleVisibility.batteryKey,
+                content: BatteryPopover(store: battery),
             )
-            button.imagePosition = .imageOnly
-            button.title = ""
-            button.toolTip = info.map { "电池 \($0.percentage)%" }
+            batteryItem.bindLabel(to: battery.$info) { button, info in
+                guard let button else { return }
+                button.image = StatsGlyphs.makeBattery(
+                    fraction: Double(info?.percentage ?? 0) / 100,
+                    charging: info?.isCharging ?? false,
+                    value: info.map { "\($0.percentage)%" } ?? "--",
+                )
+                button.imagePosition = .imageOnly
+                button.title = ""
+                button.toolTip = info.map { "电池 \($0.percentage)%" }
+            }
+            batteryController = batteryItem
         }
-        batteryController = batteryItem
     }
 }

@@ -7,4 +7,8 @@ import Foundation
 enum AppRegistry {
     static var clock: MenuBarClock?
     static var weather: WeatherStore?
+    /// False on machines without an internal battery (Mac mini,
+    /// Mac Studio) — the battery module is not created at all and the
+    /// settings window greys out its toggle.
+    static var hasBattery = false
 }

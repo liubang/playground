@@ -47,6 +47,20 @@ struct BatteryPopover: View, StatsPopoverContent {
             Text(stateLine(info))
                 .font(.caption)
                 .foregroundStyle(theme.textSecondary)
+            if isChargingLimited(info) {
+                Button {
+                    if let url = URL(
+                        string: "x-apple.systempreferences:com.apple.preference.battery",
+                    ) {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: {
+                    Label("在系统设置中调整充电上限", systemImage: "bolt.circle")
+                        .font(.caption)
+                        .foregroundStyle(theme.accent)
+                }
+                .buttonStyle(.plain)
+            }
             let fraction = Double(info.percentage) / 100
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -68,6 +82,9 @@ struct BatteryPopover: View, StatsPopoverContent {
                 return "充电中 · 充满还需 \(Self.minutesText(minutes))"
             }
             return "充电中"
+        }
+        if info.onAC, !info.isCharging, info.percentage < 100 {
+            return "已暂停充电 · 系统优化限充中"
         }
         if info.onAC {
             return info.percentage >= 100 ? "已充满 · 电源供电" : "电源供电"
@@ -103,6 +120,12 @@ struct BatteryPopover: View, StatsPopoverContent {
                 .monospacedDigit()
                 .foregroundStyle(theme.textPrimary)
         }
+    }
+
+    /// On AC but not charging below 100% — macOS is holding the charge
+    /// (80% limit or optimized battery charging).
+    private func isChargingLimited(_ info: BatteryInfo) -> Bool {
+        info.onAC && !info.isCharging && info.percentage < 100
     }
 
     private static func minutesText(_ minutes: Int) -> String {
