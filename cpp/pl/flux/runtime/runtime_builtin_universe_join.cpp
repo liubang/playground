@@ -291,7 +291,7 @@ absl::StatusOr<std::shared_ptr<ObjectValue>> join_as_row(
     if (row_or->type() != Value::Type::Object) {
         return absl::InvalidArgumentError("join package `as` must return an object");
     }
-    return std::make_shared<ObjectValue>(row_or->as_object());
+    return row_or->as_object_ptr();
 }
 
 absl::StatusOr<bool> join_predicate_matches(const FunctionValue& on_fn,

@@ -89,7 +89,9 @@ std::shared_ptr<ObjectValue> derive_chunk_group_key(
         if (group_value == nullptr || group_value->type() != Value::Type::Object) {
             return nullptr;
         }
-        return std::make_shared<ObjectValue>(group_value->as_object());
+        // The row's group object is immutable, so the chunk can share it as
+        // its group key instead of deep-copying it per chunk.
+        return group_value->as_object_ptr();
     }
     return nullptr;
 }
@@ -298,6 +300,10 @@ const ArrayValue& Value::as_array() const {
 
 const ObjectValue& Value::as_object() const {
     return *checked_get<std::shared_ptr<ObjectValue>>(storage_, type_, Type::Object);
+}
+
+const std::shared_ptr<ObjectValue>& Value::as_object_ptr() const {
+    return checked_get<std::shared_ptr<ObjectValue>>(storage_, type_, Type::Object);
 }
 
 const TableValue& Value::as_table() const {

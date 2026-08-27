@@ -67,6 +67,20 @@ TEST(MySQLSourceTest, RejectsInvalidDsnPort) {
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, config_or.status().code());
 }
 
+TEST(MySQLSourceTest, PoolAcquireSurfacesDsnParseError) {
+    // A pool built on an unparseable DSN must not fail silently: the first
+    // Acquire has to carry the original parse error instead of an opaque
+    // "not initialized" message.
+    MySQLBoostConnectionPool pool("flux:secret@tcp(localhost:70000)/testdb", 1);
+
+    auto lease_or = pool.Acquire();
+
+    ASSERT_FALSE(lease_or.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, lease_or.status().code());
+    EXPECT_NE(lease_or.status().message().find("not initialized"), std::string::npos);
+    EXPECT_NE(lease_or.status().message().find("uint16"), std::string::npos) << lease_or.status();
+}
+
 TEST(MySQLSourceTest, AcquireTimesOutWhenServerRejectsCredentials) {
     auto dsn = mysql_test_dsn();
     if (!dsn.has_value()) {

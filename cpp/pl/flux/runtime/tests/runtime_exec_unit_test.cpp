@@ -24,6 +24,7 @@
 #include <memory>
 #include <optional>
 #include <sqlite3.h>
+#include <sstream>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -4855,6 +4856,98 @@ TEST(RuntimeExecTest, UsesYieldNameForResultCollection) {
     ASSERT_EQ(Value::Type::Table, result_or->results[1].value.type());
     ASSERT_TRUE(result_or->results[1].value.as_table().result_name.has_value());
     EXPECT_EQ("cpu", *result_or->results[1].value.as_table().result_name);
+}
+
+// ---------------------------------------------------------------------------
+// Large-table join/pivot/window stress coverage
+//
+// Regression net for the intermittent release SIGABRT seen on csv big-table
+// join/pivot queries (invalid free inside ~ObjectValue during Value teardown).
+// The exact root cause was never captured, so this test keeps the implicated
+// operator chains (grouped full join, pivot, aggregateWindow) hot under the
+// ASan-enabled default test config.
+// ---------------------------------------------------------------------------
+
+std::string MakeStressAnnotatedCsv(int64_t rows, int64_t host_mod, double value_scale) {
+    std::ostringstream csv;
+    csv << "#datatype,string,long,dateTime:RFC3339,string,string,string,double\n"
+        << "#group,false,false,false,false,false,false,false\n"
+        << "#default,_result,,,,,,\n"
+        << ",result,table,_time,host,region,_field,_value\n";
+    static constexpr const char* kRegions[] = {"us-east", "us-west", "eu-central", "ap-south"};
+    static constexpr const char* kFields[] = {"cpu", "mem", "disk", "net"};
+    for (int64_t i = 0; i < rows; ++i) {
+        const int64_t minute = i % 720;
+        csv << ",,0,2024-01-01T" << (minute / 60 < 10 ? "0" : "") << minute / 60 << ":"
+            << (minute % 60 < 10 ? "0" : "") << minute % 60 << ":00Z,edge-" << (i % host_mod) << ','
+            << kRegions[i % 4] << ',' << kFields[i % 4] << ','
+            << (static_cast<double>(i % 100) * value_scale) << "\n";
+    }
+    return csv.str();
+}
+
+TEST(RuntimeExecTest, StressLargeGroupedFullJoinThenPivot) {
+    const std::string left_csv = MakeStressAnnotatedCsv(60000, 64, 1.0);
+    const std::string right_csv = MakeStressAnnotatedCsv(60000, 64, 0.5);
+    for (int iteration = 0; iteration < 3; ++iteration) {
+        const std::string script = R"flux(
+            import "csv"
+
+            left = csv.from(csv: ")flux" +
+                                   left_csv + R"flux(", mode: "annotations")
+                |> group(columns: ["host"])
+            right = csv.from(csv: ")flux" +
+                                   right_csv + R"flux(", mode: "annotations")
+                |> group(columns: ["host"])
+
+            join(tables: {l: left, r: right}, method: "full", on: ["_time", "host"])
+                |> pivot(rowKey: ["_time"], columnKey: ["host"], valueColumn: "_value_l")
+                |> limit(n: 100)
+                |> yield(name: "stress")
+        )flux";
+        auto file = ParseFile(script);
+        ASSERT_NE(file, nullptr);
+
+        Environment env;
+        BuiltinRegistry::Install(env);
+        auto result_or = StatementExecutor::ExecuteFile(*file, env);
+        ASSERT_TRUE(result_or.ok()) << result_or.status();
+        ASSERT_FALSE(result_or->results.empty());
+        const auto& result = result_or->results.back();
+        ASSERT_EQ(Value::Type::Table, result.value.type());
+        // limit applies per logical table (chunk), so the exact row count
+        // depends on the group/window chunking; the stress goal is a clean
+        // run over tens of thousands of joined rows.
+        EXPECT_GT(result.value.as_table().rows.size(), 0) << "iteration " << iteration;
+    }
+}
+
+TEST(RuntimeExecTest, StressAggregateWindowThenPivot) {
+    const std::string csv = MakeStressAnnotatedCsv(60000, 64, 1.0);
+    for (int iteration = 0; iteration < 3; ++iteration) {
+        const std::string script = R"flux(
+            import "csv"
+
+            csv.from(csv: ")flux" + csv +
+                                   R"flux(", mode: "annotations")
+                |> group(columns: ["host"])
+                |> aggregateWindow(every: 1h, fn: mean, createEmpty: true)
+                |> pivot(rowKey: ["host", "_time"], columnKey: ["region"], valueColumn: "_value")
+                |> limit(n: 100)
+                |> yield(name: "stress_window")
+        )flux";
+        auto file = ParseFile(script);
+        ASSERT_NE(file, nullptr);
+
+        Environment env;
+        BuiltinRegistry::Install(env);
+        auto result_or = StatementExecutor::ExecuteFile(*file, env);
+        ASSERT_TRUE(result_or.ok()) << result_or.status();
+        ASSERT_FALSE(result_or->results.empty());
+        const auto& result = result_or->results.back();
+        ASSERT_EQ(Value::Type::Table, result.value.type());
+        EXPECT_GT(result.value.as_table().rows.size(), 0) << "iteration " << iteration;
+    }
 }
 
 } // namespace

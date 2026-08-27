@@ -146,6 +146,10 @@ public:
     [[nodiscard]] const RegexValue& as_regex() const;
     [[nodiscard]] const ArrayValue& as_array() const;
     [[nodiscard]] const ObjectValue& as_object() const;
+    // Shares the underlying ObjectValue instead of copying it. Safe because
+    // rows/objects are treated as immutable once published: no code mutates a
+    // shared ObjectValue in place.
+    [[nodiscard]] const std::shared_ptr<ObjectValue>& as_object_ptr() const;
     [[nodiscard]] const TableValue& as_table() const;
     [[nodiscard]] TableValue& as_table_mut();
     [[nodiscard]] const FunctionValue& as_function() const;

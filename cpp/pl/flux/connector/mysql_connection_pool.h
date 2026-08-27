@@ -78,6 +78,7 @@ private:
     std::string dsn_;
     size_t max_pool_size_ = 0;
     std::chrono::milliseconds acquire_timeout_ = kDefaultAcquireTimeout;
+    std::string init_error_;
     std::unique_ptr<Impl> impl_;
 };
 

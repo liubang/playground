@@ -117,7 +117,7 @@ absl::StatusOr<Value> builtin_elapsed(const std::vector<Value>& args) {
                     *row,
                     *column_name_or,
                     Value::integer((*seconds_or - previous->second) / unit_seconds));
-                next.rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
+                next.rows.push_back(updated.as_object_ptr());
             }
             previous_time_by_group[group_key] = *seconds_or;
         }
@@ -199,11 +199,11 @@ absl::StatusOr<Value> builtin_difference(const std::vector<Value>& args) {
                 }
                 auto updated =
                     detail::object_with_upserted_property(*row, *column_or, std::move(difference));
-                next.rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
+                next.rows.push_back(updated.as_object_ptr());
             } else if (*keep_first_or) {
                 auto updated =
                     detail::object_with_upserted_property(*row, *column_or, Value::null());
-                next.rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
+                next.rows.push_back(updated.as_object_ptr());
             }
             previous_by_group[group_key] = *current;
         }
@@ -332,7 +332,7 @@ absl::StatusOr<Value> builtin_derivative(const std::vector<Value>& args) {
                 }
                 auto updated =
                     detail::object_with_upserted_property(*row, *column_or, std::move(rate));
-                next.rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
+                next.rows.push_back(updated.as_object_ptr());
             }
             previous_value_by_group[group_key] = *current;
             previous_time_by_group[group_key] = *seconds_or;

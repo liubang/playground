@@ -355,7 +355,9 @@ inline std::pair<std::shared_ptr<ObjectValue>, std::string> clone_row_with_group
     }
     Value group_value = Value::object(std::move(group_props));
     auto grouped = object_with_upserted_property(row, "_group", group_value);
-    return {std::make_shared<ObjectValue>(grouped.as_object()), std::move(key)};
+    // Share instead of deep-copying: the upserted object is a fresh immutable
+    // value owned solely by `grouped`.
+    return {grouped.as_object_ptr(), std::move(key)};
 }
 
 inline std::vector<std::string> all_visible_columns_in_order(const TableValue& table) {
@@ -633,7 +635,7 @@ inline std::vector<std::string> visible_columns_in_chunk(const TableChunk& chunk
 
 inline std::shared_ptr<ObjectValue> chunk_group_object(const TableChunk& chunk) {
     if (chunk.group_key != nullptr) {
-        return std::make_shared<ObjectValue>(*chunk.group_key);
+        return chunk.group_key;
     }
     for (const auto& row : chunk.rows) {
         if (row == nullptr) {
@@ -641,7 +643,8 @@ inline std::shared_ptr<ObjectValue> chunk_group_object(const TableChunk& chunk) 
         }
         const Value* group = row->lookup("_group");
         if (group != nullptr && group->type() == Value::Type::Object) {
-            return std::make_shared<ObjectValue>(group->as_object());
+            // Share the immutable group object instead of copying it.
+            return group->as_object_ptr();
         }
     }
     return std::make_shared<ObjectValue>(std::vector<std::pair<std::string, Value>>{});

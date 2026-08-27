@@ -251,7 +251,7 @@ absl::StatusOr<Value> builtin_reduce(const std::vector<Value>& args) {
             accumulator = *next_or;
         }
         TableChunk next;
-        next.rows.push_back(std::make_shared<ObjectValue>(accumulator.as_object()));
+        next.rows.push_back(accumulator.as_object_ptr());
         chunks.push_back(std::move(next));
     }
     auto result = detail::table_with_chunks_like(*table, std::move(chunks));
@@ -417,7 +417,7 @@ absl::StatusOr<Value> builtin_quantile(const std::vector<Value>& args) {
                 chunk, *column_or, Value::floating(*quantile_or));
             Value updated =
                 detail::object_with_upserted_property(*row, "quantile", Value::floating(q));
-            next.rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
+            next.rows.push_back(updated.as_object_ptr());
         }
         chunks.push_back(std::move(next));
     }

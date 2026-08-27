@@ -40,6 +40,7 @@
 #include <cstdlib>
 #include <exception>
 #include <iomanip>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -1586,6 +1587,12 @@ std::unique_ptr<ConnectorRuntime> MakeMySQLConnectorRuntime(const SourceSpec& sp
         auto pool_or = MakeMySQLBoostConnectionPool(spec.dsn, options.max_pool_size);
         if (pool_or.ok()) {
             pool = std::move(*pool_or);
+        } else {
+            // Falling back to direct connections must be visible: without the pool,
+            // metadata/split discovery reconnect per call and the failure would only
+            // surface much later as a far less obvious connection error.
+            std::cerr << "mysql connector falling back to direct connections: " << pool_or.status()
+                      << '\n';
         }
     }
     auto runtime = std::make_unique<ConnectorRuntime>();

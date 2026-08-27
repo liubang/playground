@@ -32,6 +32,7 @@
 #include <chrono>
 #include <exception>
 #include <future>
+#include <iostream>
 #include <utility>
 
 #include "absl/status/status.h"
@@ -124,6 +125,11 @@ MySQLBoostConnectionPool::MySQLBoostConnectionPool(std::string dsn,
       acquire_timeout_(acquire_timeout) {
     auto params_or = pool_params_from_dsn(dsn_, max_pool_size_);
     if (!params_or.ok()) {
+        // Keep the pool uninitialized but loud: silently degrading to a null
+        // impl makes the first Acquire fail with an opaque "not initialized"
+        // error and hides the actual DSN problem from operators.
+        init_error_ = params_or.status().ToString();
+        std::cerr << "mysql connection pool disabled: invalid DSN: " << init_error_ << '\n';
         return;
     }
     impl_ = std::make_unique<Impl>(std::move(*params_or));
@@ -133,7 +139,9 @@ MySQLBoostConnectionPool::~MySQLBoostConnectionPool() = default;
 
 absl::StatusOr<MySQLBoostConnectionPool::Lease> MySQLBoostConnectionPool::Acquire() {
     if (impl_ == nullptr) {
-        return absl::InvalidArgumentError("mysql boost connection pool is not initialized");
+        return absl::InvalidArgumentError(
+            absl::StrCat("mysql boost connection pool is not initialized",
+                         init_error_.empty() ? "" : absl::StrCat(": ", init_error_)));
     }
     try {
         std::future<mysql::pooled_connection> future =

@@ -2053,12 +2053,27 @@ enum class GroupedAggregateStrategy {
     TwoStagePartitioned,
 };
 
+// Row estimates drive plan-shape heuristics (grouped aggregate strategy,
+// blocking-input partitioning) within a single PhysicalPlanner::Plan call.
+// Each estimate is a full Default CBO run including connector statistics
+// lookups, and the same subplans are estimated repeatedly per query, so
+// memoize per Plan call. Plan nodes are immutable and outlive the Plan call,
+// which makes pointer identity a valid cache key; the cache is cleared on
+// every Plan entry to bound key reuse across calls.
+thread_local std::unordered_map<const plan::PlanNode*, std::optional<double>> row_estimate_cache;
+
 std::optional<double> EstimateRowsForPlan(const std::shared_ptr<plan::PlanNode>& plan_node) {
-    auto cbo_or = optimizer::DefaultCostBasedOptimizer().OptimizeWithTrace(plan_node);
-    if (!cbo_or.ok()) {
-        return std::nullopt;
+    const plan::PlanNode* key = plan_node.get();
+    if (const auto it = row_estimate_cache.find(key); it != row_estimate_cache.end()) {
+        return it->second;
     }
-    return cbo_or->cost.rows;
+    auto cbo_or = optimizer::DefaultCostBasedOptimizer().OptimizeWithTrace(plan_node);
+    std::optional<double> estimate;
+    if (cbo_or.ok()) {
+        estimate = cbo_or->cost.rows;
+    }
+    row_estimate_cache.emplace(key, estimate);
+    return estimate;
 }
 
 GroupedAggregateStrategy ChooseGroupedAggregateStrategy(
@@ -3135,6 +3150,10 @@ runtime::Value internal::ValueFromPage(const runtime::Page& page) {
 
 absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
     const std::shared_ptr<plan::PlanNode>& logical_plan) const {
+    // Drop stale estimates from previous Plan calls: plan node addresses may be
+    // reused across queries, and only nodes owned by this call's plan tree are
+    // valid cache keys.
+    row_estimate_cache.clear();
     auto memory_context = QueryMemoryContext::FromEnvironment();
     // Run the CBO exactly once per query: plans containing a join need the
     // full optimizer with connector statistics (for build-side/distribution

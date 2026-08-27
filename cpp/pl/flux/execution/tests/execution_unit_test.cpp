@@ -417,5 +417,182 @@ TEST(MaterializerTest, MaterializesLazyTableThroughPlan) {
     EXPECT_EQ("named", *table.result_name);
 }
 
+// ---------------------------------------------------------------------------
+// PhysicalPlanner + PhysicalExecutor end-to-end (memory connector)
+// ---------------------------------------------------------------------------
+
+std::shared_ptr<runtime::ObjectValue> MakePlannerRow(
+    std::vector<std::pair<std::string, runtime::Value>> props) {
+    return std::make_shared<runtime::ObjectValue>(std::move(props));
+}
+
+void RegisterPlannerMemorySource(const std::string& source,
+                                 const std::string& table,
+                                 const std::vector<std::shared_ptr<runtime::ObjectValue>>& rows,
+                                 size_t split_count) {
+    connector::ConnectorRegistry::Global().Register(
+        source, [rows, table, split_count](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(requested, table, rows, 64, split_count);
+        });
+}
+
+std::shared_ptr<plan::PlanNode> MakeScanFor(const std::string& source, const std::string& table) {
+    return plan::MakeSourceScan(source, source, "memory://" + source, table);
+}
+
+TEST(PhysicalPlannerTest, ExecutesScanFilterLimitChain) {
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows;
+    rows.reserve(100);
+    for (int64_t i = 0; i < 100; ++i) {
+        rows.push_back(MakePlannerRow({
+            {"_time", runtime::Value::time("2024-01-01T00:00:00Z")},
+            {"host", runtime::Value::string("edge-" + std::to_string(i % 4))},
+            {"usage", runtime::Value::floating(static_cast<double>(i))},
+        }));
+    }
+    RegisterPlannerMemorySource("planner_test_scan", "cpu", rows, 2);
+    auto plan =
+        plan::MakeLimit(plan::MakeFilter(MakeScanFor("planner_test_scan", "cpu"),
+                                         {plan::PredicateSpec{
+                                             .op = plan::PredicateOp::Gte,
+                                             .column = "usage",
+                                             .literal =
+                                                 plan::PredicateLiteral{
+                                                     .kind = plan::PredicateLiteralKind::Float,
+                                                     .float_value = 90.0,
+                                                 },
+                                         }}),
+                        5,
+                        0);
+
+    auto task_or = PhysicalPlanner().Plan(plan);
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_FALSE(task_or->pipelines.empty());
+
+    auto result_or = PhysicalExecutor().Execute(plan);
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& table = result_or->as_table();
+    ASSERT_EQ(5, table.rows.size());
+    for (const auto& row : table.rows) {
+        ASSERT_TRUE(row != nullptr);
+        const runtime::Value* usage = row->lookup("usage");
+        ASSERT_TRUE(usage != nullptr);
+        EXPECT_GE(usage->as_float(), 90.0);
+    }
+}
+
+TEST(PhysicalPlannerTest, ExecutesRangeProjectChainThroughStreamingOperators) {
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows;
+    rows.reserve(10);
+    for (int64_t i = 0; i < 10; ++i) {
+        const std::string minute = i < 10 ? "0" + std::to_string(i) : std::to_string(i);
+        rows.push_back(MakePlannerRow({
+            {"_time", runtime::Value::time("2024-01-01T00:" + minute + ":00Z")},
+            {"host", runtime::Value::string("edge-1")},
+            {"usage", runtime::Value::floating(static_cast<double>(i))},
+        }));
+    }
+    RegisterPlannerMemorySource("planner_test_range", "cpu", rows, 1);
+    // The memory connector cannot push down time ranges, so the planner must
+    // keep Range/Project as streaming operators above the scan.
+    auto plan = plan::MakeProject(plan::MakeRange(MakeScanFor("planner_test_range", "cpu"),
+                                                  "2024-01-01T00:03:00Z",
+                                                  "2024-01-01T00:06:00Z"),
+                                  {"_time", "usage"});
+
+    auto result_or = PhysicalExecutor().Execute(plan);
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& table = result_or->as_table();
+    ASSERT_EQ(3, table.rows.size());
+    for (const auto& row : table.rows) {
+        ASSERT_TRUE(row != nullptr);
+        EXPECT_TRUE(row->lookup("_time") != nullptr);
+        EXPECT_TRUE(row->lookup("usage") != nullptr);
+        EXPECT_TRUE(row->lookup("host") == nullptr);
+    }
+}
+
+TEST(PhysicalPlannerTest, ExecutesJoinWithCboDistributionChoice) {
+    std::vector<std::shared_ptr<runtime::ObjectValue>> left_rows;
+    left_rows.reserve(2000);
+    for (int64_t i = 0; i < 2000; ++i) {
+        left_rows.push_back(MakePlannerRow({
+            {"host", runtime::Value::string("h" + std::to_string(i % 5))},
+            {"v", runtime::Value::integer(i)},
+        }));
+    }
+    std::vector<std::shared_ptr<runtime::ObjectValue>> right_rows;
+    right_rows.reserve(5);
+    for (int64_t j = 0; j < 5; ++j) {
+        right_rows.push_back(MakePlannerRow({
+            {"host", runtime::Value::string("h" + std::to_string(j))},
+            {"owner", runtime::Value::string("o" + std::to_string(j))},
+        }));
+    }
+    RegisterPlannerMemorySource("planner_test_join_l", "metrics", left_rows, 4);
+    RegisterPlannerMemorySource("planner_test_join_r", "owners", right_rows, 1);
+    // A join plan forces the full CBO with connector statistics (build side /
+    // distribution choices). Whatever distribution it picks, the join result
+    // must be exactly the inner-join output.
+    auto plan = plan::MakeJoin(MakeScanFor("planner_test_join_l", "metrics"),
+                               MakeScanFor("planner_test_join_r", "owners"),
+                               {"host"},
+                               plan::JoinMethod::Inner,
+                               "l",
+                               "r");
+
+    auto task_or = PhysicalPlanner().Plan(plan);
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_FALSE(task_or->pipelines.empty());
+
+    auto result_or = PhysicalExecutor().Execute(plan);
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& table = result_or->as_table();
+    ASSERT_EQ(2000, table.rows.size());
+    for (const auto& row : table.rows) {
+        ASSERT_TRUE(row != nullptr);
+        const runtime::Value* host = row->lookup("host");
+        const runtime::Value* owner = row->lookup("owner");
+        ASSERT_TRUE(host != nullptr);
+        ASSERT_TRUE(owner != nullptr);
+        EXPECT_EQ("o" + host->as_string().substr(1), owner->as_string());
+    }
+}
+
+TEST(PhysicalPlannerTest, ExecutesTwoStageGroupedAggregate) {
+    // 8 hosts x 1250 rows = 10000 rows across 4 splits: above the small-input
+    // threshold, so the planner chooses a two-stage grouped aggregate. The
+    // final per-group sums must be exact regardless of the strategy.
+    constexpr int64_t kHosts = 8;
+    constexpr int64_t kRowsPerHost = 1250;
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows;
+    rows.reserve(kHosts * kRowsPerHost);
+    for (int64_t host = 0; host < kHosts; ++host) {
+        for (int64_t i = 0; i < kRowsPerHost; ++i) {
+            rows.push_back(MakePlannerRow({
+                {"_time", runtime::Value::time("2024-01-01T00:00:00Z")},
+                {"host", runtime::Value::string("edge-" + std::to_string(host))},
+                {"usage", runtime::Value::floating(1.0)},
+            }));
+        }
+    }
+    RegisterPlannerMemorySource("planner_test_agg", "cpu", rows, 4);
+    auto plan =
+        plan::MakeAggregate(plan::MakeGroup(MakeScanFor("planner_test_agg", "cpu"), {"host"}),
+                            plan::AggregateFunction::Sum,
+                            "usage");
+
+    auto result_or = PhysicalExecutor().Execute(plan);
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& table = result_or->as_table();
+    ASSERT_EQ(kHosts, static_cast<int64_t>(table.rows.size()));
+    for (const auto& row : table.rows) {
+        ASSERT_TRUE(row != nullptr);
+        const runtime::Value* usage = row->lookup("usage");
+        ASSERT_TRUE(usage != nullptr);
+        EXPECT_EQ(static_cast<double>(kRowsPerHost), usage->as_float());
+    }
+}
+
 } // namespace
 } // namespace pl::flux::execution

@@ -38,7 +38,7 @@ inline std::shared_ptr<ObjectValue> window_group_object(const TableChunk& chunk,
         *group, start_column, Value::time(format_rfc3339_seconds(start_seconds)));
     updated = object_with_upserted_property(
         updated.as_object(), stop_column, Value::time(format_rfc3339_seconds(stop_seconds)));
-    return std::make_shared<ObjectValue>(updated.as_object());
+    return updated.as_object_ptr();
 }
 
 inline std::shared_ptr<ObjectValue> row_with_window_bounds(
@@ -53,7 +53,7 @@ inline std::shared_ptr<ObjectValue> row_with_window_bounds(
     updated = object_with_upserted_property(
         updated.as_object(), stop_column, Value::time(format_rfc3339_seconds(stop_seconds)));
     updated = object_with_upserted_property(updated.as_object(), "_group", Value::object(group));
-    return std::make_shared<ObjectValue>(updated.as_object());
+    return updated.as_object_ptr();
 }
 
 inline std::unordered_set<std::string> aggregate_window_allowed_columns(

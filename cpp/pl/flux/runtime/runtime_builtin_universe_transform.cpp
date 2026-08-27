@@ -599,7 +599,9 @@ absl::StatusOr<Value> builtin_map(const std::vector<Value>& args) {
             if (mapped_or->type() != Value::Type::Object) {
                 return absl::InvalidArgumentError("map `fn` must return an object");
             }
-            return std::make_shared<ObjectValue>(mapped_or->as_object());
+            // Share the fn result object instead of deep-copying it; rows are
+            // immutable once published, so aliasing is safe.
+            return mapped_or->as_object_ptr();
         });
     if (!result_or.ok()) {
         return result_or.status();
@@ -858,7 +860,7 @@ absl::StatusOr<Value> builtin_duplicate(const std::vector<Value>& args) {
                 return detail::clone_row(row);
             }
             auto duplicated = detail::object_with_upserted_property(row, *as_or, *value);
-            return std::make_shared<ObjectValue>(duplicated.as_object());
+            return duplicated.as_object_ptr();
         });
     if (!result_or.ok()) {
         return result_or.status();
@@ -893,7 +895,7 @@ absl::StatusOr<Value> builtin_set(const std::vector<Value>& args) {
     auto result_or = detail::transform_rows_preserving_chunks(
         *table, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
             auto updated = detail::object_with_upserted_property(row, *key_or, **value_or);
-            return std::make_shared<ObjectValue>(updated.as_object());
+            return updated.as_object_ptr();
         });
     if (!result_or.ok()) {
         return result_or.status();
@@ -1195,7 +1197,7 @@ absl::StatusOr<Value> builtin_fill(const std::vector<Value>& args) {
                 if (replacement.has_value()) {
                     auto updated =
                         detail::object_with_upserted_property(*next_row, *column_or, *replacement);
-                    next_row = std::make_shared<ObjectValue>(updated.as_object());
+                    next_row = updated.as_object_ptr();
                     previous_by_group[group_key] = *replacement;
                 }
             } else {
