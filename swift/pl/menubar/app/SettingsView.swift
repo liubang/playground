@@ -220,6 +220,12 @@ private struct WeatherTab: View {
                         HStack(spacing: 6) {
                             Image(systemName: "location")
                             Text(store.location.map { "当前：\($0.name)" } ?? "待定位")
+                            if let source = store.locationService.source {
+                                Text(source == .coreLocation ? "· 系统定位" : "· IP 粗定位")
+                                    .foregroundStyle(
+                                        source == .coreLocation ? theme.textSecondary : theme.warning,
+                                    )
+                            }
                         }
                         .font(.caption)
                         .foregroundStyle(theme.textSecondary)
