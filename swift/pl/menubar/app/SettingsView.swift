@@ -1,10 +1,36 @@
 import SwiftUI
 
-/// The standalone settings window: four tabs — 通用 (theme, modules,
-/// launch at login), 日历 (clock format, week start, lunar, second time
-/// zone), 天气 (provider, location, API key) and 关于 (version, quit).
-/// Replaces the cramped per-popover gear menus.
+/// The standalone settings window, styled after macOS System Settings:
+/// an icon sidebar on the left, themed section cards with icon-badge
+/// rows on the right. Replaces the cramped per-popover gear menus.
 struct SettingsView: View {
+    enum Tab: String, CaseIterable {
+        case general
+        case calendar
+        case weather
+        case about
+
+        var label: String {
+            switch self {
+            case .general: "通用"
+            case .calendar: "日历"
+            case .weather: "天气"
+            case .about: "关于"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .general: "gearshape"
+            case .calendar: "calendar"
+            case .weather: "cloud.sun"
+            case .about: "info.circle"
+            }
+        }
+    }
+
+    @State private var selected: Tab = .general
+
     @AppStorage("themePreference") private var themePreference = ThemePreference.system.rawValue
     @Environment(\.colorScheme) private var colorScheme
 
@@ -16,27 +42,87 @@ struct SettingsView: View {
         (ThemePreference(rawValue: themePreference) ?? .system).pinnedColorScheme
     }
 
+    private var version: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+    }
+
     var body: some View {
-        TabView {
-            GeneralTab()
-                .tabItem { Label("通用", systemImage: "gearshape") }
-            CalendarTab()
-                .tabItem { Label("日历", systemImage: "calendar") }
-            WeatherTab()
-                .tabItem { Label("天气", systemImage: "cloud.sun") }
-            AboutTab()
-                .tabItem { Label("关于", systemImage: "info.circle") }
+        HStack(spacing: 0) {
+            sidebar
+            Divider().overlay(theme.cardBorder)
+            content
         }
-        .padding(20)
-        .frame(width: 560, height: 380)
+        .frame(width: 640, height: 400)
         .background(theme.background)
         .foregroundStyle(theme.textPrimary)
         .environment(\.theme, theme)
         .preferredColorScheme(pinnedColorScheme)
     }
+
+    // MARK: - Sidebar
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(Tab.allCases, id: \.self) { tab in
+                Button {
+                    selected = tab
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: tab.icon)
+                            .font(.callout)
+                            .frame(width: 20)
+                        Text(tab.label)
+                            .font(.callout)
+                    }
+                    .foregroundStyle(selected == tab ? theme.accent : theme.textPrimary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background {
+                        if selected == tab {
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(theme.accent.opacity(0.15))
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+            Text("AuraBar · v\(version)")
+                .font(.caption2)
+                .foregroundStyle(theme.textSecondary)
+                .padding(.horizontal, 10)
+        }
+        .padding(10)
+        .frame(width: 150)
+        .background(theme.cardBackground)
+    }
+
+    // MARK: - Content
+
+    private var content: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(selected.label)
+                    .font(.system(.title3, design: .rounded).weight(.semibold))
+                switch selected {
+                case .general: GeneralTab()
+                case .calendar: CalendarTab()
+                case .weather: WeatherTab()
+                case .about: AboutTab()
+                }
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(theme.background)
+    }
 }
 
-/// Section header + content container, themed.
+// MARK: - Shared components
+
+/// A card grouping related rows, with a small caption above it.
 private struct SettingsSection<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
@@ -44,13 +130,68 @@ private struct SettingsSection<Content: View>: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(theme.textSecondary)
-            content
+                .padding(.horizontal, 4)
+            VStack(alignment: .leading, spacing: 0) {
+                content
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+            .background(theme.cardBackground, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(theme.cardBorder, lineWidth: 1),
+            )
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Colored rounded-square icon for a settings row, System Settings style.
+private struct IconBadge: View {
+    let systemName: String
+    let color: Color
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 22, height: 22)
+            .background(color, in: RoundedRectangle(cornerRadius: 5))
+    }
+}
+
+/// One settings row: icon badge + label on the left, control on the right.
+private struct SettingsRow<Control: View>: View {
+    let icon: String
+    let color: Color
+    let label: String
+    @ViewBuilder let control: Control
+
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        HStack(spacing: 10) {
+            IconBadge(systemName: icon, color: color)
+            Text(label)
+                .font(.callout)
+            Spacer()
+            control
+        }
+        .padding(.vertical, 7)
+    }
+}
+
+/// Divider between rows inside a section card.
+private struct RowDivider: View {
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        Divider()
+            .overlay(theme.cardBorder)
+            .padding(.leading, 32)
     }
 }
 
@@ -69,15 +210,18 @@ private struct GeneralTab: View {
     @State private var launchError: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             SettingsSection(title: "外观") {
-                Picker("主题", selection: $themePreference) {
-                    ForEach(ThemePreference.allCases, id: \.rawValue) { preference in
-                        Text(preference.label).tag(preference.rawValue)
+                SettingsRow(icon: "paintpalette", color: theme.accent, label: "主题") {
+                    Picker("主题", selection: $themePreference) {
+                        ForEach(ThemePreference.allCases, id: \.rawValue) { preference in
+                            Text(preference.label).tag(preference.rawValue)
+                        }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 200)
                 }
-                .labelsHidden()
-                .pickerStyle(.segmented)
             }
             SettingsSection(title: "菜单栏模块") {
                 LazyVGrid(
@@ -95,22 +239,29 @@ private struct GeneralTab: View {
                         moduleToggle("电池", $battery, "battery")
                     }
                 }
+                .padding(.vertical, 8)
             }
             SettingsSection(title: "系统") {
-                Toggle("开机自启", isOn: LaunchAtLogin.binding { launchError = $0 })
-                    .tint(theme.accent)
+                SettingsRow(icon: "power", color: theme.ok, label: "开机自启") {
+                    Toggle("", isOn: LaunchAtLogin.binding { launchError = $0 })
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .tint(theme.accent)
+                }
                 if let launchError {
                     Text(launchError)
                         .font(.caption)
                         .foregroundStyle(theme.rest)
+                        .padding(.bottom, 6)
                 }
             }
-            Spacer()
         }
     }
 
     private func moduleToggle(_ label: String, _ binding: Binding<Bool>, _ key: String) -> some View {
         Toggle(label, isOn: binding)
+            .font(.callout)
+            .toggleStyle(.switch)
             .tint(theme.accent)
             .disabled(othersAllOff(key))
     }
@@ -139,29 +290,43 @@ private struct CalendarTab: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             SettingsSection(title: "菜单栏时钟") {
-                Picker("时钟格式", selection: clockFormat) {
-                    ForEach(ClockFormat.allCases, id: \.rawValue) { format in
-                        Text(format.label).tag(format.rawValue)
+                SettingsRow(icon: "clock", color: theme.accent, label: "时钟格式") {
+                    Picker("时钟格式", selection: clockFormat) {
+                        ForEach(ClockFormat.allCases, id: \.rawValue) { format in
+                            Text(format.label).tag(format.rawValue)
+                        }
                     }
+                    .labelsHidden()
                 }
-                Picker("第二时区", selection: secondTimeZone) {
-                    ForEach(SecondTimeZone.allCases, id: \.rawValue) { zone in
-                        Text(zone.label).tag(zone.rawValue)
+                RowDivider()
+                SettingsRow(icon: "globe", color: theme.aqua, label: "第二时区") {
+                    Picker("第二时区", selection: secondTimeZone) {
+                        ForEach(SecondTimeZone.allCases, id: \.rawValue) { zone in
+                            Text(zone.label).tag(zone.rawValue)
+                        }
                     }
+                    .labelsHidden()
                 }
             }
             SettingsSection(title: "日历") {
-                Picker("每周第一天", selection: $weekStartRaw) {
-                    ForEach(WeekStart.allCases, id: \.rawValue) { start in
-                        Text(start.label).tag(start.rawValue)
+                SettingsRow(icon: "calendar", color: theme.orange, label: "每周第一天") {
+                    Picker("每周第一天", selection: $weekStartRaw) {
+                        ForEach(WeekStart.allCases, id: \.rawValue) { start in
+                            Text(start.label).tag(start.rawValue)
+                        }
                     }
+                    .labelsHidden()
                 }
-                Toggle("显示农历与节气", isOn: $showLunar)
-                    .tint(theme.accent)
+                RowDivider()
+                SettingsRow(icon: "moon.stars", color: theme.accent, label: "显示农历与节气") {
+                    Toggle("", isOn: $showLunar)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .tint(theme.accent)
+                }
             }
-            Spacer()
         }
     }
 
@@ -188,35 +353,45 @@ private struct WeatherTab: View {
     @State private var keyDraft = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             if let store = AppRegistry.weather {
                 SettingsSection(title: "数据源") {
-                    Picker("数据源", selection: Binding(
-                        get: { store.providerKind },
-                        set: { store.providerKind = $0 },
-                    )) {
-                        ForEach(WeatherProviderKind.allCases, id: \.rawValue) { kind in
-                            Text(kind.label).tag(kind)
+                    SettingsRow(icon: "cloud.sun", color: theme.warning, label: "数据源") {
+                        Picker("数据源", selection: Binding(
+                            get: { store.providerKind },
+                            set: { store.providerKind = $0 },
+                        )) {
+                            ForEach(WeatherProviderKind.allCases, id: \.rawValue) { kind in
+                                Text(kind.label).tag(kind)
+                            }
                         }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(width: 200)
                     }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-
                     if store.providerKind == .qweather {
-                        SettingsField(prompt: "和风天气 API Key", text: $keyDraft) {
-                            store.qweatherKey = keyDraft
-                            Task { await store.refresh() }
+                        RowDivider()
+                        SettingsRow(icon: "key", color: theme.orange, label: "和风 Key") {
+                            SettingsField(prompt: "API Key", text: $keyDraft) {
+                                store.qweatherKey = keyDraft
+                                Task { await store.refresh() }
+                            }
+                            .frame(width: 200)
                         }
                     }
                 }
                 SettingsSection(title: "位置") {
-                    Toggle("自动定位", isOn: Binding(
-                        get: { store.autoLocation },
-                        set: { store.setAutoLocation($0) },
-                    ))
-                    .tint(theme.accent)
-
+                    SettingsRow(icon: "location", color: theme.accent, label: "自动定位") {
+                        Toggle("", isOn: Binding(
+                            get: { store.autoLocation },
+                            set: { store.setAutoLocation($0) },
+                        ))
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .tint(theme.accent)
+                    }
                     if store.autoLocation {
+                        RowDivider()
                         HStack(spacing: 6) {
                             Image(systemName: "location")
                             Text(store.location.map { "当前：\($0.name)" } ?? "待定位")
@@ -229,20 +404,28 @@ private struct WeatherTab: View {
                         }
                         .font(.caption)
                         .foregroundStyle(theme.textSecondary)
+                        .padding(.leading, 32)
+                        .padding(.vertical, 7)
                     } else {
-                        SettingsField(prompt: "添加城市（如 北京 / 上海）", text: $cityDraft) {
-                            Task {
-                                await store.setCity(cityDraft)
-                                cityDraft = ""
+                        RowDivider()
+                        SettingsRow(icon: "plus.circle", color: theme.ok, label: "添加城市") {
+                            SettingsField(prompt: "如 北京 / 上海", text: $cityDraft) {
+                                Task {
+                                    await store.setCity(cityDraft)
+                                    cityDraft = ""
+                                }
                             }
+                            .frame(width: 160)
                         }
                         if !store.savedLocations.isEmpty {
+                            RowDivider()
                             savedLocationList(store)
+                                .padding(.leading, 32)
+                                .padding(.vertical, 7)
                         }
                     }
                 }
             }
-            Spacer()
         }
         .onAppear {
             keyDraft = AppRegistry.weather?.qweatherKey ?? ""
@@ -296,6 +479,8 @@ private struct AboutTab: View {
     var body: some View {
         VStack(spacing: 10) {
             Spacer()
+            Image(nsImage: StatsGlyphs.makeBattery(fraction: 0.93, charging: false, value: ""))
+                .opacity(0.9)
             Text("AuraBar")
                 .font(.system(.title2, design: .rounded).weight(.semibold))
             Text("版本 \(version)")
@@ -311,5 +496,6 @@ private struct AboutTab: View {
                 Button("退出 AuraBar", role: .destructive, action: quitApp)
             }
         }
+        .frame(maxWidth: .infinity)
     }
 }

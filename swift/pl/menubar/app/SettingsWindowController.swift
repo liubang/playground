@@ -13,12 +13,16 @@ final class SettingsWindowController {
     func show() {
         if window == nil {
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 560, height: 380),
+                contentRect: NSRect(x: 0, y: 0, width: 640, height: 400),
                 styleMask: [.titled, .closable, .miniaturizable],
                 backing: .buffered,
                 defer: false,
             )
             window.title = "AuraBar 设置"
+            // Let our themed content run flush under a transparent
+            // titlebar, System Settings style.
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
             window.contentViewController = NSHostingController(rootView: SettingsView())
             window.setFrameAutosaveName("AuraBar.settings")
             window.isReleasedWhenClosed = false
