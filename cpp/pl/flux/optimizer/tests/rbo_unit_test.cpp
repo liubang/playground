@@ -57,6 +57,8 @@ TEST(RuleBasedOptimizerTest, KeepsLogicalPlanStableWhileRecordingDeterministicTr
 
     ASSERT_TRUE(result_or.ok()) << result_or.status();
     EXPECT_EQ(plan, result_or->plan);
+    // Detection rules report matches via `detected`, never `applied`.
+    EXPECT_TRUE(AppliedRuleNames(*result_or).empty());
     EXPECT_EQ((std::vector<std::string>{
                   "PushLimitIntoConnectorScan",
                   "PushSortIntoConnectorScan",
@@ -64,7 +66,7 @@ TEST(RuleBasedOptimizerTest, KeepsLogicalPlanStableWhileRecordingDeterministicTr
                   "PushPredicateIntoConnectorScan",
                   "PushTimeRangeIntoConnectorScan",
               }),
-              AppliedRuleNames(*result_or));
+              DetectedRuleNames(*result_or));
     ASSERT_TRUE(result_or->pushdown_plan.has_value());
     EXPECT_EQ(SourceScanPlan()->source_scan().table, result_or->pushdown_plan->source.table);
     EXPECT_EQ((std::vector<std::string>{"_time", "host", "usage"}),

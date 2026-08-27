@@ -45,6 +45,9 @@ struct CostEstimate {
 
 struct OptimizerTrace {
     std::vector<std::string> rbo_rules;
+    // RBO rules that matched a pattern (e.g. pushdown opportunities) without
+    // rewriting the plan; `rbo_rules` only contains real rewrites.
+    std::vector<std::string> rbo_detected;
     std::vector<std::string> cbo_alternatives;
     std::string cbo_decision = "not-run";
     CostEstimate cost;
@@ -170,6 +173,7 @@ inline void FormatPhysicalNodeProperties(const PhysicalPlanNode& node,
     }
     FormatPhysicalListProperty(indent, "logical_prefix", node.logical_prefix, out);
     FormatPhysicalListProperty(indent, "rbo", node.optimizer.rbo_rules, out);
+    FormatPhysicalListProperty(indent, "detected", node.optimizer.rbo_detected, out);
     FormatPhysicalStringProperty(indent, "cbo", node.optimizer.cbo_decision, out);
     FormatPhysicalScalarProperty(indent, "cost", CostString(node.optimizer.cost), out);
     FormatPhysicalListProperty(indent, "alternatives", node.optimizer.cbo_alternatives, out);

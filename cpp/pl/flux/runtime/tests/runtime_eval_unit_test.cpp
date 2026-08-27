@@ -2417,6 +2417,48 @@ TEST(RuntimeEvalTest, DerivativePreservesLogicalTableChunks) {
     EXPECT_EQ("\"b\"", result->as_table().tables[1].rows[0]->lookup("host")->string());
 }
 
+TEST(RuntimeEvalTest, AggregateWindowCalendarMonthPreservesGroupChunks) {
+    Environment env;
+    InstallBuiltinsAndArrayPackage(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = array.from(
+            bucket: "telegraf",
+            rows: [
+                {_time: 2024-01-15T00:00:00Z, host: "a", _value: 10.0},
+                {_time: 2024-01-20T00:00:00Z, host: "a", _value: 20.0},
+                {_time: 2024-02-02T00:00:00Z, host: "a", _value: 30.0},
+                {_time: 2024-02-10T00:00:00Z, host: "b", _value: 40.0},
+                {_time: 2024-03-01T00:00:00Z, host: "b", _value: 50.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> aggregateWindow(every: 1mo, fn: sum, createEmpty: false)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    // One output chunk per input group chunk; calendar month windows expand to
+    // rows inside each chunk: a×{Jan, Feb} + b×{Feb, Mar} = 2 chunks × 2 rows.
+    ASSERT_EQ(2, result->as_table().table_count());
+    const auto& tables = result->as_table().tables;
+    ASSERT_EQ(2, tables[0].rows.size());
+    EXPECT_EQ("\"a\"", tables[0].rows[0]->lookup("host")->string());
+    EXPECT_EQ("30", tables[0].rows[0]->lookup("_value")->string());
+    EXPECT_EQ("2024-01-01T00:00:00Z", tables[0].rows[0]->lookup("_start")->string());
+    EXPECT_EQ("2024-02-01T00:00:00Z", tables[0].rows[0]->lookup("_stop")->string());
+    EXPECT_EQ("30", tables[0].rows[1]->lookup("_value")->string());
+    // Calendar months: February starts on the 1st, not 30 days after Jan 1st.
+    EXPECT_EQ("2024-02-01T00:00:00Z", tables[0].rows[1]->lookup("_start")->string());
+    EXPECT_EQ("2024-03-01T00:00:00Z", tables[0].rows[1]->lookup("_stop")->string());
+    ASSERT_EQ(2, tables[1].rows.size());
+    EXPECT_EQ("\"b\"", tables[1].rows[0]->lookup("host")->string());
+    EXPECT_EQ("40", tables[1].rows[0]->lookup("_value")->string());
+    EXPECT_EQ("50", tables[1].rows[1]->lookup("_value")->string());
+    EXPECT_EQ("2024-03-01T00:00:00Z", tables[1].rows[1]->lookup("_start")->string());
+    EXPECT_EQ("2024-04-01T00:00:00Z", tables[1].rows[1]->lookup("_stop")->string());
+}
+
 TEST(RuntimeEvalTest, SortOrdersTimeColumnByInstantAcrossZoneOffsets) {
     Environment env;
     InstallBuiltinsAndArrayPackage(env);

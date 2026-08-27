@@ -536,6 +536,26 @@ absl::StatusOr<std::vector<mysql::field>> mysql_fields_from_params(
     return fields;
 }
 
+absl::StatusOr<mysql::results> execute_prepared(mysql::any_connection* conn,
+                                                const ParameterizedSql& sql,
+                                                const std::string& context) {
+    auto fields_or = mysql_fields_from_params(sql.params);
+    if (!fields_or.ok()) {
+        return fields_or.status();
+    }
+    try {
+        mysql::statement stmt = conn->prepare_statement(sql.sql);
+        mysql::results result;
+        conn->execute(stmt.bind(fields_or->begin(), fields_or->end()), result);
+        return result;
+    } catch (const mysql::error_with_diagnostics& err) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("mysql ", context, " failed: ", MySQLErrorMessage(err)));
+    } catch (const std::exception& err) {
+        return absl::InvalidArgumentError(absl::StrCat("mysql ", context, " failed: ", err.what()));
+    }
+}
+
 /// MySqlDialect implements SqlDialect for MySQL using Boost.MySQL format_options.
 class MySqlDialect final : public SqlDialect {
 public:
@@ -1049,11 +1069,13 @@ absl::StatusOr<runtime::Value> MySQLSource::Scan(const ScanRequest& request) {
             absl::StrCat("mysql format options failed: ", opts_or.error().message()));
     }
     MySqlDialect dialect(opts_or.value());
-    auto sql_or = BuildScanSql(query_, request, *schema_or, dialect);
+    // Scan always goes through parameterized SQL + server-side prepared
+    // statements, same as the split page source path: no literal embedding.
+    auto sql_or = BuildParameterizedScanSql(query_, request, *schema_or, dialect);
     if (!sql_or.ok()) {
         return sql_or.status();
     }
-    auto result_or = execute_query(conn_or->connection(), *sql_or, "scan query");
+    auto result_or = execute_prepared(conn_or->connection(), *sql_or, "scan query");
     if (!result_or.ok()) {
         if (conn_or->lease.has_value()) {
             conn_or->lease->MarkBroken();

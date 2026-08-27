@@ -12,6 +12,10 @@
 
 **第二轮**：修复 accumulator 内存配额 Reserve/Release 不匹配；连接池 `Acquire` 增加 30s 超时（认证失败从永久挂起变为有界报错）；`filter` 每行双 `clone_row` 消除（`linear:500000` 同机口径 median 0.518s → 0.455s，约 -12%）；MySQL `Statistics()` 列聚合 SQL 由每列一条合并为单条（保留逐列回退）；补 `execution/` 单测 16 个（`QueryMemoryContext`/`TaskExecutor`/`Scheduler`/`ExchangeBuffer`）；`sql_builder` 测试 1 → 10 个。
 
+**第三轮**：RBO 接口拆分（检测规则上报 `detected` 而非 `applied`，explain 输出新增 `RBO(detected=[...])` 与 physical `detected:` 列表）；CBO 双跑合并（`Plan()` 按输入 plan 是否含 join 直接选择 Default/Fast 优化器，join 查询 CBO 从 2 次降为 1 次）；MySQL `Scan()` 统一走 `BuildParameterizedScanSql` + server-side prepared statement；补 `Materializer` 单测 4 个与 `aggregateWindow(1mo)` 多 chunk + 日历月边界回归测试。`ObjectValue::lookup` 索引化评估后**未合入**（benchmark 证据不足且 lazy mutable 状态的并发前提未证实）。
+
+**新发现（未定位，专项处理）**：csv 大表 `join`/`pivot` 查询在 release build 下存在**间歇性崩溃**（SIGABRT，stderr 为空）。已捕获一次确定性栈：`malloc: pointer being freed was not allocated`，位于主线程嵌套函数调用深处 `Value`(variant) 析构 → `shared_ptr<ObjectValue>` 引用归零 → `~ObjectValue()` 释放非法指针，指向 `Value`/`ObjectValue` 的悬垂或双重析构。特征：`MallocScribble=1` 时窗口期 100% 复现，窗口外 0%；ASan/TSan/lldb 环境下不触发；与前三轮改动无关（同窗口逐版本对比证实，最早可复现版本未确定）。排查手段记录：`MallocScribble=1` + lldb `malloc_error_break` 断点。建议：启用 core dump 专项分析 lazy 表物化多 pipeline 路径的对象生命周期。
+
 各条目状态：✅ 已修复 ｜ ❌ 复核不成立 ｜ ⏳ 待处理。
 
 ---
@@ -94,7 +98,7 @@ struct TimeValue {
 |---|---|---|
 | `runtime_eval.cpp:811`（已核实） | `=~` 每次匹配都现编译 `std::regex`，filter 热点路径重复编译 | ✅ 已加编译缓存 |
 | `runtime_builtin_universe_transform.cpp:547` | `filter`/`map` 每行双重 `clone_row` | ✅ filter 已消除（median -12%）；map 单次 clone 不可避免 |
-| `runtime_value.cpp:383` | `ObjectValue::lookup` 线性扫描，pivot/join/group 反复调用 | ⏳ 待处理（动值模型，需索引化） |
+| `runtime_value.cpp:383` | `ObjectValue::lookup` 线性扫描，pivot/join/group 反复调用 | ⏳ 已评估未合入（第三轮）：阈值式惰性索引已实现但 benchmark 证据不足、lazy mutable 状态并发前提未证实，回滚保留结论 |
 | `runtime_builtin_table_helpers.h:322` | `object_with_upserted_property` 每次全量拷贝 properties vector | ⏳ 待处理（不可变行模型，改造大） |
 | `runtime_builtin_universe_join.cpp:229` | `join_rows` 用 `any_of` 去重，每行 O(K²) | ✅ 已改哈希集合 |
 | `mysql_source.cpp:879` | `Statistics()` 每列 2 条串行 SQL，宽表性能灾难 | ✅ 列聚合已合并为单条 SQL（MCV 保留逐列） |
@@ -104,10 +108,10 @@ struct TimeValue {
 
 ## 四、架构与工程问题
 
-- **CBO 重复执行** ⏳：同一 logical plan 的 CBO 最多跑 3 次（`physical_planner.cpp:3255/3261`、`BuildOperator`、`explain.cpp:42`），且 CBO 内部查远端 metadata。
+- **CBO 重复执行** ⏳（部分修复）：~~`physical_planner.cpp:3255/3261` join 查询 CBO 双跑~~ ✅ 第三轮已合并为单次（按输入 plan 是否含 join 直接选择 Default/Fast）。残余：`BuildOperator` 内嵌套子计划的 Fast CBO、`EstimateRowsForPlan` 每次完整 Default CBO、`explain.cpp` 每节点一次 Default CBO（诊断路径，改造需保持输出语义）。
 - **两套内存管控并存** ⏳（部分修复）：`QueryMemoryContext` 只覆盖 accumulator；page 流与 `ExchangeBuffer`（硬编码 64MB 背压）不受其管控；`page_budget.h` 只用于统计。~~内存超限时 `Release` 与增量 `Reserve` 不匹配，泄漏配额（`accumulator.cpp:126-158`）~~ ✅ 第二轮已修复：`QueryMemoryContext::Reserve` 失败回滚 `used_bytes_`，`account_accumulator_memory` 仅在 Reserve 成功后计数，Release 与成功 Reserve 严格配对（含回归测试）。
-- **RBO Rule 接口被滥用** ⏳：8 条规则中 7 条只「打标签」不改写计划却返回 `applied=true`，trace 有误导性（`rbo.cpp:692`）。唯一真正改写的是 `InsertMaterializationBarrierRule`。
-- **MySQL 非参数化 SQL 拼接** ⏳：`Scan()` 走 `BuildScanSql` 字符串拼接（`mysql_source.cpp:994`），应统一走参数化。
+- **RBO Rule 接口被滥用** ✅：第三轮已拆分——`RuleApplication`/`RuleTrace` 新增 `detected` 字段，7 条检测规则改为上报 `detected`；`AppliedRuleNames` 只含真实改写（`InsertMaterializationBarrierRule`），explain 文本与 physical trace 分别展示 `rules` 与 `detected`。
+- **MySQL 非参数化 SQL 拼接** ✅：第三轮已统一——`Scan()` 改走 `BuildParameterizedScanSql` + server-side prepared statement（新增 `execute_prepared` helper，与 split page source 同构），docker MySQL 8.3 集成测试验证。
 - **连接池静默降级** ⏳（部分修复）：DSN 解析失败 `impl_` 为 nullptr 且无告警（`mysql_connection_pool.cpp:126`）；`MySQLPageSource::Initialize()` 总开直连绕过池（ASAN workaround，`mysql_source.cpp:1305`）。✅ 第二轮已修复关联问题：E2E 实测认证失败时 `async_get_connection` 无限重试导致查询永久挂起，`Acquire` 已增加 30s 超时（默认，可覆盖），返回 `DeadlineExceeded`；含 DSN-gated 回归测试。
 - **小毛病**（✅ 第一轮全部修复）：
   - `ast.h:674` 头文件 `static` 非 const 全局 map（每 TU 一份副本，应改 `inline const`）
@@ -121,10 +125,10 @@ struct TimeValue {
 
 ## 五、测试缺口
 
-1. **`execution/` 整个目录无单测** ⏳（部分补齐）：第二轮已新增 `execution/tests/execution_unit_test.cpp`（16 个用例），覆盖 `QueryMemoryContext`（Reserve/Release/超限回滚）、`TaskExecutor`（Submit/Shutdown/并发）、`Scheduler`（空 task/缺失依赖/cycle/单 pipeline 运行/算子失败传播）、`ExchangeBuffer`（FIFO/背压阻塞/多生产者 Finish/MarkError/Close/线程间传递）。`PhysicalPlanner`、各 Streaming operator、`Materializer`、`PageBudget` 仍仅靠端到端间接覆盖。
+1. **`execution/` 整个目录无单测** ⏳（部分补齐）：第二轮已新增 `execution/tests/execution_unit_test.cpp`（16 个用例），覆盖 `QueryMemoryContext`（Reserve/Release/超限回滚）、`TaskExecutor`（Submit/Shutdown/并发）、`Scheduler`（空 task/缺失依赖/cycle/单 pipeline 运行/算子失败传播）、`ExchangeBuffer`（FIFO/背压阻塞/多生产者 Finish/MarkError/Close/线程间传递）；第三轮补 `Materializer` 4 个用例（passthrough/无 plan 拒绝/经 plan 物化并保留 plan/range/result 字段）。`PhysicalPlanner`、各 Streaming operator、`PageBudget` 仍仅靠端到端间接覆盖。
 2. **MySQL 连接器 CI 零覆盖** ⏳：全部测试依赖 `FLUX_MYSQL_TEST_DSN`，CI 100% SKIP。建议 testcontainer 或 docker compose MySQL 门禁。（第一轮/第二轮均已用 docker `mysql:8.3` + fixture 本地复验过完整集成路径，流程可行但未固化到 CI。）
 3. `sql_builder` 仅 1 个测试用例，缺谓词/聚合/distinct/limit 场景。✅ 第二轮已补至 10 个用例（时间范围/谓词/聚合/distinct/投影别名/排序/limit-offset/参数绑定顺序与 normalize_time 标记/contract 拒绝路径）。
-4. 缺：~~时区偏移时间解析、`depth_guard` 深度保护、非法字符串转义~~（✅ 第一轮已补）、window/aggregateWindow 多 chunk + 日历 duration（⏳）、CBO join distribution 选择的测试（⏳）。
+4. 缺：~~时区偏移时间解析、`depth_guard` 深度保护、非法字符串转义~~（✅ 第一轮已补）、~~window/aggregateWindow 多 chunk + 日历 duration~~（✅ 第三轮已补：group 后 `aggregateWindow(1mo)` 双 group 双日历月 chunk 结构与边界断言）、CBO join distribution 选择的测试（⏳）。
 
 ---
 
@@ -139,4 +143,5 @@ struct TimeValue {
 | P2 | 时间语义统一：`TimeValue` 改为解析后时间点比较 | #5 | 中大（动值模型） | ✅ 第一轮 |
 | P2 | 正则编译缓存 + `ObjectValue::lookup` 索引化（先补 benchmark） | 三 | 中 | 正则缓存 ✅ 第一轮；lookup 索引化 ⏳ |
 | P3 | MySQL 测试基建（testcontainer）+ 参数化 SQL 统一 | 四、五.2 | 大 | ⏳ |
-| P3 | `ObjectValue::lookup` 索引化、`upsert` 全量拷贝、CBO 双跑合并、RBO 接口拆分、window 多 chunk 日历 duration 测试 | 三、四、五 | 中大 | ⏳ |
+| P3 | `ObjectValue::lookup` 索引化、`upsert` 全量拷贝、CBO 双跑合并、RBO 接口拆分、window 多 chunk 日历 duration 测试 | 三、四、五 | 中大 | 部分 ✅ 第三轮（CBO 双跑/RBO/测试）；lookup 已评估未合入；upsert 拷贝 ⏳ |
+| P0 | **专项**：定位 csv 大表 join/pivot 间歇性崩溃（release SIGABRT，Value/ObjectValue 悬垂或双重析构） | 进展.新发现 | 中 | ⏳ 已记录排查手段与已捕获栈 |

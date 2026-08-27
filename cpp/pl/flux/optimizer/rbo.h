@@ -45,13 +45,19 @@ struct PushdownPlan {
 
 struct RuleTrace {
     std::string rule;
+    // The rule rewrote the plan. Only rewriting rules may set this, so traces
+    // never claim a change that did not happen.
     bool applied = false;
+    // The rule matched/detected a pattern (e.g. a pushdown opportunity) but
+    // did not rewrite the plan. Kept separate from `applied` on purpose.
+    bool detected = false;
     std::string detail;
 };
 
 struct RuleApplication {
     std::shared_ptr<plan::PlanNode> plan;
     bool applied = false;
+    bool detected = false;
     std::string detail;
 };
 
@@ -92,6 +98,7 @@ private:
 RuleBasedOptimizer DefaultRuleBasedOptimizer();
 
 std::vector<std::string> AppliedRuleNames(const PlanOptimizerResult& result);
+std::vector<std::string> DetectedRuleNames(const PlanOptimizerResult& result);
 
 absl::StatusOr<std::vector<std::string>> SourceScanColumns(const plan::SourceScanSpec& source);
 absl::StatusOr<connector::SourceCapabilities> SourceScanCapabilities(

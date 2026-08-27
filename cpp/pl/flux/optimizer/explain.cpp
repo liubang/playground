@@ -41,6 +41,7 @@ std::string FormatCboAlternative(const PlanAlternative& alternative) {
 
 void ApplyCboTrace(const CboPlanResult& cbo_result, plan::PhysicalPlanNode* physical) {
     physical->optimizer.rbo_rules = AppliedRuleNames(cbo_result.rbo_result);
+    physical->optimizer.rbo_detected = DetectedRuleNames(cbo_result.rbo_result);
     physical->optimizer.cbo_alternatives.clear();
     physical->optimizer.cbo_alternatives.reserve(cbo_result.alternatives.size());
     for (const auto& alternative : cbo_result.alternatives) {
@@ -289,6 +290,7 @@ std::shared_ptr<plan::PhysicalPlanNode> BuildPhysicalPlan(
     ApplyCboTraceForPlan(node, physical.get());
     if (node->kind != plan::PlanNodeKind::Materialize) {
         physical->optimizer.rbo_rules.clear();
+        physical->optimizer.rbo_detected.clear();
     }
     for (const auto& input : node->inputs) {
         physical->inputs.push_back(BuildPhysicalPlan(input));
@@ -463,6 +465,10 @@ std::string FormatOptimizedLogicalPlan(const std::shared_ptr<plan::PlanNode>& pl
     const auto rules = AppliedRuleNames(optimized);
     if (!rules.empty()) {
         out << "RBO(rules=" << plan::StringList(rules) << ")\n";
+    }
+    const auto detected = DetectedRuleNames(optimized);
+    if (!detected.empty()) {
+        out << "RBO(detected=" << plan::StringList(detected) << ")\n";
     }
     if (auto summary = SourcePushdownSummary(optimized); summary.has_value()) {
         out << *summary;

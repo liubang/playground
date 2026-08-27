@@ -21,6 +21,9 @@
 #include <vector>
 
 #include "absl/status/status.h"
+#include "cpp/pl/flux/connector/connector_registry.h"
+#include "cpp/pl/flux/connector/memory_source.h"
+#include "cpp/pl/flux/execution/materializer.h"
 #include "cpp/pl/flux/execution/physical_executor.h"
 #include "cpp/pl/flux/execution/task_executor.h"
 #include "cpp/pl/flux/runtime/runtime_page.h"
@@ -344,6 +347,74 @@ TEST(SchedulerTest, PropagatesOperatorFailure) {
 
     ASSERT_FALSE(result_or.ok());
     EXPECT_EQ(absl::StatusCode::kInternal, result_or.status().code());
+}
+
+// ---------------------------------------------------------------------------
+// Materializer
+// ---------------------------------------------------------------------------
+
+TEST(MaterializerTest, PassesThroughNonTableValues) {
+    auto result_or = MaterializeValue(runtime::Value::integer(7));
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_EQ(runtime::Value::integer(7), *result_or);
+}
+
+TEST(MaterializerTest, PassesThroughMaterializedTables) {
+    auto table = runtime::Value::table("b", {}, std::nullopt, std::nullopt);
+
+    auto result_or = MaterializeValue(table);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_TRUE(result_or->as_table().materialized);
+}
+
+TEST(MaterializerTest, RejectsLazyTableWithoutPlan) {
+    auto table = runtime::Value::table_stream("b", {});
+    table.as_table_mut().materialized = false;
+
+    auto result_or = MaterializeValue(std::move(table));
+
+    ASSERT_FALSE(result_or.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, result_or.status().code());
+}
+
+TEST(MaterializerTest, MaterializesLazyTableThroughPlan) {
+    std::vector<std::shared_ptr<runtime::ObjectValue>> rows;
+    for (int i = 0; i < 3; ++i) {
+        rows.push_back(std::make_shared<runtime::ObjectValue>(
+            std::vector<std::pair<std::string, runtime::Value>>{
+                {"v", runtime::Value::integer(i)}}));
+    }
+    connector::SourceSpec spec{
+        .source = "materializer_test_memory",
+        .driver = "materializer_test_memory",
+        .dsn = "memory://materializer-test",
+        .table = "cpu",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        spec.source, [rows](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows, 2, 1);
+        });
+    auto plan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
+    auto lazy =
+        runtime::Value::table_plan("bucket", plan, "2024-01-01T00:00:00Z", std::nullopt, "named");
+    ASSERT_FALSE(lazy.as_table().materialized);
+
+    auto result_or = MaterializeValue(std::move(lazy));
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& table = result_or->as_table();
+    EXPECT_TRUE(table.materialized);
+    EXPECT_EQ(3, table.rows.size());
+    // The bucket comes from the executed source, not from the lazy wrapper;
+    // the lazy table's plan, range and result name survive materialization.
+    EXPECT_EQ("cpu", table.bucket);
+    EXPECT_EQ(plan, table.plan);
+    ASSERT_TRUE(table.range_start.has_value());
+    EXPECT_EQ("2024-01-01T00:00:00Z", *table.range_start);
+    ASSERT_TRUE(table.result_name.has_value());
+    EXPECT_EQ("named", *table.result_name);
 }
 
 } // namespace

@@ -840,7 +840,7 @@ TEST(RuntimeExecTest, ExplainFormatsPhysicalPlan) {
     EXPECT_NE(std::string::npos, plan_or->as_string().find("splits: 1"));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("logical_prefix:\n"));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("- Limit"));
-    EXPECT_NE(std::string::npos, plan_or->as_string().find("rbo:\n"));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("detected:\n"));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("- PushPredicateIntoConnectorScan"));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("cbo: \"chosen\""));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("cost: {"));
@@ -876,7 +876,7 @@ TEST(RuntimeExecTest, ExplainFormatsOptimizedLogicalPlan) {
               "`- Filter [sqlite pushdown: host == \"edge-1\"]\n"
               "   `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", "
               "table=\"cpu\")\n"
-              "RBO(rules=[PushLimitIntoConnectorScan, PushPredicateIntoConnectorScan])\n"
+              "RBO(detected=[PushLimitIntoConnectorScan, PushPredicateIntoConnectorScan])\n"
               "capabilities=[projection, filter, time_range, limit, sort, aggregate, distinct]\n"
               "SourcePushdown\n"
               "  request:\n"

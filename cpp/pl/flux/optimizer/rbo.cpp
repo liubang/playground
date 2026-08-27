@@ -696,7 +696,9 @@ public:
         }
         return RuleApplication{
             .plan = node,
-            .applied = prefix_contains_any_node_kind(node, kinds_),
+            // Detection rules never rewrite the plan; report the match as `detected`
+            // instead of `applied` so traces do not claim phantom rewrites.
+            .detected = prefix_contains_any_node_kind(node, kinds_),
             .detail = "",
         };
     }
@@ -799,6 +801,7 @@ absl::StatusOr<PlanOptimizerResult> RuleBasedOptimizer::Optimize(
         result.trace.push_back({
             .rule = rule->Name(),
             .applied = application_or->applied,
+            .detected = application_or->detected,
             .detail = std::move(application_or->detail),
         });
     }
@@ -835,6 +838,16 @@ std::vector<std::string> AppliedRuleNames(const PlanOptimizerResult& result) {
     std::vector<std::string> rules;
     for (const auto& trace : result.trace) {
         if (trace.applied) {
+            rules.push_back(trace.rule);
+        }
+    }
+    return rules;
+}
+
+std::vector<std::string> DetectedRuleNames(const PlanOptimizerResult& result) {
+    std::vector<std::string> rules;
+    for (const auto& trace : result.trace) {
+        if (trace.detected) {
             rules.push_back(trace.rule);
         }
     }

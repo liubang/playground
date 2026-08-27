@@ -3136,17 +3136,19 @@ runtime::Value internal::ValueFromPage(const runtime::Page& page) {
 absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
     const std::shared_ptr<plan::PlanNode>& logical_plan) const {
     auto memory_context = QueryMemoryContext::FromEnvironment();
-    auto fast_or = optimizer::FastCostBasedOptimizer().OptimizeWithTrace(logical_plan);
+    // Run the CBO exactly once per query: plans containing a join need the
+    // full optimizer with connector statistics (for build-side/distribution
+    // choices), everything else takes the fast path without remote metadata
+    // lookups. RBO neither adds nor removes join nodes, so checking the input
+    // plan is equivalent to checking the optimized one.
+    const bool needs_full_cbo =
+        logical_plan != nullptr &&
+        optimizer::ContainsPlanNodeKind(*logical_plan, plan::PlanNodeKind::Join);
+    auto fast_or = needs_full_cbo
+                       ? optimizer::DefaultCostBasedOptimizer().OptimizeWithTrace(logical_plan)
+                       : optimizer::FastCostBasedOptimizer().OptimizeWithTrace(logical_plan);
     if (!fast_or.ok()) {
         return fast_or.status();
-    }
-    if (fast_or->rbo_result.plan != nullptr &&
-        optimizer::ContainsPlanNodeKind(*fast_or->rbo_result.plan, plan::PlanNodeKind::Join)) {
-        auto cbo_or = optimizer::DefaultCostBasedOptimizer().OptimizeWithTrace(logical_plan);
-        if (!cbo_or.ok()) {
-            return cbo_or.status();
-        }
-        fast_or = std::move(cbo_or);
     }
     if (fast_or->rbo_result.plan != nullptr &&
         fast_or->rbo_result.plan->kind == plan::PlanNodeKind::Join) {

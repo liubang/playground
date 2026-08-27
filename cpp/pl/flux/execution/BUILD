@@ -65,6 +65,7 @@ cc_test(
     linkopts = LINKOPTS,
     deps = [
         ":execution",
+        "//cpp/pl/flux/connector",
         "//cpp/pl/flux/runtime:runtime_value",
         "@googletest//:gtest_main",
     ],
