@@ -71,6 +71,14 @@ bazel_dep(name = "rules_proto_grpc_go", version = "5.8.0")
 bazel_dep(name = "grpc-java", version = "1.74.0")
 bazel_dep(name = "protobuf", version = "31.1")
 bazel_dep(name = "grpc", version = "1.74.1")
+# protobuf >= 34 (pulled in by rules_swift >= 3.5.0 via rules_apple) moved
+# upb out of the protobuf repo, but grpc 1.74.1 still loads
+# @com_google_protobuf//bazel:upb_proto_library.bzl. Pin protobuf to 33.4,
+# the last release that still ships upb, to keep grpc building.
+single_version_override(
+    module_name = "protobuf",
+    version = "33.4",
+)
 ### grpc && protobuf
 
 ## math

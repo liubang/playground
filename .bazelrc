@@ -61,7 +61,7 @@ build:llvm --cxxopt=-Wno-error=unused-but-set-parameter
 build:macos --action_env=CC=/opt/homebrew/opt/llvm/bin/clang
 build:macos --cxxopt=-stdlib=libc++
 build:macos --linkopt=-stdlib=libc++
-build:macos --macos_minimum_os=13.3
+build:macos --macos_minimum_os=14.0
 build:macos --cxxopt=-Wno-error=unused-but-set-variable
 build:macos --cxxopt=-Wno-error=unused-but-set-parameter
 
