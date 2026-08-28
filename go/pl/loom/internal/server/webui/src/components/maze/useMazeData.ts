@@ -33,18 +33,25 @@ export function useMazeData(controller: AppController) {
         if (seqRef.current !== seq) return
         setError((e as Error).message || '加载失败')
       } finally {
-        if (seqRef.current === seq && showLoading) setLoading(false)
+        // The latest request always owns the loading flag — not just the one
+        // that set it. A showLoading=true initial fetch superseded by a
+        // debounced refetch would otherwise never be cleared (the superseded
+        // request's guard fails, the superseding one had showLoading=false),
+        // leaving the UI spinning forever.
+        if (seqRef.current === seq) setLoading(false)
       }
     },
     [controller],
   )
 
-  // Session switch: full refetch and view-state reset.
+  // Session switch: full refetch and view-state reset. data is cleared first
+  // — otherwise the previous session's maze flashes under the new one (and,
+  // worse, its non-null leftover would arm the activity-refetch effect below
+  // during the initial fetch window).
   useEffect(() => {
-    if (!sessionId) {
-      setData(null)
-      return
-    }
+    setData(null)
+    setError('')
+    if (!sessionId) return
     void refresh(sessionId, true)
   }, [sessionId, refresh])
 

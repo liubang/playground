@@ -134,6 +134,15 @@ export const Sidebar = memo(function Sidebar({
   }
   const ids = new Set(sessions.map((s) => s.id))
 
+  // Hoisted out of JSX: an inline hook call inside the onScroll attribute
+  // would be re-created per render (same hygiene issue fixed in ReasoningBlock).
+  const onListScroll = useRafScroll<HTMLDivElement>((el) => {
+    // Session-list waterfall: load the next page when scrolled near the bottom
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) {
+      void controller.loadMoreSessions()
+    }
+  })
+
   return (
     <>
       <div className="ws-bar">
@@ -147,17 +156,7 @@ export const Sidebar = memo(function Sidebar({
           <Icon name="folder-plus" />
         </button>
       </div>
-      <div
-        id="session-list"
-        className="session-list"
-        ref={listRef}
-        onScroll={useRafScroll<HTMLDivElement>((el) => {
-          // Session-list waterfall: load the next page when scrolled near the bottom
-          if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) {
-            void controller.loadMoreSessions()
-          }
-        })}
-      >
+      <div id="session-list" className="session-list" ref={listRef} onScroll={onListScroll}>
         {ordered.map((wsId) => {
           const ws = workspaces.find((w) => w.id === wsId)
           const wsSessions = byWs.get(wsId) || []

@@ -1087,18 +1087,19 @@ export class TranscriptController {
     const id = this.questions.get(questionId)
     if (!id) return
     this.questions.delete(questionId)
-    this.store.update((s) => {
-      s.blocks = s.blocks.map((b) =>
-        b.id === id
-          ? ({
-              id: b.id,
-              v: b.v + 1,
-              kind: 'notice',
-              text: skipped ? 'question skipped' : 'question answered',
-            } as BlockModel)
-          : b,
-      )
-    })
+    // findIndex+slice (same as collapseApproval / patchBlock): no full-array
+    // allocation and goes through setBlocks so applySnapshot batching sees it.
+    const blocks = this.blocksNow()
+    const i = blocks.findIndex((b) => b.id === id)
+    if (i < 0) return
+    const next = blocks.slice()
+    next[i] = {
+      id: next[i].id,
+      v: next[i].v + 1,
+      kind: 'notice',
+      text: skipped ? 'question skipped' : 'question answered',
+    } as BlockModel
+    this.setBlocks(next)
     this.requestFollow(false)
   }
 

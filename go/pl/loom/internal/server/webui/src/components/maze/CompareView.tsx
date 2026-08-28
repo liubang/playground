@@ -46,9 +46,16 @@ export function CompareView({ controller }: { controller: AppController }) {
         const lane1 = a.lanes[0]
         const lane2 = b.lanes[0]
         if (!lane1 || !lane2) throw new Error('会话还没有执行轨迹')
-        lane1.key = 'l1'
-        lane2.key = 'l2'
-        setData({ tmax: Math.max(a.tmax, b.tmax), lanes: [lane1, lane2] })
+        // Spread instead of mutating the fetched lane objects: the response
+        // belongs to the API layer — writing `key` onto it would leak into
+        // any future reuse of the same payload.
+        setData({
+          tmax: Math.max(a.tmax, b.tmax),
+          lanes: [
+            { ...lane1, key: 'l1' },
+            { ...lane2, key: 'l2' },
+          ],
+        })
         setError('')
       } catch (e) {
         if (!cancelled) {
