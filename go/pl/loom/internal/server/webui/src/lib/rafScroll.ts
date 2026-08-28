@@ -11,20 +11,37 @@
 //
 // 回调在 rAF 里执行；组件卸载时自动取消挂起的帧。
 
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 export function useRafScroll<T extends HTMLElement>(
   handler: (el: T) => void,
 ): (e: { currentTarget: T }) => void {
   const raf = useRef<number | null>(null)
   const elRef = useRef<T | null>(null)
+  // 用 ref 持有最新 handler：unstable handler（如在 JSX 中创建的箭头函数）
+  // 不会让 useCallback 缓存失效，onScroll / flush 在整个组件生命周期内
+  // 保持同一引用，因此挂在 DOM 上的监听器不需要每次渲染重建。
+  const handlerRef = useRef(handler)
+  handlerRef.current = handler
+
+  // 组件卸载：取消挂起的 rAF，避免对已卸载组件触发 handler 里捕获的 setState
+  useEffect(
+    () => () => {
+      if (raf.current !== null) {
+        cancelAnimationFrame(raf.current)
+        raf.current = null
+      }
+      elRef.current = null
+    },
+    [],
+  )
 
   const flush = useCallback(() => {
     raf.current = null
     const el = elRef.current
-    if (el) handler(el)
+    if (el) handlerRef.current(el)
     elRef.current = null
-  }, [handler])
+  }, [])
 
   const onScroll = useCallback(
     (e: { currentTarget: T }) => {

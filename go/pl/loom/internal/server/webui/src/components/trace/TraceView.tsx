@@ -204,6 +204,10 @@ export function TraceView({
   // 结构签名：只在块「结构」变化（增/删/类型/完成状态/stream 文本长度档）
   // 时重算 buildGroups，高频文本增量不会整组重建（流式时本 tab 不当前
   // 也算，但挂载下仍会被 lit 为 memo key）。
+  // text.length 按 256 字符分桶而非精确值：流式期间每个 delta 都会让
+  // length 增长，直接入签名等于逐字符重建 buildGroups；分桶后每攒
+  // 256 字符才换一次档，与 streamBuf 的节流节奏匹配，end-of-turn
+  // 的 kind/completion 变化仍是最后一帧真值。
   const structureSig = useMemo(() => {
     let s = ''
     for (const b of blocks) {
@@ -216,7 +220,7 @@ export function TraceView({
         ':' +
         ('live' in b ? (b.live ? '1' : '0') : '') +
         ':' +
-        ('text' in b ? b.text.length : 0) +
+        ('text' in b ? Math.floor(b.text.length / 256) : 0) +
         '\n'
     }
     return s

@@ -234,6 +234,13 @@ export const ReasoningBlock = memo(function ReasoningBlock({
   // following flag; expanding always re-pins to the latest first.
   const bodyRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
+  // Hoist hook + handler to the top of the component: the inline arrow in JSX
+  // below would otherwise be a new function each render, defeating the hook's
+  // internal useCallback caching (and every streaming delta re-renders this
+  // component, so the handler churn is per-frame).
+  const onBodyScroll = useRafScroll<HTMLDivElement>((el) => {
+    stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+  })
   useEffect(() => {
     const body = bodyRef.current
     if (!active || !body || !stickRef.current) return
@@ -265,13 +272,7 @@ export const ReasoningBlock = memo(function ReasoningBlock({
           {tail}
         </div>
       )}
-      <div
-        className="body"
-        ref={bodyRef}
-        onScroll={useRafScroll<HTMLDivElement>((el) => {
-          stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
-        })}
-      >
+      <div className="body" ref={bodyRef} onScroll={onBodyScroll}>
         {text}
       </div>
     </details>
