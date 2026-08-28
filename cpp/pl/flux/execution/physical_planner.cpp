@@ -45,6 +45,7 @@
 #include "cpp/pl/flux/execution/physical_executor_internal.h"
 #include "cpp/pl/flux/execution/task_executor.h"
 #include "cpp/pl/flux/optimizer/cbo.h"
+#include "cpp/pl/flux/optimizer/explain.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_aggregate_helpers.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
 
@@ -1956,7 +1957,16 @@ absl::StatusOr<PlannedOperator> BuildOperator(
         return std::move(*planned_or);
     }
     if (optimized_plan->inputs.size() != 1 || optimized_plan->inputs[0] == nullptr) {
-        return absl::InvalidArgumentError("plan is not executable");
+        std::string message = absl::StrCat("plan is not executable: node kind ",
+                                           plan::PlanNodeKindName(optimized_plan->kind),
+                                           " has ",
+                                           optimized_plan->inputs.size(),
+                                           " inputs");
+        if (std::getenv("FLUX_DEBUG_PLAN") != nullptr) {
+            absl::StrAppend(
+                &message, "\noptimized plan:\n", optimizer::FormatLogicalPlan(optimized_plan));
+        }
+        return absl::InvalidArgumentError(message);
     }
     auto planned_or = BuildOperator(optimized_plan->inputs[0], false, memory_context);
     if (!planned_or.ok()) {

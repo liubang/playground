@@ -20,6 +20,8 @@
 
 **新发现（未定位，专项处理）**：csv 大表 `join`/`pivot` 查询在 release build 下存在**间歇性崩溃**（SIGABRT，stderr 为空）。已捕获一次确定性栈：`malloc: pointer being freed was not allocated`，位于主线程嵌套函数调用深处 `Value`(variant) 析构 → `shared_ptr<ObjectValue>` 引用归零 → `~ObjectValue()` 释放非法指针，指向 `Value`/`ObjectValue` 的悬垂或双重析构。特征：`MallocScribble=1` 时窗口期 100% 复现，窗口外 0%；ASan/TSan/lldb 环境下不触发；与前三轮改动无关（同窗口逐版本对比证实，最早可复现版本未确定）。排查手段记录：`MallocScribble=1` + lldb `malloc_error_break` 断点。建议：启用 core dump 专项分析 lazy 表物化多 pipeline 路径的对象生命周期。
 
+**Lazy 计划不可执行专项（第四轮追加，2026-08-28）**：排查「大数据量 sqlite 下 `range |> keep |> sort |> limit |> group` lazy 计划报 `plan is not executable`」。结论：在第四轮改动前后的代码（048947acf 与 HEAD）上，配合标准 1M 行 benchmark sqlite 数据均**无法复现**；问题与当时特定数据库文件的统计信息强相关，该文件已丢失。改进：`BuildOperator` 在拒绝计划时输出节点类型与输入数（原为裸 `plan is not executable`），并支持 `FLUX_DEBUG_PLAN=1` 环境变量输出完整 RBO 优化后计划结构，便于下次捕获时直接定位。26/26 测试保持全绿。
+
 各条目状态：✅ 已修复 ｜ ❌ 复核不成立 ｜ ⏳ 待处理。
 
 ---
