@@ -2,7 +2,7 @@
 // composer + status bar) + global overlays (toast / confirm / settings /
 // directory browser / banner).
 
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import type { AppController } from './app/controller'
 import { useStore } from './store/store'
 import { Gate } from './components/Gate'
@@ -14,9 +14,17 @@ import { StatusBar } from './components/StatusBar'
 import { DirPicker } from './components/DirPicker'
 import { RightPanel } from './components/panel/RightPanel'
 import { SettingsPanel } from './components/settings/SettingsPanel'
-import { MazePage } from './components/maze/MazePage'
-import { CompareView } from './components/maze/CompareView'
-import { TracePage } from './components/trace/TraceView'
+// 这些重页面（maze / trace / compare）都会拉入 SVG 渲染 / 迷宫数据 / 高亮 diff
+// 等大依赖：用 React.lazy 拆成独立 chunk，初始会话页只加载聊天流，不背这些。
+const MazePage = lazy(() =>
+  import('./components/maze/MazePage').then((m) => ({ default: m.MazePage })),
+)
+const CompareView = lazy(() =>
+  import('./components/maze/CompareView').then((m) => ({ default: m.CompareView })),
+)
+const TracePage = lazy(() =>
+  import('./components/trace/TraceView').then((m) => ({ default: m.TracePage })),
+)
 import { SessionTabs } from './components/SessionTabs'
 import { ToastHost } from './components/ui/Toast'
 import { ConfirmHost } from './components/ui/Confirm'
@@ -34,6 +42,7 @@ export function App({ controller }: { controller: AppController }) {
   const mainView = useStore(controller.store, (s) => s.mainView)
   const rightPanelOpen = useStore(controller.store, (s) => s.rightPanelOpen)
   const sessionId = useStore(controller.store, (s) => s.sessionId)
+  const connState = useStore(controller.store, (s) => s.connState)
   const [revealWs, setRevealWs] = useState<{ wsId: string; seq: number } | null>(null)
 
   // TranscriptView interaction callbacks (stable references: controller methods
@@ -123,7 +132,9 @@ export function App({ controller }: { controller: AppController }) {
                     two-session context with its own chrome). */}
                 {!!sessionId && mainView !== 'compare' && <SessionTabs controller={controller} />}
                 {mainView === 'compare' ? (
-                  <CompareView controller={controller} />
+                  <Suspense fallback={<div className="lazy-pane" aria-hidden="true" />}>
+                    <CompareView controller={controller} />
+                  </Suspense>
                 ) : (
                   <>
                     {/* The chat tree stays mounted but hidden on other
@@ -133,6 +144,9 @@ export function App({ controller }: { controller: AppController }) {
                         controller={controller.transcript}
                         io={transcriptIO}
                         scrollerOut={controller.scrollerRef}
+                        className={
+                          connState !== 'live' && connState !== '' ? 'is-offline' : undefined
+                        }
                         empty={{
                           hidden: !landingVisible,
                           hint: landingHint,
@@ -142,8 +156,16 @@ export function App({ controller }: { controller: AppController }) {
                       />
                       <Composer controller={controller} />
                     </div>
-                    {mainView === 'trace' && <TracePage controller={controller} />}
-                    {mainView === 'maze' && <MazePage controller={controller} />}
+                    {mainView === 'trace' && (
+                      <Suspense fallback={<div className="lazy-pane" aria-hidden="true" />}>
+                        <TracePage controller={controller} />
+                      </Suspense>
+                    )}
+                    {mainView === 'maze' && (
+                      <Suspense fallback={<div className="lazy-pane" aria-hidden="true" />}>
+                        <MazePage controller={controller} />
+                      </Suspense>
+                    )}
                   </>
                 )}
               </>

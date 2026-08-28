@@ -10,12 +10,34 @@ import { useBlocksIO } from './context'
 
 // --- 图片灯箱（点击放大）：单例 overlay，点击遮罩或按 ESC 关闭 ---
 let lightboxEl: HTMLDivElement | null = null
+let lightboxPrevFocus: HTMLElement | null = null
+let lightboxKeyHandler: ((e: globalThis.KeyboardEvent) => void) | null = null
+
+function closeImageLightbox() {
+  if (!lightboxEl) return
+  // 拆掉随灯箱而生的 keydown 监听（不再让一个模块级监听器永远挂在 document 上）
+  if (lightboxKeyHandler) {
+    document.removeEventListener('keydown', lightboxKeyHandler, true)
+    lightboxKeyHandler = null
+  }
+  lightboxEl.remove()
+  lightboxEl = null
+  document.body.classList.remove('lightbox-open')
+  // 焦点归还到打开灯箱的那个缩略图，供屏幕阅读器用户继续阅读
+  const prev = lightboxPrevFocus
+  lightboxPrevFocus = null
+  prev?.focus?.()
+}
 
 function openImageLightbox(src: string, alt?: string) {
   if (!src) return
   closeImageLightbox()
   const overlay = document.createElement('div')
   overlay.className = 'lightbox'
+  overlay.setAttribute('role', 'dialog')
+  overlay.setAttribute('aria-modal', 'true')
+  overlay.setAttribute('aria-label', alt || 'image preview')
+  overlay.tabIndex = -1
   const img = document.createElement('img')
   img.src = src
   img.alt = alt || 'image'
@@ -24,18 +46,17 @@ function openImageLightbox(src: string, alt?: string) {
   document.body.appendChild(overlay)
   document.body.classList.add('lightbox-open')
   lightboxEl = overlay
+  // 焦点进灯箱，使 Esc/Tab 不遇背景输入框
+  lightboxPrevFocus = (document.activeElement as HTMLElement) || null
+  overlay.focus()
+  lightboxKeyHandler = (e: globalThis.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation()
+      closeImageLightbox()
+    }
+  }
+  document.addEventListener('keydown', lightboxKeyHandler, true)
 }
-
-function closeImageLightbox() {
-  if (!lightboxEl) return
-  lightboxEl.remove()
-  lightboxEl = null
-  document.body.classList.remove('lightbox-open')
-}
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeImageLightbox()
-})
 
 function onZoomKeydown(e: KeyboardEvent<HTMLImageElement>) {
   if (e.key === 'Enter' || e.key === ' ') {

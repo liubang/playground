@@ -34,6 +34,7 @@ import {
 import { ToolBlock } from './blocks/ToolBlock'
 import { ApprovalCard, QuestionCard } from './blocks/cards'
 import { ArtifactBlock, InlineImage } from './blocks/images'
+import { useRafScroll } from '../lib/rafScroll'
 
 const FOLLOW_THRESHOLD_PX = 80
 
@@ -328,13 +329,11 @@ export function TranscriptView({
       id="transcript"
       className={className ? 'transcript ' + className : 'transcript'}
       ref={scrollerRef}
-      onScroll={() => {
-        const el = scrollerRef.current
-        if (!el) return
+      onScroll={useRafScroll<HTMLDivElement>((el) => {
         setViewport({ top: el.scrollTop, height: el.clientHeight })
         const gap = el.scrollHeight - el.scrollTop - el.clientHeight
         controller.setFollowing(gap < FOLLOW_THRESHOLD_PX)
-      }}
+      })}
     >
       <div id="blocks" className="transcript-inner">
         {topPad > 0 && <div style={{ height: topPad }} aria-hidden="true" />}

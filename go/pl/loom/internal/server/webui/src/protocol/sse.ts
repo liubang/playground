@@ -79,13 +79,14 @@ export class EventStream {
   // 时调用：看门狗的 setInterval 会随页面一起被系统挂起（App Nap / 窗口
   // 遮挡 / BFCache），冻结期间 TCP 半开、连接悄死，恢复后没有任何定时器
   // 会发现它——必须由页面事件主动戳一下。连接在且帧新鲜时是 no-op。
+  // 注意：这里只提前触发重连，不重置 retries——弱网下频繁唤起页面不应
+  // 把退避进度清零变成对服务端的重连风暴（成功后连接帧会自行归零）。
   ensureLive() {
     if (this.stopped || this.drained || !this.sessionId) return
     // 退避等待中（含 429 慢速重试）：不等了，立即重连。
     if (this.retryTimer) {
       clearTimeout(this.retryTimer)
       this.retryTimer = null
-      this.retries = 0
       void this._connect()
       return
     }
@@ -96,7 +97,6 @@ export class EventStream {
         this.abort.abort()
         this.abort = null
       }
-      this.retries = 0
       void this._connect()
     }
   }
@@ -105,7 +105,9 @@ export class EventStream {
     if (this.stopped) return
     const gen = ++this.gen
     this.onConn(this.retries === 0 ? 'connecting' : 'reconnecting')
-    const url = `/v1/sessions/${this.sessionId}/events?after=${this.lastSeq}`
+    const sid = this.sessionId!
+    const params = new URLSearchParams({ after: String(this.lastSeq) })
+    const url = `/v1/sessions/${encodeURIComponent(sid)}/events?${params}`
     this.abort = new AbortController()
     let res: Response
     try {
@@ -238,6 +240,13 @@ export class EventStream {
           const m = line.match(/^: connected, instance=(\w+)/)
           if (m) {
             if (this.instance && this.instance !== m[1]) {
+              // 实例切换意味着服务端换了进程（滚动部署/重启）：旧连接的
+              // 资源必须在走 resync 前亲手清理——cancel reader 收掉底层流、
+              // 停看门狗、bump gen 让 _connect 尾部不会给这条旧连接再排一次
+              // 重连定时器（否则与 resync 牵出的新 attach 构成双连接）。
+              void reader.cancel()
+              this._stopWatchdog()
+              this.gen++
               this.onResync('instance_changed')
               return
             }

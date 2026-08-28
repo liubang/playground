@@ -27,6 +27,7 @@ export const Gate = memo(function Gate({ controller }: { controller: AppControll
           id="gate-token"
           type="password"
           autoComplete="off"
+          autoFocus
           placeholder="token"
           required
           hidden={gateLocked}

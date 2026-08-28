@@ -119,18 +119,23 @@ export function Composer({ controller }: { controller: AppController }) {
   }, [text, controller])
   useEffect(() => {
     controller.onComposerRestore = (t: string) => {
+      // 会话切换前，先把当前草稿带的附件预览 URL 全部 revoke（否则变成
+      // 孤儿 blob URL 直到页面卸载才回收）。
+      for (const a of attachmentsRef.current) URL.revokeObjectURL(a.previewUrl)
+      attachmentsRef.current = []
+      setAttachments([])
       setText(t)
-      if (!t) {
-        // Clearing also releases attachments (submit-success path)
-        for (const a of attachmentsRef.current) URL.revokeObjectURL(a.previewUrl)
-        attachmentsRef.current = []
-        setAttachments([])
-      }
     }
     return () => {
       controller.onComposerRestore = null
     }
   }, [controller])
+  // 卸载时清掉挂起的 autocomplete 定时器，避免对已卸载组件 setState。
+  useEffect(() => {
+    return () => {
+      if (acTimer.current) clearTimeout(acTimer.current)
+    }
+  }, [])
 
   // Auto-growing height
   useEffect(() => {

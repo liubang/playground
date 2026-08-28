@@ -14,6 +14,7 @@
 
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { AppController } from '../../app/controller'
+import { useRafScroll } from '../../lib/rafScroll'
 import type { BlockModel, ToolCompletion } from '../../app/transcript'
 import { useStore } from '../../store/store'
 import type { MazeData } from '../../protocol/types'
@@ -200,10 +201,29 @@ export function TraceView({
     }
   }, [scrollerOut])
 
-  const groups = useMemo(() => buildGroups(blocks), [blocks])
+  // 结构签名：只在块「结构」变化（增/删/类型/完成状态/stream 文本长度档）
+  // 时重算 buildGroups，高频文本增量不会整组重建（流式时本 tab 不当前
+  // 也算，但挂载下仍会被 lit 为 memo key）。
+  const structureSig = useMemo(() => {
+    let s = ''
+    for (const b of blocks) {
+      s +=
+        b.kind +
+        ':' +
+        ('callId' in b && b.callId ? b.callId : '') +
+        ':' +
+        ('completion' in b ? (b.completion ? '1' : '0') : '') +
+        ':' +
+        ('live' in b ? (b.live ? '1' : '0') : '') +
+        ':' +
+        ('text' in b ? b.text.length : 0) +
+        '\n'
+    }
+    return s
+  }, [blocks])
 
-  // A session is live while anything is still in flight: streaming text,
-  // a pending approval/question, or a tool call without its completion.
+  const groups = useMemo(() => buildGroups(blocks), [structureSig])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 结构签名驱动
   const live = useMemo(
     () =>
       blocks.some(
@@ -213,7 +233,7 @@ export function TraceView({
           b.kind === 'question' ||
           (b.kind === 'tool' && !b.completion),
       ),
-    [blocks],
+    [structureSig],
   )
 
   const metrics = useMemo(() => {
@@ -324,11 +344,9 @@ export function TraceView({
         <div
           className="trace-list"
           ref={listRef}
-          onScroll={() => {
-            const el = listRef.current
-            if (!el) return
+          onScroll={useRafScroll<HTMLDivElement>((el) => {
             setFollowing(el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_THRESHOLD_PX)
-          }}
+          })}
         >
           {visible.groups.map((g) => (
             <div key={g.turn} className="trace-turn" data-turn={g.turn}>

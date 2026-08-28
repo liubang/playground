@@ -107,6 +107,16 @@ export const QuestionCard = memo(function QuestionCard({
   const inputType = q.allow_multiple ? 'checkbox' : 'radio'
   const [name] = useState(() => 'q_' + Math.random().toString(36).slice(2, 8))
   const [custom, setCustom] = useState('')
+  // 受控选择状态：此前用 querySelectorAll(':checked') 直接读 DOM，组件被
+  // React 复用 / payload 变更 / resolving 切换重渲时，DOM 的 checked 与
+  // 组件意图可能脱节。统一收进 state。
+  const [selected, setSelected] = useState<string[]>([])
+  const toggle = (label: string) =>
+    q.allow_multiple
+      ? setSelected((prev) =>
+          prev.includes(label) ? prev.filter((x) => x !== label) : [...prev, label],
+        )
+      : setSelected([label])
 
   return (
     <div className="block card-question">
@@ -117,7 +127,14 @@ export const QuestionCard = memo(function QuestionCard({
       <div className="q-text">{q.text || ''}</div>
       {(q.options || []).map((opt) => (
         <label className="opt" key={opt.label}>
-          <input type={inputType} name={name} value={opt.label} data-opt="1" disabled={resolving} />
+          <input
+            type={inputType}
+            name={name}
+            value={opt.label}
+            checked={selected.includes(opt.label)}
+            onChange={() => toggle(opt.label)}
+            disabled={resolving}
+          />
           <span>
             {opt.label}
             {opt.description && <span className="desc">{' — ' + opt.description}</span>}
@@ -136,15 +153,7 @@ export const QuestionCard = memo(function QuestionCard({
           type="button"
           className="btn btn-primary"
           disabled={resolving}
-          onClick={(e) => {
-            const root = (e.target as HTMLElement).closest('.card-question')
-            const selected = root
-              ? [...root.querySelectorAll<HTMLInputElement>('input[data-opt]:checked')].map(
-                  (i) => i.value,
-                )
-              : []
-            onAnswer({ selected, custom_text: custom.trim(), skipped: false })
-          }}
+          onClick={() => onAnswer({ selected, custom_text: custom.trim(), skipped: false })}
         >
           Submit
         </button>

@@ -4,6 +4,7 @@
 // (marked → DOMPurify) is the sole markdown rendering entry.
 
 import { memo, useEffect, useRef } from 'react'
+import { useRafScroll } from '../../lib/rafScroll'
 import type { AssistantActionContext, UserImage } from '../../app/transcript'
 import { isInlineImage } from '../../app/transcript'
 import type { ContextCompactedPayload } from '../../protocol/events'
@@ -267,10 +268,9 @@ export const ReasoningBlock = memo(function ReasoningBlock({
       <div
         className="body"
         ref={bodyRef}
-        onScroll={(e) => {
-          const el = e.currentTarget
+        onScroll={useRafScroll<HTMLDivElement>((el) => {
           stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
-        }}
+        })}
       >
         {text}
       </div>

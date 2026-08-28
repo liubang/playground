@@ -1,6 +1,9 @@
 // Confirm.tsx — 确认弹窗（替代原生 confirm）。
 // confirmDialog({title, body, okLabel}) → Promise<boolean>
-// Esc / 点遮罩 = 取消；Enter = 确认。<ConfirmHost /> 挂在 App 根部。
+// 所有调用点都是破坏性/有代价操作（删除会话/工作区/skill、撤销分享、
+// 写入规则包、放弃未保存修改），故默认焦点在「取消」上：Esc / 点遮罩 /
+// Enter（命中取消按钮）= 取消；确认必须主动点击或 Tab 过去——避免弹窗
+// 叠加在输入焦点上时一次 Enter 就执行不可恢复操作。<ConfirmHost /> 挂在 App 根部。
 
 import { useEffect } from 'react'
 import { Store, useStore } from '../../store/store'
@@ -37,10 +40,10 @@ export function ConfirmHost() {
       if (e.key === 'Escape') {
         e.stopPropagation()
         done(false)
-      } else if (e.key === 'Enter') {
-        e.stopPropagation()
-        done(true)
       }
+      // 不在 document 捕获阶段消费 Enter：弹窗出现时用户焦点可能还停留在
+      // 背后的输入框里，全局 Enter=确认 会把一次普通的输入回车变成危险操作。
+      // Enter/Space 的确认留给聚焦按钮的浏览器原生行为。
     }
     const done = (v: boolean) => {
       document.removeEventListener('keydown', onKey, true)
@@ -79,6 +82,7 @@ export function ConfirmHost() {
             id="confirm-cancel"
             className="btn btn-secondary"
             type="button"
+            autoFocus
             onClick={() => done(false)}
           >
             取消
@@ -87,7 +91,6 @@ export function ConfirmHost() {
             id="confirm-ok"
             className="btn btn-danger"
             type="button"
-            autoFocus
             onClick={() => done(true)}
           >
             {req.okLabel || '确认'}

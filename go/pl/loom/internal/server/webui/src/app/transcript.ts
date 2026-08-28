@@ -131,6 +131,11 @@ export class TranscriptController {
   private streamLastRender = 0
   private reasoningId: string | null = null
   private reasoningStartTs = '' // first delta's event time, for the thinking duration
+  // 与 streamBuf 对称的 reasoning 合并帧渲染：高频 reasoning_delta 不再逐条触发
+  // blocks 全量扫描 + store emit（此前是 find+map 双重 O(N)，链式开销与 stream 一致）。
+  private reasoningBuf = ''
+  private reasoningScheduled = false
+  private reasoningLastRender = 0
   private thinkingId: string | null = null
   private tools = new Map<string, string>() // call_id → block id
   private approvals = new Map<string, string>() // approval_id → block id
@@ -143,6 +148,9 @@ export class TranscriptController {
   private turnAssistantTs = ''
   private turnRunID = '' // run id of this turn (feedback vote target)
   private turnErrorShown = false
+  // applySnapshot 重建期间的暂存：整个快照的块先堆在本地数组，最后一次
+  // store.update 提交（避免逐块 O(N) 数组拷贝和渲染 tick）。
+  private batchedBlocks: BlockModel[] | null = null
 
   constructor(io: TranscriptIO) {
     this.io = io
@@ -191,27 +199,32 @@ export class TranscriptController {
 
   private append(block: DistributiveOmit<BlockModel, 'id' | 'v'>): string {
     const id = 'b' + nextBlockId++
-    this.store.update((s) => {
-      s.blocks = [...s.blocks, { ...block, id, v: 0 } as BlockModel]
-      s.following = true // a new block means new conversation: force-snap to bottom
-    })
-    this.requestFollow(true)
+    if (this.batchedBlocks) {
+      this.batchedBlocks = [...this.batchedBlocks, { ...block, id, v: 0 } as BlockModel]
+    } else {
+      this.store.update((s) => {
+        s.blocks = [...s.blocks, { ...block, id, v: 0 } as BlockModel]
+        s.following = true // a new block means new conversation: force-snap to bottom
+      })
+      this.requestFollow(true)
+    }
     return id
   }
 
+  // findIndex+slice replaces the previous map(): single linear scan and no
+  // per-element closure/allocation when the target isn't in the list.
   private patchBlock(id: string, patch: Partial<BlockModel>) {
-    this.store.update((s) => {
-      s.blocks = s.blocks.map((b) =>
-        b.id === id ? ({ ...b, ...patch, v: b.v + 1 } as BlockModel) : b,
-      )
-    })
+    const blocks = this.blocksNow()
+    const i = blocks.findIndex((b) => b.id === id)
+    if (i < 0) return
+    const next = blocks.slice()
+    next[i] = { ...next[i], ...patch, v: next[i].v + 1 } as BlockModel
+    this.setBlocks(next)
   }
 
   private removeBlock(id: string | null) {
     if (!id) return
-    this.store.update((s) => {
-      s.blocks = s.blocks.filter((b) => b.id !== id)
-    })
+    this.setBlocks(this.blocksNow().filter((b) => b.id !== id))
   }
 
   clear() {
@@ -221,6 +234,9 @@ export class TranscriptController {
     this.streamDestroyed = false
     this.reasoningId = null
     this.reasoningStartTs = ''
+    this.reasoningBuf = ''
+    this.reasoningScheduled = false
+    this.reasoningLastRender = 0
     this.thinkingId = null
     this.tools.clear()
     this.approvals.clear()
@@ -247,6 +263,26 @@ export class TranscriptController {
       runId,
       feedback: this.io.getFeedback ? this.io.getFeedback(runId) : '',
     }
+  }
+
+  // --- block storage helpers ---
+
+  // Reads/writes of the block list go through these two helpers so that
+  // applySnapshot can stage an entire rebuild in a local array and commit it
+  // in a single store.update (per-block update+emit on a long snapshot is
+  // O(N²) work and one render tick per message).
+  private blocksNow(): BlockModel[] {
+    return this.batchedBlocks ?? this.store.get().blocks
+  }
+
+  private setBlocks(blocks: BlockModel[]): void {
+    if (this.batchedBlocks) {
+      this.batchedBlocks = blocks
+      return
+    }
+    this.store.update((s) => {
+      s.blocks = blocks
+    })
   }
 
   // At turn end, attach the action row (copy/feedback + time) to the final
@@ -287,6 +323,40 @@ export class TranscriptController {
   applySnapshot(snap: Snapshot, { preserveScroll = false } = {}): { preserved: boolean } {
     const wasFollowing = this.store.get().following
     this.clear()
+    // 暂存式重建：整个快照的块先堆在本地数组里，最后一次 store.update
+    // 提交（此前每个块一次 update+emit，1K 消息快照 = 数百次 O(N) 数组
+    // 全量拷贝和渲染 tick，且与逐块 requestFollow 叠加触发重复 snap-to-bottom）。
+    this.batchedBlocks = []
+    try {
+      this.buildFromSnapshot(snap)
+    } finally {
+      const staged = this.batchedBlocks
+      this.batchedBlocks = null
+      if (staged) {
+        this.store.update((s) => {
+          s.blocks = staged
+          s.following = true
+        })
+      }
+    }
+    if (preserveScroll && !wasFollowing) {
+      // Appends during the rebuild already set following/forceFollow and
+      // queued snap-to-bottom rAFs; those callbacks fire only after this
+      // synchronous method returns, so resetting here suppresses them. The
+      // caller (view layer) restores the viewport to its pre-rebuild position.
+      this.store.update((s) => {
+        s.following = false
+      })
+      this.forceFollow = false
+      return { preserved: true }
+    }
+    this.store.update((s) => {
+      s.followSeq++
+    })
+    return { preserved: false }
+  }
+
+  private buildFromSnapshot(snap: Snapshot) {
     const histTools = new Map<string, string>() // call_id → block id
     let lastAssistantId: string | null = null
     let lastAssistantText = ''
@@ -298,13 +368,16 @@ export class TranscriptController {
       const createdAt = lastTs
       const fb = this.fbAction(lastRunId)
       const id = lastAssistantId
-      this.store.update((s) => {
-        s.blocks = s.blocks.map((b) =>
-          b.id === id && b.kind === 'assistant'
-            ? { ...b, actions: { createdAt, ...fb }, v: b.v + 1 }
-            : b,
-        )
-      })
+      const blocks = this.blocksNow()
+      const i = blocks.findIndex((b) => b.kind === 'assistant' && b.id === id)
+      if (i >= 0) {
+        const b = blocks[i]
+        if (b.kind === 'assistant') {
+          const next = blocks.slice()
+          next[i] = { ...b, actions: { createdAt, ...fb }, v: b.v + 1 }
+          this.setBlocks(next)
+        }
+      }
       lastAssistantId = null
     }
 
@@ -458,21 +531,6 @@ export class TranscriptController {
     } else {
       closeTurn()
     }
-    if (preserveScroll && !wasFollowing) {
-      // Appends during the rebuild already set following/forceFollow and
-      // queued snap-to-bottom rAFs; those callbacks fire only after this
-      // synchronous method returns, so resetting here suppresses them. The
-      // caller (view layer) restores the viewport to its pre-rebuild position.
-      this.store.update((s) => {
-        s.following = false
-      })
-      this.forceFollow = false
-      return { preserved: true }
-    }
-    this.store.update((s) => {
-      s.followSeq++
-    })
-    return { preserved: false }
   }
 
   // --- SSE event dispatch (§5; unknown kinds ignored) ---
@@ -743,9 +801,13 @@ export class TranscriptController {
   // stay (steer.injected still fires within the turn).
   private drainSteerNotices(prompt: string) {
     if (this.steers.length === 0) return
+    // turn.started 的 prompt 是剩余 steering 文本按 "\n\n" 拼接的产物：
+    // 按整段匹配，避免短文本误中另一条 notice 的子串
+    // （例如 "fix" 会吃掉 "fix the bug" 的提示）。
+    const segments = new Set(prompt.split('\n\n').map((t) => t.trim()))
     const kept: { id: string; text: string }[] = []
     for (const s of this.steers) {
-      if (s.text && prompt.includes(s.text)) this.removeBlock(s.id)
+      if (s.text && segments.has(s.text.trim())) this.removeBlock(s.id)
       else kept.push(s)
     }
     this.steers = kept
@@ -822,11 +884,27 @@ export class TranscriptController {
     if (!alive) {
       this.reasoningId = this.appendReasoningBlock()
       this.reasoningStartTs = ts
+      this.reasoningBuf = ''
+      this.reasoningLastRender = 0
     }
+    this.reasoningBuf += delta
+    // 与 streamAppend 对称的合并帧渲染：高频 reasoning_delta 不再逐条触发
+    // patchBlock（此前每帧 find+map 双重 O(N) 扫描）。
+    if (this.reasoningScheduled) return
+    this.reasoningScheduled = true
     const id = this.reasoningId!
-    const cur = this.store.get().blocks.find((b) => b.id === id)
-    const text = (cur && cur.kind === 'reasoning' ? cur.text : '') + delta
-    this.patchBlock(id, { text })
+    const wait = Math.max(
+      0,
+      STREAM_RENDER_MIN_INTERVAL_MS - (performance.now() - this.reasoningLastRender),
+    )
+    setTimeout(() => {
+      requestAnimationFrame(() => {
+        this.reasoningScheduled = false
+        if (this.reasoningId !== id) return // 已被 finalize/clear 切走
+        this.reasoningLastRender = performance.now()
+        this.patchBlock(id, { text: this.reasoningBuf })
+      })
+    }, wait)
   }
 
   // Under interleaved protocols (OpenAI family: text and reasoning may mix in
@@ -838,14 +916,16 @@ export class TranscriptController {
     const streamId = this.streamId
     if (!streamId) return this.append(block)
     const id = 'b' + nextBlockId++
-    this.store.update((s) => {
-      const nb = { ...block, id, v: 0 } as BlockModel
-      const idx = s.blocks.findIndex((b) => b.id === streamId)
-      s.blocks =
-        idx < 0 ? [...s.blocks, nb] : [...s.blocks.slice(0, idx), nb, ...s.blocks.slice(idx)]
-      s.following = true
-    })
-    this.requestFollow(true)
+    const nb = { ...block, id, v: 0 } as BlockModel
+    const blocks = this.blocksNow()
+    const idx = blocks.findIndex((b) => b.id === streamId)
+    this.setBlocks(idx < 0 ? [...blocks, nb] : [...blocks.slice(0, idx), nb, ...blocks.slice(idx)])
+    if (!this.batchedBlocks) {
+      this.store.update((s) => {
+        s.following = true
+      })
+      this.requestFollow(true)
+    }
     return id
   }
 
@@ -857,15 +937,22 @@ export class TranscriptController {
     this.reasoningId = null
     if (!id) {
       this.reasoningStartTs = ''
+      this.reasoningBuf = ''
       return
     }
-    const patch: { live: boolean; durationMs?: number } = { live: false }
+    // 将尚未上屏的缓冲带入最后一帧：seal 后不再有后续 delta，定时器里的
+    // pending flush 会被 reasoningId !== id 守卫丢弃，必须在此补上。
+    const patch: { live: boolean; text?: string; durationMs?: number } = {
+      live: false,
+      text: this.reasoningBuf,
+    }
     if (endTs && this.reasoningStartTs) {
       const ms = Date.parse(endTs) - Date.parse(this.reasoningStartTs)
       if (Number.isFinite(ms) && ms >= 0) patch.durationMs = ms
     }
     this.patchBlock(id, patch)
     this.reasoningStartTs = ''
+    this.reasoningBuf = ''
   }
 
   // Turn-level backstop: any live reasoning block leaked by any path (lost
@@ -887,7 +974,7 @@ export class TranscriptController {
     const toolBlockId = payload.call_id ? this.tools.get(payload.call_id) : undefined
     let diff: string | undefined
     if (toolBlockId) {
-      const tb = this.store.get().blocks.find((b) => b.id === toolBlockId)
+      const tb = this.blocksNow().find((b) => b.id === toolBlockId)
       if (tb && tb.kind === 'tool' && tb.diff) {
         diff = tb.diff
         this.patchBlock(toolBlockId, { diffSuppressed: true })

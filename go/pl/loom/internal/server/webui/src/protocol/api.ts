@@ -123,11 +123,16 @@ export function createApi({ getToken, onUnauthorized }: ApiOptions) {
     installRulePack: (id: string) =>
       req('PUT', `/v1/rules/packs/${encodeURIComponent(id)}/install`, {}),
     uninstallRulePack: (id: string) => req('DELETE', `/v1/rules/packs/${encodeURIComponent(id)}`),
-    listSessions: (limit = 50, cursor = '', archived = false, workspaceId = '') =>
-      req<{ sessions?: SessionSummary[]; next_cursor?: string }>(
+    listSessions: (limit = 50, cursor = '', archived = false, workspaceId = '') => {
+      const params = new URLSearchParams({ limit: String(limit) })
+      if (cursor) params.set('cursor', cursor)
+      if (archived) params.set('archived', '1')
+      if (workspaceId) params.set('workspace_id', workspaceId)
+      return req<{ sessions?: SessionSummary[]; next_cursor?: string }>(
         'GET',
-        `/v1/sessions?limit=${limit}${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}${archived ? '&archived=1' : ''}${workspaceId ? '&workspace_id=' + encodeURIComponent(workspaceId) : ''}`,
-      ),
+        `/v1/sessions?${params}`,
+      )
+    },
     // workspaces (docs/WORKSPACE_DESIGN.md §8.1)
     listWorkspaces: () => req<{ workspaces?: Workspace[] }>('GET', '/v1/workspaces'),
     registerWorkspace: (rootPath: string, name: string) =>
@@ -200,8 +205,10 @@ export function createApi({ getToken, onUnauthorized }: ApiOptions) {
     snapshot: (id: string) => req<Snapshot>('GET', `/v1/sessions/${id}/snapshot`),
     // Execution-trace maze (shared by the trace tab and the compare view)
     maze: (id: string) => req<MazeData>('GET', `/v1/sessions/${id}/maze`),
-    transcript: (id: string, after = 0, limit = 200) =>
-      req('GET', `/v1/sessions/${id}/transcript?after=${after}&limit=${limit}`),
+    transcript: (id: string, after = 0, limit = 200) => {
+      const params = new URLSearchParams({ after: String(after), limit: String(limit) })
+      return req('GET', `/v1/sessions/${encodeURIComponent(id)}/transcript?${params}`)
+    },
     submitPrompt: (
       id: string,
       prompt: string,

@@ -10,6 +10,7 @@ import type { SessionSummary, Workspace } from '../protocol/types'
 import { useStore } from '../store/store'
 import { Icon } from '../lib/icons'
 import { relTime, shortId } from '../lib/format'
+import { useRafScroll } from '../lib/rafScroll'
 
 const COLLAPSE_KEY = 'loom_ws_collapsed'
 
@@ -41,6 +42,7 @@ export const Sidebar = memo(function Sidebar({
   const activeId = useStore(controller.store, (s) => s.sessionId)
   const showArchived = useStore(controller.store, (s) => s.showArchived)
   const mainView = useStore(controller.store, (s) => s.mainView)
+  const sessionsLoading = useStore(controller.store, (s) => s.sessionsLoading)
   const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed)
   const listRef = useRef<HTMLDivElement>(null)
   // First mount: make the most recently active workspace the visual focus
@@ -149,13 +151,12 @@ export const Sidebar = memo(function Sidebar({
         id="session-list"
         className="session-list"
         ref={listRef}
-        onScroll={() => {
-          const list = listRef.current
+        onScroll={useRafScroll<HTMLDivElement>((el) => {
           // Session-list waterfall: load the next page when scrolled near the bottom
-          if (list && list.scrollHeight - list.scrollTop - list.clientHeight < 120) {
+          if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) {
             void controller.loadMoreSessions()
           }
-        }}
+        })}
       >
         {ordered.map((wsId) => {
           const ws = workspaces.find((w) => w.id === wsId)
@@ -178,6 +179,11 @@ export const Sidebar = memo(function Sidebar({
             />
           )
         })}
+        {sessionsLoading && (
+          <div className="session-list-more" aria-hidden="true">
+            <span className="spinner" /> 加载更多会话…
+          </div>
+        )}
       </div>
       <div className="sidebar-foot">
         <button

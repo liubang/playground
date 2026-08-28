@@ -65,6 +65,7 @@ export interface AppState {
   busy: boolean
   connState: ConnState | ''
   connDetail?: string
+  sessionsLoading: boolean // sidebar infinite-scroll 加载中指示
   banner: BannerState | null
   sessions: SessionSummary[]
   showArchived: boolean
@@ -119,6 +120,7 @@ function initialState(): AppState {
     sessionState: '',
     busy: false,
     connState: '',
+    sessionsLoading: false,
     connDetail: undefined,
     banner: null,
     sessions: [],
@@ -189,8 +191,11 @@ export class AppController {
   // Composer drafts are per-session: stash the current input before switching
   // away, restore on switch back.
   private composerDrafts = new Map<string, string>()
-  // Content-addressed artifact cache (blob URLs); released wholesale on session switch
+  // Content-addressed artifact cache (blob URLs); LRU-bounded so image-heavy
+  // sessions don't accumulate unbounded blob URLs. Map preserves insertion
+  // order: get() re-inserts to mark recent use; evict oldest on overflow.
   private artifactURLCache = new Map<string, ArtifactEntry>()
+  private static ARTIFACT_CACHE_MAX = 50
   // Current composer draft text (written back by the controlled view component,
   // for draft stashing)
   composerText = ''
@@ -623,8 +628,14 @@ export class AppController {
   fetchArtifactURL = async (id: string, size: number): Promise<ArtifactEntry> => {
     const key = `${id}:${size}`
     const cached = this.artifactURLCache.get(key)
-    if (cached) return cached
-    const res = await fetch(`/v1/artifacts/${encodeURIComponent(id)}?size=${size}`, {
+    if (cached) {
+      // LRU touch: re-insert to move to end (most-recently-used position)
+      this.artifactURLCache.delete(key)
+      this.artifactURLCache.set(key, cached)
+      return cached
+    }
+    const params = new URLSearchParams({ size: String(size) })
+    const res = await fetch(`/v1/artifacts/${encodeURIComponent(id)}?${params}`, {
       headers: { Authorization: 'Bearer ' + this.token },
     })
     if (!res.ok) throw new Error(`artifact fetch failed (HTTP ${res.status})`)
@@ -633,6 +644,14 @@ export class AppController {
       url: URL.createObjectURL(blob),
       mediaType: blob.type || '',
       blob,
+    }
+    // LRU evict: drop oldest entries (first in Map iteration order) when over capacity
+    while (this.artifactURLCache.size >= AppController.ARTIFACT_CACHE_MAX) {
+      const oldest = this.artifactURLCache.keys().next().value
+      if (oldest === undefined) break
+      const evicted = this.artifactURLCache.get(oldest)
+      if (evicted) URL.revokeObjectURL(evicted.url)
+      this.artifactURLCache.delete(oldest)
     }
     this.artifactURLCache.set(key, entry)
     return entry
@@ -816,6 +835,7 @@ export class AppController {
   loadMoreSessions = async () => {
     if (this.sessLoading || !this.sessCursor) return
     this.sessLoading = true
+    this.store.set({ sessionsLoading: true })
     try {
       const { sessions, next_cursor } = await this.api.listSessions(
         SESSION_PAGE_SIZE,
@@ -832,6 +852,7 @@ export class AppController {
       if ((e as ApiError).status !== 401) console.warn('load more sessions:', e)
     } finally {
       this.sessLoading = false
+      this.store.set({ sessionsLoading: false })
     }
   }
 

@@ -1,7 +1,7 @@
 // DirPicker.tsx — 目录浏览弹窗（添加工作区）：从 $HOME 起逐级下钻，
 // 选择目录即注册。与旧 main.js 的 dirPicker 逻辑一一对应。
 
-import { memo, useCallback, useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { AppController } from '../app/controller'
 import type { DirEntry } from '../protocol/types'
 import { useStore } from '../store/store'
@@ -41,6 +41,44 @@ export const DirPicker = memo(function DirPicker({ controller }: { controller: A
     if (open) void browseDir('')
   }, [open, browseDir])
 
+  // Esc 关闭 + 弹窗内焦点陷阱（Tab/Esc 不逃逸到背后的输入框）。
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        controller.closeDirPicker()
+        return
+      }
+      if (e.key !== 'Tab') return
+      const root = rootRef.current
+      if (!root) return
+      const focusable = root.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
+    // 初始焦点落到取消按钮（安全默认，与 Confirm 一致）
+    const t = setTimeout(() => {
+      rootRef.current?.querySelector<HTMLElement>('#dir-cancel')?.focus()
+    }, 0)
+    return () => {
+      document.removeEventListener('keydown', onKey, true)
+      clearTimeout(t)
+    }
+  }, [open, controller])
+
   if (!open) return null
 
   // 面包屑：把当前路径拆成可点段，根段在 $HOME 内显示为 ~，否则为 /。
@@ -64,6 +102,7 @@ export const DirPicker = memo(function DirPicker({ controller }: { controller: A
     <div
       id="dir-modal"
       className="modal-wrap"
+      ref={rootRef}
       onClick={(e) => {
         if (e.target === e.currentTarget) controller.closeDirPicker()
       }}

@@ -976,10 +976,21 @@ button {
   color: var(--primary);
   animation: blink 1s steps(1) infinite;
 }
+/* 断连时停止光标动画并置灰，给出"流已停"的静态视觉信号（连接恢复后自动复位） */
+.transcript.is-offline .stream-cursor {
+  animation: none;
+  opacity: 0.35;
+}
 @keyframes blink {
   50% {
     opacity: 0;
   }
+}
+
+/* lazy-loaded 重页面（maze/trace/compare）chunk 加载期间的占位 */
+.lazy-pane {
+  flex: 1;
+  min-height: 0;
 }
 
 /* Message action row: copy / thumbs up / thumbs down + time.
@@ -2538,10 +2549,6 @@ long text truncates, full content visible via title on hover */
   outline: 1px solid var(--error);
   border-color: var(--error);
 }
-button.is-invalid {
-  outline: 2px solid var(--error);
-  outline-offset: 1px;
-}
 .set-input::placeholder {
   color: var(--muted);
   opacity: 0.7;
@@ -2549,10 +2556,6 @@ button.is-invalid {
 textarea.set-input {
   resize: vertical;
   line-height: 1.5;
-}
-select.set-input {
-  width: auto;
-  min-width: 180px;
 }
 .set-check {
   width: 16px;
@@ -3152,18 +3155,6 @@ select.set-input {
   padding: 0 7px;
   letter-spacing: 0.04em;
 }
-.env-badge.env-src-config {
-  color: var(--primary);
-  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
-}
-.env-badge.env-st-prepended {
-  color: var(--primary);
-  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
-}
-.env-badge.env-st-missing {
-  color: var(--warning);
-  border-color: color-mix(in srgb, var(--warning) 40%, transparent);
-}
 .set-env-path {
   word-break: break-all;
   line-height: 1.5;
@@ -3239,6 +3230,9 @@ select.set-input {
     transform: translateX(-105%);
     transition: transform 0.15s ease;
     box-shadow: var(--shadow-md);
+    /* notch: keep sidebar content below the status bar / dynamic island */
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
   }
   /* Override the desktop collapse rule's display:none; the drawer is hidden via transform instead */
   .shell.sidebar-collapsed .sidebar {
@@ -3277,13 +3271,19 @@ select.set-input {
 
   /* Composer / statusbar: tightened margins + bottom safe area (notch home indicator) */
   .composer {
-    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+    padding: 8px max(10px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
   }
   .statusbar {
-    padding: 0 10px;
+    padding: 0 max(10px, env(safe-area-inset-right));
     padding-bottom: env(safe-area-inset-bottom);
     gap: 8px;
     overflow-x: auto;
+  }
+  /* Transcript: right/left safe-area insets so content clears the notch / rounded corners */
+  .transcript-inner {
+    padding-left: max(24px, env(safe-area-inset-left));
+    padding-right: max(24px, env(safe-area-inset-right));
   }
 
   /* Share page narrow-screen adaptation: tighter margins, wider bubbles, secondary meta hidden —
