@@ -81,6 +81,15 @@ func MemoryPackages(d Derivation, trust string) ([]Package, bool) {
 			MaxConsequence: e.Consequence,
 		}}, true
 	case d.WritePath != "":
+		if len(e.Indicators) > 0 {
+			// An indicated write target (protected loom metadata, shell
+			// startup files, credential paths, ...) stays per-call:
+			// Decide's indicator gate admits only exact bindings, so a
+			// remembered path package could never cover it — offering
+			// to remember would be a silent no-op that re-asks every
+			// call. Mirror the host branch above.
+			return nil, false
+		}
 		dir := filepath.Dir(d.WritePath)
 		if workspacepkg.CoversSensitiveLocation(dir) {
 			// A directory that COVERS a sensitive location must never

@@ -172,6 +172,30 @@ func TestAttackHomeDirectoryPathMemory(t *testing.T) {
 	}
 }
 
+// TestAttackIndicatedWriteMemory: a write target carrying a persistence
+// indicator (protected loom metadata, shell startup files, ...) must
+// never be rememberable: Decide's indicator gate admits only exact
+// bindings, so a remembered path package could never cover the next call
+// — offering to remember would be a silent no-op that re-asks every
+// call. Regression: an "allow always" on a ~/.loom edit was accepted and
+// persisted yet the very next edit to the same file asked again.
+func TestAttackIndicatedWriteMemory(t *testing.T) {
+	home, err := homeDir()
+	if err != nil || home == "" {
+		t.Skip("home directory unavailable in this test environment")
+	}
+	dw := DeriveEffect(domain.PreparedCall{
+		Call:         domain.ToolCall{Name: "edit"},
+		WriteRequest: &domain.WriteRequest{Path: home + "/.loom/skills/x/SKILL.md"},
+	}, DeriveEnv{Roots: []string{"/ws"}})
+	if len(dw.Effect.Indicators) == 0 {
+		t.Fatal("a write into ~/.loom must carry the protected-metadata indicator")
+	}
+	if _, ok := MemoryPackages(dw, ""); ok {
+		t.Fatal("an indicated write target must not be memorable (the package could never cover it)")
+	}
+}
+
 // TestAttackGitConfigInjection: -c core.hooksPath must carry an
 // indicator regardless of subcommand (M8).
 func TestAttackGitConfigInjection(t *testing.T) {
