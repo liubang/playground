@@ -60,6 +60,12 @@ html {
 html,
 body {
   height: 100%;
+  /* Never let the document itself scroll: the app shell is already height:100dvh,
+     and in the desktop webview (WKWebView) document-level rubber-banding lets a hard
+     scroll translate the whole page out of the window frame. Gate page content fits
+     well inside the minimum window size (960x640), so nothing relies on body scroll. */
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 body {
   background: var(--bg0);
@@ -394,6 +400,8 @@ button {
 .session-list {
   flex: 1;
   overflow-y: auto;
+  /* Contain overscroll at the list edge so it never chains to a parent. */
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -717,6 +725,8 @@ button {
 /* transcript */
 .transcript {
   overflow-y: auto;
+  /* Contain overscroll at the transcript edge so it never chains to a parent. */
+  overscroll-behavior: contain;
   /* Backstop: clip any residual horizontal overflow from children so it never bubbles up
      into a page-level horizontal scrollbar; wide code/tables/diffs each have their own
      overflow-x scroll container and are unaffected. */
