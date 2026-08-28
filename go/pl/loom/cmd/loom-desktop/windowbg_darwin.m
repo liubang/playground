@@ -13,12 +13,34 @@
 // limitations under the License.
 
 #import <Cocoa/Cocoa.h>
+#import <WebKit/WebKit.h>
+
+// Recursively finds the WKWebView in the wails content tree and retint it.
+// The webview's underPageBackgroundColor (default white) is what actually
+// shows during a live resize — setting just the NSWindow's backgroundColor
+// leaves the webview's own white visible on top of it.
+static void loomTintViewTree(NSView *root, NSColor *c) {
+  if (!root) {
+    return;
+  }
+  if ([root isKindOfClass:[WKWebView class]]) {
+    WKWebView *wv = (WKWebView *)root;
+    wv.underPageBackgroundColor = c;
+    if (wv.layer) {
+      wv.layer.backgroundColor = c.CGColor;
+    }
+  }
+  for (NSView *sub in root.subviews) {
+    loomTintViewTree(sub, c);
+  }
+}
 
 void loomSetWindowBackgroundColor(float r, float g, float b) {
   dispatch_async(dispatch_get_main_queue(), ^{
     NSColor *c = [NSColor colorWithCalibratedRed:r green:g blue:b alpha:1.0];
     for (NSWindow *w in [NSApplication sharedApplication].windows) {
       [w setBackgroundColor:c];
+      loomTintViewTree([w contentView], c);
     }
   });
 }

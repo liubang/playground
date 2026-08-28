@@ -47,6 +47,8 @@ go_library(
         "@platforms//os:macos": [
             "-framework",
             "UniformTypeIdentifiers",
+            "-framework",
+            "WebKit",
         ],
         "//conditions:default": [],
     }),

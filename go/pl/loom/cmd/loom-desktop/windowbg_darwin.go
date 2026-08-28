@@ -27,7 +27,7 @@
 package main
 
 /*
-#cgo LDFLAGS: -framework Cocoa
+#cgo LDFLAGS: -framework Cocoa -framework WebKit
 
 void loomSetWindowBackgroundColor(float r, float g, float b);
 */
