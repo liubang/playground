@@ -291,15 +291,26 @@ export class TranscriptController {
     if (!this.turnAssistantId) return
     const createdAt = this.turnAssistantTs
     const fb = this.fbAction(this.turnRunID)
-    this.store.update((s) => {
-      s.blocks = s.blocks.map((b) => {
-        if (b.id !== this.turnAssistantId || (b.kind !== 'assistant' && b.kind !== 'stream')) {
-          return b
-        }
-        if (b.kind === 'assistant' && b.actions) return b // idempotent
-        return { ...b, kind: 'assistant', text: b.text, actions: { createdAt, ...fb }, v: b.v + 1 }
-      })
-    })
+    // findIndex+slice like patchBlock, but with a wider kind predicate and an
+    // in-place rewriting idempotency guard (map() would allocate for all
+    // non-matching blocks).
+    const blocks = this.blocksNow()
+    const i = blocks.findIndex(
+      (b) => b.id === this.turnAssistantId && (b.kind === 'assistant' || b.kind === 'stream'),
+    )
+    if (i < 0) return
+    const b = blocks[i]
+    if (b.kind === 'assistant' && b.actions) return // idempotent
+    const next = blocks.slice()
+    // ...b already carries text (both 'assistant' and 'stream' have it); the
+    // explicit re-assignment below only pins the kind/actions/v overrides.
+    next[i] = {
+      ...b,
+      kind: 'assistant',
+      actions: { createdAt, ...fb },
+      v: b.v + 1,
+    } as BlockModel
+    this.setBlocks(next)
   }
 
   // --- thinking animation (waiting for model output) ---
@@ -675,8 +686,12 @@ export class TranscriptController {
         const payload = p as unknown as ToolCompletedPayload
         const id = payload.call_id ? this.tools.get(payload.call_id) : undefined
         if (id) {
-          const cur = this.store.get().blocks.find((b) => b.id === id)
-          // Idempotent: a late/replayed tool.completed must not append output twice
+          // Idempotent: a late/replayed tool.completed must not append output twice.
+          // blocksNow() (not store.get()) so the check sees the in-batch state
+          // during applySnapshot; single findIndex, patchBlock would re-scan.
+          const blocks = this.blocksNow()
+          const i = blocks.findIndex((b) => b.id === id)
+          const cur = i >= 0 ? blocks[i] : null
           if (cur && cur.kind === 'tool' && !cur.completion) {
             this.patchBlock(id, { completion: payload as ToolCompletion })
           }
@@ -959,7 +974,8 @@ export class TranscriptController {
   // events, reconnect, unknown provider behavior) is force-sealed at the turn
   // boundary — the flicker animation must stop when thinking ends.
   private sweepLiveReasoning() {
-    for (const b of this.store.get().blocks) {
+    // blocksNow() so the sweep sees the in-batch state during applySnapshot.
+    for (const b of this.blocksNow()) {
       if (b.kind === 'reasoning' && b.live) this.patchBlock(b.id, { live: false })
     }
   }
@@ -993,7 +1009,7 @@ export class TranscriptController {
   ) {
     const id = this.approvals.get(approvalId)
     if (!id) return
-    const block = this.store.get().blocks.find((b) => b.id === id)
+    const block = this.blocksNow().find((b) => b.id === id)
     if (!block || block.kind !== 'approval') return
     this.patchBlock(id, { resolving: true })
     try {
@@ -1017,26 +1033,27 @@ export class TranscriptController {
     const id = this.approvals.get(approvalId)
     if (!id) return
     this.approvals.delete(approvalId)
+    const blocks = this.blocksNow()
+    const i = blocks.findIndex((b) => b.id === id)
+    if (i < 0) return
+    const block = blocks[i]
     // Move the diff back to the tool block
-    const block = this.store.get().blocks.find((b) => b.id === id)
-    if (block && block.kind === 'approval' && block.payload.call_id) {
+    if (block.kind === 'approval' && block.payload.call_id) {
       const toolBlockId = this.tools.get(block.payload.call_id)
       if (toolBlockId) this.patchBlock(toolBlockId, { diffSuppressed: false })
     }
-    this.store.update((s) => {
-      s.blocks = s.blocks.map((b) =>
-        b.id === id
-          ? ({
-              id: b.id,
-              v: b.v + 1,
-              kind: 'resolved',
-              ok: allowed,
-              actor,
-              what: 'approval',
-            } as BlockModel)
-          : b,
-      )
-    })
+    // Single findIndex+slice in place of the old map(): no allocation when
+    // the id isn't present, and only the resolved block gets a new object.
+    const next = blocks.slice()
+    next[i] = {
+      id: block.id,
+      v: block.v + 1,
+      kind: 'resolved',
+      ok: allowed,
+      actor,
+      what: 'approval',
+    } as BlockModel
+    this.setBlocks(next)
     this.requestFollow(false)
   }
 

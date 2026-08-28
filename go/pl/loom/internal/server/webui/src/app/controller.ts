@@ -194,7 +194,10 @@ export class AppController {
   // Content-addressed artifact cache (blob URLs); LRU-bounded so image-heavy
   // sessions don't accumulate unbounded blob URLs. Map preserves insertion
   // order: get() re-inserts to mark recent use; evict oldest on overflow.
+  // Resolved entries live here; in-flight requests live in artifactInflight
+  // so a concurrent second caller .await's the same fetch instead of stampeding.
   private artifactURLCache = new Map<string, ArtifactEntry>()
+  private artifactInflight = new Map<string, Promise<ArtifactEntry>>()
   private static ARTIFACT_CACHE_MAX = 50
   // Current composer draft text (written back by the controlled view component,
   // for draft stashing)
@@ -634,27 +637,42 @@ export class AppController {
       this.artifactURLCache.set(key, cached)
       return cached
     }
+    // Promise coalescing: a concurrent second caller for the same key awaits
+    // the same in-flight promise instead of firing a duplicate fetch (the old
+    // "check → fetch → set" window leaked one duplicate per race).
+    const inflight = this.artifactInflight.get(key)
+    if (inflight) return inflight
     const params = new URLSearchParams({ size: String(size) })
-    const res = await fetch(`/v1/artifacts/${encodeURIComponent(id)}?${params}`, {
-      headers: { Authorization: 'Bearer ' + this.token },
-    })
-    if (!res.ok) throw new Error(`artifact fetch failed (HTTP ${res.status})`)
-    const blob = await res.blob()
-    const entry: ArtifactEntry = {
-      url: URL.createObjectURL(blob),
-      mediaType: blob.type || '',
-      blob,
+    const promise = (async () => {
+      const res = await fetch(`/v1/artifacts/${encodeURIComponent(id)}?${params}`, {
+        headers: { Authorization: 'Bearer ' + this.token },
+      })
+      if (!res.ok) throw new Error(`artifact fetch failed (HTTP ${res.status})`)
+      const blob = await res.blob()
+      const entry: ArtifactEntry = {
+        url: URL.createObjectURL(blob),
+        mediaType: blob.type || '',
+        blob,
+      }
+      // LRU evict: drop oldest entries (first in Map iteration order) when over capacity
+      while (this.artifactURLCache.size >= AppController.ARTIFACT_CACHE_MAX) {
+        const oldest = this.artifactURLCache.keys().next().value
+        if (oldest === undefined) break
+        const evicted = this.artifactURLCache.get(oldest)
+        if (evicted) URL.revokeObjectURL(evicted.url)
+        this.artifactURLCache.delete(oldest)
+      }
+      this.artifactURLCache.set(key, entry)
+      return entry
+    })()
+    this.artifactInflight.set(key, promise)
+    try {
+      return await promise
+    } finally {
+      // Clean up the in-flight slot regardless of outcome; failures leave no
+      // cache entry, so a later retry re-fetches.
+      this.artifactInflight.delete(key)
     }
-    // LRU evict: drop oldest entries (first in Map iteration order) when over capacity
-    while (this.artifactURLCache.size >= AppController.ARTIFACT_CACHE_MAX) {
-      const oldest = this.artifactURLCache.keys().next().value
-      if (oldest === undefined) break
-      const evicted = this.artifactURLCache.get(oldest)
-      if (evicted) URL.revokeObjectURL(evicted.url)
-      this.artifactURLCache.delete(oldest)
-    }
-    this.artifactURLCache.set(key, entry)
-    return entry
   }
 
   // Release all artifact blob URLs on session switch, so the cache can't grow
@@ -948,6 +966,20 @@ export class AppController {
       } else {
         throw e
       }
+    }
+    // Snapshot race guard: if the user switched sessions while the snapshot
+    // fetch was in flight, this snapshot belongs to the OLD session — drop it,
+    // otherwise it would overwrite the new session's transcript, plan, model
+    // metadata, readOnly/archived state, and eventFloor with stale data.
+    if (this.store.get().sessionId !== id) {
+      console.info(
+        'openSession: dropping stale snapshot for',
+        id,
+        '(now on',
+        this.store.get().sessionId,
+        ')',
+      )
+      return
     }
     // Preserve scroll on resync: the view layer restores scrollTop after the
     // DOM rebuild

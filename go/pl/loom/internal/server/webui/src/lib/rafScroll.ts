@@ -11,7 +11,7 @@
 //
 // 回调在 rAF 里执行；组件卸载时自动取消挂起的帧。
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 
 export function useRafScroll<T extends HTMLElement>(
   handler: (el: T) => void,
@@ -21,8 +21,13 @@ export function useRafScroll<T extends HTMLElement>(
   // 用 ref 持有最新 handler：unstable handler（如在 JSX 中创建的箭头函数）
   // 不会让 useCallback 缓存失效，onScroll / flush 在整个组件生命周期内
   // 保持同一引用，因此挂在 DOM 上的监听器不需要每次渲染重建。
+  // 同步写在 layout effect 里而不是渲染期：React 18 并发模式下渲染可能被
+  // 中止/重放，渲染期变异 ref 会读到不可预测的值；layout effect 在 commit
+  // 阶段同步执行，始终指向最后一个已提交的 handler。
   const handlerRef = useRef(handler)
-  handlerRef.current = handler
+  useLayoutEffect(() => {
+    handlerRef.current = handler
+  }, [handler])
 
   // 组件卸载：取消挂起的 rAF，避免对已卸载组件触发 handler 里捕获的 setState
   useEffect(

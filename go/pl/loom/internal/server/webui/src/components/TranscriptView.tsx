@@ -110,7 +110,11 @@ const BlockView = memo(
       case 'question': {
         const qid = block.payload.question_id || block.payload.id || ''
         return (
+          // key on question_id: force unmount+remount if the payload identity
+          // ever changes, so the controlled selected/custom state can't leak
+          // across distinct questions.
           <QuestionCard
+            key={qid}
             payload={block.payload}
             resolving={block.resolving}
             onAnswer={(answer) => io.onAnswerQuestion?.(qid, answer)}
