@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     networks:
       - bigdata
+      - federation
     environment:
       - CLUSTER_NAME=test
     env_file:
@@ -33,6 +34,7 @@ services:
     restart: unless-stopped
     networks:
       - bigdata
+      - federation
     environment:
       SERVICE_PRECONDITION: "namenode:9870"
     env_file:
@@ -88,6 +90,7 @@ services:
 
     networks:
       - bigdata
+      - federation
     volumes:
       - ./hive/conf/core-site.xml:/opt/hive/conf/core-site.xml
       - ./hive/conf/hdfs-site.xml:/opt/hive/conf/hdfs-site.xml
@@ -283,3 +286,8 @@ volumes:
   trino-worker-data:
 networks:
   bigdata:
+  # 跨模块联邦网络：供 Doris 集群访问 Hive Metastore 与 HDFS，
+  # 由任一模块的 bootstrap.sh 负责创建（docker network create doris-bigdata-federation）
+  federation:
+    external: true
+    name: doris-bigdata-federation

@@ -8,8 +8,10 @@ source "$SCRIPT_DIR/../scripts/bootstrap-common.sh"
 bootstrap_init "$SCRIPT_DIR" "$@"
 
 ICEBERG_VERSION="${ICEBERG_VERSION:-1.10.0}"
+PAIMON_VERSION="${PAIMON_VERSION:-1.3.2}"
 MYSQL_JAR="mysql-connector-j-8.3.0.jar"
 MYSQL_JAR_URL="https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.3.0/${MYSQL_JAR}"
+FEDERATION_NETWORK="doris-bigdata-federation"
 
 bootstrap_check_dependencies curl
 bootstrap_handle_reset
@@ -60,11 +62,34 @@ else
     log_ok "下载完成 ${ICEBERG_JAR}"
 fi
 
+echo "==> 准备 Paimon Spark runtime..."
+PAIMON_JAR="paimon-spark-4.0-${PAIMON_VERSION}.jar"
+PAIMON_JAR_URL="https://repo1.maven.org/maven2/org/apache/paimon/paimon-spark-4.0/${PAIMON_VERSION}/${PAIMON_JAR}"
+if [ -f "spark/jars/${PAIMON_JAR}" ]; then
+    log_skip "${PAIMON_JAR} 已存在"
+else
+    log_run "下载 ${PAIMON_JAR} ..."
+    curl -fL -o "spark/jars/${PAIMON_JAR}" "$PAIMON_JAR_URL" || die "下载失败 ${PAIMON_JAR_URL}"
+    log_ok "下载完成 ${PAIMON_JAR}"
+fi
+
 mysql_healthy() {
     docker compose ps mysql | grep -q "healthy"
 }
 
+spark_healthy() {
+    docker compose ps spark-master | grep -q "healthy"
+}
+
 if [ "$START_SERVICES" = true ]; then
+    echo "==> 准备跨模块联邦网络（供 Doris 集群访问 Hive/HDFS）..."
+    if docker network inspect "$FEDERATION_NETWORK" >/dev/null 2>&1; then
+        log_skip "${FEDERATION_NETWORK} 已存在"
+    else
+        docker network create "$FEDERATION_NETWORK" >/dev/null
+        log_ok "联邦网络 ${FEDERATION_NETWORK} 已创建"
+    fi
+
     compose_start
     wait_until "MySQL 就绪" 30 2 mysql_healthy || die "MySQL 启动失败"
 
@@ -73,6 +98,17 @@ if [ "$START_SERVICES" = true ]; then
         docker compose exec -T namenode hdfs dfs -chmod -R 777 /user/hive/warehouse /tmp 2>/dev/null &&
         log_ok "HDFS warehouse 目录已创建" ||
         log_skip "HDFS 目录创建跳过（NameNode 可能尚未就绪）"
+
+    echo "==> 初始化联邦查询示例数据（Hive 维度表 + Paimon 明细表）..."
+    if wait_until "Spark Master 就绪" 30 2 spark_healthy; then
+        docker cp tests/federation-seed.sql "$(docker compose ps -q spark-master):/tmp/federation-seed.sql"
+        docker compose exec -T spark-master /opt/spark/bin/spark-sql --master 'local[2]' \
+            -f /tmp/federation-seed.sql >/dev/null 2>&1 &&
+            log_ok "demo.users（Hive）与 paimon.demo.events（Paimon）已就绪" ||
+            log_warn "示例数据初始化失败，可稍后手动执行: docker compose exec spark-master /opt/spark/bin/spark-sql --master 'local[2]' -f /tmp/federation-seed.sql"
+    else
+        log_skip "Spark 未就绪，示例数据初始化跳过（可重跑 bootstrap.sh 补齐）"
+    fi
 
     show_compose_status
     printf '\n==> Web UI:\n'

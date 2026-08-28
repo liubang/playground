@@ -111,6 +111,7 @@ python/manim/manimations/media/
 # Dependencies downloaded by bootstrap.sh
 /docker/bigdata/hive/lib/*.jar
 /docker/bigdata/spark/jars/*.jar
+/docker/doris/jdbc-drivers/
 
 # Extension deployment artifacts built from java/pl/bigdata
 /docker/bigdata/extensions/spark/jars/*.jar
