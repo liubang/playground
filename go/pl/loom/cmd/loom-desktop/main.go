@@ -293,6 +293,12 @@ func run(ctx context.Context, args []string) error {
 			}
 			go persistWindowState(ctx, wctx, wsPath, logger)
 		},
+		OnDomReady: func(context.Context) {
+			// OnStartup races window registration (the hook fires on a goroutine
+			// while Run() drives the main loop); OnDomReady is the belt-and-
+			// suspenders second shot once window+webview+content all exist.
+			applyWindowBackgroundColor(0x1e/255.0, 0x23/255.0, 0x26/255.0)
+		},
 		OnShutdown: func(context.Context) {
 			shutdown()
 		},
