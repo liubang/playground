@@ -283,6 +283,11 @@ func run(ctx context.Context, args []string) error {
 			case wailsReady <- wctx:
 			default:
 			}
+			// Tint the NSWindow background to the web UI's --bg0 (#1e2326):
+			// during a live resize the system frame step wins the race against
+			// the webview's next composite, so the gap shows the window's
+			// backgroundColor — the default white streaks against the dark page.
+			applyWindowBackgroundColor(0x1e/255.0, 0x23/255.0, 0x26/255.0)
 			if hasSavedWs {
 				restoreWindowPosition(wctx, savedWs)
 			}

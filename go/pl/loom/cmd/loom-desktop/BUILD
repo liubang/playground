@@ -32,6 +32,8 @@ go_library(
         "dialogs_darwin.go",
         "frameworks_darwin.go",
         "main.go",
+        "windowbg_darwin.go",
+        "windowbg_darwin.m",
         "windowstate.go",
     ],
     cgo = True,
