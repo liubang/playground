@@ -37,6 +37,7 @@ macos_application(
     bundle_name = "AuraBar",
     infoplists = ["resources/Info.plist"],
     minimum_os_version = "14.0",
+    resources = ["resources/AppIcon.icns"],
     target_compatible_with = ["@platforms//os:macos"],
     deps = [":menubar_lib"],
 )
