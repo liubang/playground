@@ -21,6 +21,8 @@ extension StatsPopoverContent {
 struct CPUPopover: View, StatsPopoverContent {
     @ObservedObject var store: SystemStatsStore
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
+    // Subscribed (not read) so an accent change re-renders the popover.
+    @AppStorage(AccentColor.key) var accentHex = ""
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
@@ -104,6 +106,8 @@ struct CPUPopover: View, StatsPopoverContent {
 struct MemoryPopover: View, StatsPopoverContent {
     @ObservedObject var store: SystemStatsStore
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
+    // Subscribed (not read) so an accent change re-renders the popover.
+    @AppStorage(AccentColor.key) var accentHex = ""
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
@@ -200,6 +204,8 @@ struct MemoryPopover: View, StatsPopoverContent {
 struct NetworkPopover: View, StatsPopoverContent {
     @ObservedObject var store: SystemStatsStore
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
+    // Subscribed (not read) so an accent change re-renders the popover.
+    @AppStorage(AccentColor.key) var accentHex = ""
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
@@ -440,6 +446,8 @@ struct StatsFooter: View, StatsPopoverContent {
     var cadenceLabel = "2s 采样 · 2 分钟窗口"
 
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
+    // Subscribed (not read) so an accent change re-renders the popover.
+    @AppStorage(AccentColor.key) var accentHex = ""
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {

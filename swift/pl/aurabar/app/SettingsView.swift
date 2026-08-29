@@ -32,6 +32,8 @@ struct SettingsView: View {
     @State private var selected: Tab = .general
 
     @AppStorage("themePreference") private var themePreference = ThemePreference.system.rawValue
+    // Subscribed (not read) so an accent change re-renders the window.
+    @AppStorage(AccentColor.key) private var accentHex = ""
     @Environment(\.colorScheme) private var colorScheme
 
     private var theme: Theme {
@@ -184,6 +186,94 @@ private struct SettingsRow<Control: View>: View {
     }
 }
 
+/// Accent-color picker: theme default (empty string), curated presets,
+/// then a free ColorPicker well. Persisted as #RRGGBB in UserDefaults;
+/// ThemePreference.theme(for:) applies it to every popover.
+private struct AccentSwatches: View {
+    @AppStorage(AccentColor.key) private var accentHex = ""
+    /// The environment theme may already carry the override; the
+    /// default swatch needs the palette's pristine accent.
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.theme) private var theme
+
+    private static let presets = [
+        "#7FBBB3", "#0A84FF", "#7D7AFF", "#BF5AF2",
+        "#FF6482", "#FF9F0A", "#FFD60A", "#A7C080",
+    ]
+
+    /// The theme-default accent for the first swatch.
+    private var defaultAccent: Color {
+        (colorScheme == .dark ? Theme.dark : Theme.light).accent
+    }
+
+    private var isCustom: Bool {
+        !accentHex.isEmpty && !Self.presets.contains {
+            $0.caseInsensitiveCompare(accentHex) == .orderedSame
+        }
+    }
+
+    private var customColor: Binding<Color> {
+        Binding(
+            get: { Color(hexString: accentHex) ?? .gray },
+            set: {
+                if let hex = Color.hexString(of: $0) {
+                    accentHex = hex
+                }
+            },
+        )
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            swatchButton(color: defaultAccent, selected: accentHex.isEmpty) {
+                accentHex = ""
+            }
+            ForEach(Self.presets, id: \.self) { hex in
+                swatchButton(
+                    color: Color(hexString: hex) ?? .gray,
+                    selected: accentHex.caseInsensitiveCompare(hex) == .orderedSame,
+                ) {
+                    accentHex = hex
+                }
+            }
+            ColorPicker("", selection: customColor, supportsOpacity: false)
+                .labelsHidden()
+                .frame(width: 20, height: 20)
+                .clipShape(Circle())
+                .overlay {
+                    if isCustom {
+                        selectionRing
+                            .allowsHitTesting(false)
+                    }
+                }
+                .help("自定义…")
+        }
+    }
+
+    private func swatchButton(
+        color: Color,
+        selected: Bool,
+        action: @escaping () -> Void,
+    ) -> some View {
+        Button(action: action) {
+            Circle()
+                .fill(color)
+                .frame(width: 16, height: 16)
+                .overlay {
+                    if selected { selectionRing }
+                }
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var selectionRing: some View {
+        Circle()
+            .stroke(theme.textPrimary.opacity(0.55), lineWidth: 1.5)
+            .padding(-3)
+    }
+}
+
 /// Divider between rows inside a section card.
 private struct RowDivider: View {
     @Environment(\.theme) private var theme
@@ -221,6 +311,10 @@ private struct GeneralTab: View {
                     .labelsHidden()
                     .pickerStyle(.segmented)
                     .frame(width: 200)
+                }
+                RowDivider()
+                SettingsRow(icon: "paintbrush.fill", color: theme.accent, label: "强调色") {
+                    AccentSwatches()
                 }
             }
             SettingsSection(title: "菜单栏模块") {

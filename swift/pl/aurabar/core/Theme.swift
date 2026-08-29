@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 extension Color {
@@ -7,6 +8,45 @@ extension Color {
             green: Double((hex >> 8) & 0xFF) / 255,
             blue: Double(hex & 0xFF) / 255,
         )
+    }
+
+    /// "#RRGGBB" or "RRGGBB"; nil on malformed input.
+    init?(hexString: String) {
+        var string = hexString.trimmingCharacters(in: .whitespacesAndNewlines)
+        if string.hasPrefix("#") { string.removeFirst() }
+        guard string.count == 6, let value = UInt32(string, radix: 16) else { return nil }
+        self.init(hex: value)
+    }
+
+    /// #RRGGBB in the sRGB space, for persisting a picked Color. nil
+    /// when the color can't be resolved (e.g. a semantic/system color
+    /// without a fixed RGB value).
+    static func hexString(of color: Color) -> String? {
+        guard let resolved = NSColor(color).usingColorSpace(.sRGB) else { return nil }
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return String(
+            format: "#%02X%02X%02X",
+            Int((red * 255).rounded()),
+            Int((green * 255).rounded()),
+            Int((blue * 255).rounded()),
+        )
+    }
+}
+
+/// The accent-color override persisted by the settings UI. An empty
+/// string means "theme default". Applied centrally in
+/// ThemePreference.theme(for:) so every popover picks it up without
+/// touching call sites; top-level views just subscribe to the key.
+enum AccentColor {
+    static let key = "accentColorHex"
+
+    static var override: Color? {
+        guard let raw = UserDefaults.standard.string(forKey: key), !raw.isEmpty else { return nil }
+        return Color(hexString: raw)
     }
 }
 
@@ -83,11 +123,15 @@ enum ThemePreference: String, CaseIterable, Sendable {
     }
 
     func theme(for colorScheme: ColorScheme) -> Theme {
-        switch self {
+        var theme: Theme = switch self {
         case .dark: .dark
         case .light: .light
         case .system: colorScheme == .dark ? .dark : .light
         }
+        if let accent = AccentColor.override {
+            theme.accent = accent
+        }
+        return theme
     }
 
     /// Pinned appearance for system-rendered controls, which follow the

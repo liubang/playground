@@ -11,6 +11,8 @@ struct CalendarPopover: View {
     @ObservedObject var holidaySync: HolidaySync
 
     @AppStorage("themePreference") private var themePreference = ThemePreference.system.rawValue
+    // Subscribed (not read) so an accent change re-renders the popover.
+    @AppStorage(AccentColor.key) private var accentHex = ""
     @AppStorage("AuraBar.calendar.weekStart") private var weekStartRaw = WeekStart.monday.rawValue
     @AppStorage("AuraBar.calendar.showLunar") private var showLunar = true
     @Environment(\.colorScheme) private var colorScheme
