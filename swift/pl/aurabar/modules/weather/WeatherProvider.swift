@@ -4,11 +4,13 @@ import Foundation
 enum WeatherProviderKind: String, CaseIterable, Sendable {
     case openMeteo
     case qweather
+    case apple
 
     var label: String {
         switch self {
         case .openMeteo: "Open-Meteo"
         case .qweather: "和风天气"
+        case .apple: "Apple 天气"
         }
     }
 }

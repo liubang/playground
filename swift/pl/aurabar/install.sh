@@ -19,6 +19,11 @@
 set -euo pipefail
 
 ZIP="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+# Runfiles paths of the entitlement sets, passed as args 2/3 (see
+# BUILD). $0-based discovery doesn't work: under `bazel run`, $0 points
+# into bazel-bin, whose directory has no resources/ subtree.
+ENTITLEMENTS_FULL="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
+ENTITLEMENTS_DEV="$(cd "$(dirname "$3")" && pwd)/$(basename "$3")"
 APP_NAME="AuraBar"
 DEST="${AURABAR_INSTALL_DIR:-/Applications}"
 CN="${AURABAR_CERT_CN:-AuraBar Dev (liubang)}"
@@ -77,7 +82,30 @@ fi
 
 if [ -n "$IDENTITY" ]; then
     echo "==> signing with: $IDENTITY"
-    codesign --force --deep --sign "$IDENTITY" "$DEST/$APP_NAME.app"
+    # com.apple.weatherkit is a restricted entitlement: without a
+    # provisioning profile (self-signed local identities never have
+    # one) amfid refuses to spawn the app at all. Only real developer
+    # identities get the full set; everything else gets the empty dev
+    # set, and WeatherKit stays unavailable until then. Override with
+    # AURABAR_WEATHERKIT=1/0.
+    WEATHERKIT=0
+    case "$IDENTITY" in
+        "Developer ID Application:"*|"Apple Development:"*|"Mac Developer:"*|"Apple Distribution:"*)
+            WEATHERKIT=1 ;;
+    esac
+    WEATHERKIT="${AURABAR_WEATHERKIT:-$WEATHERKIT}"
+    if [ "$WEATHERKIT" = 1 ]; then
+        ENTITLEMENTS="$ENTITLEMENTS_FULL"
+    else
+        ENTITLEMENTS="$ENTITLEMENTS_DEV"
+    fi
+    # Re-signing replaces the whole signature — pass the entitlements
+    # explicitly; codesign drops the build-time set otherwise.
+    SIGN_ARGS=(--force --deep --sign "$IDENTITY")
+    if [ -f "$ENTITLEMENTS" ]; then
+        SIGN_ARGS+=(--entitlements "$ENTITLEMENTS")
+    fi
+    codesign "${SIGN_ARGS[@]}" "$DEST/$APP_NAME.app"
 else
     echo "!! WARNING: no codesigning identity found — AuraBar is"
     echo "   installed with an ad-hoc signature, so TCC grants"

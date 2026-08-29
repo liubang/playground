@@ -133,6 +133,7 @@ enum WeatherError: LocalizedError {
     case missingAPIKey
     case cityNotFound(String)
     case badResponse(String)
+    case appleUnavailable(String)
 
     var errorDescription: String? {
         switch self {
@@ -142,6 +143,8 @@ enum WeatherError: LocalizedError {
             "找不到城市「\(city)」"
         case let .badResponse(detail):
             "天气服务返回异常：\(detail)"
+        case let .appleUnavailable(detail):
+            "Apple 天气不可用：\(detail)（需开发者账号开启 WeatherKit capability）"
         }
     }
 }

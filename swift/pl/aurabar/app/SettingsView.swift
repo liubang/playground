@@ -367,7 +367,14 @@ private struct WeatherTab: View {
                         }
                         .labelsHidden()
                         .pickerStyle(.segmented)
-                        .frame(width: 200)
+                        .frame(width: 280)
+                    }
+                    if store.providerKind == .apple {
+                        Text("需 Apple Developer 账号为 App ID 开启 WeatherKit capability 并用开发者证书签名后生效。")
+                            .font(.caption)
+                            .foregroundStyle(theme.textSecondary)
+                            .padding(.leading, 32)
+                            .padding(.vertical, 7)
                     }
                     if store.providerKind == .qweather {
                         RowDivider()

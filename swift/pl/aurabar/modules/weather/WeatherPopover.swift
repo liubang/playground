@@ -387,6 +387,15 @@ struct WeatherPopover: View {
                 .font(.caption)
                 .foregroundStyle(theme.textSecondary)
                 .contentTransition(.numericText())
+            // WeatherKit's terms require visible attribution with a link
+            // to the legal attribution page while its data is shown.
+            if store.providerKind == .apple {
+                Link(" Weather", destination: URL(
+                    string: "https://weatherkit.apple.com/legal-attribution.html",
+                )!)
+                .font(.caption2)
+                .foregroundStyle(theme.textSecondary)
+            }
             Spacer()
             RefreshButton(isLoading: store.isLoading, justRefreshed: store.justRefreshed) {
                 Task { await store.refresh() }

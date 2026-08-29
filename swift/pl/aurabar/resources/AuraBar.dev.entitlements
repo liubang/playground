@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PLIST-1.0.dtd">
+<!-- Local-development entitlements: empty. com.apple.weatherkit is a
+     restricted entitlement — the kernel (amfid) refuses to spawn a
+     binary that carries it without a provisioning profile, which a
+     self-signed local identity can never have. The full set lives in
+     AuraBar.entitlements and is selected via the weatherkit bool_flag
+     for developer-account builds; install.sh picks the same pair. -->
+<plist version="1.0">
+<dict/>
+</plist>

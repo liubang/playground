@@ -14,6 +14,7 @@
 #
 # Authors: liubang (it.liubang@gmail.com)
 
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("@rules_apple//apple:macos.bzl", "macos_application")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@rules_swift//swift:swift.bzl", "swift_library")
@@ -31,10 +32,28 @@ swift_library(
     target_compatible_with = ["@platforms//os:macos"],
 )
 
+# com.apple.weatherkit needs a provisioning profile (paid developer
+# account); self-signed local builds must use the empty dev set or the
+# kernel refuses to spawn the app. Enable with:
+#   bazel build //swift/pl/aurabar:AuraBar --//swift/pl/aurabar:weatherkit
+bool_flag(
+    name = "weatherkit",
+    build_setting_default = False,
+)
+
+config_setting(
+    name = "weatherkit_enabled",
+    flag_values = {":weatherkit": "True"},
+)
+
 macos_application(
     name = "AuraBar",
     bundle_id = "cc.liubang.aurabar",
     bundle_name = "AuraBar",
+    entitlements = select({
+        ":weatherkit_enabled": "resources/AuraBar.entitlements",
+        "//conditions:default": "resources/AuraBar.dev.entitlements",
+    }),
     infoplists = ["resources/Info.plist"],
     minimum_os_version = "14.0",
     resources = ["resources/AppIcon.icns"],
@@ -48,8 +67,14 @@ macos_application(
 sh_binary(
     name = "install",
     srcs = ["install.sh"],
-    args = ["$(location :AuraBar)"],
+    args = [
+        "$(location :AuraBar)",
+        "$(location resources/AuraBar.entitlements)",
+        "$(location resources/AuraBar.dev.entitlements)",
+    ],
     data = [
+        "resources/AuraBar.dev.entitlements",
+        "resources/AuraBar.entitlements",
         ":AuraBar",
         ":make-signing-cert",
     ],

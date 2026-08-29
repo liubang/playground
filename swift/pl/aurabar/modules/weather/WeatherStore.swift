@@ -124,6 +124,7 @@ final class WeatherStore: ObservableObject {
         switch providerKind {
         case .openMeteo: OpenMeteoProvider()
         case .qweather: QWeatherProvider(apiKey: qweatherKey)
+        case .apple: AppleWeatherProvider()
         }
     }
 
