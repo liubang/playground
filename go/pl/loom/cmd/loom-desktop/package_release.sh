@@ -31,6 +31,12 @@
 # The Linux GUI desktop is out of scope here (needs webkit2gtk + a Linux
 # build environment, docs/DESKTOP_DESIGN.md §8.4); the debs ship the CLI.
 #
+# Signing: release artifacts are ad-hoc signed by default. A local
+# self-signed identity is useless for distribution (untrusted on other
+# machines), so this script never auto-creates one — pass
+# LOOM_SIGN_IDENTITY=<Developer ID Application> to sign with a real
+# Apple identity (pair with notarization for Gatekeeper-clean installs).
+#
 # Usage: bazel run --config=desktop //go/pl/loom/cmd/loom-desktop:package_release
 set -euo pipefail
 
@@ -99,7 +105,15 @@ for arch in arm64 amd64; do
     unzip -q "${ZIP}" -d "${TMP}/app-${arch}"
     cp "${TMP}/loom-desktop-${arch}" "${APP}/Contents/MacOS/loom-desktop"
     chmod +x "${APP}/Contents/MacOS/loom-desktop"
-    codesign --force --sign - "${APP}"
+    if [ -n "${LOOM_SIGN_IDENTITY:-}" ]; then
+        echo "package_release: signing with ${LOOM_SIGN_IDENTITY}" 1>&2
+        codesign --force --sign "${LOOM_SIGN_IDENTITY}" "${APP}"
+    else
+        # Ad-hoc: distribution cannot use a local self-signed identity
+        # (untrusted elsewhere). For public desktop builds configure a
+        # Developer ID cert and notarize the DMG.
+        codesign --force --sign - "${APP}"
+    fi
     touch "${APP}"
 
     VERSION="$(plutil -extract CFBundleVersion raw -o - "${APP}/Contents/Info.plist")"

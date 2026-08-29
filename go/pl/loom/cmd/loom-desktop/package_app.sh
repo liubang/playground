@@ -14,9 +14,16 @@
 # limitations under the License.
 
 # package_app.sh — unpack the Bazel-produced bundle zip into dist/Loom.app
-# and ad-hoc codesign it (docs/DESKTOP_DESIGN.md §6.2/§6.3). Ad-hoc signing
-# gives the firewall/TCC prompts a stable identity across rebuilds; it is
-# NOT a distribution signature (Developer ID + notarization are out of
+# and codesign it (docs/DESKTOP_DESIGN.md §6.2/§6.3). Identity resolution,
+# in order:
+#   1. $LOOM_SIGN_IDENTITY, if set (explicit override)
+#   2. auto-discover "$LOOM_CERT_CN" (default "Loom Dev (liubang)") in the
+#      login keychain
+#   3. auto-create it by running make-signing-cert (idempotent; prompts for
+#      the keychain password the first time), then use it
+# A stable identity keeps firewall/TCC grants across rebuilds — ad-hoc
+# signatures change the CDHash on every build and reset those grants. It
+# is NOT a distribution signature (Developer ID + notarization are out of
 # scope for the desktop milestone).
 set -euo pipefail
 
@@ -48,9 +55,46 @@ rm -rf "${DEST}/Loom.app" "${DEST}"/Loom-*.dmg "${DEST}"/loom_*.deb
 unzip -q "${ZIP}" -d "${DEST}"
 chmod +x "${DEST}/Loom.app/Contents/MacOS/loom-desktop"
 
+# --- Signing identity resolution (see header comment) ---
+CN="${LOOM_CERT_CN:-Loom Dev (liubang)}"
+IDENTITY="${LOOM_SIGN_IDENTITY:-}"
+
+# True when a codesigning identity with the default CN exists in the
+# login keychain. Safe under `set -e` because callers always invoke it
+# as an `if` condition.
+has_identity() {
+    security find-identity -v -p codesigning | grep -qF "\"$CN\""
+}
+
+if [ -z "$IDENTITY" ] && has_identity; then
+    IDENTITY="$CN"
+    echo "==> auto-discovered identity: $IDENTITY"
+fi
+
+if [ -z "$IDENTITY" ]; then
+    # Auto-create the stable identity so the next package finds it.
+    CERT_SCRIPT="$(cd "$(dirname "$0")" && pwd)/make-signing-cert"
+    if [ -x "$CERT_SCRIPT" ]; then
+        echo "==> no codesigning identity — running $CERT_SCRIPT"
+        "$CERT_SCRIPT"
+    fi
+    if has_identity; then
+        IDENTITY="$CN"
+        echo "==> identity created: $IDENTITY"
+    fi
+fi
+
 # No --deep: the bundle holds a single Mach-O, and Apple discourages
 # --deep (signing order becomes unpredictable with nested code).
-codesign --force --sign - "${DEST}/Loom.app"
+if [ -n "$IDENTITY" ]; then
+    echo "==> signing with: $IDENTITY"
+    codesign --force --sign "$IDENTITY" "${DEST}/Loom.app"
+else
+    echo "!! WARNING: no codesigning identity found — signing ad-hoc;"
+    echo "   firewall/TCC grants will be lost on the next rebuild."
+    echo "   Run once to fix: bazel run --config=desktop //go/pl/loom/cmd/loom-desktop:make-signing-cert"
+    codesign --force --sign - "${DEST}/Loom.app"
+fi
 # Bust Finder/LaunchServices' icon cache so a rebuilt bundle shows the
 # current AppIcon.icns instead of a stale cached icon.
 touch "${DEST}/Loom.app"

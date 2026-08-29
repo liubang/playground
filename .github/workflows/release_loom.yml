@@ -63,11 +63,45 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26.x"
+      # Import the stable local self-signed identity when configured
+      # (LOOM_CERT_P12 secret). A fixed certificate across releases keeps
+      # firewall/TCC grants on users' machines (Cask installs use
+      # no_quarantine, so Gatekeeper never inspects the untrusted cert).
+      # Without it, builds fall back to ad-hoc signatures — they run, but
+      # every upgrade resets those grants.
+      - name: import codesigning certificate
+        if: ${{ env.LOOM_CERT_P12 != '' }}
+        env:
+          LOOM_CERT_P12: ${{ secrets.LOOM_CERT_P12 }}
+          LOOM_CERT_P12_PASSWORD: ${{ secrets.LOOM_CERT_P12_PASSWORD }}
+        run: |
+          echo "$LOOM_CERT_P12" | base64 --decode > /tmp/loom-cert.p12
+          security create-keychain -p temp loom-signing.keychain
+          security default-keychain -s loom-signing.keychain
+          security unlock-keychain -p temp loom-signing.keychain
+          security import /tmp/loom-cert.p12 \
+            -P "$LOOM_CERT_P12_PASSWORD" -T /usr/bin/codesign \
+            -k loom-signing.keychain
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: -s -k temp loom-signing.keychain
       - name: build release artifacts
+        env:
+          # Self-signed identity CN (LOOM_CERT_CN default) when the cert
+          # secret is present; empty string falls back to ad-hoc signing.
+          LOOM_SIGN_IDENTITY: ${{ secrets.LOOM_CERT_P12 != '' && 'Loom Dev (liubang)' || '' }}
         run: |
           bazel run \
             --config=desktop \
             //go/pl/loom/cmd/loom-desktop:package_release
+      - name: warn about missing signing cert
+        if: ${{ env.LOOM_CERT_P12 == '' }}
+        env:
+          LOOM_CERT_P12: ${{ secrets.LOOM_CERT_P12 }}
+        run: |
+          echo "::warning::LOOM_CERT_P12 未配置，桌面版将以 ad-hoc 签名发布："
+          echo "用户升级后会丢失防火墙/TCC 授权；Cask 需配合 no_quarantine 才能直接运行。"
+          echo "配置方法：本地跑 bazel run --config=desktop //go/pl/loom/cmd/loom-desktop:make-signing-cert，"
+          echo "把 ~/.config/loom/codesign/loom-dev.p12 base64 后设为 LOOM_CERT_P12 secret，密码设为 LOOM_CERT_P12_PASSWORD。"
       - name: verify artifacts
         run: |
           ls -la dist/

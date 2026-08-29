@@ -156,8 +156,9 @@ pkg_files(
     tags = ["manual"],
 )
 
-# Unzipping the output yields Loom.app directly; ad-hoc sign it afterwards
-# (bazel run :package_app) for a stable firewall/TCC identity.
+# Unzipping the output yields Loom.app directly; codesign it afterwards
+# (bazel run :package_app), which auto-discovers/creates a stable local
+# identity for firewall/TCC grants across rebuilds.
 pkg_zip(
     name = "loom_desktop_app",
     srcs = [
@@ -169,12 +170,25 @@ pkg_zip(
     tags = ["manual"],
 )
 
-# Unpacks the bundle zip into dist/Loom.app and ad-hoc codesigns it.
+# Unpacks the bundle zip into dist/Loom.app and codesigns it with the
+# auto-discovered local identity (ad-hoc as last resort).
 # Usage: bazel run --config=desktop //go/pl/loom/cmd/loom-desktop:package_app
 sh_binary(
     name = "package_app",
     srcs = ["package_app.sh"],
-    data = [":loom_desktop_app"],
+    data = [
+        ":loom_desktop_app",
+        ":make-signing-cert",
+    ],
+    tags = ["manual"],
+)
+
+# Generates the local self-signed codesigning identity used by package_app
+# (idempotent; prompts for the keychain password the first time).
+# Usage: bazel run --config=desktop //go/pl/loom/cmd/loom-desktop:make-signing-cert
+sh_binary(
+    name = "make-signing-cert",
+    srcs = ["make-signing-cert.sh"],
     tags = ["manual"],
 )
 
