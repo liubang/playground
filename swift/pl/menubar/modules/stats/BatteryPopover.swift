@@ -20,7 +20,7 @@ struct BatteryPopover: View, StatsPopoverContent {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 20)
             }
-            StatsFooter(current: "battery")
+            StatsFooter(cadenceLabel: "事件驱动 · 实时刷新")
         }
         .padding(12)
         .frame(width: 316)

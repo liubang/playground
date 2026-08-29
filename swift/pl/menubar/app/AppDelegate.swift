@@ -134,8 +134,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         networkController = networkItem
 
-        // Battery: level glyph + percentage, 30s cadence. The module is
-        // skipped entirely on machines without an internal battery
+        // Battery: level glyph + percentage, event-driven via IOKit
+        // power-source notifications (30s timer as fallback). The module
+        // is skipped entirely on machines without an internal battery
         // (Mac mini, Mac Studio) instead of showing a meaningless "--".
         let battery = BatteryStore()
         AppRegistry.hasBattery = battery.info != nil

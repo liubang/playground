@@ -41,13 +41,17 @@ macos_application(
     deps = [":menubar_lib"],
 )
 
-# bazel run //swift/pl/menubar:install — unzip, re-sign (when
-# AURABAR_SIGN_IDENTITY is set) and install to /Applications.
+# bazel run //swift/pl/menubar:install — unzip, re-sign (auto-discovers
+# the local identity, creating it via make-signing-cert when missing) and
+# install to /Applications.
 sh_binary(
     name = "install",
     srcs = ["install.sh"],
     args = ["$(location :AuraBar)"],
-    data = [":AuraBar"],
+    data = [
+        ":AuraBar",
+        ":make-signing-cert",
+    ],
     target_compatible_with = ["@platforms//os:macos"],
 )
 

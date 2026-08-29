@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import IOKit
 import IOKit.ps
@@ -87,22 +88,59 @@ enum BatterySampler {
     }
 }
 
-/// Owns the battery module's state, refreshed on a relaxed 30s timer —
-/// charge level and AC state change slowly, and IOKit reads are cheap.
+/// Owns the battery module's state. Refreshes are event-driven via the
+/// IOPowerSources run loop source (AC attach/detach, capacity ticks and
+/// charging-state changes all fire it — that's how the system menu bar
+/// reacts instantly), with a relaxed 30s timer as a fallback for stale
+/// time-remaining estimates.
 @MainActor
 final class BatteryStore: ObservableObject {
     @Published private(set) var info: BatteryInfo?
 
     private var timer: Timer?
+    private var powerSourceRunLoopSource: CFRunLoopSource?
 
     init() {
         refresh()
+        observePowerSourceChanges()
+        // Sleep may span a power-state change whose notification never
+        // replays on wake — refresh immediately so the label catches up
+        // without waiting for the next timer tick.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main,
+        ) { [weak self] _ in
+            Task { @MainActor in self?.refresh() }
+        }
         let t = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
         t.tolerance = 10
         RunLoop.main.add(t, forMode: .common)
         timer = t
+    }
+
+    deinit {
+        timer?.invalidate()
+        if let source = powerSourceRunLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+        }
+    }
+
+    /// Registers for IOKit power-source notifications. The callback fires
+    /// on the main run loop whenever the power source blob changes, so AC
+    /// plug/unplug is reflected immediately instead of waiting for the
+    /// next timer tick.
+    private func observePowerSourceChanges() {
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        guard let source = IOPSNotificationCreateRunLoopSource({ context in
+            guard let context else { return }
+            let store = Unmanaged<BatteryStore>.fromOpaque(context).takeUnretainedValue()
+            Task { @MainActor in store.refresh() }
+        }, context)?.takeRetainedValue() else { return }
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        powerSourceRunLoopSource = source
     }
 
     private func refresh() {

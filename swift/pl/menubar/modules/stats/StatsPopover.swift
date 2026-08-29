@@ -32,7 +32,7 @@ struct CPUPopover: View, StatsPopoverContent {
             if !store.topCPU.isEmpty {
                 topProcessesCard
             }
-            StatsFooter(current: "cpu")
+            StatsFooter()
         }
         .padding(12)
         .frame(width: 316)
@@ -113,7 +113,7 @@ struct MemoryPopover: View, StatsPopoverContent {
             if !store.topMemory.isEmpty {
                 topProcessesCard
             }
-            StatsFooter(current: "memory")
+            StatsFooter()
         }
         .padding(12)
         .frame(width: 316)
@@ -207,7 +207,7 @@ struct NetworkPopover: View, StatsPopoverContent {
             connectionCard
             ratesCard
             totalsCard
-            StatsFooter(current: "network")
+            StatsFooter()
         }
         .padding(12)
         .frame(width: 316)
@@ -399,18 +399,20 @@ private struct TopProcessesCard: View {
     }
 }
 
-/// Footer shared by the three stats popovers: cadence note on the left,
-/// settings menu on the right.
+/// Footer shared by the stats popovers: a cadence note on the left,
+/// settings menu on the right. Each module passes its own cadence
+/// description — stats show the sampling/window format, battery shows
+/// its event-driven refresh model.
 struct StatsFooter: View, StatsPopoverContent {
-    /// Module identifier, kept for footer labelling.
-    let current: String
+    /// Bottom-left note describing how this module's data refreshes.
+    var cadenceLabel = "2s 采样 · 2 分钟窗口"
 
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
         HStack(spacing: 10) {
-            Text("2s 采样 · 2 分钟窗口")
+            Text(cadenceLabel)
                 .font(.caption)
                 .foregroundStyle(theme.textSecondary)
             Spacer()
