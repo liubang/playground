@@ -33,7 +33,7 @@ swift_library(
 
 macos_application(
     name = "AuraBar",
-    bundle_id = "com.liubang.aurabar",
+    bundle_id = "cc.liubang.aurabar",
     bundle_name = "AuraBar",
     infoplists = ["resources/Info.plist"],
     minimum_os_version = "14.0",

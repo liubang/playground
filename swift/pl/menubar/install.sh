@@ -31,14 +31,30 @@ has_identity() {
     security find-identity -v -p codesigning | grep -qF "\"$CN\""
 }
 
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+# Stage the unzip next to the destination (same volume → atomic mv)
+# instead of under /tmp. LaunchServices registers a .app where it first
+# appears; a bundle first seen in a temp dir gets an `in-temp-dir`
+# record, which makes macOS 26's menu-bar host attribution fail to
+# resolve the app on its own — its status items then get attributed to
+# whatever app spawned it (e.g. the IDE whose terminal ran this
+# script) and inherit that host's hidden/allowed state. That once made
+# AuraBar's icons silently vanish from the menu bar.
+STAGE="$DEST/.${APP_NAME}.staging.$$"
+trap 'rm -rf "$STAGE"' EXIT
+mkdir -p "$STAGE"
 
-unzip -q "$ZIP" -d "$TMP"
+unzip -q "$ZIP" -d "$STAGE"
 
 pkill -x "$APP_NAME" 2>/dev/null || true
 rm -rf "$DEST/$APP_NAME.app"
-mv "$TMP/$APP_NAME.app" "$DEST/"
+mv "$STAGE/$APP_NAME.app" "$DEST/"
+
+# Re-register from the final path so LaunchServices' record points at
+# the installed location, clearing any stale in-temp-dir attribution.
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
+if [ -x "$LSREGISTER" ]; then
+    "$LSREGISTER" -f "$DEST/$APP_NAME.app" || true
+fi
 
 # Resolve the signing identity (see header comment).
 if [ -z "$IDENTITY" ] && has_identity; then
