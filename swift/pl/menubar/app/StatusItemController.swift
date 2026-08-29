@@ -138,8 +138,18 @@ final class StatusItemController: NSObject {
         } else {
             NotificationCenter.default.post(name: .statusItemPopoverWillShow, object: self)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            // Bring the popover forward so text fields can take focus.
-            NSApp.activate()
+            // The modern NSApp.activate() honors the user-activation
+            // policy and silently refuses here: the status-item click
+            // arrives via the system status-bar process, so the app has
+            // no recent user event of its own when the popover opens.
+            // The result was a popover shown by a non-active app whose
+            // window never becomes key — the first click on any SwiftUI
+            // Menu inside (the gear) was spent on activation and the
+            // menu only opened on the second click. The legacy API
+            // bypasses the policy and is still the reliable path on
+            // macOS 14–26; every serious menu-bar app uses it.
+            NSApp.activate(ignoringOtherApps: true)
+            popover.contentViewController?.view.window?.makeKey()
             startMonitors()
             reportVisibility(true)
         }

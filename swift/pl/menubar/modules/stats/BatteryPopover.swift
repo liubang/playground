@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// The battery popover: a status card (big percentage, charge state,
-/// time estimate, level bar) and a health card (cycle count, capacity
-/// health).
+/// time estimate, level bar), a health card (cycle count, capacity
+/// health) and the 防休眠 toggle — keeping the machine awake is a power
+/// feature, so it lives here rather than in the settings window.
 struct BatteryPopover: View, StatsPopoverContent {
     @ObservedObject var store: BatteryStore
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
@@ -20,6 +21,7 @@ struct BatteryPopover: View, StatsPopoverContent {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 20)
             }
+            sleepCard
             StatsFooter(cadenceLabel: "事件驱动 · 实时刷新")
         }
         .padding(12)
@@ -107,6 +109,41 @@ struct BatteryPopover: View, StatsPopoverContent {
             }
         }
         .cardStyle()
+    }
+
+    // MARK: - 防休眠
+
+    /// The sleep-prevention card. Rendered whether or not battery info is
+    /// available — staying awake matters on desktops too.
+    private var sleepCard: some View {
+        HStack(spacing: 8) {
+            Image(systemName: store.preventSleep ? "moon.zzz.fill" : "moon.zzz")
+                .foregroundStyle(store.preventSleep ? theme.warning : theme.textSecondary)
+                .contentTransition(.symbolEffect(.replace))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("防休眠")
+                    .font(.callout)
+                Text(store.preventSleep
+                    ? "已开启 · 系统不会自动休眠，屏幕保持常亮"
+                    : "阻止系统休眠并保持屏幕常亮")
+                    .font(.caption2)
+                    .foregroundStyle(theme.textSecondary)
+                    .contentTransition(.numericText())
+            }
+            Spacer()
+            Toggle(
+                "防休眠",
+                isOn: Binding(
+                    get: { store.preventSleep },
+                    set: { store.preventSleep = $0 },
+                ),
+            )
+            .labelsHidden()
+            .toggleStyle(.switch)
+            .tint(theme.accent)
+        }
+        .cardStyle()
+        .animation(.easeInOut(duration: 0.2), value: store.preventSleep)
     }
 
     private func row(_ name: String, value: String) -> some View {

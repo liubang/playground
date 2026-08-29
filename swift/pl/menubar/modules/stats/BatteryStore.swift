@@ -93,14 +93,42 @@ enum BatterySampler {
 /// charging-state changes all fire it — that's how the system menu bar
 /// reacts instantly), with a relaxed 30s timer as a fallback for stale
 /// time-remaining estimates.
+///
+/// Also owns the 防休眠 toggle: power management naturally belongs to the
+/// battery module (on machines with a battery; the store exists either
+/// way), and the toggle prefers ProcessInfo activities over wrapping
+/// `caffeinate` so no helper process is needed.
 @MainActor
 final class BatteryStore: ObservableObject {
     @Published private(set) var info: BatteryInfo?
 
+    /// UserDefaults key persisting the sleep-prevention toggle.
+    static let preventSleepKey = "AuraBar.battery.preventSleep"
+
+    /// When true, idle system sleep and display sleep are prevented via a
+    /// ProcessInfo activity. Persisted across launches and (re)acquired
+    /// at startup when still on.
+    @Published var preventSleep: Bool {
+        didSet {
+            guard preventSleep != oldValue else { return }
+            UserDefaults.standard.set(preventSleep, forKey: Self.preventSleepKey)
+            if preventSleep {
+                startSleepPrevention()
+            } else {
+                stopSleepPrevention()
+            }
+        }
+    }
+
     private var timer: Timer?
     private var powerSourceRunLoopSource: CFRunLoopSource?
+    private var sleepActivity: NSObjectProtocol?
 
     init() {
+        preventSleep = UserDefaults.standard.bool(forKey: Self.preventSleepKey)
+        if preventSleep {
+            startSleepPrevention()
+        }
         refresh()
         observePowerSourceChanges()
         // Sleep may span a power-state change whose notification never
@@ -123,6 +151,9 @@ final class BatteryStore: ObservableObject {
 
     deinit {
         timer?.invalidate()
+        if let activity = sleepActivity {
+            ProcessInfo.processInfo.endActivity(activity)
+        }
         if let source = powerSourceRunLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
         }
@@ -145,5 +176,26 @@ final class BatteryStore: ObservableObject {
 
     private func refresh() {
         info = BatterySampler.info()
+    }
+
+    /// Acquires the ProcessInfo activity keeping the machine awake, the
+    /// caffeinate -d equivalent: `.userInitiated` asserts against idle
+    /// system sleep (the plain variant includes idleSystemSleepDisabled),
+    /// and the display-sleep option keeps the screen on too. This is why
+    /// AppNapDisabler must use `.userInitiatedAllowingIdleSystemSleep` —
+    /// otherwise the app would pin the machine awake unconditionally and
+    /// this toggle would be a no-op.
+    private func startSleepPrevention() {
+        guard sleepActivity == nil else { return }
+        sleepActivity = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .idleDisplaySleepDisabled],
+            reason: "AuraBar 防休眠",
+        )
+    }
+
+    private func stopSleepPrevention() {
+        guard let activity = sleepActivity else { return }
+        ProcessInfo.processInfo.endActivity(activity)
+        sleepActivity = nil
     }
 }

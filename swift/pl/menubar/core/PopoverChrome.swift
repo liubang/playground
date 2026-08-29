@@ -6,7 +6,10 @@ import SwiftUI
 
 /// Keeps App Nap away for the app's lifetime: as an LSUIElement app with
 /// no visible windows, timers would otherwise be coalesced by minutes
-/// whenever all popovers are closed.
+/// whenever all popovers are closed. The "allowing idle system sleep"
+/// variant is deliberate: plain `.userInitiated` also asserts against
+/// idle system sleep, which would keep the machine awake for as long as
+/// the app runs and make the battery module's 防休眠 toggle a no-op.
 final class AppNapDisabler {
     static let shared = AppNapDisabler()
 
@@ -14,7 +17,7 @@ final class AppNapDisabler {
 
     private init() {
         activity = ProcessInfo.processInfo.beginActivity(
-            options: [.userInitiated],
+            options: [.userInitiatedAllowingIdleSystemSleep],
             reason: "Menu bar updates",
         )
     }
