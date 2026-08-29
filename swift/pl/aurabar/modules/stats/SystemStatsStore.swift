@@ -36,9 +36,10 @@ final class SystemStatsStore: ObservableObject {
     /// Cumulative bytes since boot.
     @Published private(set) var downTotal: UInt64 = 0
 
-    /// Primary interface snapshot (SSID / signal / local IP), refreshed
-    /// every ~10s while any stats popover is visible.
-    @Published private(set) var interfaceInfo: SystemSampler.InterfaceInfo?
+    /// Active interfaces (Wi-Fi, ethernet…) ordered with the default-
+    /// route one first, refreshed every ~10s while any stats popover is
+    /// visible.
+    @Published private(set) var interfaces: [SystemSampler.InterfaceInfo] = []
     /// Best-effort public IP, refreshed every ~10 minutes.
     @Published private(set) var publicIP: String?
 
@@ -202,8 +203,8 @@ final class SystemStatsStore: ObservableObject {
         netInfoTick &+= 1
         if netInfoTick % 5 == 1 {
             Task.detached(priority: .utility) { [weak self] in
-                let info = SystemSampler.interfaceInfo()
-                await self?.setInterfaceInfo(info)
+                let infos = SystemSampler.activeInterfaces()
+                await self?.setInterfaces(infos)
             }
         }
         // Public IP: every ~10 minutes.
@@ -213,8 +214,8 @@ final class SystemStatsStore: ObservableObject {
         }
     }
 
-    private func setInterfaceInfo(_ info: SystemSampler.InterfaceInfo) {
-        interfaceInfo = info
+    private func setInterfaces(_ infos: [SystemSampler.InterfaceInfo]) {
+        interfaces = infos
     }
 
     private func fetchPublicIP() {

@@ -217,18 +217,58 @@ struct NetworkPopover: View, StatsPopoverContent {
         .preferredColorScheme(pinnedColorScheme)
     }
 
-    /// The "current connection" card: interface kind + SSID (or generic
-    /// name), Wi-Fi signal strength, local and public IP.
+    /// The "connections" card: one row per active interface (Wi-Fi /
+    /// ethernet / …), the default-route one marked and sorted first,
+    /// plus Wi-Fi signal strength, local and public IP.
     private var connectionCard: some View {
         VStack(alignment: .leading, spacing: 7) {
+            if store.interfaces.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "network.slash")
+                        .foregroundStyle(theme.textSecondary)
+                    Text("未连接")
+                        .font(.callout)
+                        .foregroundStyle(theme.textSecondary)
+                }
+            } else {
+                ForEach(Array(store.interfaces.enumerated()), id: \.offset) { index, info in
+                    if index > 0 {
+                        Divider().overlay(theme.cardBorder)
+                    }
+                    interfaceRow(info)
+                }
+            }
+            if let publicIP = store.publicIP {
+                HStack {
+                    Spacer()
+                    Text("公网 \(publicIP)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(theme.textSecondary)
+                }
+            }
+        }
+        .cardStyle()
+    }
+
+    private func interfaceRow(_ info: SystemSampler.InterfaceInfo) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
-                Image(systemName: store.interfaceInfo?.kind == .wifi ? "wifi" : "cable.connector")
+                Image(systemName: info.kind == .wifi ? "wifi" : "cable.connector")
                     .foregroundStyle(theme.accent)
-                Text(store.interfaceInfo?.title ?? "未连接")
+                Text(info.title)
                     .font(.callout)
                     .fontWeight(.medium)
+                    .lineLimit(1)
+                if info.isPrimary {
+                    Text("默认")
+                        .font(.caption2)
+                        .foregroundStyle(theme.accent)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(theme.accent.opacity(0.15), in: Capsule())
+                }
                 Spacer()
-                if let rssi = store.interfaceInfo?.rssi {
+                if let rssi = info.rssi {
                     HStack(spacing: 4) {
                         Circle()
                             .fill(signalColor(rssi))
@@ -239,19 +279,11 @@ struct NetworkPopover: View, StatsPopoverContent {
                     .foregroundStyle(theme.textSecondary)
                 }
             }
-            HStack {
-                Text(store.interfaceInfo?.localIP ?? "—")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(theme.textPrimary)
-                Spacer()
-                if let publicIP = store.publicIP {
-                    Text("公网 \(publicIP)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(theme.textSecondary)
-                }
-            }
+            Text(info.localIP ?? "—")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(theme.textPrimary)
+                .padding(.leading, 20)
         }
-        .cardStyle()
     }
 
     private func signalColor(_ rssi: Int) -> Color {

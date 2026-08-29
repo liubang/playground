@@ -1,6 +1,7 @@
 import CoreWLAN
 import Darwin
 import Foundation
+import SystemConfiguration
 
 /// Pure sampling functions over Mach/Darwin kernel interfaces — no
 /// third-party dependencies, no IOKit. Each call is a self-contained
@@ -157,8 +158,7 @@ enum SystemSampler {
 
     // MARK: - Interface info
 
-    /// Snapshot of the primary network interface for the "current
-    /// connection" card.
+    /// Snapshot of one active network interface for the connection card.
     struct InterfaceInfo {
         enum Kind {
             case wifi
@@ -168,53 +168,101 @@ enum SystemSampler {
 
         var kind: Kind
         /// SSID on Wi-Fi (nil without location permission — macOS 14
-        /// treats SSID as location privacy), or the interface name.
+        /// treats SSID as location privacy), or the localized interface
+        /// display name ("USB 10/100/1000 LAN", "以太网").
         var title: String
         /// dBm, Wi-Fi only.
         var rssi: Int?
         /// Link rate in Mbps, Wi-Fi only.
         var transmitRate: Double?
-        /// IPv4 of the primary interface.
+        /// IPv4 of this interface.
         var localIP: String?
+        /// True when this interface carries the default IPv4 route —
+        /// on a Mac with both Wi-Fi and ethernet up, service order
+        /// decides, and it isn't necessarily Wi-Fi.
+        var isPrimary: Bool
     }
 
-    static func interfaceInfo() -> InterfaceInfo {
-        if let iface = CWWiFiClient.shared().interface() {
-            // ssid() returns nil when the app lacks location permission.
-            let ssid = iface.ssid()
-            return InterfaceInfo(
-                kind: .wifi,
-                title: ssid ?? "Wi-Fi",
-                rssi: iface.rssiValue(),
-                transmitRate: iface.transmitRate(),
-                localIP: primaryIPv4(preferred: iface.interfaceName),
-            )
+    /// All interfaces with a live IPv4 address, ordered with the
+    /// default-route one first. Virtual interfaces (utun, bridge,
+    /// awdl/llw, Thunderbolt bridge members) are excluded.
+    static func activeInterfaces() -> [InterfaceInfo] {
+        let primary = primaryInterfaceName()
+        let ipv4 = ipv4Addresses()
+        let wifi = CWWiFiClient.shared().interface()
+        var result: [InterfaceInfo] = []
+
+        for (name, ip) in ipv4.sorted(by: { $0.key < $1.key }) {
+            if let wifi, name == wifi.interfaceName {
+                // ssid() returns nil when the app lacks location permission.
+                result.append(InterfaceInfo(
+                    kind: .wifi,
+                    title: wifi.ssid() ?? "Wi-Fi",
+                    rssi: wifi.rssiValue(),
+                    transmitRate: wifi.transmitRate(),
+                    localIP: ip,
+                    isPrimary: name == primary,
+                ))
+            } else {
+                result.append(InterfaceInfo(
+                    kind: .ethernet,
+                    title: interfaceDisplayName(for: name) ?? "以太网",
+                    rssi: nil,
+                    transmitRate: nil,
+                    localIP: ip,
+                    isPrimary: name == primary,
+                ))
+            }
         }
-        let ip = primaryIPv4(preferred: nil)
-        return InterfaceInfo(
-            kind: .ethernet,
-            title: "以太网",
-            rssi: nil,
-            transmitRate: nil,
-            localIP: ip,
-        )
+        result.sort { $0.isPrimary && !$1.isPrimary }
+        return result
     }
 
-    /// IPv4 address of the preferred interface, else the first
-    /// non-loopback one.
-    private static func primaryIPv4(preferred: String?) -> String? {
+    /// The BSD name (e.g. "en5") of the interface carrying the default
+    /// IPv4 route, from the SystemConfiguration dynamic store. nil when
+    /// offline.
+    private static func primaryInterfaceName() -> String? {
+        let store = SCDynamicStoreCreate(nil, "AuraBar" as CFString, nil, nil)
+        guard let store,
+              let global = SCDynamicStoreCopyValue(store, "State:/Network/Global/IPv4" as CFString)
+              as? [String: Any]
+        else { return nil }
+        return global[kSCDynamicStorePropNetPrimaryInterface as String] as? String
+    }
+
+    /// Localized hardware-port name ("USB 10/100/1000 LAN", "Ethernet")
+    /// for a BSD interface name, from SystemConfiguration's interface
+    /// table — the same names Network settings shows. nil if unknown.
+    private static func interfaceDisplayName(for bsdName: String) -> String? {
+        guard let all = SCNetworkInterfaceCopyAll() as? [SCNetworkInterface] else { return nil }
+        for interface in all where SCNetworkInterfaceGetBSDName(interface) as String? == bsdName {
+            if let name = SCNetworkInterfaceGetLocalizedDisplayName(interface) as String? {
+                return name
+            }
+        }
+        return nil
+    }
+
+    /// BSD name → IPv4 for every up-and-running non-loopback interface.
+    /// Virtual interfaces that don't count as a "connection" are
+    /// filtered out by name prefix.
+    private static func ipv4Addresses() -> [String: String] {
         var addrs: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&addrs) == 0 else { return nil }
+        guard getifaddrs(&addrs) == 0 else { return [:] }
         defer { freeifaddrs(addrs) }
 
-        var fallback: String?
+        let virtualPrefixes = ["lo", "utun", "bridge", "awdl", "llw", "anpi", "ap", "vmenet"]
+        var result: [String: String] = [:]
         var ptr = addrs
         while let iface = ptr?.pointee {
             defer { ptr = iface.ifa_next }
-            guard let addr = iface.ifa_addr,
-                  Int32(addr.pointee.sa_family) == AF_INET else { continue }
             let name = String(cString: iface.ifa_name)
-            guard name != "lo0" else { continue }
+            guard !virtualPrefixes.contains(where: { name.hasPrefix($0) }),
+                  result[name] == nil,
+                  Int32(iface.ifa_flags) & IFF_UP != 0,
+                  Int32(iface.ifa_flags) & IFF_RUNNING != 0,
+                  let addr = iface.ifa_addr,
+                  Int32(addr.pointee.sa_family) == AF_INET else { continue }
             var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
             let rc = getnameinfo(
                 addr,
@@ -226,15 +274,9 @@ enum SystemSampler {
                 NI_NUMERICHOST,
             )
             guard rc == 0 else { continue }
-            let ip = String(cString: host)
-            if name == preferred {
-                return ip
-            }
-            if fallback == nil {
-                fallback = ip
-            }
+            result[name] = String(cString: host)
         }
-        return fallback
+        return result
     }
 
     // MARK: - Network
