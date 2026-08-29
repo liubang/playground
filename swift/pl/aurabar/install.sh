@@ -90,8 +90,9 @@ if [ -n "$IDENTITY" ]; then
     # AURABAR_WEATHERKIT=1/0.
     WEATHERKIT=0
     case "$IDENTITY" in
-        "Developer ID Application:"*|"Apple Development:"*|"Mac Developer:"*|"Apple Distribution:"*)
-            WEATHERKIT=1 ;;
+    "Developer ID Application:"* | "Apple Development:"* | "Mac Developer:"* | "Apple Distribution:"*)
+        WEATHERKIT=1
+        ;;
     esac
     WEATHERKIT="${AURABAR_WEATHERKIT:-$WEATHERKIT}"
     if [ "$WEATHERKIT" = 1 ]; then

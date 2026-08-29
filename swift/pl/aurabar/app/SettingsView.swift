@@ -260,7 +260,9 @@ private struct AccentSwatches: View {
                 .fill(color)
                 .frame(width: 16, height: 16)
                 .overlay {
-                    if selected { selectionRing }
+                    if selected {
+                        selectionRing
+                    }
                 }
                 .contentShape(Circle())
         }

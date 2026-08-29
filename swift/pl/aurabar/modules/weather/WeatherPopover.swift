@@ -395,8 +395,8 @@ struct WeatherPopover: View {
                 Link(" Weather", destination: URL(
                     string: "https://weatherkit.apple.com/legal-attribution.html",
                 )!)
-                .font(.caption2)
-                .foregroundStyle(theme.textSecondary)
+                    .font(.caption2)
+                    .foregroundStyle(theme.textSecondary)
             }
             Spacer()
             RefreshButton(isLoading: store.isLoading, justRefreshed: store.justRefreshed) {

@@ -214,8 +214,9 @@ enum SystemSampler {
                 ))
             }
         }
-        result.sort { $0.isPrimary && !$1.isPrimary }
-        return result
+        // Default-route interface first; Swift's sort is unstable, so
+        // partition explicitly to keep the name order of the rest.
+        return result.filter(\.isPrimary) + result.filter { !$0.isPrimary }
     }
 
     /// The BSD name (e.g. "en5") of the interface carrying the default
@@ -251,7 +252,7 @@ enum SystemSampler {
         guard getifaddrs(&addrs) == 0 else { return [:] }
         defer { freeifaddrs(addrs) }
 
-        let virtualPrefixes = ["lo", "utun", "bridge", "awdl", "llw", "anpi", "ap", "vmenet"]
+        let virtualPrefixes = ["lo", "utun", "bridge", "awdl", "llw", "anpi", "vmnet"]
         var result: [String: String] = [:]
         var ptr = addrs
         while let iface = ptr?.pointee {

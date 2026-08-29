@@ -13,7 +13,9 @@ extension Color {
     /// "#RRGGBB" or "RRGGBB"; nil on malformed input.
     init?(hexString: String) {
         var string = hexString.trimmingCharacters(in: .whitespacesAndNewlines)
-        if string.hasPrefix("#") { string.removeFirst() }
+        if string.hasPrefix("#") {
+            string.removeFirst()
+        }
         guard string.count == 6, let value = UInt32(string, radix: 16) else { return nil }
         self.init(hex: value)
     }
