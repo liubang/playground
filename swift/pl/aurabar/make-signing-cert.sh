@@ -11,8 +11,8 @@
 # Idempotent: if the identity already exists in the keychain, do nothing.
 #
 # Usage:
-#   bazel run //swift/pl/menubar:make-signing-cert
-#   AURABAR_CERT_CN="My Cert Name" bazel run //swift/pl/menubar:make-signing-cert
+#   bazel run //swift/pl/aurabar:make-signing-cert
+#   AURABAR_CERT_CN="My Cert Name" bazel run //swift/pl/aurabar:make-signing-cert
 set -euo pipefail
 
 CN="${AURABAR_CERT_CN:-AuraBar Dev (liubang)}"
@@ -79,7 +79,7 @@ cat <<EOF
 Done. Next steps:
 
   # build, sign and install to /Applications in one go:
-  AURABAR_SIGN_IDENTITY="$CN" bazel run //swift/pl/menubar:install
+  AURABAR_SIGN_IDENTITY="$CN" bazel run //swift/pl/aurabar:install
 
   # (optional) put it in your shell rc so you can omit it next time:
   export AURABAR_SIGN_IDENTITY="$CN"

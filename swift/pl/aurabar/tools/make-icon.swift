@@ -12,18 +12,18 @@ import AppKit
 
 func color(_ hex: UInt32, _ alpha: CGFloat = 1) -> NSColor {
     NSColor(
-        red: CGFloat((hex >> 16) & 0xff) / 255,
-        green: CGFloat((hex >> 8) & 0xff) / 255,
-        blue: CGFloat(hex & 0xff) / 255,
-        alpha: alpha
+        red: CGFloat((hex >> 16) & 0xFF) / 255,
+        green: CGFloat((hex >> 8) & 0xFF) / 255,
+        blue: CGFloat(hex & 0xFF) / 255,
+        alpha: alpha,
     )
 }
 
-let bgTop = color(0x2d353b)      // Everforest bg1
-let bgBottom = color(0x141b1e)   // Everforest bg_dim
-let teal = color(0x7fbbb3)       // Everforest teal — primary accent
-let aqua = color(0x83c092)       // Everforest aqua
-let green = color(0xa7c080)      // Everforest green
+let bgTop = color(0x2D353B) // Everforest bg1
+let bgBottom = color(0x141B1E) // Everforest bg_dim
+let teal = color(0x7FBBB3) // Everforest teal — primary accent
+let aqua = color(0x83C092) // Everforest aqua
+let green = color(0xA7C080) // Everforest green
 
 func drawIcon(size: CGFloat) -> NSImage {
     NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
@@ -41,7 +41,7 @@ func drawIcon(size: CGFloat) -> NSImage {
             colors: [
                 teal.withAlphaComponent(0.35),
                 teal.withAlphaComponent(0.0),
-            ]
+            ],
         )
         glow?.draw(in: glowRect, relativeCenterPosition: .zero)
 
@@ -74,14 +74,14 @@ func drawIcon(size: CGFloat) -> NSImage {
         let dotAngle = CGFloat(40) * .pi / 180
         let dotCenter = NSPoint(
             x: center.x + ringRadius * cos(dotAngle),
-            y: center.y + ringRadius * sin(dotAngle)
+            y: center.y + ringRadius * sin(dotAngle),
         )
         let dotSide = ringWidth * 1.25
         let dotRect = NSRect(
             x: dotCenter.x - dotSide / 2,
             y: dotCenter.y - dotSide / 2,
             width: dotSide,
-            height: dotSide
+            height: dotSide,
         )
         green.setFill()
         NSBezierPath(ovalIn: dotRect).fill()
@@ -94,7 +94,7 @@ func pngData(size: Int) -> Data? {
     guard let rep = NSBitmapImageRep(
         bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size,
         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
-        colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0,
     ) else { return nil }
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
@@ -134,4 +134,5 @@ try? FileManager.default.removeItem(atPath: iconset)
 guard iconutil.terminationStatus == 0 else {
     fatalError("iconutil failed with exit code \(iconutil.terminationStatus)")
 }
+
 print("wrote \(output)")

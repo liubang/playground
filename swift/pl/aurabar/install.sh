@@ -14,8 +14,8 @@
 # ad-hoc signature and a warning is printed.
 #
 # Usage:
-#   bazel run //swift/pl/menubar:install
-#   AURABAR_SIGN_IDENTITY="AuraBar Dev (liubang)" bazel run //swift/pl/menubar:install
+#   bazel run //swift/pl/aurabar:install
+#   AURABAR_SIGN_IDENTITY="AuraBar Dev (liubang)" bazel run //swift/pl/aurabar:install
 set -euo pipefail
 
 ZIP="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
@@ -82,7 +82,7 @@ else
     echo "!! WARNING: no codesigning identity found — AuraBar is"
     echo "   installed with an ad-hoc signature, so TCC grants"
     echo "   (calendar, location) will be lost on the next rebuild."
-    echo "   Run once to fix: bazel run //swift/pl/menubar:make-signing-cert"
+    echo "   Run once to fix: bazel run //swift/pl/aurabar:make-signing-cert"
 fi
 
 echo "==> installed: $DEST/$APP_NAME.app"
