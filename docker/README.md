@@ -8,8 +8,8 @@
 
 | 模块                    | 说明                                                      | 启动命令                       |
 | ----------------------- | --------------------------------------------------------- | ------------------------------ |
-| [`bigdata/`](./bigdata) | 大数据全栈：HDFS + MySQL + Hive + Spark + Trino + Iceberg | `cd bigdata && ./bootstrap.sh` |
-| [`doris/`](./doris)     | Apache Doris 集群：1 FE + 2 BE                            | `cd doris && ./bootstrap.sh`   |
+| [`bigdata/`](./bigdata) | 大数据全栈：HDFS + MySQL + Hive + Spark + Trino + Iceberg + Paimon | `cd bigdata && ./bootstrap.sh` |
+| [`doris/`](./doris)     | Apache Doris 集群：1 FE + 2 BE + 内置 MySQL，支持 MySQL/Hive/Paimon 外表联邦查询 | `cd doris && ./bootstrap.sh`   |
 | [`fdb/`](./fdb)         | FoundationDB 集群：3 节点 × 2 进程，double 副本，含自动 E2E | `cd fdb && ./bootstrap.sh`     |
 | [`hermes/`](./hermes)   | Hermes Agent 网关 + Dashboard                             | `cd hermes && ./bootstrap.sh`  |
 | [`kerberos/`](./kerberos) | Kerberos 实验室：KDC + GSSAPI demo 服务 + 客户端，含自动 E2E | `cd kerberos && ./bootstrap.sh` |
@@ -22,7 +22,7 @@
 - `--no-start`：只准备环境（生成 `.env`、下载依赖等），不启动 `docker compose`
 - `--reset`：清除所有 volume 和 `.env`，从头初始化
 
-模块间默认不存在网络互通，若需要跨模块访问（例如让 `monitor/` 抓取 `bigdata/` 的指标），把对应服务加入同一 Docker 网络或改用 `host` 网络模式即可。
+模块间默认不存在网络互通，例外是 `doris/` 与 `bigdata/` 共享 `doris-bigdata-federation` 外部网络（由任一模块的 `bootstrap.sh` 自动创建），用于 Doris 外表联邦查询访问 Hive Metastore 与 HDFS。其他跨模块访问（例如让 `monitor/` 抓取 `bigdata/` 的指标），把对应服务加入同一 Docker 网络或改用 `host` 网络模式即可。
 
 ### 端口绑定地址
 
@@ -58,7 +58,7 @@ E2E 覆盖三节点注册、命名空间操作、多块三副本上传、下载�
 
 ## bigdata/
 
-大数据全栈实验环境，支持 Trino / Spark 跨引擎读写 Iceberg 表。
+大数据全栈实验环境，支持 Trino / Spark 跨引擎读写 Iceberg 表、Spark 读写 Paimon 表（Hive Metastore 注册、HDFS 存储），并作为 Doris 集群外表联邦查询的数据源。
 
 ### 组件与端口
 
@@ -80,7 +80,7 @@ E2E 覆盖三节点注册、命名空间操作、多块三副本上传、下载�
 
 ### 启动步骤
 
-提供一键引导脚本 `bootstrap.sh`，自动完成：检查依赖 → 交互式生成 `.env`（MySQL 密码可自行输入，直接回车使用随机生成值）→ 下载 MySQL 驱动 → 下载 Iceberg jar → 启动服务。所有步骤幂等，可安全重复执行。
+提供一键引导脚本 `bootstrap.sh`，自动完成：检查依赖 → 交互式生成 `.env`（MySQL 密码可自行输入，直接回车使用随机生成值）→ 下载 MySQL 驱动 → 下载 Iceberg / Paimon jar → 创建跨模块联邦网络 `doris-bigdata-federation` → 启动服务 → 通过 spark-sql 幂等写入联邦查询示例数据（Hive `demo.users`、Paimon `paimon.demo.events`）。所有步骤幂等，可安全重复执行。
 
 ```bash
 cd bigdata
@@ -194,7 +194,7 @@ CALL iceberg.system.expire_snapshots('default.orders', TIMESTAMP '2026-06-01 00:
 | `hive/conf/`                 | Hive 配置文件（hive-site.xml、core-site.xml、hdfs-site.xml） |
 | `hive/lib/`                  | Hive 依赖 jar（MySQL 驱动，gitignore）                       |
 | `spark/conf/`                | Spark 配置（spark-defaults.conf）                            |
-| `spark/jars/`                | Spark 框架依赖 jar（Iceberg runtime，gitignore）             |
+| `spark/jars/`                | Spark 框架依赖 jar（Iceberg / Paimon runtime，gitignore）            |
 | `extensions/spark/jars/`     | 自定义 Spark DataSource、SQL Extension、UDF jar（gitignore） |
 | `trino/etc-coordinator/`     | Trino Coordinator 配置                                       |
 | `trino/etc-worker1/`         | Trino Worker 配置                                            |
@@ -265,7 +265,7 @@ cd bigdata
 
 ## doris/
 
-Apache Doris 实验集群：1 个 FE（Frontend）+ 2 个 BE（Backend），用于本地体验 MPP 分布式查询和多副本存储。
+Apache Doris 实验集群：1 个 FE（Frontend）+ 2 个 BE（Backend）+ 1 个内置 MySQL（外表数据源），用于本地体验 MPP 分布式查询、多副本存储与外表联邦查询。
 
 ### 组件与端口
 
@@ -274,6 +274,7 @@ Apache Doris 实验集群：1 个 FE（Frontend）+ 2 个 BE（Backend），用�
 | FE   | `apache/doris:fe-${DORIS_VERSION}` | 8030 (HTTP/控制台), 9030 (MySQL 协议), 9010 (选举) |
 | BE1  | `apache/doris:be-${DORIS_VERSION}` | 8040 (Web), 9050 (心跳)                            |
 | BE2  | `apache/doris:be-${DORIS_VERSION}` | 8041 (Web), 9051 (心跳)                            |
+| MySQL | `mysql:8.3`                       | 3308 (联邦查询内置数据源，仅本机调试)               |
 
 默认 `DORIS_VERSION=4.0.6`（可通过环境变量覆盖），镜像为官方多架构 manifest，自动适配 x86_64 / arm64。`deploy.resources.limits` 配置的资源上限总计约 **6 GB 内存** 和 **6 CPU 核心**。
 
@@ -284,7 +285,7 @@ cd doris
 ./bootstrap.sh
 ```
 
-脚本会依次：检查 Docker 依赖 → 启动 FE/BE 容器 → 轮询等待 FE 选主完成 → 轮询等待 2 个 BE 注册存活 → 校验示例表数据是否就绪。首次启动因需拉起 JVM 和完成选举，约需 1-2 分钟。
+脚本会依次：检查 Docker 依赖 → 生成/补齐 `.env`（含内置 MySQL 密码）→ 准备 JDBC 驱动（优先复用 `bigdata/hive/lib/` 的 MySQL 驱动）→ 创建跨模块联邦网络 `doris-bigdata-federation` → 启动 FE/BE/MySQL 容器 → 轮询等待 FE 选主完成 → 轮询等待 2 个 BE 注册存活 → 校验示例表数据是否就绪 → 创建并验证外表 Catalog → 设置 root 密码。首次启动因需拉起 JVM 和完成选举，约需 1-2 分钟。
 
 只做前置检查、不启动服务：
 
@@ -312,6 +313,31 @@ SHOW BACKENDS\G
 
 如需重新执行初始化脚本，需先 `./bootstrap.sh --reset` 清空数据卷再重新启动（脚本仅在存储目录为空时执行一次）。
 
+### 外表联邦查询
+
+`bootstrap.sh` 会自动创建并验证以下外表 Catalog（所有步骤幂等，可重跑补齐）：
+
+| Catalog      | 类型     | 数据源                                                        |
+| ------------ | -------- | ------------------------------------------------------------- |
+| `mysql_fed`  | `jdbc`   | 内置 MySQL `federation_demo.users`                            |
+| `hive_fed`   | `hms`    | bigdata 模块 Hive Metastore `demo.users`（数据在 HDFS）        |
+| `paimon_fed` | `paimon` | bigdata 模块 Paimon `demo.events`（HMS 注册，数据在 HDFS）     |
+
+`hive_fed` / `paimon_fed` 依赖 bigdata 模块运行（两模块共享 `doris-bigdata-federation` 外部网络）；bigdata 未启动时自动跳过，先执行 `bigdata/bootstrap.sh` 再重跑本模块 bootstrap 即可补齐。
+
+```sql
+-- 内表 ⨝ 湖仓外表联邦 JOIN
+SELECT o.order_id, o.amount, u.user_name, u.vip_level
+FROM demo.orders o
+JOIN hive_fed.demo.users u ON o.user_id = u.user_id;
+
+-- 直查 Paimon / MySQL 外表
+SELECT * FROM paimon_fed.demo.events;
+SELECT * FROM mysql_fed.federation_demo.users;
+```
+
+> 注意：Doris 官方镜像只在首次初始化时写入 `priority_networks`，双网络（doris + federation）下重启会误选网卡导致 FE 无法选主。compose 中已为 FE/BE 通过 `command` 兜底写入 `priority_networks = 172.28.10.0/24`，勿随意移除。
+
 ### 测试
 
 更完整的功能验证（建表模型、Stream Load 导入、物化视图、多副本高可用、Schema Change 等）见 [`doris/TESTING.md`](./doris/TESTING.md)。
@@ -319,6 +345,7 @@ SHOW BACKENDS\G
 ### 已知限制
 
 - 组网依赖固定 IP（`172.28.10.0/24` 网段），如与本机其他 Docker 网络冲突，请修改 `docker-compose.yml` 中的 `subnet` 与各服务 `ipv4_address`
+- Hive/Paimon 外表 Catalog 依赖 bigdata 模块，bigdata 停止后相关查询不可用（`mysql_fed` 不受影响）
 - SQL 查询端口 `9030` 使用 root 密码认证，但 HTTP/内部端口仍可能包含无认证接口；所有入口均无 TLS，仅适合开发测试
 - FE 单节点，无高可用；如需体验多 FE 选举，可仿照 `FE_SERVERS` 格式自行扩展
 

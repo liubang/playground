@@ -57,10 +57,10 @@
 | [SSTable v2](cpp/pl/sstv2/)     | SSTable 完全重写版本。模块化架构：类型化键系统（C++20 concept）、memcomparable 编码、多级索引树、列存储 Block、布隆过滤器。            | C++20, Abseil, zstd, snappy, lz4, xxHash               |
 | [Braft Counter](cpp/pl/braft/)  | 基于 braft 的 Raft 状态机示例，演示日志复制、快照、Leader 选举和集群部署。                                                             | C++20, braft, brpc, protobuf                           |
 | [Meta](cpp/meta/)               | C++20 模板元编程实验，包括 Type List、Expression Template、Pattern Matching 和 Tuple Iteration。                                       | C++20                                                  |
-| [Recall](cpp/pl/recall/)        | 基于 FAISS 的向量召回服务，提供 gRPC 接口。                                                                                            | C++20, FAISS, OpenBLAS, gRPC, protobuf                 |
+| [MiniSearch](cpp/pl/minisearch/) | 通用混合检索服务（原 Recall）：FAISS 向量召回 + jieba 中文倒排 + BM25 + RRF 融合 + Rerank，多 Collection，附带 Apple Silicon 本地 MLX embedding server。 | C++20, FAISS, jieba, brpc, MLX                        |
 | [Loom](go/pl/loom/)             | 生产级 Coding Agent：交互式 TUI、事件溯源会话与崩溃恢复、工具沙箱与分级审批、Skills 扩展、OTel/Langfuse 观测；Server 模式设计中。      | Go, Bubble Tea, SQLite, OpenTelemetry                  |
 | [Echo Service](proto/echo/)     | 多语言 gRPC Echo 服务示例。共享 proto 定义，C++ / Go / Java / Python 四语言各自实现 server + client，支持跨语言互操作。                | gRPC, protobuf, C++20, Go, Java 21, Python 3.13        |
-| [Big Data Lab](docker/bigdata/) | HDFS、Hive、Spark、Trino、Iceberg 与 MySQL 集群；支持从 Java 扩展源码构建到 Docker SQL 断言的一体化 E2E。                              | Spark 4.0.2, Trino 468, Hive 4, Iceberg, Docker        |
+| [Big Data Lab](docker/bigdata/) | HDFS、Hive、Spark、Trino、Iceberg、Paimon 与 MySQL 集群；支持从 Java 扩展源码构建到 Docker SQL 断言的一体化 E2E，并可与 Doris 集群打通 Hive/Paimon 外表联邦查询。 | Spark 4.0.2, Trino 468, Hive 4, Iceberg, Paimon, Docker |
 
 此外，仓库还包含 [Skip List](cpp/pl/skiplist/)、[Bloom Filter](cpp/pl/bloom/)、[Arena Allocator](cpp/pl/arena/)、[Thread Pool](cpp/pl/thread/)、[Geohash](cpp/pl/geohash/)、[Brainfuck Interpreter](cpp/pl/bf/) 和 [HTTP Server](cpp/pl/http/) 等小型实现。
 
@@ -73,7 +73,7 @@
 | java/       | Java 项目：Spring Boot、gRPC Echo、Spark/Trino 扩展（Bazel + Maven）。     |
 | python/     | Python 项目：pybind11 绑定、Manim 动画、gRPC Echo 服务。                   |
 | proto/      | 跨语言共享的 Protobuf 定义。                                               |
-| docker/     | 本地实验集群：MiniDFS、Big Data、Doris、Hermes、监控与 MySQL。             |
+| docker/     | 本地实验集群：MiniDFS、Big Data、Doris、FoundationDB、Kerberos、Hermes、监控与 MySQL。 |
 | registry/   | Bazel 本地模块注册表（OpenBLAS、ISA-L 等）。                               |
 | 其他        | tla/（TLA+ 形式化规约）、latex/（TikZ 示例）、php/（Router）、bash/。      |
 
