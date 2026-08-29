@@ -1,6 +1,6 @@
 # Doris 模块测试指南
 
-本文档覆盖 Doris 集群（1 FE + 2 BE）的功能验证，包括建表模型、数据导入、查询能力、高可用与 Schema 变更。
+本文档覆盖 Doris 集群（1 FE + 2 BE + 内置 MySQL 数据源）的功能验证，包括建表模型、数据导入、查询能力、高可用、Schema 变更与外表联邦查询。
 
 > **前置条件**：已通过 `./bootstrap.sh` 启动集群，且 `SHOW BACKENDS\G` 显示 2 个 BE 均 `Alive: true`。
 
@@ -14,6 +14,7 @@
 - [3. 查询与物化视图测试](#3-查询与物化视图测试)
 - [4. 高可用与多副本测试](#4-高可用与多副本测试)
 - [5. Schema Change 测试](#5-schema-change-测试)
+- [6. 外表联邦查询测试](#6-外表联邦查询测试)
 - [附录：排障命令与常见问题](#附录排障命令与常见问题)
 
 ---
@@ -48,12 +49,13 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8041
 
 ### 0.3 连接信息速查
 
-| 组件      | 连接方式                                | 认证                                   |
-| --------- | --------------------------------------- | -------------------------------------- |
-| FE MySQL  | `mysql -h 127.0.0.1 -P 9030 -u root -p` | 密码见 `.env` 的 `DORIS_ROOT_PASSWORD` |
-| FE 控制台 | http://localhost:8030                   | 部分接口无需认证，默认仅绑定本机       |
-| BE1 Web   | http://localhost:8040                   | 无，默认仅绑定本机                     |
-| BE2 Web   | http://localhost:8041                   | 无，默认仅绑定本机                     |
+| 组件          | 连接方式                                | 认证                                    |
+| ------------- | --------------------------------------- | --------------------------------------- |
+| FE MySQL      | `mysql -h 127.0.0.1 -P 9030 -u root -p` | 密码见 `.env` 的 `DORIS_ROOT_PASSWORD`  |
+| FE 控制台     | http://localhost:8030                   | 部分接口无需认证，默认仅绑定本机        |
+| BE1 Web       | http://localhost:8040                   | 无，默认仅绑定本机                      |
+| BE2 Web       | http://localhost:8041                   | 无，默认仅绑定本机                      |
+| 内置 MySQL    | `mysql -h 127.0.0.1 -P 3308 -u root -p` | 密码见 `.env` 的 `MYSQL_ROOT_PASSWORD`  |
 
 ### 0.4 集群状态检查
 
@@ -598,6 +600,110 @@ SHOW ALTER TABLE COLUMN FROM demo ORDER BY CreateTime DESC LIMIT 1\G
 
 DESC orders;
 -- 预期: remark 列已移除，amount 类型已还原为 decimal(10,2)
+```
+
+---
+
+## 6. 外表联邦查询测试
+
+`bootstrap.sh` 会自动创建外表 Catalog 并做连通性验证：`mysql_fed`（JDBC Catalog，连接本模块内置 MySQL 数据源，始终创建）；bigdata 模块运行时还会创建 `hive_fed`（HMS Catalog）与 `paimon_fed`（Paimon Catalog，均通过 bigdata 的 Hive Metastore 注册、从 HDFS 读数据）。两个模块通过共享外部网络 `doris-bigdata-federation` 互通。
+
+> 前置：6.3 / 6.4 需要 bigdata 模块已启动且完成示例数据初始化（先运行 `bigdata/bootstrap.sh`，再重跑本模块 `bootstrap.sh` 补齐 Catalog 与验证）。
+
+### 6.1 查看已配置的 Catalog
+
+```sql
+SHOW CATALOGS;
+-- 预期: internal、mysql_fed（Type=jdbc）
+-- bigdata 运行时另有: hive_fed（Type=hms）、paimon_fed（Type=paimon）
+
+-- 查看 Catalog 完整属性（数据源地址、驱动等）
+SHOW CREATE CATALOG mysql_fed\G
+```
+
+### 6.2 MySQL JDBC 外表（mysql_fed）
+
+内置 MySQL 数据源由 `mysql-init/01-federation-demo.sql` 初始化（容器首次启动时执行一次），包含 `federation_demo.users` 表（5 行，`user_id` 与 `demo.orders.user_id` 对应）。
+
+```sql
+-- 外表元数据与数据读取
+SHOW CREATE TABLE mysql_fed.federation_demo.users;
+SELECT * FROM mysql_fed.federation_demo.users ORDER BY user_id;
+-- 预期: 5 行，1001 Alice(GOLD) ~ 1005 Eve(SILVER)
+
+-- 内表 ⨝ 外表联邦 JOIN
+SELECT o.order_id, o.amount, u.user_name, u.vip_level
+FROM demo.orders o
+JOIN mysql_fed.federation_demo.users u ON o.user_id = u.user_id
+ORDER BY o.order_id;
+-- 预期: 5 行（orders 的 user_id 均在 users 中存在）
+
+-- 外表侧有、内表侧无的用户（验证 LEFT JOIN 语义）
+SELECT u.user_id, u.user_name
+FROM mysql_fed.federation_demo.users u
+LEFT JOIN demo.orders o ON u.user_id = o.user_id
+WHERE o.order_id IS NULL
+ORDER BY u.user_id;
+-- 预期: 2 行（1004 Diana、1005 Eve，均无订单记录）
+```
+
+### 6.3 Hive 外表（hive_fed，依赖 bigdata 模块）
+
+数据源为 bigdata 模块的 Hive Metastore（`thrift://hivemetastore:9083`），表数据在 bigdata 的 HDFS 上。
+
+```sql
+SHOW DATABASES FROM hive_fed;
+-- 预期: 含 demo（以及 bigdata 中的其他实验数据库）
+
+SELECT * FROM hive_fed.demo.users ORDER BY user_id;
+-- 预期: 5 行（与 mysql_fed 相同的数据，但来自 HDFS 上的 Hive 表）
+
+-- 内表 ⨝ Hive 维度表联邦 JOIN
+SELECT o.order_id, o.amount, u.user_name, u.vip_level
+FROM demo.orders o
+JOIN hive_fed.demo.users u ON o.user_id = u.user_id
+ORDER BY o.order_id;
+-- 预期: 5 行
+```
+
+### 6.4 Paimon 外表（paimon_fed，依赖 bigdata 模块）
+
+数据源为 bigdata 模块由 Spark 写入的 Paimon 表（HMS 注册，warehouse 为 `hdfs://namenode:9000/user/hive/warehouse/paimon`）。
+
+```sql
+SHOW TABLES FROM paimon_fed.demo;
+-- 预期: events
+
+SELECT * FROM paimon_fed.demo.events ORDER BY event_id;
+-- 预期: 6 行（CLICK/PAY/REFUND 事件）
+
+-- 三方联邦：内表订单 ⨝ Hive 用户维表 ⨝ Paimon 事件表
+SELECT o.order_id, o.amount, u.user_name, e.event_type
+FROM demo.orders o
+JOIN hive_fed.demo.users u ON o.user_id = u.user_id
+LEFT JOIN paimon_fed.demo.events e ON o.user_id = e.user_id AND e.event_type = 'PAY'
+ORDER BY o.order_id;
+-- 预期: 5 行；order_id=4（Charlie）无 PAY 事件，event_type 为 NULL
+```
+
+### 6.5 Catalog 重建与幂等补齐
+
+Catalog 元数据持久化在 FE，集群重启后仍然保留。如需重建（如修改了属性）：
+
+```sql
+DROP CATALOG hive_fed;
+DROP CATALOG paimon_fed;
+```
+
+重跑 `./bootstrap.sh` 即可以 `IF NOT EXISTS` 方式重建并重新验证；bigdata 不可达时湖仓 Catalog 自动跳过，不影响 `mysql_fed`。
+
+### 6.6 清理
+
+```sql
+DROP CATALOG IF EXISTS mysql_fed;
+DROP CATALOG IF EXISTS hive_fed;
+DROP CATALOG IF EXISTS paimon_fed;
+-- 清理后如需恢复，重跑 ./bootstrap.sh 即可
 ```
 
 ---
