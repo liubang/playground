@@ -80,7 +80,7 @@ E2E 覆盖三节点注册、命名空间操作、多块三副本上传、下载�
 
 ### 启动步骤
 
-提供一键引导脚本 `bootstrap.sh`，自动完成：检查依赖 → 交互式生成 `.env`（MySQL 密码可自行输入，直接回车使用随机生成值）→ 下载 MySQL 驱动 → 下载 Iceberg / Paimon jar → 创建跨模块联邦网络 `doris-bigdata-federation` → 启动服务 → 通过 spark-sql 幂等写入联邦查询示例数据（Hive `demo.users`、Paimon `paimon.demo.events`）。所有步骤幂等，可安全重复执行。
+提供一键引导脚本 `bootstrap.sh`，自动完成：检查依赖 → 交互式生成 `.env`（MySQL 密码可自行输入，直接回车使用随机生成值）→ 下载 MySQL 驱动 → 下载 Iceberg / Paimon jar → 创建跨模块联邦网络 `doris-bigdata-federation` → 启动服务 → 通过 spark-sql 幂等写入联邦查询示例数据（Hive `demo.users`、Paimon `paimon.lake.events`）。所有步骤幂等，可安全重复执行。
 
 ```bash
 cd bigdata
@@ -332,7 +332,7 @@ FROM demo.orders o
 JOIN hive_fed.demo.users u ON o.user_id = u.user_id;
 
 -- 直查 Paimon / MySQL 外表
-SELECT * FROM paimon_fed.demo.events;
+SELECT * FROM paimon_fed.lake.events;
 SELECT * FROM mysql_fed.federation_demo.users;
 ```
 

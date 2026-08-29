@@ -668,20 +668,20 @@ ORDER BY o.order_id;
 
 ### 6.4 Paimon 外表（paimon_fed，依赖 bigdata 模块）
 
-数据源为 bigdata 模块由 Spark 写入的 Paimon 表（HMS 注册，warehouse 为 `hdfs://namenode:9000/user/hive/warehouse/paimon`）。
+数据源为 bigdata 模块由 Spark 写入的 Paimon 表（HMS 注册，数据落在 HMS warehouse 下的 `hdfs://namenode:9000/user/hive/warehouse/lake.db/`，与 Hive 表分库隔离）。
 
 ```sql
-SHOW TABLES FROM paimon_fed.demo;
+SHOW TABLES FROM paimon_fed.lake;
 -- 预期: events
 
-SELECT * FROM paimon_fed.demo.events ORDER BY event_id;
+SELECT * FROM paimon_fed.lake.events ORDER BY event_id;
 -- 预期: 6 行（CLICK/PAY/REFUND 事件）
 
 -- 三方联邦：内表订单 ⨝ Hive 用户维表 ⨝ Paimon 事件表
 SELECT o.order_id, o.amount, u.user_name, e.event_type
 FROM demo.orders o
 JOIN hive_fed.demo.users u ON o.user_id = u.user_id
-LEFT JOIN paimon_fed.demo.events e ON o.user_id = e.user_id AND e.event_type = 'PAY'
+LEFT JOIN paimon_fed.lake.events e ON o.user_id = e.user_id AND e.event_type = 'PAY'
 ORDER BY o.order_id;
 -- 预期: 5 行；order_id=4（Charlie）无 PAY 事件，event_type 为 NULL
 ```

@@ -1112,6 +1112,83 @@ ORDER BY dt;
 DROP SCHEMA hive.part_test CASCADE;
 ```
 
+### 7.6 Spark 读写 Paimon 表
+
+`bootstrap.sh` 已通过 spark-sql 幂等初始化 Paimon 示例表（`paimon.lake.events`，HMS 注册）。本节验证 Paimon catalog 的读写、HMS 注册与物理存储。
+
+> 注意：Spark 侧 Paimon 表落在 HMS 的 `lake` 库（`/user/hive/warehouse/lake.db/`），与 Hive 侧的 `demo` 库隔离。hive 模式下 paimon catalog 不显式配置 warehouse——db/table 落盘位置跟随 HMS 的 `hive.metastore.warehouse.dir`。
+
+**步骤 1：读取示例表**
+
+```bash
+docker compose exec -T spark-master /opt/spark/bin/spark-sql --master 'local[2]' \
+  -e "SELECT * FROM paimon.lake.events ORDER BY event_id"
+```
+
+预期：6 行（event_id 1-6，CLICK/PAY/REFUND 事件）。
+
+**步骤 2：写入新表并验证 HMS 注册**
+
+```bash
+docker compose exec -T spark-master /opt/spark/bin/spark-sql --master 'local[2]' -e "
+CREATE TABLE IF NOT EXISTS paimon.lake.paimon_verify (id BIGINT, v STRING);
+INSERT OVERWRITE TABLE paimon.lake.paimon_verify VALUES (1, 'a'), (2, 'b'), (3, 'c');
+SELECT COUNT(*), sum(id) FROM paimon.lake.paimon_verify"
+```
+
+预期：`3    6`。表注册在 Hive Metastore 的 `lake` 库中（beeline `SHOW TABLES IN lake;` 可见）。
+
+**步骤 3：验证 HDFS 物理存储**
+
+```bash
+docker compose exec -T namenode hdfs dfs -ls /user/hive/warehouse/lake.db/events/
+```
+
+预期：存在 `bucket-0`（数据文件）、`manifest`、`schema`、`snapshot` 等 Paimon 元数据目录。
+
+**步骤 4：清理**
+
+```bash
+docker compose exec -T spark-master /opt/spark/bin/spark-sql --master 'local[2]' \
+  -e "DROP TABLE IF EXISTS paimon.lake.paimon_verify"
+
+# Paimon 1.3 的 DROP TABLE 仅清理 HMS 元数据，物理文件需手动删除
+docker compose exec -T namenode hdfs dfs -rm -r /user/hive/warehouse/lake.db/paimon_verify
+```
+
+### 7.7 与 Doris 模块的外表联邦联调
+
+依赖 [`../doris`](../doris) 模块（两个模块共享外部网络 `doris-bigdata-federation`，由任一模块的 `bootstrap.sh` 自动创建）。Doris 侧启动时会自动创建 `hive_fed` / `paimon_fed` Catalog 并完成本节验证，详见 [`../doris/TESTING.md`](../doris/TESTING.md) 第 6 节。
+
+**步骤 1：按顺序启动两个模块**
+
+```bash
+cd ../doris && ./bootstrap.sh
+# Doris bootstrap 输出中应包含:
+#   [OK] 外表 hive_fed.demo.users 已就绪，共 5 行
+#   [OK] 外表 paimon_fed.lake.events 已就绪，共 6 行
+```
+
+**步骤 2：在 Doris 中验证联邦读取与 JOIN**
+
+```bash
+export DORIS_ROOT_PASSWORD=$(grep '^DORIS_ROOT_PASSWORD=' ../doris/.env | cut -d= -f2-)
+MYSQL_PWD="$DORIS_ROOT_PASSWORD" mysql -h 127.0.0.1 -P 9030 -u root
+```
+
+```sql
+SELECT COUNT(*) FROM hive_fed.demo.users;      -- 预期: 5
+SELECT COUNT(*) FROM paimon_fed.lake.events;   -- 预期: 6
+
+-- 三方联邦：Doris 内表订单 ⨝ Hive 用户维表 ⨝ Paimon 事件表
+SELECT o.order_id, o.amount, u.user_name, e.event_type
+FROM demo.orders o
+JOIN hive_fed.demo.users u ON o.user_id = u.user_id
+LEFT JOIN paimon_fed.lake.events e ON o.user_id = e.user_id AND e.event_type = 'PAY'
+ORDER BY o.order_id;
+-- 预期: 5 行；order_id=4 无 PAY 事件，event_type 为 NULL
+```
+
 ---
 
 ## 附录：排障命令与常见问题
@@ -1167,7 +1244,9 @@ docker compose down -v    # -v 删除所有 volume
 | Trino 看不到 Iceberg 表   | catalog 配置错误                    | 检查 `extensions/trino/catalogs/iceberg.properties`                   |
 | Trino 无法写入 Hive 表    | Hive 4.0 默认建表为 EXTERNAL_TABLE  | Trino Hive connector 不允许写入外部表；如需写入请使用 Iceberg catalog |
 | Trino 查 MySQL 报表不存在 | `hive` 用户无权访问 `root` 创建的库 | 在 MySQL 中执行 `GRANT ALL PRIVILEGES ON biz.* TO 'hive'@'%'`         |
-| Spark 看不到 Iceberg 表   | iceberg jar 未下载                  | 运行 `./bootstrap.sh` 重新下载                                        |
+| Spark 看不到 Iceberg 表    | iceberg jar 未下载                  | 运行 `./bootstrap.sh` 重新下载                                        |
+| Spark 读写 Paimon 报 ClassNotFound | paimon jar 未下载           | 运行 `./bootstrap.sh` 重新下载 `spark/jars/paimon-spark-4.0-*.jar`    |
+| Paimon DROP TABLE 后数据文件残留 | Paimon 1.3 仅清理 HMS 元数据 | 手动 `hdfs dfs -rm -r /user/hive/warehouse/<db>.db/<table>`           |
 | HDFS 空间不足             | DataNode 容量限制                   | 清理无用数据或调整 `deploy.resources`                                 |
 | 端口冲突                  | 宿主机端口被占用                    | 修改 `docker-compose.yml` 端口映射                                    |
 | 首次启动 Trino 失败       | metastore 还在初始化                | 等待 1-2 分钟后 `docker compose restart`                              |

@@ -104,7 +104,7 @@ if [ "$START_SERVICES" = true ]; then
         docker cp tests/federation-seed.sql "$(docker compose ps -q spark-master):/tmp/federation-seed.sql"
         docker compose exec -T spark-master /opt/spark/bin/spark-sql --master 'local[2]' \
             -f /tmp/federation-seed.sql >/dev/null 2>&1 &&
-            log_ok "demo.users（Hive）与 paimon.demo.events（Paimon）已就绪" ||
+            log_ok "demo.users（Hive）与 paimon.lake.events（Paimon）已就绪" ||
             log_warn "示例数据初始化失败，可稍后手动执行: docker compose exec spark-master /opt/spark/bin/spark-sql --master 'local[2]' -f /tmp/federation-seed.sql"
     else
         log_skip "Spark 未就绪，示例数据初始化跳过（可重跑 bootstrap.sh 补齐）"

@@ -118,7 +118,7 @@ create_lake_catalogs() {
             \"type\" = \"paimon\",
             \"paimon.catalog.type\" = \"hms\",
             \"hive.metastore.uris\" = \"thrift://hivemetastore:9083\",
-            \"warehouse\" = \"hdfs://namenode:9000/user/hive/warehouse/paimon\",
+            \"warehouse\" = \"hdfs://namenode:9000/user/hive/warehouse\",
             \"hadoop.username\" = \"root\",
             \"fs.defaultFS\" = \"hdfs://namenode:9000\"
         )" >/dev/null 2>&1
@@ -126,7 +126,7 @@ create_lake_catalogs() {
 
 lake_federation_ready() {
     doris_mysql_auth -N -e "SELECT COUNT(*) FROM hive_fed.demo.users" >/dev/null 2>&1 &&
-        doris_mysql_auth -N -e "SELECT COUNT(*) FROM paimon_fed.demo.events" >/dev/null 2>&1
+        doris_mysql_auth -N -e "SELECT COUNT(*) FROM paimon_fed.lake.events" >/dev/null 2>&1
 }
 
 if [ "$START_SERVICES" = true ]; then
@@ -189,9 +189,9 @@ if [ "$START_SERVICES" = true ]; then
     if bigdata_hms_reachable; then
         if create_lake_catalogs && wait_until "Hive/Paimon 外表就绪" 30 2 lake_federation_ready; then
             HIVE_USER_COUNT="$(doris_mysql_auth -N -e "SELECT COUNT(*) FROM hive_fed.demo.users")"
-            PAIMON_EVENT_COUNT="$(doris_mysql_auth -N -e "SELECT COUNT(*) FROM paimon_fed.demo.events")"
+            PAIMON_EVENT_COUNT="$(doris_mysql_auth -N -e "SELECT COUNT(*) FROM paimon_fed.lake.events")"
             log_ok "外表 hive_fed.demo.users 已就绪，共 ${HIVE_USER_COUNT} 行"
-            log_ok "外表 paimon_fed.demo.events 已就绪，共 ${PAIMON_EVENT_COUNT} 行"
+            log_ok "外表 paimon_fed.lake.events 已就绪，共 ${PAIMON_EVENT_COUNT} 行"
 
             echo "  [--] 内表 ⨝ Hive 维度表联邦 JOIN"
             doris_mysql_auth -e "SELECT o.order_id, o.amount, u.user_name, u.vip_level
@@ -200,7 +200,7 @@ if [ "$START_SERVICES" = true ]; then
                 ORDER BY o.order_id"
             echo "  [--] Paimon 明细表直查"
             doris_mysql_auth -e "SELECT event_id, user_id, event_type, event_time
-                FROM paimon_fed.demo.events ORDER BY event_id"
+                FROM paimon_fed.lake.events ORDER BY event_id"
         else
             log_warn "湖仓外表暂不可用（bigdata 示例数据可能未初始化），可在两侧重跑 bootstrap.sh 补齐"
         fi
@@ -230,7 +230,7 @@ if [ "$START_SERVICES" = true ]; then
   -- Hive 外表（HMS Catalog，数据在 HDFS 上）
   SELECT * FROM hive_fed.demo.users;
   -- Paimon 外表（湖仓格式，HMS 注册）
-  SELECT * FROM paimon_fed.demo.events;
+  SELECT * FROM paimon_fed.lake.events;
   -- 内表 ⨝ 湖仓外表联邦 JOIN
   SELECT o.order_id, o.amount, u.user_name, u.vip_level
   FROM demo.orders o

@@ -21,9 +21,10 @@ INSERT OVERWRITE TABLE demo.users VALUES
     (1005, 'Eve',     'Chengdu',  'SILVER');
 
 -- ========== Paimon 明细表（对接 Doris paimon_fed catalog） ==========
-CREATE DATABASE IF NOT EXISTS paimon.demo;
+-- 独立 lake 库，避免与 Hive 表混用同一 HMS database（物理路径隔离在 paimon warehouse 下）
+CREATE DATABASE IF NOT EXISTS paimon.lake;
 
-CREATE TABLE IF NOT EXISTS paimon.demo.events
+CREATE TABLE IF NOT EXISTS paimon.lake.events
 (
     event_id   BIGINT,
     user_id    BIGINT,
@@ -31,7 +32,7 @@ CREATE TABLE IF NOT EXISTS paimon.demo.events
     event_time TIMESTAMP
 );
 
-INSERT OVERWRITE TABLE paimon.demo.events VALUES
+INSERT OVERWRITE TABLE paimon.lake.events VALUES
     (1, 1001, 'CLICK',   TIMESTAMP '2026-07-01 09:58:00'),
     (2, 1001, 'PAY',     TIMESTAMP '2026-07-01 10:00:05'),
     (3, 1002, 'CLICK',   TIMESTAMP '2026-07-02 11:28:00'),
