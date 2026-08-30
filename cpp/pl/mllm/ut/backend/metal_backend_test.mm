@@ -146,6 +146,7 @@ TEST(MetalParityTest, MatMulF32Weight) {
     std::array<TensorView, 1> views_gpu = {w.view};
     ASSERT_TRUE(gpu.ImportWeights(views_gpu, names_gpu).ok());
     ASSERT_TRUE(gpu.MatMul(out_gpu.view, x.view, "w0").ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
 
     expect_close(out_cpu.view, out_gpu.view, 1e-4f, 1e-4f);
 }
@@ -177,6 +178,7 @@ TEST(MetalParityTest, MatMulF16Weight) {
     std::array<TensorView, 1> views_gpu = {w.view};
     ASSERT_TRUE(gpu.ImportWeights(views_gpu, names_gpu).ok());
     ASSERT_TRUE(gpu.MatMul(out_gpu.view, x.view, "w0").ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
 
     // MPS f32 math vs CPU: small fp16 weight quantization is identical (both
     // dequantize to f32), so tight tolerance holds.
@@ -207,6 +209,7 @@ TEST(MetalParityTest, MatMulQ8_0Weight) {
     std::array<TensorView, 1> views_gpu = {w.view};
     ASSERT_TRUE(gpu.ImportWeights(views_gpu, names_gpu).ok());
     ASSERT_TRUE(gpu.MatMul(out_gpu.view, x.view, "w0").ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
 
     // Both dequantize Q8_0 identically to f32 before the MAC, so parity is
     // exact modulo f32 rounding in MPS vs scalar CPU.
@@ -230,6 +233,7 @@ TEST(MetalParityTest, RmsNormParity) {
 
     MetalBackend gpu;
     ASSERT_TRUE(gpu.RmsNorm(out_gpu.view, x.view, w.view, 1e-5f).ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
 
     expect_close(out_cpu.view, out_gpu.view, 1e-5f, 1e-5f);
 }
@@ -255,6 +259,8 @@ TEST(MetalParityTest, RoPEParity) {
 
     MetalBackend gpu;
     ASSERT_TRUE(gpu.RoPE(q.view, k.view, 3, cfg).ok());
+    ASSERT_TRUE(gpu.SyncToHost(q.view).ok());
+    ASSERT_TRUE(gpu.SyncToHost(k.view).ok());
 
     expect_close(q_cpu.view, q.view, 1e-5f, 1e-5f);
     expect_close(k_cpu.view, k.view, 1e-5f, 1e-5f);
@@ -294,6 +300,61 @@ TEST(MetalParityTest, AttentionParity) {
 
     MetalBackend gpu;
     ASSERT_TRUE(gpu.Attention(out_gpu.view, q.view, kv, cfg).ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
+
+    expect_close(out_cpu.view, out_gpu.view, 1e-5f, 1e-5f);
+}
+
+// Device KV cache parity (AppendKV + AttentionKV)
+
+TEST(MetalParityTest, DeviceKVAttentionParity) {
+    REQUIRE_METAL();
+    const int num_heads = 2, num_kv_heads = 1, head_dim = 8, seq_len = 4;
+    auto q = HostTensor::alloc({1, num_heads, head_dim}, DType::kF32);
+    auto keys = HostTensor::alloc({seq_len, num_kv_heads, head_dim}, DType::kF32);
+    auto values = HostTensor::alloc({seq_len, num_kv_heads, head_dim}, DType::kF32);
+    auto out_cpu = HostTensor::alloc({1, num_heads * head_dim}, DType::kF32);
+    auto out_gpu = HostTensor::alloc({1, num_heads * head_dim}, DType::kF32);
+    fill_random(q.view.data_as<float>(), num_heads * head_dim, 11);
+    fill_random(keys.view.data_as<float>(), seq_len * num_kv_heads * head_dim, 12);
+    fill_random(values.view.data_as<float>(), seq_len * num_kv_heads * head_dim, 13);
+
+    // CPU reference: host-KV attention.
+    KVCacheView kv_host{
+        .keys = keys.view.data(),
+        .values = values.view.data(),
+        .seq_len = seq_len,
+        .num_kv_heads = num_kv_heads,
+        .head_dim = head_dim,
+        .dtype = DType::kF32,
+    };
+    AttentionConfig cfg{
+        .num_heads = num_heads,
+        .num_kv_heads = num_kv_heads,
+        .head_dim = head_dim,
+        .scale = 1.0f / std::sqrt(static_cast<float>(head_dim)),
+    };
+    CpuBackend cpu;
+    ASSERT_TRUE(cpu.Attention(out_cpu.view, q.view, kv_host, cfg).ok());
+
+    // Metal: device-KV path — configure, append, then AttentionKV.
+    MetalBackend gpu;
+    ASSERT_TRUE(gpu.ConfigureDeviceKV(1, num_kv_heads, head_dim, seq_len).ok());
+    for (int s = 0; s < seq_len; ++s) {
+        TensorView k_slice(
+            static_cast<char*>(keys.view.data()) +
+                static_cast<size_t>(s) * num_kv_heads * head_dim * sizeof(float),
+            DType::kF32,
+            Shape({1, num_kv_heads, head_dim}));
+        TensorView v_slice(
+            static_cast<char*>(values.view.data()) +
+                static_cast<size_t>(s) * num_kv_heads * head_dim * sizeof(float),
+            DType::kF32,
+            Shape({1, num_kv_heads, head_dim}));
+        ASSERT_TRUE(gpu.AppendKV(0, k_slice, v_slice, s).ok());
+    }
+    ASSERT_TRUE(gpu.AttentionKV(out_gpu.view, q.view, 0, seq_len, cfg).ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
 
     expect_close(out_cpu.view, out_gpu.view, 1e-5f, 1e-5f);
 }
@@ -315,6 +376,7 @@ TEST(MetalParityTest, SwiGLUParity) {
 
     MetalBackend gpu;
     ASSERT_TRUE(gpu.SwiGLU(out_gpu.view, gate.view, up.view).ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
 
     expect_close(out_cpu.view, out_gpu.view, 1e-5f, 1e-5f);
 }
@@ -334,6 +396,7 @@ TEST(MetalParityTest, AddInPlaceParity) {
 
     MetalBackend gpu;
     ASSERT_TRUE(gpu.AddInPlace(x.view, residual.view).ok());
+    ASSERT_TRUE(gpu.SyncToHost(x.view).ok());
 
     expect_close(x_cpu.view, x.view, 1e-5f, 1e-5f);
 }

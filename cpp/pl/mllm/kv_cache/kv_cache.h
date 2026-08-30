@@ -38,6 +38,13 @@ public:
                                                 int32_t max_tokens,
                                                 DType dtype = DType::kF16);
 
+    // Metadata-only cache for backends with device-resident K/V storage
+    // (Backend::HasDeviceKV()). A shell tracks length/capacity so Engine
+    // bounds checks and Model::Advance keep working, but its backing buffers
+    // hold a single token only — Append/View must never be called on it.
+    [[nodiscard]] static Result<KVCache> CreateShell(const ModelConfig& config,
+                                                     int32_t max_tokens);
+
     // Append one token's K/V for a layer.
     // key/value shape: [1, num_kv_heads, head_dim]
     Status Append(int32_t layer, TensorView key, TensorView value);

@@ -66,12 +66,19 @@ struct HostBuf {
 
 template <typename Fn> double bench_ms(Fn&& fn, int iters) {
     fn(); // warmup (JIT / first-launch costs)
+    fn(); // second warmup (ensures shadow buffers are populated)
     const auto t0 = Clock::now();
     for (int i = 0; i < iters; ++i) {
         fn();
     }
     const auto t1 = Clock::now();
     return std::chrono::duration<double, std::milli>(t1 - t0).count() / static_cast<double>(iters);
+}
+
+// For Metal: flush deferred command buffer and wait, so we measure real
+// GPU execution time, not just encode time.
+void sync_backend(Backend& backend) {
+    backend.Synchronize();
 }
 
 // RMSNorm
@@ -88,6 +95,7 @@ void bench_rmsnorm(Backend& backend, int hidden) {
             auto s = backend.RmsNorm(out.view, x.view, w.view, 1e-5f);
             if (!s.ok())
                 std::fprintf(stderr, "rmsnorm failed: %s\n", s.message.c_str());
+            sync_backend(backend);
         },
         200);
 
@@ -131,6 +139,7 @@ void bench_gemv_f32(Backend& backend, int out_dim, int in_dim) {
             auto s = backend.MatMul(out.view, x.view, w.name);
             if (!s.ok())
                 std::fprintf(stderr, "gemv failed: %s\n", s.message.c_str());
+            sync_backend(backend);
         },
         50);
 
@@ -184,6 +193,7 @@ void bench_gemv_q8_0(Backend& backend, int out_dim, int in_dim) {
             auto s = backend.MatMul(out.view, x.view, w.name);
             if (!s.ok())
                 std::fprintf(stderr, "gemv q8_0 failed: %s\n", s.message.c_str());
+            sync_backend(backend);
         },
         50);
 
@@ -206,14 +216,6 @@ void bench_attention(Backend& backend, int seq_len, int num_heads, int num_kv_he
     keys.fill_random(2);
     values.fill_random(3);
 
-    KVCacheView kv{
-        .keys = keys.view.data(),
-        .values = values.view.data(),
-        .seq_len = seq_len,
-        .num_kv_heads = num_kv_heads,
-        .head_dim = head_dim,
-        .dtype = DType::kF32,
-    };
     AttentionConfig cfg{
         .num_heads = num_heads,
         .num_kv_heads = num_kv_heads,
@@ -221,13 +223,52 @@ void bench_attention(Backend& backend, int seq_len, int num_heads, int num_kv_he
         .scale = 1.0f / std::sqrt(static_cast<float>(head_dim)),
     };
 
-    const double ms = bench_ms(
-        [&] {
-            auto s = backend.Attention(out.view, q.view, kv, cfg);
-            if (!s.ok())
-                std::fprintf(stderr, "attention failed: %s\n", s.message.c_str());
-        },
-        20);
+    double ms;
+    if (backend.HasDeviceKV()) {
+        // Device KV path: configure, populate, then benchmark AttentionKV.
+        backend.ConfigureDeviceKV(1, num_kv_heads, head_dim, seq_len);
+        // Append all KV entries (outside the timed loop).
+        for (int s = 0; s < seq_len; ++s) {
+            // Slice one token's K/V from the full buffers.
+            TensorView k_slice(
+                static_cast<char*>(keys.view.data()) + s * num_kv_heads * head_dim * sizeof(float),
+                DType::kF32,
+                Shape({1, num_kv_heads, head_dim}));
+            TensorView v_slice(
+                static_cast<char*>(values.view.data()) + s * num_kv_heads * head_dim * sizeof(float),
+                DType::kF32,
+                Shape({1, num_kv_heads, head_dim}));
+            backend.AppendKV(0, k_slice, v_slice, s);
+        }
+        sync_backend(backend);
+
+        ms = bench_ms(
+            [&] {
+                auto s = backend.AttentionKV(out.view, q.view, 0, seq_len, cfg);
+                if (!s.ok())
+                    std::fprintf(stderr, "attention_kv failed: %s\n", s.message.c_str());
+                sync_backend(backend);
+            },
+            20);
+    } else {
+        // Host KV path (CPU fallback).
+        KVCacheView kv{
+            .keys = keys.view.data(),
+            .values = values.view.data(),
+            .seq_len = seq_len,
+            .num_kv_heads = num_kv_heads,
+            .head_dim = head_dim,
+            .dtype = DType::kF32,
+        };
+        ms = bench_ms(
+            [&] {
+                auto s = backend.Attention(out.view, q.view, kv, cfg);
+                if (!s.ok())
+                    std::fprintf(stderr, "attention failed: %s\n", s.message.c_str());
+                sync_backend(backend);
+            },
+            20);
+    }
 
     // FLOPs: QK (seq*seq per head) + PV (seq*seq per head), x2 for MACs.
     const double flops = 2.0 * static_cast<double>(seq_len) * static_cast<double>(num_heads) *

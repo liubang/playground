@@ -25,17 +25,25 @@
 
 namespace pl::mllm {
 
-// Metal (Apple GPU) backend — MVP correctness-focused implementation.
+// Metal (Apple GPU) backend — optimized for decode-phase performance.
+//
+// Key optimizations:
+//   * Shadow buffer cache: MTLBuffers are cached by host pointer so that
+//     repeated ops on the same activation (e.g. hidden state through all
+//     layers) avoid re-uploading. Invalidated by NotifyHostWrite.
+//   * Deferred command buffer: a single MTLCommandBuffer is kept open across
+//     multiple ops and only committed on SyncToHost / Synchronize, eliminating
+//     per-op round-trip latency (~5-10 µs each on Apple Silicon).
+//   * Device-resident KV cache: K/V storage lives in MTLBuffers on the GPU;
+//     AppendKV and AttentionKV operate entirely on-device without uploading
+//     the full cache each step.
+//   * f16 weight preservation: f16 weights are uploaded as-is (half bandwidth);
+//     the GEMV kernel reads half-precision natively via as_type<half>.
+//   * Output buffers persist: the output MTLBuffer from one op is the input
+//     MTLBuffer of the next, keeping the entire forward pass on-device.
+//
 // All Metal/Objective-C types live behind the opaque Impl (SPEC §2.2), so this
 // header stays pure C++ and can be included from engine.cpp / cli.cpp.
-//
-// Compute model (MVP):
-//   * ImportWeights converts every weight to f32 and uploads to a shared
-//     MTLBuffer (Q8_0 is dequantized at import time).
-//   * Each op synchronously uploads inputs, runs a shader (compiled at runtime
-//     from shader_source.h) or MPSMatrixMultiplication for MatMul, then
-//     downloads the f32 output back into the caller's TensorView.
-//   * Shaders are f32-only; f16 inputs are converted on upload.
 class MetalBackend : public Backend {
 public:
     MetalBackend();
@@ -59,8 +67,24 @@ public:
     Status AddBiasInPlace(TensorView x, TensorView bias) override;
     Status Synchronize() override;
 
+    // --- Device-residency hooks ---
+    Status NotifyHostWrite(TensorView t) override;
+    Status SyncToHost(TensorView t) override;
+
+    // --- Device-resident KV cache ---
+    bool HasDeviceKV() const override;
+    Status ConfigureDeviceKV(int32_t num_layers,
+                             int32_t num_kv_heads,
+                             int32_t head_dim,
+                             int32_t capacity) override;
+    Status AppendKV(int32_t layer, TensorView key, TensorView value, int64_t position) override;
+    Status AttentionKV(TensorView out,
+                       TensorView q,
+                       int32_t layer,
+                       int64_t seq_len,
+                       const AttentionConfig& config) override;
+
     // Opaque implementation handle (all Metal types live in the .mm TU).
-    // Public so translation units can hold/dereference the unique_ptr.
     struct Impl;
 
 private:

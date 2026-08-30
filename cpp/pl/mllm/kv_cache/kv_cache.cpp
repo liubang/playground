@@ -60,6 +60,36 @@ Result<KVCache> KVCache::Create(const ModelConfig& config, int32_t max_tokens, D
     return cache;
 }
 
+Result<KVCache> KVCache::CreateShell(const ModelConfig& config, int32_t max_tokens) {
+    if (max_tokens <= 0) {
+        return Status::Error(ErrorCode::kInvalidArgument, "KVCache: max_tokens must be positive");
+    }
+
+    KVCache cache;
+    cache.num_layers_ = config.num_layers;
+    cache.num_kv_heads_ = config.num_kv_heads;
+    cache.head_dim_ = config.effective_head_dim();
+    cache.capacity_ = max_tokens;
+    cache.dtype_ = DType::kF32;
+    cache.elem_size_ = dtype_type_size(DType::kF32);
+    cache.per_token_stride_ = static_cast<size_t>(cache.num_kv_heads_) *
+                              static_cast<size_t>(cache.head_dim_) * cache.elem_size_;
+
+    // Single-token backing buffers; the real K/V live on the device.
+    auto kbuf = OwnedBuffer::AllocateCpu(cache.per_token_stride_, 64);
+    if (!kbuf.ok()) {
+        return kbuf.status();
+    }
+    cache.k_buffer_ = std::move(kbuf).value();
+
+    auto vbuf = OwnedBuffer::AllocateCpu(cache.per_token_stride_, 64);
+    if (!vbuf.ok()) {
+        return vbuf.status();
+    }
+    cache.v_buffer_ = std::move(vbuf).value();
+    return cache;
+}
+
 void* KVCache::k_ptr(int32_t layer, int32_t pos) noexcept {
     const size_t layer_offset =
         static_cast<size_t>(layer) * static_cast<size_t>(capacity_) * per_token_stride_;

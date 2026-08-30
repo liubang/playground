@@ -170,11 +170,29 @@ Result<std::unique_ptr<Engine>> Engine::Create(Options options) {
     }
 
     int32_t max_tokens = std::min(options.max_context, config.context_length);
-    auto cache_result = KVCache::Create(config, max_tokens, DType::kF32);
-    if (!cache_result.ok()) {
-        return cache_result.status();
+    std::unique_ptr<KVCache> cache;
+    if (backend->HasDeviceKV()) {
+        // The backend owns the real K/V storage on device; the host cache is
+        // a metadata-only shell for length/capacity bookkeeping.
+        if (auto s = backend->ConfigureDeviceKV(config.num_layers,
+                                                config.num_kv_heads,
+                                                config.effective_head_dim(),
+                                                max_tokens);
+            !s.ok()) {
+            return s;
+        }
+        auto shell_result = KVCache::CreateShell(config, max_tokens);
+        if (!shell_result.ok()) {
+            return shell_result.status();
+        }
+        cache = std::make_unique<KVCache>(std::move(shell_result).value());
+    } else {
+        auto cache_result = KVCache::Create(config, max_tokens, DType::kF32);
+        if (!cache_result.ok()) {
+            return cache_result.status();
+        }
+        cache = std::make_unique<KVCache>(std::move(cache_result).value());
     }
-    auto cache = std::make_unique<KVCache>(std::move(cache_result).value());
 
     // Arena: must hold all per-layer activations across ALL layers in one
     // forward pass (arena is reset per-token, not per-layer). Each layer
@@ -229,6 +247,10 @@ Status Engine::RunPrefill(std::span<const int32_t> tokens) {
         if (!embd_buf.ok())
             return embd_buf.status();
         if (auto s = embedding_row(impl.token_embd, tok, hidden, embd_buf.value()); !s.ok()) {
+            return s;
+        }
+        // The embedding write happened on the host, outside the backend.
+        if (auto s = impl.backend->NotifyHostWrite(embd_buf.value()); !s.ok()) {
             return s;
         }
 
@@ -326,6 +348,10 @@ Status Engine::GenerateStream(std::string_view prompt,
             !s.ok()) {
             return s;
         }
+        // The embedding write happened on the host, outside the backend.
+        if (auto s = impl.backend->NotifyHostWrite(embd_buf.value()); !s.ok()) {
+            return s;
+        }
 
         if (auto s =
                 impl.model->Forward(embd_buf.value(), pos, *impl.cache, *impl.backend, *impl.arena);
@@ -337,6 +363,11 @@ Status Engine::GenerateStream(std::string_view prompt,
         if (auto s =
                 impl.model->ComputeLogits(embd_buf.value(), logits, *impl.backend, *impl.arena);
             !s.ok()) {
+            return s;
+        }
+
+        // The sampler reads logits on the host.
+        if (auto s = impl.backend->SyncToHost(logits); !s.ok()) {
             return s;
         }
 

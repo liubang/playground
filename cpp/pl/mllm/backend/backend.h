@@ -104,6 +104,76 @@ public:
 
     // Block until all queued work is complete.
     virtual Status Synchronize() = 0;
+
+    // --- Optional device-residency hooks -----------------------------------
+    // Backends that keep activations device-resident (e.g. Metal) implement
+    // these; the default implementations preserve plain host-memory semantics
+    // (every op reads/writes host tensors synchronously), so CpuBackend and
+    // existing callers need no changes.
+
+    // Called after the host writes into `t`'s memory outside of the backend
+    // (e.g. the engine's embedding lookup). The backend must treat any cached
+    // device-side copy of `t` as stale and re-upload before the next use.
+    virtual Status NotifyHostWrite(TensorView t) {
+        (void)t;
+        return {};
+    }
+
+    // Ensures `t`'s host memory reflects the latest backend-computed results.
+    // Must be called before the host reads a backend-produced tensor (e.g.
+    // logits before sampling). Backends with deferred execution flush and
+    // synchronize here.
+    virtual Status SyncToHost(TensorView t) {
+        (void)t;
+        return {};
+    }
+
+    // --- Optional device-resident KV cache ---------------------------------
+    // When HasDeviceKV() returns true, the model appends K/V and runs
+    // attention through the backend (AppendKV/AttentionKV) instead of the
+    // host KVCache; the host cache is then only used for length/capacity
+    // bookkeeping. All three must be implemented together.
+
+    virtual bool HasDeviceKV() const { return false; }
+
+    // Allocate device-side K/V storage: [num_layers][capacity][nkv*head_dim]
+    // per cache, f32 elements.
+    virtual Status ConfigureDeviceKV(int32_t num_layers,
+                                     int32_t num_kv_heads,
+                                     int32_t head_dim,
+                                     int32_t capacity) {
+        (void)num_layers;
+        (void)num_kv_heads;
+        (void)head_dim;
+        (void)capacity;
+        return Status::Error(ErrorCode::kUnsupported, "device KV cache not supported");
+    }
+
+    // Append one token's K/V for `layer` at absolute `position`.
+    // key/value shape: [1, num_kv_heads, head_dim]
+    virtual Status AppendKV(int32_t layer, TensorView key, TensorView value, int64_t position) {
+        (void)layer;
+        (void)key;
+        (void)value;
+        (void)position;
+        return Status::Error(ErrorCode::kUnsupported, "device KV cache not supported");
+    }
+
+    // Single-token causal attention over the device KV cache of `layer`,
+    // attending to positions [0, seq_len).
+    // q shape: [1, num_heads, head_dim]; out shape: [1, num_heads * head_dim]
+    virtual Status AttentionKV(TensorView out,
+                               TensorView q,
+                               int32_t layer,
+                               int64_t seq_len,
+                               const AttentionConfig& config) {
+        (void)out;
+        (void)q;
+        (void)layer;
+        (void)seq_len;
+        (void)config;
+        return Status::Error(ErrorCode::kUnsupported, "device KV cache not supported");
+    }
 };
 
 } // namespace pl::mllm

@@ -126,33 +126,51 @@ Status TransformerLayer::Forward(TensorView hidden,
         return s;
     }
 
-    // 5. Append K/V to cache
+    // 5/6. Append K/V and run attention. Backends with device-resident KV
+    // storage (HasDeviceKV) take over both steps; otherwise use the host
+    // KV cache and the generic Attention op.
     auto v_reshaped = v.reshape({1, num_kv_heads, head_dim});
     if (!v_reshaped.ok())
         return v_reshaped.status();
-    if (auto s = cache.Append(layer_index_, k_reshaped.value(), v_reshaped.value()); !s.ok()) {
-        return s;
-    }
 
-    // 6. Attention
     auto attn_ctx = scratch.AllocateTensor({1, num_heads * head_dim}, DType::kF32);
     if (!attn_ctx.ok())
         return attn_ctx.status();
     auto attn_ctx_out = attn_ctx.value();
 
-    KVCacheView kv_view = cache.View(layer_index_);
-    // View() only reports fully-advanced tokens. This token was appended above
-    // but not yet advanced, so extend the view by one so the query can attend
-    // to the causal diagonal (itself and all previous positions).
-    ++kv_view.seq_len;
     AttentionConfig attn_cfg{
         .num_heads = num_heads,
         .num_kv_heads = num_kv_heads,
         .head_dim = head_dim,
         .scale = scale,
     };
-    if (auto s = backend.Attention(attn_ctx_out, q_reshaped.value(), kv_view, attn_cfg); !s.ok()) {
-        return s;
+    if (backend.HasDeviceKV()) {
+        if (auto s = backend.AppendKV(
+                layer_index_, k_reshaped.value(), v_reshaped.value(), position);
+            !s.ok()) {
+            return s;
+        }
+        // The query attends to positions [0, position] inclusive.
+        if (auto s = backend.AttentionKV(
+                attn_ctx_out, q_reshaped.value(), layer_index_, position + 1, attn_cfg);
+            !s.ok()) {
+            return s;
+        }
+    } else {
+        if (auto s = cache.Append(layer_index_, k_reshaped.value(), v_reshaped.value());
+            !s.ok()) {
+            return s;
+        }
+        KVCacheView kv_view = cache.View(layer_index_);
+        // View() only reports fully-advanced tokens. This token was appended
+        // above but not yet advanced, so extend the view by one so the query
+        // can attend to the causal diagonal (itself and all previous
+        // positions).
+        ++kv_view.seq_len;
+        if (auto s = backend.Attention(attn_ctx_out, q_reshaped.value(), kv_view, attn_cfg);
+            !s.ok()) {
+            return s;
+        }
     }
 
     // 7. Output projection
