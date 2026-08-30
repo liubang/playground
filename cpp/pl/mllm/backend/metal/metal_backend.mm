@@ -101,8 +101,7 @@ struct MetalBackend::Impl {
     // Pipeline states for compute kernels.
     id<MTLComputePipelineState> rmsnorm_ps = nil;
     id<MTLComputePipelineState> rope_ps = nil;
-    id<MTLComputePipelineState> attention_ps = nil;       // host-KV path
-    id<MTLComputePipelineState> attention_kv_ps = nil;   // device-KV path
+    id<MTLComputePipelineState> attention_flash_ps = nil; // unified flash-attention (host + device KV)
     id<MTLComputePipelineState> swiglu_ps = nil;
     id<MTLComputePipelineState> add_ps = nil;
     id<MTLComputePipelineState> add_bias_ps = nil;
@@ -199,8 +198,7 @@ private:
         };
         rmsnorm_ps = make_ps("mllm_rmsnorm");
         rope_ps = make_ps("mllm_rope");
-        attention_ps = make_ps("mllm_attention");
-        attention_kv_ps = make_ps("mllm_attention_kv");
+        attention_flash_ps = make_ps("mllm_attention_flash");
         swiglu_ps = make_ps("mllm_swiglu");
         add_ps = make_ps("mllm_add_inplace");
         add_bias_ps = make_ps("mllm_add_bias");
@@ -211,7 +209,7 @@ private:
         if (!init_error.ok()) {
             return;
         }
-        if (!rmsnorm_ps || !rope_ps || !attention_ps || !attention_kv_ps ||
+        if (!rmsnorm_ps || !rope_ps || !attention_flash_ps ||
             !swiglu_ps || !add_ps || !add_bias_ps ||
             !gemv_q8_0_ps || !gemv_f16_ps || !gemv_f32_ps || !append_kv_ps) {
             init_error = Status::Error(ErrorCode::kBackendFailure,
@@ -480,7 +478,10 @@ Status MetalBackend::MatMul(TensorView out, TensorView x,
         [enc setBuffer:w.buf offset:0 atIndex:2];
         [enc setBytes:&in_d length:sizeof(in_d) atIndex:3];
         [enc setBytes:&out_d length:sizeof(out_d) atIndex:4];
-        [enc dispatchThreads:MTLSizeMake(static_cast<NSUInteger>(out_dim), 1, 1)
+        // Split-K GEMV: NT=4 threads per output row, tsize=256 → 64 rows/group.
+        // Grid = out_dim * NT threads. Threadgroup memory: 256 floats.
+        [enc setThreadgroupMemoryLength:256 * sizeof(float) atIndex:0];
+        [enc dispatchThreads:MTLSizeMake(static_cast<NSUInteger>(out_dim) * 4, 1, 1)
             threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
         // Deferred — no commit/wait here.
         return {};
@@ -751,8 +752,17 @@ Status MetalBackend::Attention(TensorView out, TensorView q, const KVCacheView& 
     const uint32_t sl = static_cast<uint32_t>(seq_len);
     const float sc = scale;
 
+    // Host KV path uses the unified flash kernel with kv_base = 0.
+    const uint64_t kv_base = 0;
+    const uint32_t attn_tsize = 128; // matches BLOCK in the flash kernel
+    // Threadgroup memory regions: tg_q[head_dim] + tg_sc[128] + tg_acc[head_dim] + tg_red[128].
+    const NSUInteger tg_q_bytes = static_cast<NSUInteger>(head_dim) * sizeof(float);
+    const NSUInteger tg_acc_bytes = tg_q_bytes;
+    const NSUInteger tg_sc_bytes = 128 * sizeof(float);
+    const NSUInteger tg_red_bytes = tg_sc_bytes;
+
     id<MTLComputeCommandEncoder> enc = impl_->encoder();
-    [enc setComputePipelineState:impl_->attention_ps];
+    [enc setComputePipelineState:impl_->attention_flash_ps];
     [enc setBuffer:obuf offset:0 atIndex:0];
     [enc setBuffer:qbuf offset:0 atIndex:1];
     [enc setBuffer:kbuf offset:0 atIndex:2];
@@ -762,11 +772,14 @@ Status MetalBackend::Attention(TensorView out, TensorView q, const KVCacheView& 
     [enc setBytes:&hd length:sizeof(hd) atIndex:6];
     [enc setBytes:&sl length:sizeof(sl) atIndex:7];
     [enc setBytes:&sc length:sizeof(sc) atIndex:8];
-
-    const uint32_t grid = static_cast<uint32_t>(num_heads) * static_cast<uint32_t>(head_dim);
-    const uint32_t tsize = 256;
-    [enc dispatchThreads:MTLSizeMake(grid, 1, 1)
-        threadsPerThreadgroup:MTLSizeMake(tsize, 1, 1)];
+    [enc setBytes:&kv_base length:sizeof(kv_base) atIndex:9];
+    [enc setThreadgroupMemoryLength:tg_q_bytes atIndex:0];
+    [enc setThreadgroupMemoryLength:tg_sc_bytes atIndex:1];
+    [enc setThreadgroupMemoryLength:tg_acc_bytes atIndex:2];
+    [enc setThreadgroupMemoryLength:tg_red_bytes atIndex:3];
+    // One threadgroup per query head.
+    [enc dispatchThreadgroups:MTLSizeMake(static_cast<NSUInteger>(num_heads), 1, 1)
+         threadsPerThreadgroup:MTLSizeMake(attn_tsize, 1, 1)];
     // Deferred.
     return {};
 }
@@ -1043,14 +1056,22 @@ Status MetalBackend::AttentionKV(TensorView out, TensorView q, int32_t layer,
     const uint32_t nkh = static_cast<uint32_t>(num_kv_heads);
     const uint32_t hd = static_cast<uint32_t>(head_dim);
     const uint32_t sl = static_cast<uint32_t>(seq_len);
-    const uint32_t cap = static_cast<uint32_t>(kv.capacity);
-    const uint32_t lay = static_cast<uint32_t>(layer);
+    // Device KV path uses the unified flash kernel with kv_base = layer * capacity * num_kv_heads * head_dim.
+    const uint64_t kv_base = static_cast<uint64_t>(layer)
+                           * static_cast<uint64_t>(kv.capacity)
+                           * static_cast<uint64_t>(num_kv_heads)
+                           * static_cast<uint64_t>(head_dim);
     const float sc = scale;
+    const uint32_t attn_tsize = 128; // matches BLOCK in the flash kernel
+    const NSUInteger tg_q_bytes = static_cast<NSUInteger>(head_dim) * sizeof(float);
+    const NSUInteger tg_acc_bytes = tg_q_bytes;
+    const NSUInteger tg_sc_bytes = 128 * sizeof(float);
+    const NSUInteger tg_red_bytes = tg_sc_bytes;
 
     id<MTLComputeCommandEncoder> enc = impl_->encoder();
-    [enc setComputePipelineState:impl_->attention_kv_ps];
+    [enc setComputePipelineState:impl_->attention_flash_ps];
     [enc setBuffer:obuf offset:0 atIndex:0];
-    [enc setBuffer:qbuf offset:1 atIndex:1];
+    [enc setBuffer:qbuf offset:0 atIndex:1];
     [enc setBuffer:kv.keys offset:0 atIndex:2];
     [enc setBuffer:kv.values offset:0 atIndex:3];
     [enc setBytes:&nh length:sizeof(nh) atIndex:4];
@@ -1058,13 +1079,13 @@ Status MetalBackend::AttentionKV(TensorView out, TensorView q, int32_t layer,
     [enc setBytes:&hd length:sizeof(hd) atIndex:6];
     [enc setBytes:&sl length:sizeof(sl) atIndex:7];
     [enc setBytes:&sc length:sizeof(sc) atIndex:8];
-    [enc setBytes:&cap length:sizeof(cap) atIndex:9];
-    [enc setBytes:&lay length:sizeof(lay) atIndex:10];
-
-    const uint32_t grid = static_cast<uint32_t>(num_heads) * static_cast<uint32_t>(head_dim);
-    const uint32_t tsize = 256;
-    [enc dispatchThreads:MTLSizeMake(grid, 1, 1)
-        threadsPerThreadgroup:MTLSizeMake(tsize, 1, 1)];
+    [enc setBytes:&kv_base length:sizeof(kv_base) atIndex:9];
+    [enc setThreadgroupMemoryLength:tg_q_bytes atIndex:0];
+    [enc setThreadgroupMemoryLength:tg_sc_bytes atIndex:1];
+    [enc setThreadgroupMemoryLength:tg_acc_bytes atIndex:2];
+    [enc setThreadgroupMemoryLength:tg_red_bytes atIndex:3];
+    [enc dispatchThreadgroups:MTLSizeMake(static_cast<NSUInteger>(num_heads), 1, 1)
+         threadsPerThreadgroup:MTLSizeMake(attn_tsize, 1, 1)];
     // Deferred.
     return {};
 }

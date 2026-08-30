@@ -216,6 +216,97 @@ TEST(MetalParityTest, MatMulQ8_0Weight) {
     expect_close(out_cpu.view, out_gpu.view, 1e-3f, 1e-3f);
 }
 
+// MatMul parity at real-model dimensions (Qwen3-0.6B-like: hidden=1024,
+// intermediate=3072, vocab=151936). Stresses the split-K GEMV with large
+// output dimensions and validates accumulation correctness at scale.
+
+TEST(MetalParityTest, MatMulF32WeightRealDims) {
+    REQUIRE_METAL();
+    const int batch = 1, in_dim = 1024, out_dim = 1024;
+    auto x = HostTensor::alloc({batch, in_dim}, DType::kF32);
+    auto w = HostTensor::alloc({out_dim, in_dim}, DType::kF32);
+    auto out_cpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    auto out_gpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    fill_random(x.view.data_as<float>(), batch * in_dim, 31);
+    fill_random(w.view.data_as<float>(), out_dim * in_dim, 32);
+
+    CpuBackend cpu;
+    std::array names_cpu = {std::string_view{"w0"}};
+    std::array<TensorView, 1> views_cpu = {w.view};
+    ASSERT_TRUE(cpu.ImportWeights(views_cpu, names_cpu).ok());
+    ASSERT_TRUE(cpu.MatMul(out_cpu.view, x.view, "w0").ok());
+
+    MetalBackend gpu;
+    std::array names_gpu = {std::string_view{"w0"}};
+    std::array<TensorView, 1> views_gpu = {w.view};
+    ASSERT_TRUE(gpu.ImportWeights(views_gpu, names_gpu).ok());
+    ASSERT_TRUE(gpu.MatMul(out_gpu.view, x.view, "w0").ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
+
+    expect_close(out_cpu.view, out_gpu.view, 1e-3f, 1e-3f);
+}
+
+TEST(MetalParityTest, MatMulF16WeightRealDims) {
+    REQUIRE_METAL();
+    const int batch = 1, in_dim = 1024, out_dim = 1024;
+    auto x = HostTensor::alloc({batch, in_dim}, DType::kF32);
+    auto w = HostTensor::alloc({out_dim, in_dim}, DType::kF16);
+    auto out_cpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    auto out_gpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    fill_random(x.view.data_as<float>(), batch * in_dim, 33);
+
+    std::vector<float> w_f32(static_cast<size_t>(out_dim) * in_dim);
+    fill_random(w_f32.data(), w_f32.size(), 34);
+    auto* wh = w.view.data_as<uint16_t>();
+    for (size_t i = 0; i < w_f32.size(); ++i) {
+        wh[i] = fp32_to_fp16(w_f32[i]);
+    }
+
+    CpuBackend cpu;
+    std::array names_cpu = {std::string_view{"w0"}};
+    std::array<TensorView, 1> views_cpu = {w.view};
+    ASSERT_TRUE(cpu.ImportWeights(views_cpu, names_cpu).ok());
+    ASSERT_TRUE(cpu.MatMul(out_cpu.view, x.view, "w0").ok());
+
+    MetalBackend gpu;
+    std::array names_gpu = {std::string_view{"w0"}};
+    std::array<TensorView, 1> views_gpu = {w.view};
+    ASSERT_TRUE(gpu.ImportWeights(views_gpu, names_gpu).ok());
+    ASSERT_TRUE(gpu.MatMul(out_gpu.view, x.view, "w0").ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
+
+    expect_close(out_cpu.view, out_gpu.view, 1e-2f, 1e-2f);
+}
+
+TEST(MetalParityTest, MatMulQ8_0WeightRealDims) {
+    REQUIRE_METAL();
+    const int batch = 1, in_dim = 1024, out_dim = 1024;
+    auto x = HostTensor::alloc({batch, in_dim}, DType::kF32);
+    auto w = HostTensor::alloc_q8_0({out_dim, in_dim});
+    auto out_cpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    auto out_gpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    fill_random(x.view.data_as<float>(), batch * in_dim, 35);
+
+    std::vector<float> w_f32(static_cast<size_t>(out_dim) * in_dim);
+    fill_random(w_f32.data(), w_f32.size(), 36);
+    fill_q8_0(w, w_f32);
+
+    CpuBackend cpu;
+    std::array names_cpu = {std::string_view{"w0"}};
+    std::array<TensorView, 1> views_cpu = {w.view};
+    ASSERT_TRUE(cpu.ImportWeights(views_cpu, names_cpu).ok());
+    ASSERT_TRUE(cpu.MatMul(out_cpu.view, x.view, "w0").ok());
+
+    MetalBackend gpu;
+    std::array names_gpu = {std::string_view{"w0"}};
+    std::array<TensorView, 1> views_gpu = {w.view};
+    ASSERT_TRUE(gpu.ImportWeights(views_gpu, names_gpu).ok());
+    ASSERT_TRUE(gpu.MatMul(out_gpu.view, x.view, "w0").ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
+
+    expect_close(out_cpu.view, out_gpu.view, 1.0f, 1e-2f);
+}
+
 // RmsNorm parity
 
 TEST(MetalParityTest, RmsNormParity) {
@@ -357,6 +448,50 @@ TEST(MetalParityTest, DeviceKVAttentionParity) {
     ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
 
     expect_close(out_cpu.view, out_gpu.view, 1e-5f, 1e-5f);
+}
+
+// Attention parity at real-model dimensions (Qwen3-like):
+//   head_dim=128, GQA group=4 (32 q heads, 8 kv heads), seq=128.
+//   This stresses the flash-attention cooperative kernel with realistic
+//   sizes and validates the online-softmax merging across blocks.
+
+TEST(MetalParityTest, AttentionParityRealDims) {
+    REQUIRE_METAL();
+    const int num_heads = 32, num_kv_heads = 8, head_dim = 128, seq_len = 128;
+    auto q = HostTensor::alloc({1, num_heads, head_dim}, DType::kF32);
+    auto keys = HostTensor::alloc({seq_len, num_kv_heads, head_dim}, DType::kF32);
+    auto values = HostTensor::alloc({seq_len, num_kv_heads, head_dim}, DType::kF32);
+    auto out_cpu = HostTensor::alloc({1, num_heads * head_dim}, DType::kF32);
+    auto out_gpu = HostTensor::alloc({1, num_heads * head_dim}, DType::kF32);
+    fill_random(q.view.data_as<float>(), num_heads * head_dim, 21);
+    fill_random(keys.view.data_as<float>(), seq_len * num_kv_heads * head_dim, 22);
+    fill_random(values.view.data_as<float>(), seq_len * num_kv_heads * head_dim, 23);
+
+    KVCacheView kv{
+        .keys = keys.view.data(),
+        .values = values.view.data(),
+        .seq_len = seq_len,
+        .num_kv_heads = num_kv_heads,
+        .head_dim = head_dim,
+        .dtype = DType::kF32,
+    };
+    AttentionConfig cfg{
+        .num_heads = num_heads,
+        .num_kv_heads = num_kv_heads,
+        .head_dim = head_dim,
+        .scale = 1.0f / std::sqrt(static_cast<float>(head_dim)),
+    };
+
+    CpuBackend cpu;
+    ASSERT_TRUE(cpu.Attention(out_cpu.view, q.view, kv, cfg).ok());
+
+    MetalBackend gpu;
+    ASSERT_TRUE(gpu.Attention(out_gpu.view, q.view, kv, cfg).ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
+
+    // Online-softmax accumulation order differs from CPU's two-pass, so use
+    // a slightly looser tolerance than the small-dim test.
+    expect_close(out_cpu.view, out_gpu.view, 1e-4f, 1e-3f);
 }
 
 // SwiGLU / AddInPlace parity
