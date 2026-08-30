@@ -230,14 +230,14 @@ void bench_attention(Backend& backend, int seq_len, int num_heads, int num_kv_he
         // Append all KV entries (outside the timed loop).
         for (int s = 0; s < seq_len; ++s) {
             // Slice one token's K/V from the full buffers.
-            TensorView k_slice(
-                static_cast<char*>(keys.view.data()) + s * num_kv_heads * head_dim * sizeof(float),
-                DType::kF32,
-                Shape({1, num_kv_heads, head_dim}));
-            TensorView v_slice(
-                static_cast<char*>(values.view.data()) + s * num_kv_heads * head_dim * sizeof(float),
-                DType::kF32,
-                Shape({1, num_kv_heads, head_dim}));
+            TensorView k_slice(static_cast<char*>(keys.view.data()) +
+                                   s * num_kv_heads * head_dim * sizeof(float),
+                               DType::kF32,
+                               Shape({1, num_kv_heads, head_dim}));
+            TensorView v_slice(static_cast<char*>(values.view.data()) +
+                                   s * num_kv_heads * head_dim * sizeof(float),
+                               DType::kF32,
+                               Shape({1, num_kv_heads, head_dim}));
             backend.AppendKV(0, k_slice, v_slice, s);
         }
         sync_backend(backend);

@@ -84,8 +84,7 @@ public:
                                TensorView x,
                                std::span<const std::string_view> weight_names) {
         if (outs.size() != weight_names.size()) {
-            return Status::Error(ErrorCode::kInvalidArgument,
-                                 "MatMulFused: size mismatch");
+            return Status::Error(ErrorCode::kInvalidArgument, "MatMulFused: size mismatch");
         }
         for (size_t i = 0; i < outs.size(); ++i) {
             if (auto s = MatMul(outs[i], x, weight_names[i]); !s.ok()) {

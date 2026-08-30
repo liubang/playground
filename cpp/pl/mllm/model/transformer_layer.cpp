@@ -147,8 +147,8 @@ Status TransformerLayer::Forward(TensorView hidden,
         .scale = scale,
     };
     if (backend.HasDeviceKV()) {
-        if (auto s = backend.AppendKV(
-                layer_index_, k_reshaped.value(), v_reshaped.value(), position);
+        if (auto s =
+                backend.AppendKV(layer_index_, k_reshaped.value(), v_reshaped.value(), position);
             !s.ok()) {
             return s;
         }
@@ -159,8 +159,7 @@ Status TransformerLayer::Forward(TensorView hidden,
             return s;
         }
     } else {
-        if (auto s = cache.Append(layer_index_, k_reshaped.value(), v_reshaped.value());
-            !s.ok()) {
+        if (auto s = cache.Append(layer_index_, k_reshaped.value(), v_reshaped.value()); !s.ok()) {
             return s;
         }
         KVCacheView kv_view = cache.View(layer_index_);
@@ -213,8 +212,8 @@ Status TransformerLayer::Forward(TensorView hidden,
 
     {
         std::array<TensorView, 2> fused_outs = {gate, up};
-        std::array<std::string_view, 2> fused_names = {
-            weights_.gate_weight_name, weights_.up_weight_name};
+        std::array<std::string_view, 2> fused_names = {weights_.gate_weight_name,
+                                                       weights_.up_weight_name};
         if (auto s = backend.MatMulFused(fused_outs, mlp_out, fused_names); !s.ok())
             return s;
     }
