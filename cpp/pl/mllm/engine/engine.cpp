@@ -174,10 +174,8 @@ Result<std::unique_ptr<Engine>> Engine::Create(Options options) {
     if (backend->HasDeviceKV()) {
         // The backend owns the real K/V storage on device; the host cache is
         // a metadata-only shell for length/capacity bookkeeping.
-        if (auto s = backend->ConfigureDeviceKV(config.num_layers,
-                                                config.num_kv_heads,
-                                                config.effective_head_dim(),
-                                                max_tokens);
+        if (auto s = backend->ConfigureDeviceKV(
+                config.num_layers, config.num_kv_heads, config.effective_head_dim(), max_tokens);
             !s.ok()) {
             return s;
         }
@@ -230,10 +228,15 @@ Result<std::unique_ptr<Engine>> Engine::Create(Options options) {
     return engine;
 }
 
-Status Engine::RunPrefill(std::span<const int32_t> tokens) {
+Result<TensorView> Engine::RunPrefill(std::span<const int32_t> tokens) {
     auto& impl = *impl_;
     const int32_t hidden = impl.config.hidden_size;
 
+    if (tokens.empty()) {
+        return Status::Error(ErrorCode::kInvalidArgument, "prefill: empty prompt");
+    }
+
+    TensorView last_hidden;
     for (int64_t i = 0; i < static_cast<int64_t>(tokens.size()); ++i) {
         int32_t tok = tokens[static_cast<size_t>(i)];
         if (tok < 0 || tok >= impl.config.vocab_size) {
@@ -259,8 +262,11 @@ Status Engine::RunPrefill(std::span<const int32_t> tokens) {
             !s.ok()) {
             return s;
         }
+        // Forward updates the embedding buffer in place; after the last
+        // token it holds the final hidden state used to sample token N+1.
+        last_hidden = embd_buf.value();
     }
-    return {};
+    return last_hidden;
 }
 
 Result<std::vector<int32_t>> Engine::GenerateTokens(std::string_view prompt,
@@ -297,11 +303,15 @@ Status Engine::GenerateStream(std::string_view prompt,
 
     auto t_start = Clock::now();
 
-    // Prefill.
+    // Prefill. The returned hidden state belongs to the last prompt token
+    // and is used directly to sample the first generated token — the last
+    // prompt token must NOT be re-forwarded during decode.
     auto prefill_start = Clock::now();
-    if (auto s = RunPrefill(prompt_tokens); !s.ok()) {
-        return s;
+    auto prefill_result = RunPrefill(prompt_tokens);
+    if (!prefill_result.ok()) {
+        return prefill_result.status();
     }
+    TensorView hidden_state = prefill_result.value();
     auto prefill_end = Clock::now();
     perf_.prefill_ms = elapsed_ms(prefill_start, prefill_end);
     perf_.prompt_tokens = static_cast<int32_t>(prompt_tokens.size());
@@ -323,7 +333,8 @@ Status Engine::GenerateStream(std::string_view prompt,
     auto logits_owned = std::move(logits_buf_result).value();
     TensorView logits(logits_owned.data(), DType::kF32, {1, vocab});
 
-    // Decode loop.
+    // Decode loop: each step samples from the current hidden state, then
+    // embeds the sampled token and forwards it to produce the next one.
     std::vector<int32_t> generated;
     generated.reserve(static_cast<size_t>(params.max_tokens));
     int64_t pos = static_cast<int64_t>(prompt_tokens.size());
@@ -331,37 +342,11 @@ Status Engine::GenerateStream(std::string_view prompt,
     auto decode_start = Clock::now();
     bool first_token = true;
 
-    // The last token from prompt seeds the first decode step.
-    int32_t last_token = prompt_tokens.back();
-
     for (int32_t step = 0; step < params.max_tokens; ++step) {
-        // Embed last token into a writable arena buffer (dequantized).
-        if (last_token < 0 || last_token >= vocab) {
-            return Status::Error(ErrorCode::kInternal, "token out of range");
-        }
-
-        impl.arena->Reset();
-        auto embd_buf = impl.arena->AllocateTensor({1, hidden}, DType::kF32);
-        if (!embd_buf.ok())
-            return embd_buf.status();
-        if (auto s = embedding_row(impl.token_embd, last_token, hidden, embd_buf.value());
-            !s.ok()) {
-            return s;
-        }
-        // The embedding write happened on the host, outside the backend.
-        if (auto s = impl.backend->NotifyHostWrite(embd_buf.value()); !s.ok()) {
-            return s;
-        }
-
-        if (auto s =
-                impl.model->Forward(embd_buf.value(), pos, *impl.cache, *impl.backend, *impl.arena);
-            !s.ok()) {
-            return s;
-        }
-
-        impl.arena->Reset();
-        if (auto s =
-                impl.model->ComputeLogits(embd_buf.value(), logits, *impl.backend, *impl.arena);
+        // Compute logits from the current hidden state. The arena is NOT
+        // reset between Forward and ComputeLogits: `hidden_state` lives in
+        // the arena and ComputeLogits' scratch allocations follow it.
+        if (auto s = impl.model->ComputeLogits(hidden_state, logits, *impl.backend, *impl.arena);
             !s.ok()) {
             return s;
         }
@@ -395,7 +380,37 @@ Status Engine::GenerateStream(std::string_view prompt,
             }
         }
 
-        last_token = next;
+        // No point forwarding a token nobody will sample from.
+        if (step + 1 == params.max_tokens) {
+            break;
+        }
+
+        // Embed the sampled token into a writable arena buffer (dequantized)
+        // and forward it at the next position.
+        if (next < 0 || next >= vocab) {
+            return Status::Error(ErrorCode::kInternal, "token out of range");
+        }
+
+        impl.arena->Reset();
+        auto embd_buf = impl.arena->AllocateTensor({1, hidden}, DType::kF32);
+        if (!embd_buf.ok())
+            return embd_buf.status();
+        if (auto s = embedding_row(impl.token_embd, next, hidden, embd_buf.value()); !s.ok()) {
+            return s;
+        }
+        // The embedding write happened on the host, outside the backend.
+        if (auto s = impl.backend->NotifyHostWrite(embd_buf.value()); !s.ok()) {
+            return s;
+        }
+
+        if (auto s =
+                impl.model->Forward(embd_buf.value(), pos, *impl.cache, *impl.backend, *impl.arena);
+            !s.ok()) {
+            return s;
+        }
+        // Forward updates the buffer in place; it is now the hidden state
+        // for the next sampling step.
+        hidden_state = embd_buf.value();
         ++pos;
     }
 

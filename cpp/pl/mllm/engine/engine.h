@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "cpp/pl/mllm/core/status.h"
+#include "cpp/pl/mllm/core/tensor.h"
 #include "cpp/pl/mllm/sampler/sampler.h"
 
 namespace pl::mllm {
@@ -89,7 +90,10 @@ private:
     Engine() = default;
 
     // Run prefill: tokenize prompt, embed each token, forward through model.
-    Status RunPrefill(std::span<const int32_t> tokens);
+    // Returns the final hidden state (a view into the scratch arena, valid
+    // until the next arena Reset) so the caller can sample the first
+    // generated token from it without re-forwarding the last prompt token.
+    [[nodiscard]] Result<TensorView> RunPrefill(std::span<const int32_t> tokens);
 
     struct Impl;
     std::unique_ptr<Impl> impl_;
