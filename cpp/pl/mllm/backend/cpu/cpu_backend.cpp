@@ -507,4 +507,42 @@ Status CpuBackend::AddInPlace(TensorView x, TensorView residual) {
     return {};
 }
 
+// AddBiasInPlace
+
+Status CpuBackend::AddBiasInPlace(TensorView x, TensorView bias) {
+    if (auto s = check_contiguous(x, "AddBiasInPlace"); !s.ok())
+        return s;
+    if (auto s = check_contiguous(bias, "AddBiasInPlace"); !s.ok())
+        return s;
+
+    if (x.shape().rank() != 2 || bias.shape().numel() != x.shape().dim(1)) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "AddBiasInPlace: expected x[batch, n] + bias[n]");
+    }
+
+    const int64_t batch = x.shape().dim(0);
+    const int64_t n = x.shape().dim(1);
+
+    if (x.dtype() == DType::kF32) {
+        auto* xd = x.data_as<float>();
+        for (int64_t b = 0; b < batch; ++b) {
+            for (int64_t i = 0; i < n; ++i) {
+                xd[b * n + i] += elem_to_f32(bias.data(), bias.dtype(), i);
+            }
+        }
+    } else if (x.dtype() == DType::kF16) {
+        auto* xd = x.data_as<uint16_t>();
+        for (int64_t b = 0; b < batch; ++b) {
+            for (int64_t i = 0; i < n; ++i) {
+                const float v =
+                    fp16_to_fp32(xd[b * n + i]) + elem_to_f32(bias.data(), bias.dtype(), i);
+                xd[b * n + i] = fp32_to_fp16(v);
+            }
+        }
+    } else {
+        return Status::Error(ErrorCode::kUnsupported, "AddBiasInPlace: unsupported dtype");
+    }
+    return {};
+}
+
 } // namespace pl::mllm

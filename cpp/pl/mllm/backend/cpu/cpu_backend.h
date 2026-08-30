@@ -45,6 +45,7 @@ public:
                      const AttentionConfig& config) override;
     Status SwiGLU(TensorView out, TensorView gate, TensorView up) override;
     Status AddInPlace(TensorView x, TensorView residual) override;
+    Status AddBiasInPlace(TensorView x, TensorView bias) override;
     Status Synchronize() override { return {}; }
 
     // Test helper: direct access to imported weight by name.

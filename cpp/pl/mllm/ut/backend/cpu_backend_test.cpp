@@ -691,5 +691,55 @@ TEST(CpuBackendTest, AddInPlaceShapeMismatch) {
     EXPECT_EQ(s.code, ErrorCode::kInvalidArgument);
 }
 
+// AddBiasInPlace (Qwen2 QKV bias)
+
+TEST(CpuBackendTest, AddBiasInPlaceF32) {
+    auto x = HostTensor::alloc({2, 4}, DType::kF32);
+    auto bias = HostTensor::alloc({4}, DType::kF32);
+    float* xp = x.view.data_as<float>();
+    float* bp = bias.view.data_as<float>();
+    for (int i = 0; i < 8; ++i) {
+        xp[i] = static_cast<float>(i);
+    }
+    for (int i = 0; i < 4; ++i) {
+        bp[i] = 0.5f * static_cast<float>(i);
+    }
+
+    CpuBackend backend;
+    ASSERT_TRUE(backend.AddBiasInPlace(x.view, bias.view).ok());
+
+    for (int b = 0; b < 2; ++b) {
+        for (int i = 0; i < 4; ++i) {
+            EXPECT_FLOAT_EQ(xp[b * 4 + i], static_cast<float>(b * 4 + i) + bp[i]);
+        }
+    }
+}
+
+TEST(CpuBackendTest, AddBiasInPlaceF16Bias) {
+    // bias may arrive as f16 (typical for Qwen2 GGUF); it must be converted.
+    auto x = HostTensor::alloc({1, 4}, DType::kF32);
+    auto bias = HostTensor::alloc({4}, DType::kF16);
+    float* xp = x.view.data_as<float>();
+    for (int i = 0; i < 4; ++i) {
+        xp[i] = 1.0f;
+        bias.view.data_as<uint16_t>()[i] = fp32_to_fp16(0.25f * static_cast<float>(i));
+    }
+
+    CpuBackend backend;
+    ASSERT_TRUE(backend.AddBiasInPlace(x.view, bias.view).ok());
+    for (int i = 0; i < 4; ++i) {
+        EXPECT_NEAR(xp[i], 1.0f + 0.25f * static_cast<float>(i), 1e-3f);
+    }
+}
+
+TEST(CpuBackendTest, AddBiasInPlaceShapeMismatch) {
+    auto x = HostTensor::alloc({1, 4}, DType::kF32);
+    auto bias = HostTensor::alloc({8}, DType::kF32);
+    CpuBackend backend;
+    auto s = backend.AddBiasInPlace(x.view, bias.view);
+    EXPECT_FALSE(s.ok());
+    EXPECT_EQ(s.code, ErrorCode::kInvalidArgument);
+}
+
 } // namespace
 } // namespace pl::mllm

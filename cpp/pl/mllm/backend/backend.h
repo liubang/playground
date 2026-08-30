@@ -98,6 +98,10 @@ public:
     // x += residual  (in-place)
     virtual Status AddInPlace(TensorView x, TensorView residual) = 0;
 
+    // x[b, i] += bias[i]  (in-place, row-broadcast)
+    // x shape: [batch, n], bias shape: [n]
+    virtual Status AddBiasInPlace(TensorView x, TensorView bias) = 0;
+
     // Block until all queued work is complete.
     virtual Status Synchronize() = 0;
 };

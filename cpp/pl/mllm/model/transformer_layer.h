@@ -46,6 +46,15 @@ struct LayerWeights {
     // Norm weights — passed as TensorView
     TensorView attn_norm;
     TensorView mlp_norm;
+    // Optional additive Q/K/V projection biases (Qwen2). Invalid TensorView
+    // = absent; sizes are [heads*head_dim] / [kv_heads*head_dim].
+    TensorView q_bias;
+    TensorView k_bias;
+    TensorView v_bias;
+    // Optional per-head Q/K RMSNorm weights applied before RoPE (Qwen3).
+    // Shape: [head_dim] each. Invalid TensorView = absent.
+    TensorView q_norm;
+    TensorView k_norm;
 };
 
 // One transformer layer. See SPEC §6.2.

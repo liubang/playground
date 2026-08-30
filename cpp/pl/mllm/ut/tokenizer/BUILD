@@ -15,26 +15,20 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2026/08/29 22:15
 
-load("//cpp:copts/configure_copts.bzl", "COPTS", "LINKOPTS")
+load("@rules_cc//cc:defs.bzl", "cc_test")
+load("//cpp:copts/configure_copts.bzl", "COPTS", "LINKOPTS", "TEST_COPTS")
 
-cc_library(
-    name = "engine",
-    srcs = ["engine.cpp"],
-    hdrs = ["engine.h"],
-    copts = COPTS,
+package(default_visibility = ["//visibility:public"])
+
+cc_test(
+    name = "tokenizer_test",
+    srcs = ["tokenizer_test.cpp"],
+    copts = TEST_COPTS,
     linkopts = LINKOPTS,
-    visibility = ["//visibility:public"],
     deps = [
-        "//cpp/pl/mllm/backend",
-        "//cpp/pl/mllm/backend/cpu:cpu_backend",
-        "//cpp/pl/mllm/core",
-        "//cpp/pl/mllm/kv_cache",
         "//cpp/pl/mllm/loader",
-        "//cpp/pl/mllm/model",
-        "//cpp/pl/mllm/sampler",
         "//cpp/pl/mllm/tokenizer",
-    ] + select({
-        "@platforms//os:macos": ["//cpp/pl/mllm/backend/metal:metal_backend"],
-        "//conditions:default": [],
-    }),
+        "//cpp/pl/mllm/ut/testdata:gguf_writer",
+        "@googletest//:gtest_main",
+    ],
 )

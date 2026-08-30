@@ -21,10 +21,14 @@
 #include <string>
 
 #include "cpp/pl/mllm/core/status.h"
+#include "cpp/pl/mllm/model/architecture.h"
 
 namespace pl::mllm {
 
-// Decoder-only, LLaMA-compatible model hyperparameters.
+// Decoder-only model hyperparameters, shared by all supported dense decoder
+// families (llama, qwen2, qwen3, ...). Family-specific behavior is toggled by
+// the feature flags populated from the architecture registry
+// (see architecture.h); the GGUF loader resolves and stores them here.
 struct ModelConfig {
     std::string architecture;
     int32_t vocab_size = 0;
@@ -33,13 +37,20 @@ struct ModelConfig {
     int32_t num_layers = 0;
     int32_t num_attention_heads = 0;
     int32_t num_kv_heads = 0;
+    // Explicit per-head dim. 0 = derive as hidden_size / num_attention_heads.
+    // May differ from hidden_size / heads (e.g. Qwen3 uses 128 per head with
+    // hidden_size 1024 and 16 heads).
     int32_t head_dim = 0;
     int32_t context_length = 0;
     float rms_norm_eps = 1e-5f;
     float rope_freq_base = 10000.0f;
+    // Feature flags (see ArchSpec): additive Q/K/V bias (Qwen2) and per-head
+    // Q/K RMSNorm (Qwen3).
+    bool qkv_bias = false;
+    bool qk_norm = false;
 
     [[nodiscard]] Status Validate() const {
-        if (architecture != "llama") {
+        if (find_architecture(architecture) == nullptr) {
             return Status::Error(ErrorCode::kUnsupported,
                                  "unsupported architecture: " + architecture);
         }
@@ -48,13 +59,13 @@ struct ModelConfig {
             return Status::Error(ErrorCode::kInvalidFormat, "config: non-positive dimension");
         }
         const int32_t hd = head_dim != 0 ? head_dim : hidden_size / num_attention_heads;
-        if (hidden_size != num_attention_heads * hd) {
+        if (head_dim == 0 && hidden_size != num_attention_heads * hd) {
             return Status::Error(ErrorCode::kInvalidFormat,
-                                 "config: hidden_size != heads * head_dim");
+                                 "config: hidden_size not divisible by heads");
         }
-        if (hd % 2 != 0) {
+        if (hd <= 0 || hd % 2 != 0) {
             return Status::Error(ErrorCode::kInvalidFormat,
-                                 "config: head_dim must be even for RoPE");
+                                 "config: head_dim must be positive and even for RoPE");
         }
         if (num_attention_heads % num_kv_heads != 0) {
             return Status::Error(ErrorCode::kInvalidFormat,

@@ -192,6 +192,17 @@ kernel void mllm_add_inplace(
     x[gid] += residual[gid];
 }
 
+// AddBiasInPlace
+// x[b, i] += bias[i]  (row-broadcast; x laid out as flat [batch * n])
+kernel void mllm_add_bias(
+    device float* x [[buffer(0)]],
+    const device float* bias [[buffer(1)]],
+    constant uint& n           [[buffer(2)]],
+    uint gid [[thread_position_in_grid]])
+{
+    x[gid] += bias[gid % n];
+}
+
 // Q8_0 fused dequant GEMV
 // out[o] = sum_i x[i] * dequant(w[o, i])  (decode path: batch = 1)
 // w layout (ggml Q8_0): [out_dim][num_blocks] where each block is

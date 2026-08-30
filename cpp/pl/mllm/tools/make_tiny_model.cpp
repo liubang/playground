@@ -15,17 +15,18 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/08/29 22:15
 
-// Generates a tiny LLaMA-compatible GGUF file (1 layer, 16 hidden, 8 vocab)
-// with deterministic constant weights, so the CLI / bench tools can be run
-// end-to-end without a real model. Usage:
+// Generates a tiny GGUF file (1 layer, 16 hidden, 8 vocab) for any supported
+// architecture with deterministic constant weights, so the CLI / bench tools
+// can be run end-to-end without a real model. Usage:
 //
-//   bazel run //cpp/pl/mllm/tools:make_tiny_model -- [-o out.gguf]
+//   bazel run //cpp/pl/mllm/tools:make_tiny_model -- [-o out.gguf] [--arch llama|qwen2|qwen3]
 
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "cpp/pl/mllm/ut/testdata/gguf_writer.h"
@@ -54,16 +55,24 @@ std::vector<uint8_t> f32_bytes(const std::vector<float>& values) {
     return out;
 }
 
-td::GgufWriter build_writer() {
-    td::GgufWriter w("llama");
-    w.meta_u32("llama.context_length", 32);
-    w.meta_u32("llama.embedding_length", kHidden);
-    w.meta_u32("llama.feed_forward_length", kInter);
-    w.meta_u32("llama.block_count", 1);
-    w.meta_u32("llama.attention.head_count", kHeads);
-    w.meta_u32("llama.attention.head_count_kv", kKVHeads);
-    w.meta_f32("llama.attention.layer_norm_rms_epsilon", 1e-5f);
-    w.meta_f32("llama.rope.freq_base", 10000.0f);
+// Family-specific weight layout (mirrors the arch registry feature flags):
+//   qwen2 -> additive Q/K/V projection biases
+//   qwen3 -> per-head Q/K RMSNorm before RoPE
+td::GgufWriter build_writer(std::string_view arch) {
+    const bool qkv_bias = arch == "qwen2";
+    const bool qk_norm = arch == "qwen3";
+    const float rope_base = arch == "llama" ? 10000.0f : 1000000.0f;
+
+    const std::string a(arch);
+    td::GgufWriter w(a);
+    w.meta_u32(a + ".context_length", 32);
+    w.meta_u32(a + ".embedding_length", kHidden);
+    w.meta_u32(a + ".feed_forward_length", kInter);
+    w.meta_u32(a + ".block_count", 1);
+    w.meta_u32(a + ".attention.head_count", kHeads);
+    w.meta_u32(a + ".attention.head_count_kv", kKVHeads);
+    w.meta_f32(a + ".attention.layer_norm_rms_epsilon", 1e-5f);
+    w.meta_f32(a + ".rope.freq_base", rope_base);
 
     w.meta_str_array("tokenizer.ggml.tokens", {"<s>", "</s>", "a", "b", "c", " ", "d", "e"});
     w.meta_f32_array("tokenizer.ggml.scores",
@@ -94,6 +103,21 @@ td::GgufWriter build_writer() {
     w.tensor({"blk.0.ffn_gate.weight", {kHidden, kInter}, td::GgufType::kF32, f32_bytes(ffn)});
     w.tensor({"blk.0.ffn_up.weight", {kHidden, kInter}, td::GgufType::kF32, f32_bytes(ffn)});
     w.tensor({"blk.0.ffn_down.weight", {kInter, kHidden}, td::GgufType::kF32, f32_bytes(down)});
+
+    if (qkv_bias) {
+        const std::vector<float> q_bias(kHeads * kHeadDim, 0.01f);
+        const std::vector<float> kv_bias(kKVHeads * kHeadDim, 0.01f);
+        w.tensor({"blk.0.attn_q.bias", {kHeads * kHeadDim}, td::GgufType::kF32, f32_bytes(q_bias)});
+        w.tensor(
+            {"blk.0.attn_k.bias", {kKVHeads * kHeadDim}, td::GgufType::kF32, f32_bytes(kv_bias)});
+        w.tensor(
+            {"blk.0.attn_v.bias", {kKVHeads * kHeadDim}, td::GgufType::kF32, f32_bytes(kv_bias)});
+    }
+    if (qk_norm) {
+        const std::vector<float> norm(kHeadDim, 1.0f);
+        w.tensor({"blk.0.attn_q_norm.weight", {kHeadDim}, td::GgufType::kF32, f32_bytes(norm)});
+        w.tensor({"blk.0.attn_k_norm.weight", {kHeadDim}, td::GgufType::kF32, f32_bytes(norm)});
+    }
     return w;
 }
 
@@ -101,16 +125,23 @@ td::GgufWriter build_writer() {
 
 int main(int argc, char** argv) {
     std::string out_path = "/tmp/mllm_tiny.gguf";
+    std::string arch = "llama";
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
             out_path = argv[++i];
+        } else if (std::strcmp(argv[i], "--arch") == 0 && i + 1 < argc) {
+            arch = argv[++i];
         } else if (std::strcmp(argv[i], "-h") == 0 || std::strcmp(argv[i], "--help") == 0) {
-            std::printf("usage: %s [-o out.gguf]\n", argv[0]);
+            std::printf("usage: %s [-o out.gguf] [--arch llama|qwen2|qwen3]\n", argv[0]);
             return 0;
         }
     }
+    if (arch != "llama" && arch != "qwen2" && arch != "qwen3") {
+        std::fprintf(stderr, "error: unsupported --arch %s\n", arch.c_str());
+        return 1;
+    }
 
-    auto writer = build_writer();
+    auto writer = build_writer(arch);
     const std::vector<uint8_t> bytes = writer.build(32);
     std::ofstream out(out_path, std::ios::binary);
     if (!out) {
@@ -119,6 +150,6 @@ int main(int argc, char** argv) {
     }
     out.write(reinterpret_cast<const char*>(bytes.data()),
               static_cast<std::streamsize>(bytes.size()));
-    std::printf("wrote %s (%zu bytes)\n", out_path.c_str(), bytes.size());
+    std::printf("wrote %s (%zu bytes, arch=%s)\n", out_path.c_str(), bytes.size(), arch.c_str());
     return 0;
 }

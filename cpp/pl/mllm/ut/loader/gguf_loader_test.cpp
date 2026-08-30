@@ -254,5 +254,70 @@ TEST(GgufLoaderTest, MultiTensorDataOffsets) {
     }
 }
 
+// Architecture-specific ModelConfig resolution: feature flags and RoPE
+// defaults come from the arch registry when GGUF metadata omits them.
+
+td::GgufWriter make_arch_writer(std::string_view arch) {
+    td::GgufWriter w{std::string(arch)};
+    const std::string p = std::string(arch) + ".";
+    w.meta_u32(p + "context_length", 64);
+    w.meta_u32(p + "embedding_length", 16);
+    w.meta_u32(p + "feed_forward_length", 32);
+    w.meta_u32(p + "block_count", 1);
+    w.meta_u32(p + "attention.head_count", 2);
+    w.meta_u32(p + "attention.head_count_kv", 1);
+    // No rope.freq_base on purpose: the loader must fall back to the family
+    // default from the architecture registry.
+    // token_embd.weight supplies vocab_size (ggml {16, 4} -> loaded [4, 16]).
+    w.tensor({"token_embd.weight",
+              {16, 4},
+              td::GgufType::kF32,
+              f32_bytes_from_floats(std::vector<float>(64, 0.05f))});
+    return w;
+}
+
+TEST(GgufLoaderTest, Qwen2ConfigDefaults) {
+    td::GgufWriter w = make_arch_writer("qwen2");
+    TempFile tmp(w.build(32));
+    auto file = GGUFFile::Open(tmp.path());
+    ASSERT_TRUE(file.ok()) << file.status().message;
+
+    auto cfg = file.value()->model_config();
+    ASSERT_TRUE(cfg.ok()) << cfg.status().message;
+    EXPECT_EQ(cfg.value().architecture, "qwen2");
+    EXPECT_TRUE(cfg.value().qkv_bias);
+    EXPECT_FALSE(cfg.value().qk_norm);
+    EXPECT_FLOAT_EQ(cfg.value().rope_freq_base, 1000000.0f);
+    EXPECT_EQ(cfg.value().vocab_size, 4);
+}
+
+TEST(GgufLoaderTest, Qwen3ConfigWithHeadDim) {
+    td::GgufWriter w = make_arch_writer("qwen3");
+    // Qwen3 publishes an explicit head_dim (may != embedding/heads).
+    w.meta_u32("qwen3.attention.head_dim", 16);
+    TempFile tmp(w.build(32));
+    auto file = GGUFFile::Open(tmp.path());
+    ASSERT_TRUE(file.ok()) << file.status().message;
+
+    auto cfg = file.value()->model_config();
+    ASSERT_TRUE(cfg.ok()) << cfg.status().message;
+    EXPECT_EQ(cfg.value().architecture, "qwen3");
+    EXPECT_TRUE(cfg.value().qk_norm);
+    EXPECT_FALSE(cfg.value().qkv_bias);
+    EXPECT_EQ(cfg.value().head_dim, 16);
+    EXPECT_FLOAT_EQ(cfg.value().rope_freq_base, 1000000.0f);
+}
+
+TEST(GgufLoaderTest, UnsupportedArchitectureRejected) {
+    td::GgufWriter w = make_arch_writer("deepseek");
+    TempFile tmp(w.build(32));
+    auto file = GGUFFile::Open(tmp.path());
+    ASSERT_TRUE(file.ok()) << file.status().message;
+
+    auto cfg = file.value()->model_config();
+    EXPECT_FALSE(cfg.ok());
+    EXPECT_EQ(cfg.status().code, ErrorCode::kUnsupported);
+}
+
 } // namespace
 } // namespace pl::mllm

@@ -477,11 +477,11 @@ Result<std::shared_ptr<GGUFFile>> GGUFFile::Open(std::string path) {
     // the cursor position there is still mid-directory) and resolve offsets.
     const size_t data_base = align_up(cursor.pos(), static_cast<size_t>(alignment));
     for (auto& ti : file->tensors_) {
+        ti.file_offset += data_base;
         if (ti.file_offset > file->mapped_.size() ||
             file->mapped_.size() - ti.file_offset < ti.byte_size) {
             return Status::Error(ErrorCode::kInvalidFormat, "tensor data out of range: " + ti.name);
         }
-        ti.file_offset += data_base;
     }
 
     // name_to_index_ points into tensors_ string storage (stable).
@@ -642,6 +642,14 @@ Result<ModelConfig> GGUFFile::model_config() const {
     ModelConfig cfg;
     cfg.architecture = architecture_;
 
+    // Resolve family defaults (feature flags, RoPE base) from the arch
+    // registry; unknown architectures fail at Validate() below.
+    const ArchSpec* arch = find_architecture(architecture_);
+    if (arch != nullptr) {
+        cfg.qkv_bias = arch->qkv_bias;
+        cfg.qk_norm = arch->qk_norm;
+    }
+
     const std::string p = architecture_ + ".";
     auto get_u32 = [&](std::string_view key) -> Result<uint32_t> {
         return u32_meta(p + std::string(key));
@@ -667,11 +675,21 @@ Result<ModelConfig> GGUFFile::model_config() const {
     auto eps = f32_meta(p + "attention.layer_norm_rms_epsilon");
     cfg.rms_norm_eps = eps.ok() ? eps.value() : 1e-5f;
 
+    // RoPE base: explicit metadata wins, otherwise fall back to the family
+    // default (llama 1e4; qwen2/qwen3 1e6).
     auto rope = f32_meta(p + "rope.freq_base");
-    cfg.rope_freq_base = rope.ok() ? rope.value() : 10000.0f;
+    const float default_rope_base = arch != nullptr ? arch->default_rope_freq_base : 10000.0f;
+    cfg.rope_freq_base = rope.ok() ? rope.value() : default_rope_base;
 
+    // head_dim: prefer explicit "attention.head_dim", then fall back to
+    // "attention.key_length" (used by Qwen3), then 0 (= hidden / heads).
     auto head_dim = get_u32("attention.head_dim");
-    cfg.head_dim = head_dim.ok() ? static_cast<int32_t>(head_dim.value()) : 0;
+    if (head_dim.ok()) {
+        cfg.head_dim = static_cast<int32_t>(head_dim.value());
+    } else {
+        auto key_len = get_u32("attention.key_length");
+        cfg.head_dim = key_len.ok() ? static_cast<int32_t>(key_len.value()) : 0;
+    }
 
     // vocab size from token embedding tensor row count.
     if (has_tensor("token_embd.weight")) {

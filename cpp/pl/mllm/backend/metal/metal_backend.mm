@@ -89,6 +89,7 @@ struct MetalBackend::Impl {
     id<MTLComputePipelineState> attention_ps = nil;
     id<MTLComputePipelineState> swiglu_ps = nil;
     id<MTLComputePipelineState> add_ps = nil;
+    id<MTLComputePipelineState> add_bias_ps = nil;
     id<MTLComputePipelineState> gemv_ps = nil;
 
     // Weight table. f32/f16 weights are converted to f32 at import; Q8_0
@@ -147,12 +148,13 @@ private:
         attention_ps = make_ps("mllm_attention");
         swiglu_ps = make_ps("mllm_swiglu");
         add_ps = make_ps("mllm_add_inplace");
+        add_bias_ps = make_ps("mllm_add_bias");
         gemv_ps = make_ps("mllm_gemv_q8_0");
         if (!init_error.ok()) {
             return;
         }
         if (!rmsnorm_ps || !rope_ps || !attention_ps || !swiglu_ps || !add_ps ||
-            !gemv_ps) {
+            !add_bias_ps || !gemv_ps) {
             init_error = Status::Error(ErrorCode::kBackendFailure,
                                        "MetalBackend: missing pipeline state");
         }
@@ -671,6 +673,48 @@ Status MetalBackend::AddInPlace(TensorView x, TensorView residual) {
     }
 
     std::memcpy(x.data(), xbuf.contents, static_cast<size_t>(n) * sizeof(float));
+    return {};
+}
+
+// AddBiasInPlace
+
+Status MetalBackend::AddBiasInPlace(TensorView x, TensorView bias) {
+    if (auto s = ensure_ready(*impl_); !s.ok()) return s;
+    if (auto s = check_contig_valid(x, "AddBiasInPlace"); !s.ok()) return s;
+    if (auto s = check_contig_valid(bias, "AddBiasInPlace"); !s.ok()) return s;
+
+    if (x.shape().rank() != 2 || bias.shape().numel() != x.shape().dim(1)) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "AddBiasInPlace: expected x[batch, n] + bias[n]");
+    }
+    if (x.dtype() != DType::kF32) {
+        return Status::Error(ErrorCode::kUnsupported, "AddBiasInPlace: x must be f32");
+    }
+
+    const int64_t total = x.shape().numel();
+    id<MTLBuffer> xbuf = upload(*impl_, to_f32(x));
+    id<MTLBuffer> bbuf = upload(*impl_, to_f32(bias));
+    if (!xbuf || !bbuf) {
+        return Status::Error(ErrorCode::kBackendFailure, "AddBiasInPlace: buffer alloc failed");
+    }
+
+    const uint32_t n = static_cast<uint32_t>(x.shape().dim(1));
+    id<MTLCommandBuffer> cb = [impl_->queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:impl_->add_bias_ps];
+    [enc setBuffer:xbuf offset:0 atIndex:0];
+    [enc setBuffer:bbuf offset:0 atIndex:1];
+    [enc setBytes:&n length:sizeof(n) atIndex:2];
+    [enc dispatchThreads:MTLSizeMake(static_cast<NSUInteger>(total), 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
+    [enc endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+    if (cb.error != nil) {
+        return Status::Error(ErrorCode::kBackendFailure, "AddBiasInPlace: command buffer error");
+    }
+
+    std::memcpy(x.data(), xbuf.contents, static_cast<size_t>(total) * sizeof(float));
     return {};
 }
 

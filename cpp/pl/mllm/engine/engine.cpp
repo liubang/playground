@@ -31,7 +31,7 @@
 #include "cpp/pl/mllm/core/tensor.h"
 #include "cpp/pl/mllm/kv_cache/kv_cache.h"
 #include "cpp/pl/mllm/loader/gguf.h"
-#include "cpp/pl/mllm/model/llama_model.h"
+#include "cpp/pl/mllm/model/model.h"
 #include "cpp/pl/mllm/sampler/sampler.h"
 #include "cpp/pl/mllm/tokenizer/tokenizer.h"
 
@@ -43,14 +43,14 @@ struct Engine::Impl {
     std::shared_ptr<GGUFFile> gguf;
     ModelConfig config;
     Tokenizer tokenizer;
-    std::unique_ptr<LlamaModel> model;
+    std::unique_ptr<Model> model;
     std::unique_ptr<Backend> backend;
     std::unique_ptr<KVCache> cache;
     std::unique_ptr<ScratchArena> arena;
 
     // Embedding lookup buffer (f32 for CPU backend).
     TensorView token_embd; // non-owning view into GGUF mmap
-    std::vector<LlamaModel::WeightEntry> weight_entries;
+    std::vector<Model::WeightEntry> weight_entries;
 };
 
 // Destructor must be in .cpp where Impl is complete.
@@ -128,7 +128,7 @@ Result<std::unique_ptr<Engine>> Engine::Create(Options options) {
     auto tokenizer = std::move(tok_result).value();
 
     // Collect weight entries from GGUF tensors.
-    std::vector<LlamaModel::WeightEntry> weight_entries;
+    std::vector<Model::WeightEntry> weight_entries;
     for (const auto& ti : gguf->tensors()) {
         auto view_result = gguf->tensor(ti.name);
         if (!view_result.ok()) {
@@ -137,7 +137,7 @@ Result<std::unique_ptr<Engine>> Engine::Create(Options options) {
         weight_entries.push_back({ti.name, view_result.value()});
     }
 
-    auto model_result = LlamaModel::Create(config, weight_entries);
+    auto model_result = CreateModel(config, weight_entries);
     if (!model_result.ok()) {
         return model_result.status();
     }
@@ -176,8 +176,15 @@ Result<std::unique_ptr<Engine>> Engine::Create(Options options) {
     }
     auto cache = std::make_unique<KVCache>(std::move(cache_result).value());
 
-    // Arena: generous scratch for per-token activations.
-    const size_t arena_bytes = static_cast<size_t>(config.intermediate_size) * 8 * 64;
+    // Arena: must hold all per-layer activations across ALL layers in one
+    // forward pass (arena is reset per-token, not per-layer). Each layer
+    // allocates roughly 10 * max(intermediate, heads*head_dim) * 4 bytes.
+    // Add headroom for logits and double the result for safety.
+    const size_t per_layer_bytes =
+        static_cast<size_t>(std::max(config.intermediate_size,
+                                     config.num_attention_heads * config.effective_head_dim())) *
+        10 * 4;
+    const size_t arena_bytes = per_layer_bytes * static_cast<size_t>(config.num_layers) * 2 + 65536;
     auto arena_result = ScratchArena::Create(arena_bytes);
     if (!arena_result.ok()) {
         return arena_result.status();

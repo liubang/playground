@@ -69,7 +69,46 @@ Status TransformerLayer::Forward(TensorView hidden,
     if (auto s = backend.MatMul(v, attn_out, weights_.v_weight_name); !s.ok())
         return s;
 
-    // 3. RoPE on Q/K
+    // 3a. Optional Q/K/V bias (Qwen2): row-broadcast add after projection.
+    if (weights_.q_bias.valid()) {
+        if (auto s = backend.AddBiasInPlace(q, weights_.q_bias); !s.ok())
+            return s;
+    }
+    if (weights_.k_bias.valid()) {
+        if (auto s = backend.AddBiasInPlace(k, weights_.k_bias); !s.ok())
+            return s;
+    }
+    if (weights_.v_bias.valid()) {
+        if (auto s = backend.AddBiasInPlace(v, weights_.v_bias); !s.ok())
+            return s;
+    }
+
+    // 3b. Optional per-head Q/K RMSNorm (Qwen3), applied before RoPE.
+    //   q [1, heads*head_dim] -> [heads, head_dim] where each row is a head;
+    //   the norm weight is [head_dim]. In-place (out aliases x) is safe for
+    //   row-wise RMSNorm.
+    if (weights_.q_norm.valid()) {
+        auto q_heads = q.reshape({num_heads, head_dim});
+        if (!q_heads.ok())
+            return q_heads.status();
+        if (auto s = backend.RmsNorm(
+                q_heads.value(), q_heads.value(), weights_.q_norm, config.rms_norm_eps);
+            !s.ok()) {
+            return s;
+        }
+    }
+    if (weights_.k_norm.valid()) {
+        auto k_heads = k.reshape({num_kv_heads, head_dim});
+        if (!k_heads.ok())
+            return k_heads.status();
+        if (auto s = backend.RmsNorm(
+                k_heads.value(), k_heads.value(), weights_.k_norm, config.rms_norm_eps);
+            !s.ok()) {
+            return s;
+        }
+    }
+
+    // 4. RoPE on Q/K
     // Reshape to [1, heads, head_dim]
     auto q_reshaped = q.reshape({1, num_heads, head_dim});
     if (!q_reshaped.ok())
@@ -87,7 +126,7 @@ Status TransformerLayer::Forward(TensorView hidden,
         return s;
     }
 
-    // 4. Append K/V to cache
+    // 5. Append K/V to cache
     auto v_reshaped = v.reshape({1, num_kv_heads, head_dim});
     if (!v_reshaped.ok())
         return v_reshaped.status();
@@ -95,7 +134,7 @@ Status TransformerLayer::Forward(TensorView hidden,
         return s;
     }
 
-    // 5. Attention
+    // 6. Attention
     auto attn_ctx = scratch.AllocateTensor({1, num_heads * head_dim}, DType::kF32);
     if (!attn_ctx.ok())
         return attn_ctx.status();
@@ -116,7 +155,7 @@ Status TransformerLayer::Forward(TensorView hidden,
         return s;
     }
 
-    // 6. Output projection
+    // 7. Output projection
     auto proj_out = scratch.AllocateTensor({1, hidden_size}, DType::kF32);
     if (!proj_out.ok())
         return proj_out.status();
@@ -126,11 +165,11 @@ Status TransformerLayer::Forward(TensorView hidden,
         return s;
     }
 
-    // 7. Residual add
+    // 8. Residual add
     if (auto s = backend.AddInPlace(hidden, proj); !s.ok())
         return s;
 
-    // 8. MLP RMSNorm
+    // 9. MLP RMSNorm
     auto mlp_norm_out = scratch.AllocateTensor({1, hidden_size}, DType::kF32);
     if (!mlp_norm_out.ok())
         return mlp_norm_out.status();
@@ -141,7 +180,7 @@ Status TransformerLayer::Forward(TensorView hidden,
         return s;
     }
 
-    // 9. Gate / Up projections
+    // 10. Gate / Up projections
     const int32_t inter = config.intermediate_size;
     auto gate_out = scratch.AllocateTensor({1, inter}, DType::kF32);
     if (!gate_out.ok())
@@ -157,7 +196,7 @@ Status TransformerLayer::Forward(TensorView hidden,
     if (auto s = backend.MatMul(up, mlp_out, weights_.up_weight_name); !s.ok())
         return s;
 
-    // 10. SwiGLU
+    // 11. SwiGLU
     auto act_out = scratch.AllocateTensor({1, inter}, DType::kF32);
     if (!act_out.ok())
         return act_out.status();
@@ -166,7 +205,7 @@ Status TransformerLayer::Forward(TensorView hidden,
     if (auto s = backend.SwiGLU(act, gate, up); !s.ok())
         return s;
 
-    // 11. Down projection
+    // 12. Down projection
     auto down_out = scratch.AllocateTensor({1, hidden_size}, DType::kF32);
     if (!down_out.ok())
         return down_out.status();
@@ -175,7 +214,7 @@ Status TransformerLayer::Forward(TensorView hidden,
     if (auto s = backend.MatMul(down, act, weights_.down_weight_name); !s.ok())
         return s;
 
-    // 12. Residual add
+    // 13. Residual add
     if (auto s = backend.AddInPlace(hidden, down); !s.ok())
         return s;
 

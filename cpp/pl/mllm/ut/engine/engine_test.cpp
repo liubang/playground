@@ -141,16 +141,23 @@ const std::vector<std::string> kVocab = {
     "<0x01>", // 7: byte fallback
 };
 
-td::GgufWriter make_tiny_model_writer() {
-    td::GgufWriter w("llama");
-    w.meta_u32("llama.context_length", kCtx);
-    w.meta_u32("llama.embedding_length", kHidden);
-    w.meta_u32("llama.feed_forward_length", kInter);
-    w.meta_u32("llama.block_count", 1);
-    w.meta_u32("llama.attention.head_count", kHeads);
-    w.meta_u32("llama.attention.head_count_kv", kKVHeads);
-    w.meta_f32("llama.attention.layer_norm_rms_epsilon", 1e-5f);
-    w.meta_f32("llama.rope.freq_base", 10000.0f);
+td::GgufWriter make_tiny_model_writer(std::string arch = "llama") {
+    // Family-specific extras (mirrors the arch registry feature flags):
+    //   qwen2 -> additive Q/K/V projection biases
+    //   qwen3 -> per-head Q/K RMSNorm before RoPE
+    const bool qkv_bias = arch == "qwen2";
+    const bool qk_norm = arch == "qwen3";
+    const float rope_base = arch == "llama" ? 10000.0f : 1000000.0f;
+
+    td::GgufWriter w(arch);
+    w.meta_u32(arch + ".context_length", kCtx);
+    w.meta_u32(arch + ".embedding_length", kHidden);
+    w.meta_u32(arch + ".feed_forward_length", kInter);
+    w.meta_u32(arch + ".block_count", 1);
+    w.meta_u32(arch + ".attention.head_count", kHeads);
+    w.meta_u32(arch + ".attention.head_count_kv", kKVHeads);
+    w.meta_f32(arch + ".attention.layer_norm_rms_epsilon", 1e-5f);
+    w.meta_f32(arch + ".rope.freq_base", rope_base);
 
     // Tokenizer metadata.
     w.meta_str_array("tokenizer.ggml.tokens", kVocab);
@@ -231,6 +238,31 @@ td::GgufWriter make_tiny_model_writer() {
               {static_cast<uint64_t>(kInter), static_cast<uint64_t>(kHidden)},
               td::GgufType::kF32,
               f32_bytes(make_weights(kWeightSeed + 7, kHidden * kInter))});
+
+    if (qkv_bias) {
+        w.tensor({p + "attn_q.bias",
+                  {static_cast<uint64_t>(kHeads * kHeadDim)},
+                  td::GgufType::kF32,
+                  f32_bytes(make_weights(kWeightSeed + 8, kHeads * kHeadDim))});
+        w.tensor({p + "attn_k.bias",
+                  {static_cast<uint64_t>(kKVHeads * kHeadDim)},
+                  td::GgufType::kF32,
+                  f32_bytes(make_weights(kWeightSeed + 9, kKVHeads * kHeadDim))});
+        w.tensor({p + "attn_v.bias",
+                  {static_cast<uint64_t>(kKVHeads * kHeadDim)},
+                  td::GgufType::kF32,
+                  f32_bytes(make_weights(kWeightSeed + 10, kKVHeads * kHeadDim))});
+    }
+    if (qk_norm) {
+        w.tensor({p + "attn_q_norm.weight",
+                  {static_cast<uint64_t>(kHeadDim)},
+                  td::GgufType::kF32,
+                  f32_bytes(ones(kHeadDim))});
+        w.tensor({p + "attn_k_norm.weight",
+                  {static_cast<uint64_t>(kHeadDim)},
+                  td::GgufType::kF32,
+                  f32_bytes(ones(kHeadDim))});
+    }
 
     return w;
 }
@@ -364,6 +396,87 @@ TEST(EngineE2ETest, MetalGenerateMatchesCpu) {
     EXPECT_EQ(cpu_tokens, metal_tokens);
 }
 #endif // __APPLE__
+
+// Same tiny model end-to-end under the qwen2 (QKV bias) and qwen3 (QK norm)
+// families: the engine must load, and greedy decode must be deterministic.
+
+TEST(EngineE2ETest, Qwen2CreateAndGenerate) {
+    auto w = make_tiny_model_writer("qwen2");
+    TempFile tmp(w.build(32));
+
+    Engine::Options opts;
+    opts.model_path = tmp.path();
+    opts.backend = BackendKind::kCpu;
+
+    auto result = Engine::Create(opts);
+    ASSERT_TRUE(result.ok()) << result.status().message;
+    auto engine = std::move(result).value();
+
+    GenerateParams gp;
+    gp.max_tokens = 4;
+    gp.temperature = 0.0f;
+
+    std::vector<int32_t> generated;
+    auto status = engine->GenerateStream("a", gp, [&](std::string_view, int32_t tok) {
+        generated.push_back(tok);
+        return true;
+    });
+    ASSERT_TRUE(status.ok()) << status.message;
+    EXPECT_GT(generated.size(), 0u);
+
+    std::vector<int32_t> generated2;
+    auto status2 = engine->GenerateStream("a", gp, [&](std::string_view, int32_t tok) {
+        generated2.push_back(tok);
+        return true;
+    });
+    ASSERT_TRUE(status2.ok()) << status2.message;
+    EXPECT_EQ(generated, generated2);
+}
+
+TEST(EngineE2ETest, Qwen3CreateAndGenerate) {
+    auto w = make_tiny_model_writer("qwen3");
+    TempFile tmp(w.build(32));
+
+    Engine::Options opts;
+    opts.model_path = tmp.path();
+    opts.backend = BackendKind::kCpu;
+
+    auto result = Engine::Create(opts);
+    ASSERT_TRUE(result.ok()) << result.status().message;
+    auto engine = std::move(result).value();
+
+    GenerateParams gp;
+    gp.max_tokens = 4;
+    gp.temperature = 0.0f;
+
+    std::vector<int32_t> generated;
+    auto status = engine->GenerateStream("a", gp, [&](std::string_view, int32_t tok) {
+        generated.push_back(tok);
+        return true;
+    });
+    ASSERT_TRUE(status.ok()) << status.message;
+    EXPECT_GT(generated.size(), 0u);
+}
+
+TEST(EngineE2ETest, UnsupportedArchitectureRejected) {
+    // A llama-shaped metadata layout but a foreign arch prefix must be
+    // rejected at Engine::Create time.
+    td::GgufWriter bad("mamba");
+    bad.meta_u32("mamba.context_length", kCtx);
+    bad.meta_u32("mamba.embedding_length", kHidden);
+    bad.meta_u32("mamba.feed_forward_length", kInter);
+    bad.meta_u32("mamba.block_count", 1);
+    bad.meta_u32("mamba.attention.head_count", kHeads);
+    TempFile tmp(bad.build(32));
+
+    Engine::Options opts;
+    opts.model_path = tmp.path();
+    opts.backend = BackendKind::kCpu;
+
+    auto result = Engine::Create(opts);
+    EXPECT_FALSE(result.ok());
+    EXPECT_EQ(result.status().code, ErrorCode::kUnsupported);
+}
 
 } // namespace
 } // namespace pl::mllm

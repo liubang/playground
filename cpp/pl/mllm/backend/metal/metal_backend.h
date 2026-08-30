@@ -56,6 +56,7 @@ public:
                      const AttentionConfig& config) override;
     Status SwiGLU(TensorView out, TensorView gate, TensorView up) override;
     Status AddInPlace(TensorView x, TensorView residual) override;
+    Status AddBiasInPlace(TensorView x, TensorView bias) override;
     Status Synchronize() override;
 
     // Opaque implementation handle (all Metal types live in the .mm TU).

@@ -29,3 +29,20 @@ cc_binary(
     linkopts = LINKOPTS,
     deps = ["//cpp/pl/mllm/ut/testdata:gguf_writer"],
 )
+
+# Diagnostic tool: dump config / tensor shapes / logit stats for a real GGUF.
+#   bazel run //cpp/pl/mllm/tools:dump_logits -- -m <model.gguf> -p <prompt>
+cc_binary(
+    name = "dump_logits",
+    srcs = ["dump_logits.cpp"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/mllm/backend/cpu:cpu_backend",
+        "//cpp/pl/mllm/core",
+        "//cpp/pl/mllm/kv_cache",
+        "//cpp/pl/mllm/loader",
+        "//cpp/pl/mllm/model",
+        "//cpp/pl/mllm/tokenizer",
+    ],
+)

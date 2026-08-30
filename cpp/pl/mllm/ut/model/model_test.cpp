@@ -15,6 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/08/29 22:15
 
+#include <algorithm>
 #include <cstring>
 #include <gtest/gtest.h>
 #include <memory>
@@ -27,7 +28,8 @@
 #include "cpp/pl/mllm/core/tensor.h"
 #include "cpp/pl/mllm/kv_cache/kv_cache.h"
 #include "cpp/pl/mllm/model/config.h"
-#include "cpp/pl/mllm/model/llama_model.h"
+#include "cpp/pl/mllm/model/dense_decoder.h"
+#include "cpp/pl/mllm/model/model.h"
 #include "cpp/pl/mllm/model/transformer_layer.h"
 #include "cpp/pl/mllm/model/weight_names.h"
 
@@ -54,7 +56,7 @@ ModelConfig make_tiny_config() {
 // Owns weight backing storage so TensorViews remain valid for the test lifetime.
 struct WeightStore {
     std::vector<std::vector<float>> storage;
-    std::vector<LlamaModel::WeightEntry> entries;
+    std::vector<Model::WeightEntry> entries;
 
     TensorView add(std::string name, int rows, int cols, float fill) {
         auto& d = storage.emplace_back(static_cast<size_t>(rows) * static_cast<size_t>(cols), fill);
@@ -89,17 +91,27 @@ WeightStore make_all_weights(const ModelConfig& cfg) {
     store.add_norm("output_norm.weight", cfg.hidden_size, 1.0f);
     store.add_range("output.weight", cfg.vocab_size, cfg.hidden_size);
 
+    const int32_t head_dim = cfg.effective_head_dim();
     for (int l = 0; l < cfg.num_layers; ++l) {
-        auto names = make_layer_weight_names(l);
-        store.add_range(names.q_weight, cfg.hidden_size, cfg.hidden_size);
-        store.add_range(names.k_weight, cfg.num_kv_heads * cfg.head_dim, cfg.hidden_size);
-        store.add_range(names.v_weight, cfg.num_kv_heads * cfg.head_dim, cfg.hidden_size);
-        store.add_range(names.o_weight, cfg.hidden_size, cfg.hidden_size);
+        auto names = make_layer_weight_names(l, cfg.qkv_bias, cfg.qk_norm);
+        store.add_range(names.q_weight, cfg.num_attention_heads * head_dim, cfg.hidden_size);
+        store.add_range(names.k_weight, cfg.num_kv_heads * head_dim, cfg.hidden_size);
+        store.add_range(names.v_weight, cfg.num_kv_heads * head_dim, cfg.hidden_size);
+        store.add_range(names.o_weight, cfg.hidden_size, cfg.num_attention_heads * head_dim);
         store.add_norm(names.attn_norm, cfg.hidden_size, 1.0f);
         store.add_range(names.gate_weight, cfg.intermediate_size, cfg.hidden_size);
         store.add_range(names.up_weight, cfg.intermediate_size, cfg.hidden_size);
         store.add_range(names.down_weight, cfg.hidden_size, cfg.intermediate_size);
         store.add_norm(names.mlp_norm, cfg.hidden_size, 1.0f);
+        if (cfg.qkv_bias) {
+            store.add_norm(names.q_bias, cfg.num_attention_heads * head_dim, 0.01f);
+            store.add_norm(names.k_bias, cfg.num_kv_heads * head_dim, 0.01f);
+            store.add_norm(names.v_bias, cfg.num_kv_heads * head_dim, 0.01f);
+        }
+        if (cfg.qk_norm) {
+            store.add_norm(names.q_norm, head_dim, 1.0f);
+            store.add_norm(names.k_norm, head_dim, 1.0f);
+        }
     }
     return store;
 }
@@ -126,7 +138,7 @@ TEST(ModelTest, ModelCreateAndForward) {
     auto cfg = make_tiny_config();
     auto store = make_all_weights(cfg);
 
-    auto model_result = LlamaModel::Create(cfg, store.entries);
+    auto model_result = DenseDecoderModel::Create(cfg, store.entries);
     ASSERT_TRUE(model_result.ok()) << model_result.status().message;
     auto model = std::move(model_result).value();
 
@@ -170,7 +182,7 @@ TEST(ModelTest, ModelForwardTwoTokens) {
     auto cfg = make_tiny_config();
     auto store = make_all_weights(cfg);
 
-    auto model_result = LlamaModel::Create(cfg, store.entries);
+    auto model_result = DenseDecoderModel::Create(cfg, store.entries);
     ASSERT_TRUE(model_result.ok());
     auto model = std::move(model_result).value();
 
@@ -212,4 +224,146 @@ TEST(ModelTest, ModelForwardTwoTokens) {
     for (int i = 0; i < cfg.vocab_size; ++i) {
         EXPECT_TRUE(std::isfinite(lp[i])) << "logit[" << i << "] = " << lp[i];
     }
+}
+
+// Architecture coverage: qwen2 (QKV bias) and qwen3 (QK norm + decoupled
+// head_dim).
+
+TEST(ModelTest, ConfigValidateArchitectures) {
+    auto qwen2 = make_tiny_config();
+    qwen2.architecture = "qwen2";
+    qwen2.qkv_bias = true;
+    EXPECT_TRUE(qwen2.Validate().ok());
+
+    auto qwen3 = make_tiny_config();
+    qwen3.architecture = "qwen3";
+    qwen3.qk_norm = true;
+    // Qwen3 decouples head_dim from hidden/heads (e.g. 0.6B: hidden 1024,
+    // 16 heads, head_dim 128).
+    qwen3.head_dim = 8; // 4 heads * 8 != hidden 16
+    EXPECT_TRUE(qwen3.Validate().ok());
+
+    auto unknown = make_tiny_config();
+    unknown.architecture = "deepseek";
+    EXPECT_FALSE(unknown.Validate().ok());
+
+    // Explicit head_dim still must be even (RoPE rotation pairs).
+    auto bad_hd = make_tiny_config();
+    bad_hd.architecture = "qwen3";
+    bad_hd.head_dim = 7;
+    EXPECT_FALSE(bad_hd.Validate().ok());
+}
+
+TEST(ModelTest, ArchRegistryFeatureFlags) {
+    EXPECT_EQ(find_architecture("llama"), &kArchLlama);
+    EXPECT_EQ(find_architecture("qwen2"), &kArchQwen2);
+    EXPECT_EQ(find_architecture("qwen3"), &kArchQwen3);
+    EXPECT_TRUE(kArchQwen2.qkv_bias);
+    EXPECT_FALSE(kArchQwen2.qk_norm);
+    EXPECT_TRUE(kArchQwen3.qk_norm);
+    EXPECT_FALSE(kArchQwen3.qkv_bias);
+    EXPECT_GT(kArchQwen2.default_rope_freq_base, kArchLlama.default_rope_freq_base);
+}
+
+TEST(ModelTest, Qwen2ForwardWithBias) {
+    auto cfg = make_tiny_config();
+    cfg.architecture = "qwen2";
+    cfg.qkv_bias = true;
+    auto store = make_all_weights(cfg);
+
+    auto model_result = CreateModel(cfg, store.entries);
+    ASSERT_TRUE(model_result.ok()) << model_result.status().message;
+    auto model = std::move(model_result).value();
+    EXPECT_EQ(model->num_layers(), cfg.num_layers);
+
+    CpuBackend backend;
+    ASSERT_TRUE(import_weights(backend, store));
+
+    auto cache = KVCache::Create(cfg, 32, DType::kF32).value();
+    auto arena = ScratchArena::Create(1024 * 1024).value();
+
+    auto hidden0 = store.entries[0].view.slice(0, 2, 3).value().reshape({1, cfg.hidden_size});
+    ASSERT_TRUE(hidden0.ok());
+    arena.Reset();
+    ASSERT_TRUE(model->Forward(hidden0.value(), 0, cache, backend, arena).ok());
+
+    arena.Reset();
+    auto logits_buf = OwnedBuffer::AllocateCpu(cfg.vocab_size * 4, 64);
+    ASSERT_TRUE(logits_buf.ok());
+    auto logits_owned = std::move(logits_buf).value();
+    TensorView logits(logits_owned.data(), DType::kF32, {1, cfg.vocab_size});
+    ASSERT_TRUE(model->ComputeLogits(hidden0.value(), logits, backend, arena).ok());
+    auto* lp = logits.data_as<float>();
+    for (int i = 0; i < cfg.vocab_size; ++i) {
+        EXPECT_TRUE(std::isfinite(lp[i]));
+    }
+
+    // weight_names() must cover the bias tensors so backends import them.
+    const auto names = model->weight_names();
+    EXPECT_NE(std::find(names.begin(), names.end(), "blk.0.attn_q.bias"), names.end());
+    EXPECT_NE(std::find(names.begin(), names.end(), "blk.0.attn_v.bias"), names.end());
+}
+
+TEST(ModelTest, Qwen3ForwardWithQkNormAndDecoupledHeadDim) {
+    auto cfg = make_tiny_config();
+    cfg.architecture = "qwen3";
+    cfg.qk_norm = true;
+    cfg.head_dim = 8; // heads*head_dim (32) > hidden_size (16)
+    cfg.rope_freq_base = 1000000.0f;
+    auto store = make_all_weights(cfg);
+
+    auto model_result = CreateModel(cfg, store.entries);
+    ASSERT_TRUE(model_result.ok()) << model_result.status().message;
+    auto model = std::move(model_result).value();
+
+    CpuBackend backend;
+    ASSERT_TRUE(import_weights(backend, store));
+
+    auto cache = KVCache::Create(cfg, 32, DType::kF32).value();
+    auto arena = ScratchArena::Create(1024 * 1024).value();
+
+    auto hidden0 = store.entries[0].view.slice(0, 3, 4).value().reshape({1, cfg.hidden_size});
+    ASSERT_TRUE(hidden0.ok());
+    arena.Reset();
+    ASSERT_TRUE(model->Forward(hidden0.value(), 0, cache, backend, arena).ok());
+
+    auto hidden1 = store.entries[0].view.slice(0, 4, 5).value().reshape({1, cfg.hidden_size});
+    ASSERT_TRUE(hidden1.ok());
+    arena.Reset();
+    ASSERT_TRUE(model->Forward(hidden1.value(), 1, cache, backend, arena).ok());
+
+    arena.Reset();
+    auto logits_buf = OwnedBuffer::AllocateCpu(cfg.vocab_size * 4, 64);
+    ASSERT_TRUE(logits_buf.ok());
+    auto logits_owned = std::move(logits_buf).value();
+    TensorView logits(logits_owned.data(), DType::kF32, {1, cfg.vocab_size});
+    ASSERT_TRUE(model->ComputeLogits(hidden1.value(), logits, backend, arena).ok());
+    auto* lp = logits.data_as<float>();
+    for (int i = 0; i < cfg.vocab_size; ++i) {
+        EXPECT_TRUE(std::isfinite(lp[i]));
+    }
+}
+
+TEST(ModelTest, Qwen2MissingBiasFailsFast) {
+    auto cfg = make_tiny_config();
+    cfg.architecture = "qwen2";
+    cfg.qkv_bias = true;
+
+    // Build llama-style weights (no bias) but claim qwen2 — Create must fail.
+    cfg.qkv_bias = false;
+    auto store = make_all_weights(cfg);
+    cfg.qkv_bias = true;
+
+    auto model_result = CreateModel(cfg, store.entries);
+    EXPECT_FALSE(model_result.ok());
+    EXPECT_EQ(model_result.status().code, ErrorCode::kNotFound);
+}
+
+TEST(ModelTest, FactoryRejectsUnknownArchitecture) {
+    auto cfg = make_tiny_config();
+    cfg.architecture = "mamba";
+    auto store = make_all_weights(make_tiny_config());
+    auto model_result = CreateModel(cfg, store.entries);
+    EXPECT_FALSE(model_result.ok());
+    EXPECT_EQ(model_result.status().code, ErrorCode::kUnsupported);
 }
