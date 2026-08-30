@@ -297,6 +297,7 @@ private struct GeneralTab: View {
     @AppStorage(ModuleVisibility.memoryKey) private var memory = true
     @AppStorage(ModuleVisibility.networkKey) private var network = true
     @AppStorage(ModuleVisibility.gpuKey) private var gpu = true
+    @AppStorage(ModuleVisibility.diskKey) private var disk = true
     @AppStorage(ModuleVisibility.batteryKey) private var battery = true
 
     @Environment(\.theme) private var theme
@@ -331,6 +332,7 @@ private struct GeneralTab: View {
                     moduleToggle("内存", $memory, "memory")
                     moduleToggle("网络", $network, "network")
                     moduleToggle("GPU", $gpu, "gpu")
+                    moduleToggle("磁盘", $disk, "disk")
                     // On machines without an internal battery the module
                     // simply doesn't exist as an option.
                     if AppRegistry.hasBattery {
@@ -374,6 +376,7 @@ private struct GeneralTab: View {
             "memory": memory,
             "network": network,
             "gpu": gpu,
+            "disk": disk,
             "battery": battery,
         ]
         return all.filter { $0.key != except }.allSatisfy { !$0.value }

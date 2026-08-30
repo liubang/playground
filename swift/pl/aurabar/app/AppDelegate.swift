@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var memoryController: StatusItemController?
     private var networkController: StatusItemController?
     private var gpuController: StatusItemController?
+    private var diskController: StatusItemController?
     private var batteryController: StatusItemController?
 
     func applicationDidFinishLaunching(_: Notification) {
@@ -156,6 +157,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         gpuController = gpuItem
 
+        // Disk: drive icon + write/read rate lines, diffed from the
+        // block-storage drivers' cumulative byte counters.
+        let disk = DiskStore()
+        let diskItem = StatusItemController(
+            autosaveName: "AuraBar.disk",
+            visibilityKey: ModuleVisibility.diskKey,
+            content: DiskPopover(store: disk),
+        )
+        diskItem.bindLabel(to: disk.$readRate) { [weak disk] button, read in
+            guard let button, let disk else { return }
+            let write = disk.writeRate
+            button.image = StatsGlyphs.makeDisk(read: read, write: write)
+            button.imagePosition = .imageOnly
+            button.title = ""
+            button.toolTip = "写入 \(Formatters.rate(write))/s · 读取 \(Formatters.rate(read))/s"
+        }
+        diskController = diskItem
+
         // Battery: level glyph + percentage, event-driven via IOKit
         // power-source notifications (30s timer as fallback). The module
         // is skipped entirely on machines without an internal battery
@@ -177,7 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 button.imagePosition = .imageOnly
                 button.title = ""
-                button.toolTip = info.map { "电池 \($0.percentage)%" }
+                button.toolTip = info.map { "电池：\($0.percentage)%" }
             }
             batteryController = batteryItem
         }

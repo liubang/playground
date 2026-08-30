@@ -18,7 +18,7 @@ enum StatsGlyphs {
     /// Donut gauge + "CPU" caption + percentage value.
     static func makeCPU(fraction: Double, value: String) -> NSImage {
         let fraction = min(max(fraction, 0), 1)
-        return makeLabeled(caption: "CPU", value: value) { rect in
+        return makeLabeled(caption: "CPU", value: value, valueWidthReference: "100%") { rect in
             let inset = rect.insetBy(dx: 1.7, dy: 1.7)
             let center = NSPoint(x: inset.midX, y: inset.midY)
             let radius = inset.width / 2
@@ -48,8 +48,9 @@ enum StatsGlyphs {
 
     /// Level vessel + "MEM" caption + used-bytes value.
     static func makeMemory(fraction: Double, value: String) -> NSImage {
-        let fraction = min(max(fraction, 0), 1)
-        return makeLabeled(caption: "MEM", value: value) { rect in
+        // Formatters.bytes caps out at "xx.xU" — "99.9G" is the widest
+        // shape (the dot is narrower than a digit).
+        makeLabeled(caption: "MEM", value: value, valueWidthReference: "99.9G") { rect in
             let inset = rect.insetBy(dx: 3.0, dy: 1.4)
             let vessel = NSBezierPath(roundedRect: inset, xRadius: 2.4, yRadius: 2.4)
             vessel.lineWidth = 1.5
@@ -79,7 +80,7 @@ enum StatsGlyphs {
     /// enough of it, solid on an empty battery.
     static func makeBattery(fraction: Double, charging: Bool, value: String) -> NSImage {
         let fraction = min(max(fraction, 0), 1)
-        return makeLabeled(caption: "BAT", value: value) { rect in
+        return makeLabeled(caption: "BAT", value: value, valueWidthReference: "100%") { rect in
             let body = rect.insetBy(dx: 1.2, dy: 4.2)
             let outline = NSBezierPath(roundedRect: body, xRadius: 2.2, yRadius: 2.2)
             outline.lineWidth = 1.4
@@ -133,7 +134,7 @@ enum StatsGlyphs {
     /// solid — a live reading even before the eye reaches the value.
     static func makeGPU(fraction: Double, value: String) -> NSImage {
         let fraction = min(max(fraction, 0), 1)
-        return makeLabeled(caption: "GPU", value: value) { rect in
+        return makeLabeled(caption: "GPU", value: value, valueWidthReference: "100%") { rect in
             let center = NSPoint(x: rect.midX, y: rect.midY)
             let radius = min(rect.width, rect.height) / 2 - 1.1
 
@@ -193,17 +194,76 @@ enum StatsGlyphs {
         return image
     }
 
+    // MARK: - Disk
+
+    /// Drive icon + two value lines (write over read). Deliberately
+    /// not the network glyph's ↑/↓ arrows: with both modules visible,
+    /// two arrow pairs read as duplicates, and R/W is the disk
+    /// language (Activity Monitor) rather than a borrowed network
+    /// metaphor. Direction letters render dim like the captions;
+    /// a direction idling below 1K/s dims its value too.
+    static func makeDisk(read: Double, write: Double) -> NSImage {
+        let writeText = padded(Formatters.rate(write))
+        let readText = padded(Formatters.rate(read))
+        let letterAttrs = valueAttributes(size: 8.5, dimmed: true)
+        let writeAttrs = valueAttributes(size: 8.5, dimmed: write < 1024)
+        let readAttrs = valueAttributes(size: 8.5, dimmed: read < 1024)
+        let letterWidth = textWidth("W ", letterAttrs)
+        let textWidthMax = max(textWidth(writeText, writeAttrs), textWidth(readText, readAttrs))
+        let width = iconBox + gap + letterWidth + textWidthMax
+
+        let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
+            drawDrive(NSRect(x: 0, y: (height - iconBox) / 2, width: iconBox, height: iconBox))
+            let letterX = iconBox + gap
+            let valueX = letterX + letterWidth
+            drawFlipped("W ", topLeft: NSPoint(x: letterX, y: 9.4), attributes: letterAttrs)
+            drawFlipped(writeText, topLeft: NSPoint(x: valueX, y: 9.4), attributes: writeAttrs)
+            drawFlipped("R ", topLeft: NSPoint(x: letterX, y: 0.4), attributes: letterAttrs)
+            drawFlipped(readText, topLeft: NSPoint(x: valueX, y: 0.4), attributes: readAttrs)
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
+    /// Internal-drive silhouette: horizontal rounded rectangle with a
+    /// slot line near the bottom edge.
+    private static func drawDrive(_ rect: NSRect) {
+        let body = rect.insetBy(dx: 1.4, dy: 3.4)
+        let outline = NSBezierPath(roundedRect: body, xRadius: 2.4, yRadius: 2.4)
+        outline.lineWidth = 1.4
+        NSColor.black.setStroke()
+        outline.stroke()
+
+        NSColor.black.setFill()
+        NSBezierPath(
+            roundedRect: NSRect(
+                x: body.minX + 2,
+                y: body.minY + 1.3,
+                width: body.width - 4,
+                height: 1.1,
+            ),
+            xRadius: 0.55,
+            yRadius: 0.55,
+        ).fill()
+    }
+
     // MARK: - Composite layout
 
     /// Icon on the left, caption over value on the right. The image
-    /// width hugs the value text so the item stays compact.
+    /// width follows `valueWidthReference` (the widest value the module
+    /// can show), not the current value: with monospaced digits the
+    /// value's width changes with its length, and hugging it would make
+    /// the status item — and everything to its left — jump every time a
+    /// reading crosses 9%→10%. Text is left-aligned as before.
     private static func makeLabeled(
         caption: String,
         value: String,
+        valueWidthReference: String,
         drawIcon: @escaping (NSRect) -> Void,
     ) -> NSImage {
         let valueAttrs = valueAttributes(size: 9.5, dimmed: false)
-        let width = iconBox + gap + textWidth(value, valueAttrs)
+        let width = iconBox + gap + textWidth(valueWidthReference, valueAttrs)
         let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
             let iconRect = NSRect(x: 0, y: (height - iconBox) / 2, width: iconBox, height: iconBox)
             drawIcon(iconRect)
