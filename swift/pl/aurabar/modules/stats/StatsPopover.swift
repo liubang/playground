@@ -380,7 +380,8 @@ private let chartTimeFormatter: DateFormatter = {
 
 /// Four bottom time labels at quarter positions of the history window
 /// (indices 0/15/30/45; the newest point at index 59 stays unlabeled).
-private func chartTimeLabels(count: Int) -> [String] {
+/// Shared by the stats and GPU popovers.
+func chartTimeLabels(count: Int) -> [String] {
     guard count > 1 else { return [] }
     return [0, 15, 30, 45].map { index in
         let clamped = min(index, count - 1)

@@ -25,6 +25,7 @@ swift_library(
         "app/*.swift",
         "core/*.swift",
         "modules/calendar/*.swift",
+        "modules/gpu/*.swift",
         "modules/stats/*.swift",
         "modules/weather/*.swift",
     ]),

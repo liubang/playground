@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cpuController: StatusItemController?
     private var memoryController: StatusItemController?
     private var networkController: StatusItemController?
+    private var gpuController: StatusItemController?
     private var batteryController: StatusItemController?
 
     func applicationDidFinishLaunching(_: Notification) {
@@ -133,6 +134,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             open ? stats?.popoverDidOpen() : stats?.popoverDidClose()
         }
         networkController = networkItem
+
+        // GPU: fan glyph + percentage, driven by its own IOKit sampler
+        // (unlike the other stats items the driver read is a single
+        // property fetch, so it doesn't join SystemStatsStore).
+        let gpu = GPUStore()
+        let gpuItem = StatusItemController(
+            autosaveName: "AuraBar.gpu",
+            visibilityKey: ModuleVisibility.gpuKey,
+            content: GPUPopover(store: gpu),
+        )
+        gpuItem.bindLabel(to: gpu.$usage) { button, usage in
+            guard let button else { return }
+            button.image = StatsGlyphs.makeGPU(
+                fraction: usage,
+                value: "\(Int((usage * 100).rounded()))%",
+            )
+            button.imagePosition = .imageOnly
+            button.title = ""
+            button.toolTip = "GPU：\(Int((usage * 100).rounded()))%"
+        }
+        gpuController = gpuItem
 
         // Battery: level glyph + percentage, event-driven via IOKit
         // power-source notifications (30s timer as fallback). The module

@@ -126,6 +126,50 @@ enum StatsGlyphs {
         }
     }
 
+    // MARK: - GPU
+
+    /// Fan glyph + "GPU" caption + percentage. The blades' opacity
+    /// follows utilization, so an idle fan reads faint and a busy one
+    /// solid — a live reading even before the eye reaches the value.
+    static func makeGPU(fraction: Double, value: String) -> NSImage {
+        let fraction = min(max(fraction, 0), 1)
+        return makeLabeled(caption: "GPU", value: value) { rect in
+            let center = NSPoint(x: rect.midX, y: rect.midY)
+            let radius = min(rect.width, rect.height) / 2 - 1.1
+
+            NSColor.black.withAlphaComponent(0.3 + 0.7 * fraction).setFill()
+            // Three blades: 95° wedges around the hub with 25° gaps.
+            for blade in 0 ..< 3 {
+                let start = CGFloat(blade) * 120 + 12
+                let path = NSBezierPath()
+                path.appendArc(
+                    withCenter: center,
+                    radius: radius,
+                    startAngle: start,
+                    endAngle: start + 95,
+                )
+                path.appendArc(
+                    withCenter: center,
+                    radius: 2.6,
+                    startAngle: start + 95,
+                    endAngle: start,
+                    clockwise: true,
+                )
+                path.close()
+                path.fill()
+            }
+
+            // Hub.
+            NSColor.black.setFill()
+            NSBezierPath(ovalIn: NSRect(
+                x: center.x - 1.7,
+                y: center.y - 1.7,
+                width: 3.4,
+                height: 3.4,
+            )).fill()
+        }
+    }
+
     // MARK: - Network
 
     /// Two value lines (up over down) — no leading glyph, the ↑/↓ in the

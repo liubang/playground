@@ -74,8 +74,9 @@ enum ModuleVisibility {
     static let weatherKey = "AuraBar.module.weather"
     static let cpuKey = "AuraBar.module.cpu"
     static let memoryKey = "AuraBar.module.memory"
-    static let networkKey = "AuraBar.module.network"
-    static let batteryKey = "AuraBar.module.battery"
+static let networkKey = "AuraBar.module.network"
+static let gpuKey = "AuraBar.module.gpu"
+static let batteryKey = "AuraBar.module.battery"
 }
 
 // MARK: - Themed settings field
