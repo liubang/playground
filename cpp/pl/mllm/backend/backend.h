@@ -74,6 +74,27 @@ public:
     // weight (imported) shape: [out_dim, in_dim]
     virtual Status MatMul(TensorView out, TensorView x, std::string_view weight_name) = 0;
 
+    // Fused GEMV: compute multiple MatMuls sharing the same input x in a
+    // single kernel dispatch. Reduces kernel launch overhead by N-1x.
+    // out[i]   shape: [batch, out_dims[i]]
+    // x        shape: [batch, in_dim]
+    // weights  shape: [out_dims[i], in_dim] each (imported, identified by name)
+    // Default implementation falls back to N separate MatMul calls.
+    virtual Status MatMulFused(std::span<TensorView> outs,
+                               TensorView x,
+                               std::span<const std::string_view> weight_names) {
+        if (outs.size() != weight_names.size()) {
+            return Status::Error(ErrorCode::kInvalidArgument,
+                                 "MatMulFused: size mismatch");
+        }
+        for (size_t i = 0; i < outs.size(); ++i) {
+            if (auto s = MatMul(outs[i], x, weight_names[i]); !s.ok()) {
+                return s;
+            }
+        }
+        return {};
+    }
+
     // RMSNorm: out = x / sqrt(mean(x^2) + eps) * weight
     // x, out, weight shape: [batch, hidden] (or [1, hidden])
     virtual Status RmsNorm(TensorView out, TensorView x, TensorView weight, float eps) = 0;

@@ -307,6 +307,139 @@ TEST(MetalParityTest, MatMulQ8_0WeightRealDims) {
     expect_close(out_cpu.view, out_gpu.view, 1.0f, 1e-2f);
 }
 
+// Fused MatMul parity: 3 weights (Q/K/V pattern), f32
+
+TEST(MetalParityTest, MatMulFused3F32) {
+    REQUIRE_METAL();
+    const int batch = 1, in_dim = 1024;
+    const int out0 = 1024, out1 = 256, out2 = 256; // Q/K/V dims
+    auto x = HostTensor::alloc({batch, in_dim}, DType::kF32);
+    auto w0 = HostTensor::alloc({out0, in_dim}, DType::kF32);
+    auto w1 = HostTensor::alloc({out1, in_dim}, DType::kF32);
+    auto w2 = HostTensor::alloc({out2, in_dim}, DType::kF32);
+    auto o0_cpu = HostTensor::alloc({batch, out0}, DType::kF32);
+    auto o1_cpu = HostTensor::alloc({batch, out1}, DType::kF32);
+    auto o2_cpu = HostTensor::alloc({batch, out2}, DType::kF32);
+    auto o0_gpu = HostTensor::alloc({batch, out0}, DType::kF32);
+    auto o1_gpu = HostTensor::alloc({batch, out1}, DType::kF32);
+    auto o2_gpu = HostTensor::alloc({batch, out2}, DType::kF32);
+    fill_random(x.view.data_as<float>(), batch * in_dim, 41);
+    fill_random(w0.view.data_as<float>(), out0 * in_dim, 42);
+    fill_random(w1.view.data_as<float>(), out1 * in_dim, 43);
+    fill_random(w2.view.data_as<float>(), out2 * in_dim, 44);
+
+    CpuBackend cpu;
+    std::array names_cpu = {std::string_view{"w0"}, std::string_view{"w1"}, std::string_view{"w2"}};
+    std::array<TensorView, 3> views_cpu = {w0.view, w1.view, w2.view};
+    ASSERT_TRUE(cpu.ImportWeights(views_cpu, names_cpu).ok());
+    ASSERT_TRUE(cpu.MatMul(o0_cpu.view, x.view, "w0").ok());
+    ASSERT_TRUE(cpu.MatMul(o1_cpu.view, x.view, "w1").ok());
+    ASSERT_TRUE(cpu.MatMul(o2_cpu.view, x.view, "w2").ok());
+
+    MetalBackend gpu;
+    ASSERT_TRUE(gpu.ImportWeights(views_cpu, names_cpu).ok());
+    std::array<TensorView, 3> fused_outs = {o0_gpu.view, o1_gpu.view, o2_gpu.view};
+    ASSERT_TRUE(gpu.MatMulFused(fused_outs, x.view, names_cpu).ok());
+    ASSERT_TRUE(gpu.SyncToHost(o0_gpu.view).ok());
+    ASSERT_TRUE(gpu.SyncToHost(o1_gpu.view).ok());
+    ASSERT_TRUE(gpu.SyncToHost(o2_gpu.view).ok());
+
+    expect_close(o0_cpu.view, o0_gpu.view, 1e-3f, 1e-3f);
+    expect_close(o1_cpu.view, o1_gpu.view, 1e-3f, 1e-3f);
+    expect_close(o2_cpu.view, o2_gpu.view, 1e-3f, 1e-3f);
+}
+
+// Fused MatMul parity: 2 weights (gate/up pattern), f16
+
+TEST(MetalParityTest, MatMulFused2F16) {
+    REQUIRE_METAL();
+    const int batch = 1, in_dim = 1024;
+    const int out0 = 3072, out1 = 3072; // gate/up
+    auto x = HostTensor::alloc({batch, in_dim}, DType::kF32);
+    auto w0 = HostTensor::alloc({out0, in_dim}, DType::kF16);
+    auto w1 = HostTensor::alloc({out1, in_dim}, DType::kF16);
+    auto o0_cpu = HostTensor::alloc({batch, out0}, DType::kF32);
+    auto o1_cpu = HostTensor::alloc({batch, out1}, DType::kF32);
+    auto o0_gpu = HostTensor::alloc({batch, out0}, DType::kF32);
+    auto o1_gpu = HostTensor::alloc({batch, out1}, DType::kF32);
+    fill_random(x.view.data_as<float>(), batch * in_dim, 51);
+
+    std::vector<float> w0_f32(static_cast<size_t>(out0) * in_dim);
+    std::vector<float> w1_f32(static_cast<size_t>(out1) * in_dim);
+    fill_random(w0_f32.data(), w0_f32.size(), 52);
+    fill_random(w1_f32.data(), w1_f32.size(), 53);
+    for (size_t i = 0; i < w0_f32.size(); ++i)
+        w0.view.data_as<uint16_t>()[i] = fp32_to_fp16(w0_f32[i]);
+    for (size_t i = 0; i < w1_f32.size(); ++i)
+        w1.view.data_as<uint16_t>()[i] = fp32_to_fp16(w1_f32[i]);
+
+    CpuBackend cpu;
+    std::array names = {std::string_view{"w0"}, std::string_view{"w1"}};
+    std::array<TensorView, 2> views = {w0.view, w1.view};
+    ASSERT_TRUE(cpu.ImportWeights(views, names).ok());
+    ASSERT_TRUE(cpu.MatMul(o0_cpu.view, x.view, "w0").ok());
+    ASSERT_TRUE(cpu.MatMul(o1_cpu.view, x.view, "w1").ok());
+
+    MetalBackend gpu;
+    ASSERT_TRUE(gpu.ImportWeights(views, names).ok());
+    std::array<TensorView, 2> fused_outs = {o0_gpu.view, o1_gpu.view};
+    ASSERT_TRUE(gpu.MatMulFused(fused_outs, x.view, names).ok());
+    ASSERT_TRUE(gpu.SyncToHost(o0_gpu.view).ok());
+    ASSERT_TRUE(gpu.SyncToHost(o1_gpu.view).ok());
+
+    expect_close(o0_cpu.view, o0_gpu.view, 1e-2f, 1e-2f);
+    expect_close(o1_cpu.view, o1_gpu.view, 1e-2f, 1e-2f);
+}
+
+// Fused MatMul parity: 3 weights, Q8_0
+
+TEST(MetalParityTest, MatMulFused3Q8_0) {
+    REQUIRE_METAL();
+    const int batch = 1, in_dim = 1024;
+    const int out0 = 1024, out1 = 256, out2 = 256;
+    auto x = HostTensor::alloc({batch, in_dim}, DType::kF32);
+    auto w0 = HostTensor::alloc_q8_0({out0, in_dim});
+    auto w1 = HostTensor::alloc_q8_0({out1, in_dim});
+    auto w2 = HostTensor::alloc_q8_0({out2, in_dim});
+    auto o0_cpu = HostTensor::alloc({batch, out0}, DType::kF32);
+    auto o1_cpu = HostTensor::alloc({batch, out1}, DType::kF32);
+    auto o2_cpu = HostTensor::alloc({batch, out2}, DType::kF32);
+    auto o0_gpu = HostTensor::alloc({batch, out0}, DType::kF32);
+    auto o1_gpu = HostTensor::alloc({batch, out1}, DType::kF32);
+    auto o2_gpu = HostTensor::alloc({batch, out2}, DType::kF32);
+    fill_random(x.view.data_as<float>(), batch * in_dim, 61);
+
+    std::vector<float> w0_f32(static_cast<size_t>(out0) * in_dim);
+    std::vector<float> w1_f32(static_cast<size_t>(out1) * in_dim);
+    std::vector<float> w2_f32(static_cast<size_t>(out2) * in_dim);
+    fill_random(w0_f32.data(), w0_f32.size(), 62);
+    fill_random(w1_f32.data(), w1_f32.size(), 63);
+    fill_random(w2_f32.data(), w2_f32.size(), 64);
+    fill_q8_0(w0, w0_f32);
+    fill_q8_0(w1, w1_f32);
+    fill_q8_0(w2, w2_f32);
+
+    CpuBackend cpu;
+    std::array names = {std::string_view{"w0"}, std::string_view{"w1"}, std::string_view{"w2"}};
+    std::array<TensorView, 3> views = {w0.view, w1.view, w2.view};
+    ASSERT_TRUE(cpu.ImportWeights(views, names).ok());
+    ASSERT_TRUE(cpu.MatMul(o0_cpu.view, x.view, "w0").ok());
+    ASSERT_TRUE(cpu.MatMul(o1_cpu.view, x.view, "w1").ok());
+    ASSERT_TRUE(cpu.MatMul(o2_cpu.view, x.view, "w2").ok());
+
+    MetalBackend gpu;
+    ASSERT_TRUE(gpu.ImportWeights(views, names).ok());
+    std::array<TensorView, 3> fused_outs = {o0_gpu.view, o1_gpu.view, o2_gpu.view};
+    ASSERT_TRUE(gpu.MatMulFused(fused_outs, x.view, names).ok());
+    ASSERT_TRUE(gpu.SyncToHost(o0_gpu.view).ok());
+    ASSERT_TRUE(gpu.SyncToHost(o1_gpu.view).ok());
+    ASSERT_TRUE(gpu.SyncToHost(o2_gpu.view).ok());
+
+    expect_close(o0_cpu.view, o0_gpu.view, 1.0f, 1e-2f);
+    expect_close(o1_cpu.view, o1_gpu.view, 1.0f, 1e-2f);
+    expect_close(o2_cpu.view, o2_gpu.view, 1.0f, 1e-2f);
+}
+
 // RmsNorm parity
 
 TEST(MetalParityTest, RmsNormParity) {

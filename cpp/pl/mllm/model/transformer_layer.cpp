@@ -17,6 +17,7 @@
 
 #include "cpp/pl/mllm/model/transformer_layer.h"
 
+#include <array>
 #include <cmath>
 
 namespace pl::mllm {
@@ -44,7 +45,7 @@ Status TransformerLayer::Forward(TensorView hidden,
         return s;
     }
 
-    // 2. Q/K/V projections
+    // 2. Q/K/V projections (fused into a single GEMV dispatch)
     // Q: [1, num_heads * head_dim]
     // K: [1, num_kv_heads * head_dim]
     // V: [1, num_kv_heads * head_dim]
@@ -62,12 +63,13 @@ Status TransformerLayer::Forward(TensorView hidden,
     auto k = k_out.value();
     auto v = v_out.value();
 
-    if (auto s = backend.MatMul(q, attn_out, weights_.q_weight_name); !s.ok())
-        return s;
-    if (auto s = backend.MatMul(k, attn_out, weights_.k_weight_name); !s.ok())
-        return s;
-    if (auto s = backend.MatMul(v, attn_out, weights_.v_weight_name); !s.ok())
-        return s;
+    {
+        std::array<TensorView, 3> fused_outs = {q, k, v};
+        std::array<std::string_view, 3> fused_names = {
+            weights_.q_weight_name, weights_.k_weight_name, weights_.v_weight_name};
+        if (auto s = backend.MatMulFused(fused_outs, attn_out, fused_names); !s.ok())
+            return s;
+    }
 
     // 3a. Optional Q/K/V bias (Qwen2): row-broadcast add after projection.
     if (weights_.q_bias.valid()) {
@@ -198,7 +200,7 @@ Status TransformerLayer::Forward(TensorView hidden,
         return s;
     }
 
-    // 10. Gate / Up projections
+    // 10. Gate / Up projections (fused into a single GEMV dispatch)
     const int32_t inter = config.intermediate_size;
     auto gate_out = scratch.AllocateTensor({1, inter}, DType::kF32);
     if (!gate_out.ok())
@@ -209,10 +211,13 @@ Status TransformerLayer::Forward(TensorView hidden,
     auto gate = gate_out.value();
     auto up = up_out.value();
 
-    if (auto s = backend.MatMul(gate, mlp_out, weights_.gate_weight_name); !s.ok())
-        return s;
-    if (auto s = backend.MatMul(up, mlp_out, weights_.up_weight_name); !s.ok())
-        return s;
+    {
+        std::array<TensorView, 2> fused_outs = {gate, up};
+        std::array<std::string_view, 2> fused_names = {
+            weights_.gate_weight_name, weights_.up_weight_name};
+        if (auto s = backend.MatMulFused(fused_outs, mlp_out, fused_names); !s.ok())
+            return s;
+    }
 
     // 11. SwiGLU
     auto act_out = scratch.AllocateTensor({1, inter}, DType::kF32);

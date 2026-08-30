@@ -35,6 +35,7 @@
 #import <MetalPerformanceShaders/MetalPerformanceShaders.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <string>
@@ -108,6 +109,9 @@ struct MetalBackend::Impl {
     id<MTLComputePipelineState> gemv_q8_0_ps = nil;
     id<MTLComputePipelineState> gemv_f16_ps = nil;
     id<MTLComputePipelineState> gemv_f32_ps = nil;
+    id<MTLComputePipelineState> gemv_q8_0_fused_ps = nil;
+    id<MTLComputePipelineState> gemv_f16_fused_ps = nil;
+    id<MTLComputePipelineState> gemv_f32_fused_ps = nil;
     id<MTLComputePipelineState> append_kv_ps = nil;
 
     // Weight table. f16 weights are kept as f16 (half bandwidth); Q8_0 kept
@@ -205,13 +209,18 @@ private:
         gemv_q8_0_ps = make_ps("mllm_gemv_q8_0");
         gemv_f16_ps = make_ps("mllm_gemv_f16");
         gemv_f32_ps = make_ps("mllm_gemv_f32");
+        gemv_q8_0_fused_ps = make_ps("mllm_gemv_q8_0_fused");
+        gemv_f16_fused_ps = make_ps("mllm_gemv_f16_fused");
+        gemv_f32_fused_ps = make_ps("mllm_gemv_f32_fused");
         append_kv_ps = make_ps("mllm_append_kv");
         if (!init_error.ok()) {
             return;
         }
         if (!rmsnorm_ps || !rope_ps || !attention_flash_ps ||
             !swiglu_ps || !add_ps || !add_bias_ps ||
-            !gemv_q8_0_ps || !gemv_f16_ps || !gemv_f32_ps || !append_kv_ps) {
+            !gemv_q8_0_ps || !gemv_f16_ps || !gemv_f32_ps ||
+            !gemv_q8_0_fused_ps || !gemv_f16_fused_ps || !gemv_f32_fused_ps ||
+            !append_kv_ps) {
             init_error = Status::Error(ErrorCode::kBackendFailure,
                                        "MetalBackend: missing pipeline state");
         }
@@ -550,6 +559,131 @@ Status MetalBackend::MatMul(TensorView out, TensorView x,
     impl_->shadow_[reinterpret_cast<uintptr_t>(out.data())] =
         {obuf, out_bytes, true};
 
+    return {};
+}
+
+// =========================================================================
+// MatMulFused — multiple GEMVs sharing same input, single dispatch
+// =========================================================================
+
+Status MetalBackend::MatMulFused(std::span<TensorView> outs,
+                                  TensorView x,
+                                  std::span<const std::string_view> weight_names) {
+    if (auto s = ensure_ready(*impl_); !s.ok()) return s;
+    if (outs.size() != weight_names.size()) {
+        return Status::Error(ErrorCode::kInvalidArgument, "MatMulFused: size mismatch");
+    }
+    if (outs.empty() || outs.size() > 3) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "MatMulFused: supports 1-3 outputs, got " + std::to_string(outs.size()));
+    }
+    if (auto s = check_contig_valid(x, "MatMulFused"); !s.ok()) return s;
+
+    const int32_t batch = static_cast<int32_t>(x.shape().dim(0));
+    const int32_t in_dim = static_cast<int32_t>(x.shape().dim(1));
+    if (batch != 1) {
+        // Fallback for prefill (batch > 1) — use individual MatMul calls.
+        for (size_t i = 0; i < outs.size(); ++i) {
+            if (auto s = MatMul(outs[i], x, weight_names[i]); !s.ok()) return s;
+        }
+        return {};
+    }
+
+    // Look up weights and validate.
+    const size_t n = outs.size();
+    std::array<const Impl::Weight*, 3> ws{};
+    std::array<int32_t, 3> out_dims{};
+    DType wtype = DType::kF32;
+    for (size_t i = 0; i < n; ++i) {
+        if (auto s = check_contig_valid(outs[i], "MatMulFused"); !s.ok()) return s;
+        auto it = impl_->weights_.find(std::string(weight_names[i]));
+        if (it == impl_->weights_.end()) {
+            return Status::Error(ErrorCode::kNotFound,
+                                 "MatMulFused: weight '" + std::string(weight_names[i]) + "' not found");
+        }
+        ws[i] = &it->second;
+        out_dims[i] = static_cast<int32_t>(it->second.shape.dim(0));
+        if (it->second.shape.dim(1) != in_dim) {
+            return Status::Error(ErrorCode::kInvalidArgument, "MatMulFused: in_dim mismatch");
+        }
+        if (outs[i].shape().dim(0) != 1 || outs[i].shape().dim(1) != out_dims[i]) {
+            return Status::Error(ErrorCode::kInvalidArgument, "MatMulFused: output shape mismatch");
+        }
+        if (outs[i].dtype() != DType::kF32) {
+            return Status::Error(ErrorCode::kUnsupported, "MatMulFused: output must be f32");
+        }
+        if (i == 0) {
+            wtype = it->second.dtype;
+        } else if (it->second.dtype != wtype) {
+            return Status::Error(ErrorCode::kInvalidArgument,
+                                 "MatMulFused: all weights must have same dtype");
+        }
+    }
+
+    // Select pipeline.
+    id<MTLComputePipelineState> ps = nil;
+    switch (wtype) {
+    case DType::kQ8_0:
+        if (in_dim % kQ8_0BlockSize != 0) {
+            return Status::Error(ErrorCode::kInvalidArgument,
+                                 "MatMulFused: in_dim not Q8_0 block-aligned");
+        }
+        ps = impl_->gemv_q8_0_fused_ps;
+        break;
+    case DType::kF16:
+        ps = impl_->gemv_f16_fused_ps;
+        break;
+    case DType::kF32:
+        ps = impl_->gemv_f32_fused_ps;
+        break;
+    default:
+        return Status::Error(ErrorCode::kUnsupported,
+                             "MatMulFused: unsupported weight dtype");
+    }
+
+    // Get or upload input x.
+    id<MTLBuffer> xbuf = upload_tensor(*impl_, x);
+    if (!xbuf) {
+        return Status::Error(ErrorCode::kBackendFailure, "MatMulFused: x upload failed");
+    }
+
+    // Get or allocate output buffers.
+    std::array<id<MTLBuffer>, 3> obufs{};
+    for (size_t i = 0; i < n; ++i) {
+        const size_t out_bytes = static_cast<size_t>(out_dims[i]) * sizeof(float);
+        obufs[i] = impl_->get_or_alloc_output(outs[i].data(), out_bytes);
+        if (!obufs[i]) {
+            return Status::Error(ErrorCode::kBackendFailure, "MatMulFused: output alloc failed");
+        }
+    }
+
+    // Build params: [out0, out1, out2, off0, off1, off2, in_dim, n]
+    uint32_t params[8] = {0};
+    params[0] = static_cast<uint32_t>(out_dims[0]);
+    params[1] = (n >= 2) ? static_cast<uint32_t>(out_dims[1]) : 0;
+    params[2] = (n >= 3) ? static_cast<uint32_t>(out_dims[2]) : 0;
+    params[3] = params[0];                          // off0 = out0
+    params[4] = params[3] + params[1];              // off1 = out0 + out1
+    params[5] = params[4] + params[2];              // off2 = out0 + out1 + out2
+    params[6] = static_cast<uint32_t>(in_dim);
+    params[7] = static_cast<uint32_t>(n);
+
+    const uint32_t total_rows = params[3 + (n - 1)];  // last offset = total rows
+
+    id<MTLComputeCommandEncoder> enc = impl_->encoder();
+    [enc setComputePipelineState:ps];
+    [enc setBuffer:obufs[0] offset:0 atIndex:0];
+    if (n >= 2) [enc setBuffer:obufs[1] offset:0 atIndex:1];
+    if (n >= 3) [enc setBuffer:obufs[2] offset:0 atIndex:2];
+    [enc setBuffer:xbuf offset:0 atIndex:3];
+    [enc setBuffer:ws[0]->buf offset:0 atIndex:4];
+    if (n >= 2) [enc setBuffer:ws[1]->buf offset:0 atIndex:5];
+    if (n >= 3) [enc setBuffer:ws[2]->buf offset:0 atIndex:6];
+    [enc setBytes:params length:sizeof(params) atIndex:7];
+    [enc setThreadgroupMemoryLength:256 * sizeof(float) atIndex:0];
+    [enc dispatchThreads:MTLSizeMake(static_cast<NSUInteger>(total_rows) * 4, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
+    // Deferred.
     return {};
 }
 

@@ -411,6 +411,217 @@ kernel void mllm_gemv_f16(
 }
 
 // =========================================================================
+// Fused GEMV: compute N independent GEMVs sharing the same input x in one
+// dispatch.  Up to MAX_FUSED=3 weights (Q/K/V) or 2 (gate/up).  The grid
+// covers all output rows across all weights; each thread determines which
+// weight segment it belongs to via cumulative offsets in the constant array.
+//
+// Buffers 0..N-1 = outputs, buffer N = input x, buffers N+1..2N = weights,
+// buffer 2N+1 = constant params (out_dims[3], offsets[3], in_dim, n, count).
+// =========================================================================
+
+// Fused Q8_0 GEMV (max 3 weights)
+kernel void mllm_gemv_q8_0_fused(
+    device float* out0  [[buffer(0)]],
+    device float* out1  [[buffer(1)]],
+    device float* out2  [[buffer(2)]],
+    const device float* x  [[buffer(3)]],
+    const device uchar* w0 [[buffer(4)]],
+    const device uchar* w1 [[buffer(5)]],
+    const device uchar* w2 [[buffer(6)]],
+    constant uint* params  [[buffer(7)]],  // [out0, out1, out2, off0, off1, off2, in_dim, n]
+    uint tid   [[thread_index_in_threadgroup]],
+    uint tgid  [[threadgroup_position_in_grid]],
+    uint tsize [[threads_per_threadgroup]],
+    threadgroup float* partial [[threadgroup(0)]])
+{
+    constexpr uint NT = 4;
+    const uint rows_per_group = tsize / NT;
+    const uint lane = tid % NT;
+    const uint row_global = tgid * rows_per_group + (tid / NT);
+
+    const uint n = params[7];
+    const uint in_dim = params[6];
+
+    // Determine which weight segment this row belongs to.
+    const device uchar* wrow = nullptr;
+    device float* outrow = nullptr;
+    uint row = 0;
+
+    if (n >= 1 && row_global < params[3]) { // offset[0] = 0
+        wrow = w0;
+        outrow = out0;
+        row = row_global;
+    } else if (n >= 2 && row_global < params[4]) { // offset[1] = out0
+        wrow = w1;
+        outrow = out1;
+        row = row_global - params[3];
+    } else if (n >= 3 && row_global < params[5]) { // offset[2] = out0+out1
+        wrow = w2;
+        outrow = out2;
+        row = row_global - params[4];
+    } else {
+        return; // out of range
+    }
+
+    const uint num_blocks = in_dim / 32;
+    const size_t row_stride = (size_t)num_blocks * 34;
+    const device uchar* wr = wrow + (size_t)row * row_stride;
+
+    float acc = 0.0f;
+    for (uint blk = lane; blk < num_blocks; blk += NT) {
+        const device uchar* b = wr + (size_t)blk * 34;
+        const ushort sb = (ushort)b[0] | ((ushort)b[1] << 8);
+        const float scale = (float)as_type<half>(sb);
+        float dot = 0.0f;
+        #pragma unroll
+        for (uint j = 0; j < 32; ++j) {
+            int q = (int)b[2 + j];
+            if (q >= 128) q -= 256;
+            dot += x[blk * 32 + j] * (float)q;
+        }
+        acc += dot * scale;
+    }
+    partial[tid] = acc;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (lane == 0) {
+        const uint base = (tid / NT) * NT;
+        outrow[row] = partial[base] + partial[base + 1]
+                   + partial[base + 2] + partial[base + 3];
+    }
+}
+
+// Fused f16 GEMV (max 3 weights)
+kernel void mllm_gemv_f16_fused(
+    device float* out0  [[buffer(0)]],
+    device float* out1  [[buffer(1)]],
+    device float* out2  [[buffer(2)]],
+    const device float* x  [[buffer(3)]],
+    const device half* w0  [[buffer(4)]],
+    const device half* w1  [[buffer(5)]],
+    const device half* w2  [[buffer(6)]],
+    constant uint* params  [[buffer(7)]],
+    uint tid   [[thread_index_in_threadgroup]],
+    uint tgid  [[threadgroup_position_in_grid]],
+    uint tsize [[threads_per_threadgroup]],
+    threadgroup float* partial [[threadgroup(0)]])
+{
+    constexpr uint NT = 4;
+    const uint rows_per_group = tsize / NT;
+    const uint lane = tid % NT;
+    const uint row_global = tgid * rows_per_group + (tid / NT);
+
+    const uint n = params[7];
+    const uint in_dim = params[6];
+
+    const device half* wbase = nullptr;
+    device float* outrow = nullptr;
+    uint row = 0;
+
+    if (n >= 1 && row_global < params[3]) {
+        wbase = w0;
+        outrow = out0;
+        row = row_global;
+    } else if (n >= 2 && row_global < params[4]) {
+        wbase = w1;
+        outrow = out1;
+        row = row_global - params[3];
+    } else if (n >= 3 && row_global < params[5]) {
+        wbase = w2;
+        outrow = out2;
+        row = row_global - params[4];
+    } else {
+        return;
+    }
+
+    const device half* wrow = wbase + (size_t)row * in_dim;
+    float acc = 0.0f;
+    const uint vec_end = in_dim - (in_dim % 4);
+    for (uint i = lane * 4; i < vec_end; i += NT * 4) {
+        float4 xv = float4(x[i], x[i + 1], x[i + 2], x[i + 3]);
+        half4 wv = half4(wrow[i], wrow[i + 1], wrow[i + 2], wrow[i + 3]);
+        acc += dot(xv, float4(wv));
+    }
+    if (lane == 0) {
+        for (uint i = vec_end; i < in_dim; ++i) {
+            acc += x[i] * (float)wrow[i];
+        }
+    }
+    partial[tid] = acc;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (lane == 0) {
+        const uint base = (tid / NT) * NT;
+        outrow[row] = partial[base] + partial[base + 1]
+                   + partial[base + 2] + partial[base + 3];
+    }
+}
+
+// Fused f32 GEMV (max 3 weights)
+kernel void mllm_gemv_f32_fused(
+    device float* out0  [[buffer(0)]],
+    device float* out1  [[buffer(1)]],
+    device float* out2  [[buffer(2)]],
+    const device float* x  [[buffer(3)]],
+    const device float* w0 [[buffer(4)]],
+    const device float* w1 [[buffer(5)]],
+    const device float* w2 [[buffer(6)]],
+    constant uint* params  [[buffer(7)]],
+    uint tid   [[thread_index_in_threadgroup]],
+    uint tgid  [[threadgroup_position_in_grid]],
+    uint tsize [[threads_per_threadgroup]],
+    threadgroup float* partial [[threadgroup(0)]])
+{
+    constexpr uint NT = 4;
+    const uint rows_per_group = tsize / NT;
+    const uint lane = tid % NT;
+    const uint row_global = tgid * rows_per_group + (tid / NT);
+
+    const uint n = params[7];
+    const uint in_dim = params[6];
+
+    const device float* wbase = nullptr;
+    device float* outrow = nullptr;
+    uint row = 0;
+
+    if (n >= 1 && row_global < params[3]) {
+        wbase = w0;
+        outrow = out0;
+        row = row_global;
+    } else if (n >= 2 && row_global < params[4]) {
+        wbase = w1;
+        outrow = out1;
+        row = row_global - params[3];
+    } else if (n >= 3 && row_global < params[5]) {
+        wbase = w2;
+        outrow = out2;
+        row = row_global - params[4];
+    } else {
+        return;
+    }
+
+    const device float* wrow = wbase + (size_t)row * in_dim;
+    float acc = 0.0f;
+    const uint vec_end = in_dim - (in_dim % 4);
+    for (uint i = lane * 4; i < vec_end; i += NT * 4) {
+        float4 xv = float4(x[i], x[i + 1], x[i + 2], x[i + 3]);
+        float4 wv = float4(wrow[i], wrow[i + 1], wrow[i + 2], wrow[i + 3]);
+        acc += dot(xv, wv);
+    }
+    if (lane == 0) {
+        for (uint i = vec_end; i < in_dim; ++i) {
+            acc += x[i] * wrow[i];
+        }
+    }
+    partial[tid] = acc;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (lane == 0) {
+        const uint base = (tid / NT) * NT;
+        outrow[row] = partial[base] + partial[base + 1]
+                   + partial[base + 2] + partial[base + 3];
+    }
+}
+
+// =========================================================================
 // f32 GEMV (split-K cooperative)
 //   out[o] = sum_i x[i] * w[o, i]  (w is f32)
 // NT threads cooperate per output row using float4 vectorized loads;

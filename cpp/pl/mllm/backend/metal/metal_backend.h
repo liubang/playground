@@ -56,6 +56,9 @@ public:
                          std::span<const std::string_view> names) override;
 
     Status MatMul(TensorView out, TensorView x, std::string_view weight_name) override;
+    Status MatMulFused(std::span<TensorView> outs,
+                       TensorView x,
+                       std::span<const std::string_view> weight_names) override;
     Status RmsNorm(TensorView out, TensorView x, TensorView weight, float eps) override;
     Status RoPE(TensorView q, TensorView k, int64_t position, const RopeConfig& config) override;
     Status Attention(TensorView out,
