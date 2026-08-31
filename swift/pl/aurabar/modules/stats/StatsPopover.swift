@@ -1,14 +1,19 @@
+import AppKit
 import SwiftUI
 
 /// Shared theme plumbing for the three stats popovers.
 protocol StatsPopoverContent: View {
     var themePreference: String { get }
+    var themeKind: String { get }
     var colorScheme: ColorScheme { get }
 }
 
 extension StatsPopoverContent {
     var theme: Theme {
-        (ThemePreference(rawValue: themePreference) ?? .system).theme(for: colorScheme)
+        (ThemePreference(rawValue: themePreference) ?? .system).theme(
+        for: colorScheme,
+        kind: ThemeKind(rawValue: themeKind) ?? .everforest,
+    )
     }
 
     var pinnedColorScheme: ColorScheme? {
@@ -21,6 +26,7 @@ extension StatsPopoverContent {
 struct CPUPopover: View, StatsPopoverContent {
     @ObservedObject var store: SystemStatsStore
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
+    @AppStorage(ThemeKind.key) var themeKind = ThemeKind.everforest.rawValue
     // Subscribed (not read) so an accent change re-renders the popover.
     @AppStorage(AccentColor.key) var accentHex = ""
     @Environment(\.colorScheme) var colorScheme
@@ -106,6 +112,7 @@ struct CPUPopover: View, StatsPopoverContent {
 struct MemoryPopover: View, StatsPopoverContent {
     @ObservedObject var store: SystemStatsStore
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
+    @AppStorage(ThemeKind.key) var themeKind = ThemeKind.everforest.rawValue
     // Subscribed (not read) so an accent change re-renders the popover.
     @AppStorage(AccentColor.key) var accentHex = ""
     @Environment(\.colorScheme) var colorScheme
@@ -166,7 +173,7 @@ struct MemoryPopover: View, StatsPopoverContent {
     private var breakdownCard: some View {
         VStack(alignment: .leading, spacing: 7) {
             breakdownRow("应用内存", value: store.memoryApp, color: theme.aqua)
-            breakdownRow("联动内存", value: store.memoryWired, color: theme.accent)
+            breakdownRow("固定内存", value: store.memoryWired, color: theme.accent)
             breakdownRow("被压缩", value: store.memoryCompressed, color: theme.orange)
         }
         .cardStyle()
@@ -204,6 +211,7 @@ struct MemoryPopover: View, StatsPopoverContent {
 struct NetworkPopover: View, StatsPopoverContent {
     @ObservedObject var store: SystemStatsStore
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
+    @AppStorage(ThemeKind.key) var themeKind = ThemeKind.everforest.rawValue
     // Subscribed (not read) so an accent change re-renders the popover.
     @AppStorage(AccentColor.key) var accentHex = ""
     @Environment(\.colorScheme) var colorScheme
@@ -247,9 +255,7 @@ struct NetworkPopover: View, StatsPopoverContent {
             if let publicIP = store.publicIP {
                 HStack {
                     Spacer()
-                    Text("公网 \(publicIP)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(theme.textSecondary)
+                    CopyableIPText(ip: publicIP, prefix: "公网 ", color: theme.textSecondary)
                 }
             }
         }
@@ -285,10 +291,16 @@ struct NetworkPopover: View, StatsPopoverContent {
                     .foregroundStyle(theme.textSecondary)
                 }
             }
-            Text(info.localIP ?? "—")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(theme.textPrimary)
-                .padding(.leading, 20)
+            Group {
+                if let localIP = info.localIP {
+                    CopyableIPText(ip: localIP, color: theme.textPrimary)
+                } else {
+                    Text("—")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(theme.textPrimary)
+                }
+            }
+            .padding(.leading, 20)
         }
     }
 
@@ -348,7 +360,8 @@ struct NetworkPopover: View, StatsPopoverContent {
     private var totalsCard: some View {
         VStack(alignment: .leading, spacing: 7) {
             totalRow("累计下载", value: store.downTotal, color: theme.accent)
-            totalRow("累计上传", value: store.upTotal, color: theme.aqua)
+            // Dot colors mirror the chart series: down = accent, up = orange.
+            totalRow("累计上传", value: store.upTotal, color: theme.orange)
         }
         .cardStyle()
     }
@@ -371,6 +384,92 @@ struct NetworkPopover: View, StatsPopoverContent {
 }
 
 // MARK: - Shared pieces
+
+/// A copyable IP line in the network popover: single-click writes the
+/// address to the pasteboard, turns the line success-green and reveals
+/// a checkmark for a moment; hover tints the text with the accent
+/// color; right-click offers a context menu as the discoverable
+/// fallback. The row's only action is copying, so a mis-tap's worst
+/// outcome is a changed pasteboard — hence the cheap single click over
+/// a double click. The copied state and its reset are pure view state
+/// — the store stays untouched. A generation token keeps a fast second
+/// tap from being undone by the first tap's delayed reset.
+private struct CopyableIPText: View {
+    let ip: String
+    /// Static prefix shown before the address ("公网 " on the public
+    /// row, empty for interface rows).
+    var prefix: String = ""
+    /// Base text color, replaced by theme.ok while the confirmation
+    /// flash is visible.
+    var color: Color
+
+    @Environment(\.theme) private var theme
+    /// Seconds the confirmation stays visible.
+    private let feedbackLifetime = 1.2
+    @State private var copied = false
+    @State private var copiedGeneration = 0
+    @State private var hovering = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        Button(action: copy) {
+            HStack(spacing: 4) {
+                Text("\(prefix)\(ip)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(textColor)
+                // The checkmark slot has a fixed size and only toggles
+                // opacity — swapping the text for "✓ 已复制" would
+                // change the row's width and visibly jump the card's
+                // layout (worst on the right-aligned public-IP row).
+                Image(systemName: "checkmark")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(theme.ok)
+                    .opacity(copied ? 1 : 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focused($focused)
+        .onHover { hovering = $0 }
+        .overlay {
+            // .plain suppresses the standard focus ring; draw a quiet
+            // one so Tab navigation stays visible.
+            if focused {
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(theme.accent.opacity(0.6), lineWidth: 1)
+                    .padding(-2)
+                    .allowsHitTesting(false)
+            }
+        }
+        .contextMenu {
+            Button("拷贝 IP", action: copy)
+        }
+        .help("点击拷贝 IP")
+    }
+
+    /// copied (success green) > hovered (accent) > resting color.
+    private var textColor: Color {
+        if copied { return theme.ok }
+        return hovering ? theme.accent : color
+    }
+
+    private func copy() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(ip, forType: .string)
+        copiedGeneration &+= 1
+        let generation = copiedGeneration
+        withAnimation(.easeInOut(duration: 0.15)) {
+            copied = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(feedbackLifetime))
+            guard copiedGeneration == generation else { return }
+            withAnimation(.easeInOut(duration: 0.25)) {
+                copied = false
+            }
+        }
+    }
+}
 
 private let chartTimeFormatter: DateFormatter = {
     let formatter = DateFormatter()
@@ -447,6 +546,7 @@ struct StatsFooter: View, StatsPopoverContent {
     var cadenceLabel = "2s 采样 · 2 分钟窗口"
 
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
+    @AppStorage(ThemeKind.key) var themeKind = ThemeKind.everforest.rawValue
     // Subscribed (not read) so an accent change re-renders the popover.
     @AppStorage(AccentColor.key) var accentHex = ""
     @Environment(\.colorScheme) var colorScheme

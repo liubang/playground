@@ -102,6 +102,21 @@ final class MenuBarClock: ObservableObject {
     private static let formatKey = "AuraBar.calendar.clockFormat"
     private static let secondTimeZoneKey = "AuraBar.calendar.secondTimeZone"
     private var timer: Timer?
+    /// Ticking only matters while the calendar status item is inserted;
+    /// a hidden clock doesn't need a minute-aligned timer.
+    private var samplingActive = false
+
+    /// Feed from the status item's insertion state.
+    func setActive(_ active: Bool) {
+        guard active != samplingActive else { return }
+        samplingActive = active
+        if active {
+            restart()
+        } else {
+            timer?.invalidate()
+            timer = nil
+        }
+    }
 
     private let formatter: DateFormatter = {
         let f = DateFormatter()
@@ -127,10 +142,10 @@ final class MenuBarClock: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in self?.restart() }
         }
-        restart()
     }
 
     private func restart() {
+        guard samplingActive else { return }
         timer?.invalidate()
         timer = nil
         update()

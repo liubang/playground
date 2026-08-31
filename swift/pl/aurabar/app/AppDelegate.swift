@@ -41,6 +41,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.title = text
             button.toolTip = Date.now.formatted(date: .complete, time: .omitted)
         }
+        calendar.observeStatusItemVisibility { [weak clock] visible in
+            clock?.setActive(visible)
+        }
         calendarController = calendar
 
         // Weather: condition symbol + temperature.
@@ -69,6 +72,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "\($0.location.name) · \($0.current.condition.label) \(Int($0.current.temperature.rounded()))°"
             }
         }
+        weatherItem.observeStatusItemVisibility { [weak weather] visible in
+            weather?.statusItemVisibilityChanged(visible)
+        }
+        weatherItem.onPopoverVisibilityChange = { [weak weather] open in
+            weather?.popoverVisibilityChanged(open)
+        }
         weatherController = weatherItem
 
         // Stats: one shared sampler feeding three status items — CPU
@@ -92,8 +101,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.title = ""
             button.toolTip = "CPU：\(Int((usage * 100).rounded()))%"
         }
-        cpuItem.onVisibilityChange = { [weak stats] open in
+        cpuItem.onPopoverVisibilityChange = { [weak stats] open in
             open ? stats?.popoverDidOpen() : stats?.popoverDidClose()
+        }
+        cpuItem.observeStatusItemVisibility { [weak stats] visible in
+            stats?.statusItemVisibilityChanged(visible)
         }
         cpuController = cpuItem
 
@@ -113,8 +125,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.title = ""
             button.toolTip = "内存：\(Formatters.usagePair(used, total))"
         }
-        memoryItem.onVisibilityChange = { [weak stats] open in
+        memoryItem.onPopoverVisibilityChange = { [weak stats] open in
             open ? stats?.popoverDidOpen() : stats?.popoverDidClose()
+        }
+        memoryItem.observeStatusItemVisibility { [weak stats] visible in
+            stats?.statusItemVisibilityChanged(visible)
         }
         memoryController = memoryItem
 
@@ -131,8 +146,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.title = ""
             button.toolTip = "\u{2191}\(Formatters.rate(up))/s \u{2193}\(Formatters.rate(down))/s"
         }
-        networkItem.onVisibilityChange = { [weak stats] open in
+        networkItem.onPopoverVisibilityChange = { [weak stats] open in
             open ? stats?.popoverDidOpen() : stats?.popoverDidClose()
+        }
+        networkItem.observeStatusItemVisibility { [weak stats] visible in
+            stats?.statusItemVisibilityChanged(visible)
         }
         networkController = networkItem
 
@@ -155,6 +173,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.title = ""
             button.toolTip = "GPU：\(Int((usage * 100).rounded()))%"
         }
+        gpuItem.observeStatusItemVisibility { [weak gpu] visible in
+            gpu?.statusItemVisibilityChanged(visible)
+        }
+        gpuItem.onPopoverVisibilityChange = { [weak gpu] open in
+            gpu?.popoverVisibilityChanged(open)
+        }
         gpuController = gpuItem
 
         // Disk: drive icon + write/read rate lines, diffed from the
@@ -172,6 +196,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.imagePosition = .imageOnly
             button.title = ""
             button.toolTip = "写入 \(Formatters.rate(write))/s · 读取 \(Formatters.rate(read))/s"
+        }
+        diskItem.observeStatusItemVisibility { [weak disk] visible in
+            disk?.statusItemVisibilityChanged(visible)
+        }
+        diskItem.onPopoverVisibilityChange = { [weak disk] open in
+            disk?.popoverVisibilityChanged(open)
         }
         diskController = diskItem
 
@@ -197,6 +227,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 button.imagePosition = .imageOnly
                 button.title = ""
                 button.toolTip = info.map { "电池：\($0.percentage)%" }
+            }
+            batteryItem.observeStatusItemVisibility { [weak battery] visible in
+                battery?.statusItemVisibilityChanged(visible)
+            }
+            batteryItem.onPopoverVisibilityChange = { [weak battery] open in
+                battery?.popoverVisibilityChanged(open)
             }
             batteryController = batteryItem
         }

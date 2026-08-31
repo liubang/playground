@@ -41,14 +41,29 @@ final class StatusItemController: NSObject {
     /// so redundant or asynchronously reordered close paths (e.g. the
     /// willShow broadcast landing after the open report) can't corrupt
     /// the listener's open-count.
-    var onVisibilityChange: ((Bool) -> Void)?
+    var onPopoverVisibilityChange: ((Bool) -> Void)?
+
+    /// Called when the status item is inserted into / removed from the
+    /// menu bar (i.e. the module's visibility toggle flips). Distinct
+    /// from onPopoverVisibilityChange: the item can be removed while no
+    /// popover ever opened. Stores that only serve their own module
+    /// pause background sampling while the item is absent.
+    private var statusItemVisibilityHandler: ((Bool) -> Void)?
+
+    /// Subscribes to the status item's insertion state: the handler
+    /// fires immediately with the current state (covering a module
+    /// that launched hidden) and then on every flip.
+    func observeStatusItemVisibility(_ handler: @escaping (Bool) -> Void) {
+        statusItemVisibilityHandler = handler
+        handler(statusItem != nil)
+    }
 
     private var popoverOpen = false
 
     private func reportVisibility(_ open: Bool) {
         guard popoverOpen != open else { return }
         popoverOpen = open
-        onVisibilityChange?(open)
+        onPopoverVisibilityChange?(open)
     }
 
     /// The status item is inserted while `visibilityKey` is true in
@@ -122,10 +137,12 @@ final class StatusItemController: NSObject {
             item.button?.target = self
             item.button?.action = #selector(togglePopover)
             statusItem = item
+            statusItemVisibilityHandler?(true)
         } else if !isVisible, let item = statusItem {
             closePopover()
             NSStatusBar.system.removeStatusItem(item)
             statusItem = nil
+            statusItemVisibilityHandler?(false)
         }
     }
 

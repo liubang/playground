@@ -49,12 +49,16 @@ struct WeatherPopover: View {
     @ObservedObject var store: WeatherStore
 
     @AppStorage("themePreference") private var themePreference = ThemePreference.system.rawValue
+    @AppStorage(ThemeKind.key) private var themeKind = ThemeKind.everforest.rawValue
     // Subscribed (not read) so an accent change re-renders the popover.
     @AppStorage(AccentColor.key) private var accentHex = ""
     @Environment(\.colorScheme) private var colorScheme
 
     private var theme: Theme {
-        (ThemePreference(rawValue: themePreference) ?? .system).theme(for: colorScheme)
+        (ThemePreference(rawValue: themePreference) ?? .system).theme(
+            for: colorScheme,
+            kind: ThemeKind(rawValue: themeKind) ?? .everforest,
+        )
     }
 
     private var pinnedColorScheme: ColorScheme? {

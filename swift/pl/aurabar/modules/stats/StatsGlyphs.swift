@@ -12,6 +12,15 @@ enum StatsGlyphs {
     private static let height: CGFloat = 18
     private static let iconBox: CGFloat = 16
     private static let gap: CGFloat = 3
+    /// Uniform empty margin on both sides of every glyph image. AppKit
+    /// spaces status items by a fixed amount, so the *perceived* gap
+    /// between two modules is our edge margins on both neighbors plus
+    /// that constant — identical margins across modules are what makes
+    /// the bar read as evenly spaced. Kept at 1: evenness only needs
+    /// *equal* margins, and every point counts on notched MacBooks
+    /// where menu bar real estate overflows into the notch. MenuBarGlyph
+    /// shares the constant.
+    static let edgeMargin: CGFloat = 1
 
     // MARK: - CPU
 
@@ -48,9 +57,10 @@ enum StatsGlyphs {
 
     /// Level vessel + "MEM" caption + used-bytes value.
     static func makeMemory(fraction: Double, value: String) -> NSImage {
-        // Formatters.bytes caps out at "xx.xU" — "99.9G" is the widest
-        // shape (the dot is narrower than a digit).
-        makeLabeled(caption: "MEM", value: value, valueWidthReference: "99.9G") { rect in
+        // "888G" is the widest bytes shape: at 100+ of a unit the
+        // formatter drops the decimal ("128G"), and the dot in "99.9G"
+        // is narrower than a digit. 1TB+ RAM reads "1.5T" — shorter.
+        makeLabeled(caption: "MEM", value: value, valueWidthReference: "888G") { rect in
             let inset = rect.insetBy(dx: 3.0, dy: 1.4)
             let vessel = NSBezierPath(roundedRect: inset, xRadius: 2.4, yRadius: 2.4)
             vessel.lineWidth = 1.5
@@ -177,17 +187,20 @@ enum StatsGlyphs {
     /// text already say it. A direction with no traffic right now (<1K/s)
     /// is dimmed.
     static func makeNetwork(up: Double, down: Double) -> NSImage {
-        // Pad rates to a fixed width with figure spaces so the item
-        // doesn't jitter its neighbors as numbers change length.
-        let upText = "↑\(padded(Formatters.rate(up)))"
-        let downText = "↓\(padded(Formatters.rate(down)))"
+        let upText = "↑\(Formatters.rate(up))"
+        let downText = "↓\(Formatters.rate(down))"
         let upAttrs = valueAttributes(size: 8.5, dimmed: up < 1024)
         let downAttrs = valueAttributes(size: 8.5, dimmed: down < 1024)
-        let width = max(textWidth(upText, upAttrs), textWidth(downText, downAttrs))
+        // Fixed width from the widest possible text ("↑888M": the rate
+        // formatter never exceeds 3 digits + unit, and the integer shape
+        // beats "99.9M" since a dot is narrower than a digit). Hugging
+        // the current text would shift the neighbors as rates cross 10
+        // or 100 of a unit — same rule makeLabeled applies.
+        let width = edgeMargin + textWidth("↑888M", upAttrs) + edgeMargin
 
         let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
-            drawFlipped(upText, topLeft: NSPoint(x: 0, y: 9.4), attributes: upAttrs)
-            drawFlipped(downText, topLeft: NSPoint(x: 0, y: 0.4), attributes: downAttrs)
+            drawFlipped(upText, topLeft: NSPoint(x: edgeMargin, y: 9.4), attributes: upAttrs)
+            drawFlipped(downText, topLeft: NSPoint(x: edgeMargin, y: 0.4), attributes: downAttrs)
             return true
         }
         image.isTemplate = true
@@ -203,18 +216,25 @@ enum StatsGlyphs {
     /// metaphor. Direction letters render dim like the captions;
     /// a direction idling below 1K/s dims its value too.
     static func makeDisk(read: Double, write: Double) -> NSImage {
-        let writeText = padded(Formatters.rate(write))
-        let readText = padded(Formatters.rate(read))
+        let writeText = Formatters.rate(write)
+        let readText = Formatters.rate(read)
         let letterAttrs = valueAttributes(size: 8.5, dimmed: true)
         let writeAttrs = valueAttributes(size: 8.5, dimmed: write < 1024)
         let readAttrs = valueAttributes(size: 8.5, dimmed: read < 1024)
         let letterWidth = textWidth("W ", letterAttrs)
-        let textWidthMax = max(textWidth(writeText, writeAttrs), textWidth(readText, readAttrs))
-        let width = iconBox + gap + letterWidth + textWidthMax
+        // Fixed value column from the widest rate shape, same as the
+        // network glyph: per-sample text width would jitter the item.
+        let valueWidth = textWidth("888M", writeAttrs)
+        let width = edgeMargin + iconBox + gap + letterWidth + valueWidth + edgeMargin
 
         let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
-            drawDrive(NSRect(x: 0, y: (height - iconBox) / 2, width: iconBox, height: iconBox))
-            let letterX = iconBox + gap
+            drawDrive(NSRect(
+                x: edgeMargin,
+                y: (height - iconBox) / 2,
+                width: iconBox,
+                height: iconBox,
+            ))
+            let letterX = edgeMargin + iconBox + gap
             let valueX = letterX + letterWidth
             drawFlipped("W ", topLeft: NSPoint(x: letterX, y: 9.4), attributes: letterAttrs)
             drawFlipped(writeText, topLeft: NSPoint(x: valueX, y: 9.4), attributes: writeAttrs)
@@ -263,12 +283,17 @@ enum StatsGlyphs {
         drawIcon: @escaping (NSRect) -> Void,
     ) -> NSImage {
         let valueAttrs = valueAttributes(size: 9.5, dimmed: false)
-        let width = iconBox + gap + textWidth(valueWidthReference, valueAttrs)
+        let width = edgeMargin + iconBox + gap + textWidth(valueWidthReference, valueAttrs) + edgeMargin
         let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
-            let iconRect = NSRect(x: 0, y: (height - iconBox) / 2, width: iconBox, height: iconBox)
+            let iconRect = NSRect(
+                x: edgeMargin,
+                y: (height - iconBox) / 2,
+                width: iconBox,
+                height: iconBox,
+            )
             drawIcon(iconRect)
 
-            let textX = iconBox + gap
+            let textX = edgeMargin + iconBox + gap
             drawFlipped(caption, topLeft: NSPoint(x: textX, y: 10.2), attributes: captionAttributes)
             drawFlipped(value, topLeft: NSPoint(x: textX, y: 0.2), attributes: valueAttrs)
             return true
@@ -294,13 +319,6 @@ enum StatsGlyphs {
 
     private static func textWidth(_ text: String, _ attributes: [NSAttributedString.Key: Any]) -> CGFloat {
         ceil((text as NSString).size(withAttributes: attributes).width)
-    }
-
-    /// Left-pads to 4 characters with figure spaces (digit-width, so the
-    /// label stays visually monospaced).
-    private static func padded(_ text: String) -> String {
-        let missing = 4 - text.count
-        return missing > 0 ? String(repeating: "\u{2007}", count: missing) + text : text
     }
 
     /// Draws a single text line. AppKit's NSString drawing auto-adjusts

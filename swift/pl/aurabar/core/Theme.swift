@@ -109,6 +109,222 @@ struct Theme: Sendable, Equatable {
     )
 }
 
+// MARK: - Community palettes
+
+/// Bundled community color schemes, mapped onto the same 11 semantic
+/// slots the UI uses. Mapping is judgment, not transcription: an
+/// "accent" in another palette's language may not be its headline
+/// color (e.g. Catppuccin's signature is mauve, not its teal).
+///
+/// Sources (all MIT): everforest-vim, catppuccin, tokyonight.nvim,
+/// nordtheme, solarized, dracula, material-theme.
+extension Theme {
+    /// Catppuccin Mocha.
+    static let catppuccinDark = Theme(
+        background: Color(hex: 0x1E1E2E),
+        cardBackground: Color(hex: 0x313244),
+        cardBorder: Color(hex: 0x45475A),
+        textPrimary: Color(hex: 0xCDD6F4),
+        textSecondary: Color(hex: 0xA6ADC8),
+        accent: Color(hex: 0xCBA6F7), // mauve — the palette's signature
+        rest: Color(hex: 0xF38BA8),
+        warning: Color(hex: 0xF9E2AF),
+        orange: Color(hex: 0xFAB387),
+        ok: Color(hex: 0xA6E3A1),
+        aqua: Color(hex: 0x89DCEB),
+    )
+
+    /// Catppuccin Latte.
+    static let catppuccinLight = Theme(
+        background: Color(hex: 0xEFF1F5),
+        cardBackground: Color(hex: 0xE6E9EF),
+        cardBorder: Color(hex: 0xBCC0CC),
+        textPrimary: Color(hex: 0x4C4F69),
+        textSecondary: Color(hex: 0x6C6F85),
+        accent: Color(hex: 0x8839EF),
+        rest: Color(hex: 0xD20F39),
+        warning: Color(hex: 0xDF8E1D),
+        orange: Color(hex: 0xFE640B),
+        ok: Color(hex: 0x40A02B),
+        aqua: Color(hex: 0x04A5E5),
+    )
+
+    /// Tokyo Night.
+    static let tokyoNightDark = Theme(
+        background: Color(hex: 0x1A1B26),
+        cardBackground: Color(hex: 0x24283B),
+        cardBorder: Color(hex: 0x414868),
+        textPrimary: Color(hex: 0xC0CAF5),
+        textSecondary: Color(hex: 0x565F89),
+        accent: Color(hex: 0x7AA2F7),
+        rest: Color(hex: 0xF7768E),
+        warning: Color(hex: 0xE0AF68),
+        orange: Color(hex: 0xFF9E64),
+        ok: Color(hex: 0x9ECE6A),
+        aqua: Color(hex: 0x73DACA),
+    )
+
+    /// Tokyo Night Day.
+    static let tokyoNightLight = Theme(
+        background: Color(hex: 0xE1E2E7),
+        cardBackground: Color(hex: 0xD0D5E3),
+        cardBorder: Color(hex: 0xA8AECB),
+        textPrimary: Color(hex: 0x3760BF),
+        textSecondary: Color(hex: 0x6172B0),
+        accent: Color(hex: 0x2E7DE9),
+        rest: Color(hex: 0xF52A65),
+        warning: Color(hex: 0x8C6C3E),
+        orange: Color(hex: 0xB15C00),
+        ok: Color(hex: 0x587539),
+        aqua: Color(hex: 0x007197),
+    )
+
+    /// Nord (dark only — the palette has no official light variant;
+    /// the secondary text is hand-tuned between nord3 and nord4).
+    static let nordDark = Theme(
+        background: Color(hex: 0x2E3440),
+        cardBackground: Color(hex: 0x3B4252),
+        cardBorder: Color(hex: 0x4C566A),
+        textPrimary: Color(hex: 0xD8DEE9),
+        textSecondary: Color(hex: 0x8C9BAB),
+        accent: Color(hex: 0x88C0D0),
+        rest: Color(hex: 0xBF616A),
+        warning: Color(hex: 0xEBCB8B),
+        orange: Color(hex: 0xD08770),
+        ok: Color(hex: 0xA3BE8C),
+        aqua: Color(hex: 0x8FBCBB),
+    )
+
+    /// Solarized Dark.
+    static let solarizedDark = Theme(
+        background: Color(hex: 0x002B36),
+        cardBackground: Color(hex: 0x073642),
+        cardBorder: Color(hex: 0x124150),
+        textPrimary: Color(hex: 0x93A1A1),
+        textSecondary: Color(hex: 0x586E75),
+        accent: Color(hex: 0x268BD2),
+        rest: Color(hex: 0xDC322F),
+        warning: Color(hex: 0xB58900),
+        orange: Color(hex: 0xCB4B16),
+        ok: Color(hex: 0x859900),
+        aqua: Color(hex: 0x2AA198),
+    )
+
+    /// Solarized Light.
+    static let solarizedLight = Theme(
+        background: Color(hex: 0xFDF6E3),
+        cardBackground: Color(hex: 0xEEE8D5),
+        cardBorder: Color(hex: 0xE0DCC7),
+        textPrimary: Color(hex: 0x657B83),
+        textSecondary: Color(hex: 0x93A1A1),
+        accent: Color(hex: 0x268BD2),
+        rest: Color(hex: 0xDC322F),
+        warning: Color(hex: 0xB58900),
+        orange: Color(hex: 0xCB4B16),
+        ok: Color(hex: 0x859900),
+        aqua: Color(hex: 0x2AA198),
+    )
+
+    /// Dracula (dark only, the palette's identity).
+    static let draculaDark = Theme(
+        background: Color(hex: 0x282A36),
+        cardBackground: Color(hex: 0x44475A),
+        cardBorder: Color(hex: 0x6272A4),
+        textPrimary: Color(hex: 0xF8F8F2),
+        textSecondary: Color(hex: 0x6272A4),
+        accent: Color(hex: 0xBD93F9),
+        rest: Color(hex: 0xFF5555),
+        warning: Color(hex: 0xF1FA8C),
+        orange: Color(hex: 0xFFB86C),
+        ok: Color(hex: 0x50FA7B),
+        aqua: Color(hex: 0x8BE9FD),
+    )
+
+    /// Material Ocean.
+    static let materialDark = Theme(
+        background: Color(hex: 0x0F111A),
+        cardBackground: Color(hex: 0x1B1E2B),
+        cardBorder: Color(hex: 0x2D3140),
+        textPrimary: Color(hex: 0xA6ACCD),
+        textSecondary: Color(hex: 0x676E95),
+        accent: Color(hex: 0x82AAFF),
+        rest: Color(hex: 0xFF5370),
+        warning: Color(hex: 0xFFCB6B),
+        orange: Color(hex: 0xF78C6C),
+        ok: Color(hex: 0xC3E88D),
+        aqua: Color(hex: 0x89DDFF),
+    )
+
+    /// Material Lighter.
+    static let materialLight = Theme(
+        background: Color(hex: 0xFAFAFA),
+        cardBackground: Color(hex: 0xF0F0F0),
+        cardBorder: Color(hex: 0xDFE4EA),
+        textPrimary: Color(hex: 0x546E7A),
+        textSecondary: Color(hex: 0x90A4AE),
+        accent: Color(hex: 0x6182B8),
+        rest: Color(hex: 0xE53935),
+        warning: Color(hex: 0xF6A434),
+        orange: Color(hex: 0xF76D47),
+        ok: Color(hex: 0x91B859),
+        aqua: Color(hex: 0x39ADB5),
+    )
+}
+
+/// A bundled palette family, picked independently from the appearance
+/// preference (accent color language). Each kind carries a dark
+/// variant; kinds without an official light palette (Nord, Dracula)
+/// fall back to their dark variant for a light-appearance request —
+/// an honest dark theme beats an invented light one.
+enum ThemeKind: String, CaseIterable, Sendable {
+    case everforest
+    case catppuccin
+    case tokyoNight
+    case nord
+    case solarized
+    case dracula
+    case material
+
+    /// UserDefaults key; every popover subscribes it for re-rendering.
+    static let key = "themeKind"
+
+    var label: String {
+        switch self {
+        case .everforest: "Everforest"
+        case .catppuccin: "Catppuccin"
+        case .tokyoNight: "Tokyo Night"
+        case .nord: "Nord"
+        case .solarized: "Solarized"
+        case .dracula: "Dracula"
+        case .material: "Material"
+        }
+    }
+
+    var darkTheme: Theme {
+        switch self {
+        case .everforest: .dark
+        case .catppuccin: .catppuccinDark
+        case .tokyoNight: .tokyoNightDark
+        case .nord: .nordDark
+        case .solarized: .solarizedDark
+        case .dracula: .draculaDark
+        case .material: .materialDark
+        }
+    }
+
+    /// nil for kinds with no official light palette.
+    var lightTheme: Theme? {
+        switch self {
+        case .everforest: .light
+        case .catppuccin: .catppuccinLight
+        case .tokyoNight: .tokyoNightLight
+        case .nord, .dracula: nil
+        case .solarized: .solarizedLight
+        case .material: .materialLight
+        }
+    }
+}
+
 /// User-selectable theme mode, persisted via @AppStorage. The key is shared
 /// by every module's popover so they always switch together.
 enum ThemePreference: String, CaseIterable, Sendable {
@@ -124,12 +340,16 @@ enum ThemePreference: String, CaseIterable, Sendable {
         }
     }
 
-    func theme(for colorScheme: ColorScheme) -> Theme {
-        var theme: Theme = switch self {
-        case .dark: .dark
-        case .light: .light
-        case .system: colorScheme == .dark ? .dark : .light
+    /// The 11-slot palette for `appearance`, with the user's accent
+    /// override applied on top. Callers subscribe each @AppStorage key
+    /// that feeds it so the popovers re-render on change.
+    func theme(for colorScheme: ColorScheme, kind: ThemeKind) -> Theme {
+        let wantsDark = switch self {
+        case .dark: true
+        case .system: colorScheme == .dark
+        case .light: false
         }
+        var theme = wantsDark ? kind.darkTheme : (kind.lightTheme ?? kind.darkTheme)
         if let accent = AccentColor.override {
             theme.accent = accent
         }

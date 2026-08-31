@@ -32,12 +32,16 @@ struct SettingsView: View {
     @State private var selected: Tab = .general
 
     @AppStorage("themePreference") private var themePreference = ThemePreference.system.rawValue
+    @AppStorage(ThemeKind.key) private var themeKind = ThemeKind.everforest.rawValue
     // Subscribed (not read) so an accent change re-renders the window.
     @AppStorage(AccentColor.key) private var accentHex = ""
     @Environment(\.colorScheme) private var colorScheme
 
     private var theme: Theme {
-        (ThemePreference(rawValue: themePreference) ?? .system).theme(for: colorScheme)
+        (ThemePreference(rawValue: themePreference) ?? .system).theme(
+            for: colorScheme,
+            kind: ThemeKind(rawValue: themeKind) ?? .everforest,
+        )
     }
 
     private var pinnedColorScheme: ColorScheme? {
@@ -54,7 +58,7 @@ struct SettingsView: View {
             Divider().overlay(theme.cardBorder)
             content
         }
-        .frame(width: 640, height: 400)
+        .frame(width: 640, height: 440)
         .background(theme.background)
         .foregroundStyle(theme.textPrimary)
         .environment(\.theme, theme)
@@ -191,6 +195,7 @@ private struct SettingsRow<Control: View>: View {
 /// ThemePreference.theme(for:) applies it to every popover.
 private struct AccentSwatches: View {
     @AppStorage(AccentColor.key) private var accentHex = ""
+    @AppStorage(ThemeKind.key) private var themeKind = ThemeKind.everforest.rawValue
     /// The environment theme may already carry the override; the
     /// default swatch needs the palette's pristine accent.
     @Environment(\.colorScheme) private var colorScheme
@@ -201,9 +206,11 @@ private struct AccentSwatches: View {
         "#FF6482", "#FF9F0A", "#FFD60A", "#A7C080",
     ]
 
-    /// The theme-default accent for the first swatch.
+    /// The selected palette's pristine accent for the first swatch.
     private var defaultAccent: Color {
-        (colorScheme == .dark ? Theme.dark : Theme.light).accent
+        let kind = ThemeKind(rawValue: themeKind) ?? .everforest
+        let pristine = colorScheme == .dark ? kind.darkTheme : (kind.lightTheme ?? kind.darkTheme)
+        return pristine.accent
     }
 
     private var isCustom: Bool {
@@ -276,6 +283,64 @@ private struct AccentSwatches: View {
     }
 }
 
+/// Palette picker: one mini card per bundled theme, showing its five
+/// signature colors over the palette's own dark background so each
+/// swatch previews its own character rather than the live theme's.
+private struct ThemeSwatches: View {
+    @AppStorage(ThemeKind.key) private var kindRaw = ThemeKind.everforest.rawValue
+    @Environment(\.theme) private var theme
+
+    private var kind: ThemeKind {
+        ThemeKind(rawValue: kindRaw) ?? .everforest
+    }
+
+    var body: some View {
+        LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), alignment: .leading), count: 3),
+            spacing: 8,
+        ) {
+            ForEach(ThemeKind.allCases, id: \.rawValue) { candidate in
+                card(candidate)
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    private func card(_ candidate: ThemeKind) -> some View {
+        let palette = candidate.darkTheme
+        return Button {
+            kindRaw = candidate.rawValue
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 4) {
+                    let signature = [palette.accent, palette.orange, palette.ok, palette.rest, palette.aqua]
+                    ForEach(Array(signature.enumerated()), id: \.offset) { _, color in
+                        Circle().fill(color).frame(width: 10, height: 10)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 7)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(palette.background, in: RoundedRectangle(cornerRadius: 6))
+                Text(candidate.label)
+                    .font(.caption)
+                    .foregroundStyle(theme.textPrimary)
+                    .lineLimit(1)
+            }
+            .padding(6)
+            .background(theme.cardBackground, in: RoundedRectangle(cornerRadius: 8))
+            .overlay {
+                if candidate == kind {
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(theme.accent, lineWidth: 2)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 /// Divider between rows inside a section card.
 private struct RowDivider: View {
     @Environment(\.theme) private var theme
@@ -320,6 +385,9 @@ private struct GeneralTab: View {
                 SettingsRow(icon: "paintbrush.fill", color: theme.accent, label: "强调色") {
                     AccentSwatches()
                 }
+            }
+            SettingsSection(title: "配色") {
+                ThemeSwatches()
             }
             SettingsSection(title: "菜单栏模块") {
                 LazyVGrid(
@@ -369,7 +437,7 @@ private struct GeneralTab: View {
     /// At least one module must stay visible, otherwise there'd be no
     /// status item left to reopen settings from.
     private func othersAllOff(_ except: String) -> Bool {
-        let all: [String: Bool] = [
+        var all: [String: Bool] = [
             "calendar": calendar,
             "weather": weather,
             "cpu": cpu,
@@ -379,6 +447,11 @@ private struct GeneralTab: View {
             "disk": disk,
             "battery": battery,
         ]
+        // On battery-less machines the module never exists — counting
+        // its (default-true) flag would defeat the guard entirely.
+        if !AppRegistry.hasBattery {
+            all["battery"] = nil
+        }
         return all.filter { $0.key != except }.allSatisfy { !$0.value }
     }
 }
@@ -588,7 +661,11 @@ private struct AboutTab: View {
     var body: some View {
         VStack(spacing: 10) {
             Spacer()
+            // The glyph is drawn black-on-transparent; template
+            // rendering + accent tint keeps it visible in dark themes.
             Image(nsImage: StatsGlyphs.makeBattery(fraction: 0.93, charging: false, value: ""))
+                .renderingMode(.template)
+                .foregroundStyle(theme.accent)
                 .opacity(0.9)
             Text("AuraBar")
                 .font(.system(.title2, design: .rounded).weight(.semibold))

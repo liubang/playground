@@ -28,11 +28,46 @@ final class DiskStore: ObservableObject {
 
     private var timer: Timer?
     private var lastCounters: (read: UInt64, write: UInt64, at: Date)?
+    private var itemVisible = false
+    private var popoverOpen = false
 
-    init() {
+    /// Sampling runs only while the module can actually be seen: its
+    /// status item is inserted, or its popover is open. A hidden module
+    /// has no label to refresh and no chart to keep warm.
+    private var samplingActive: Bool {
+        itemVisible || popoverOpen
+    }
+
+    func statusItemVisibilityChanged(_ visible: Bool) {
+        itemVisible = visible
+        updateSampling()
+    }
+
+    func popoverVisibilityChanged(_ open: Bool) {
+        popoverOpen = open
+        updateSampling()
+    }
+
+    deinit {
+        timer?.invalidate()
+    }
+
+    private func updateSampling() {
+        if samplingActive {
+            startSampling()
+        } else {
+            timer?.invalidate()
+            timer = nil
+        }
+    }
+
+    private func startSampling() {
+        guard timer == nil else { return }
         sample()
         // Pre-fill the 2-minute window with the current reading, so the
-        // chart opens full-width from the first second.
+        // chart opens full-width from the first second. Redone on every
+        // restart: the frozen pre-pause history would read as live data,
+        // so a fresh flat baseline is more honest.
         readHistory = Array(repeating: readRate, count: Self.historyCapacity)
         writeHistory = Array(repeating: writeRate, count: Self.historyCapacity)
         let t = Timer(timeInterval: Self.sampleInterval, repeats: true) { [weak self] _ in
@@ -41,10 +76,6 @@ final class DiskStore: ObservableObject {
         t.tolerance = 1
         RunLoop.main.add(t, forMode: .common)
         timer = t
-    }
-
-    deinit {
-        timer?.invalidate()
     }
 
     private func sample() {

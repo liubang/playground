@@ -123,12 +123,52 @@ final class BatteryStore: ObservableObject {
     private var timer: Timer?
     private var powerSourceRunLoopSource: CFRunLoopSource?
     private var sleepActivity: NSObjectProtocol?
+    private var itemVisible = false
+    private var popoverOpen = false
+
+    /// Refreshes only matter while the module is visible (status item
+    /// inserted or popover open). The 30s fallback timer follows this;
+    /// the power-source run loop source stays registered but no-ops —
+    /// the events are rare and the callback is cheap.
+    private var samplingActive: Bool {
+        itemVisible || popoverOpen
+    }
+
+    func statusItemVisibilityChanged(_ visible: Bool) {
+        itemVisible = visible
+        updateSampling()
+    }
+
+    func popoverVisibilityChanged(_ open: Bool) {
+        popoverOpen = open
+        updateSampling()
+    }
+
+    private func updateSampling() {
+        if samplingActive {
+            // Catch up immediately: the fallback timer may have been
+            // paused for a long stretch.
+            refresh()
+            guard timer == nil else { return }
+            let t = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.refresh() }
+            }
+            t.tolerance = 10
+            RunLoop.main.add(t, forMode: .common)
+            timer = t
+        } else {
+            timer?.invalidate()
+            timer = nil
+        }
+    }
 
     init() {
         preventSleep = UserDefaults.standard.bool(forKey: Self.preventSleepKey)
         if preventSleep {
             startSleepPrevention()
         }
+        // One upfront read regardless of visibility: AppRegistry's
+        // hasBattery check (and the popover's empty state) need it.
         refresh()
         observePowerSourceChanges()
         // Sleep may span a power-state change whose notification never
@@ -139,14 +179,11 @@ final class BatteryStore: ObservableObject {
             object: nil,
             queue: .main,
         ) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+            Task { @MainActor in
+                guard let self, self.samplingActive else { return }
+                self.refresh()
+            }
         }
-        let t = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
-        }
-        t.tolerance = 10
-        RunLoop.main.add(t, forMode: .common)
-        timer = t
     }
 
     deinit {
@@ -168,7 +205,10 @@ final class BatteryStore: ObservableObject {
         guard let source = IOPSNotificationCreateRunLoopSource({ context in
             guard let context else { return }
             let store = Unmanaged<BatteryStore>.fromOpaque(context).takeUnretainedValue()
-            Task { @MainActor in store.refresh() }
+            Task { @MainActor in
+                guard store.samplingActive else { return }
+                store.refresh()
+            }
         }, context)?.takeRetainedValue() else { return }
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         powerSourceRunLoopSource = source

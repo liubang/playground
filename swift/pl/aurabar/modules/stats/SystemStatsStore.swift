@@ -74,6 +74,10 @@ final class SystemStatsStore: ObservableObject {
     /// breakdowns and process enumeration only run while > 0 — the menu
     /// bar labels keep updating regardless.
     private var openPopovers = 0
+    /// Number of the three stats status items currently inserted (0-3).
+    /// All sampling stops while no item is visible and no popover is
+    /// open: a hidden module has no label to refresh.
+    private var visibleItems = 0
     private var processTick = 0
     private var netInfoTick = 0
     private var publicIPTick = 0
@@ -82,8 +86,18 @@ final class SystemStatsStore: ObservableObject {
         openPopovers > 0
     }
 
+    private var samplingActive: Bool {
+        visibleItems > 0 || anyPopoverOpen
+    }
+
+    func statusItemVisibilityChanged(_ visible: Bool) {
+        visibleItems += visible ? 1 : -1
+        updateSampling()
+    }
+
     func popoverDidOpen() {
         openPopovers += 1
+        updateSampling()
         // No immediate sample here: sampling right after the timer's own
         // tick would diff against a tiny dt and inflate the rates into
         // bogus spikes. Histories are always warm anyway (they append
@@ -92,12 +106,25 @@ final class SystemStatsStore: ObservableObject {
 
     func popoverDidClose() {
         openPopovers = max(0, openPopovers - 1)
+        updateSampling()
     }
 
-    init() {
+    private func updateSampling() {
+        if samplingActive {
+            startSampling()
+        } else {
+            timer?.invalidate()
+            timer = nil
+        }
+    }
+
+    private func startSampling() {
+        guard timer == nil else { return }
         sample()
         backfillHistories()
-        fetchPublicIP()
+        if publicIP == nil {
+            fetchPublicIP()
+        }
         let t = Timer(timeInterval: Self.sampleInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.sample() }
         }
@@ -106,11 +133,11 @@ final class SystemStatsStore: ObservableObject {
         timer = t
     }
 
-    /// Pre-fills the 2-minute window with the current reading at launch,
-    /// so charts open full-width with complete axis labels from the very
-    /// first second — new samples then slide in from the right. Without
-    /// this the first two minutes after a restart show a few points
-    /// squished against the left edge.
+    /// Pre-fills the 2-minute window with the current reading so charts
+    /// open full-width with complete axis labels — new samples then slide
+    /// in from the right. Runs on every sampling start: after a pause the
+    /// frozen pre-pause history would read as live data, so a fresh flat
+    /// baseline is more honest than keeping it.
     private func backfillHistories() {
         cpuHistory = Array(repeating: cpuUsage, count: Self.historyCapacity)
         memoryHistory = Array(

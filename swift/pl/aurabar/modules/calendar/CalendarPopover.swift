@@ -11,6 +11,7 @@ struct CalendarPopover: View {
     @ObservedObject var holidaySync: HolidaySync
 
     @AppStorage("themePreference") private var themePreference = ThemePreference.system.rawValue
+    @AppStorage(ThemeKind.key) private var themeKind = ThemeKind.everforest.rawValue
     // Subscribed (not read) so an accent change re-renders the popover.
     @AppStorage(AccentColor.key) private var accentHex = ""
     @AppStorage("AuraBar.calendar.weekStart") private var weekStartRaw = WeekStart.monday.rawValue
@@ -31,7 +32,10 @@ struct CalendarPopover: View {
     @State private var lastGridDay = Date.distantPast
 
     private var theme: Theme {
-        (ThemePreference(rawValue: themePreference) ?? .system).theme(for: colorScheme)
+        (ThemePreference(rawValue: themePreference) ?? .system).theme(
+            for: colorScheme,
+            kind: ThemeKind(rawValue: themeKind) ?? .everforest,
+        )
     }
 
     private var pinnedColorScheme: ColorScheme? {

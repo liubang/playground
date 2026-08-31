@@ -18,7 +18,7 @@ final class WeatherStore: ObservableObject {
     @Published var providerKind: WeatherProviderKind {
         didSet {
             UserDefaults.standard.set(providerKind.rawValue, forKey: Self.providerKey)
-            Task { await refresh() }
+            autoRefresh()
         }
     }
 
@@ -57,6 +57,49 @@ final class WeatherStore: ObservableObject {
 
     private var timer: Timer?
     private var checkmarkTask: Task<Void, Never>?
+    private var itemVisible = false
+    private var popoverOpen = false
+
+    /// Fetches only matter while the module is visible (status item
+    /// inserted or popover open) — a hidden weather module shouldn't
+    /// hit the network every 30 minutes. The first activation after a
+    /// pause refetches if the snapshot is older than one interval.
+    private var samplingActive: Bool {
+        itemVisible || popoverOpen
+    }
+
+    func statusItemVisibilityChanged(_ visible: Bool) {
+        itemVisible = visible
+        updateSampling()
+    }
+
+    func popoverVisibilityChanged(_ open: Bool) {
+        popoverOpen = open
+        updateSampling()
+    }
+
+    private func updateSampling() {
+        if samplingActive {
+            guard timer == nil else { return }
+            startTimer()
+            let stale = snapshot.map {
+                Date().timeIntervalSince($0.fetchedAt) > Self.refreshInterval
+            } ?? true
+            if stale {
+                Task { await refresh() }
+            }
+        } else {
+            timer?.invalidate()
+            timer = nil
+        }
+    }
+
+    /// Unattended triggers (wake, provider switch) refetch only while
+    /// the module is on screen; otherwise the next activation does.
+    private func autoRefresh() {
+        guard samplingActive else { return }
+        Task { await refresh() }
+    }
 
     private static let providerKey = "AuraBar.weather.provider"
     private static let qweatherKeyKey = "AuraBar.weather.qweatherKey"
@@ -94,10 +137,8 @@ final class WeatherStore: ObservableObject {
             object: nil,
             queue: .main,
         ) { [weak self] _ in
-            Task { @MainActor in await self?.refresh() }
+            Task { @MainActor in self?.autoRefresh() }
         }
-        startTimer()
-        Task { await refresh() }
     }
 
     private static func decode<T: Decodable>(_: T.Type, forKey key: String) -> T? {

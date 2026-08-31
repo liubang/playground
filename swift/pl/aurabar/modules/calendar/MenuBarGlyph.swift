@@ -6,9 +6,12 @@ import AppKit
 /// to the menu bar's light/dark appearance automatically.
 enum MenuBarGlyph {
     static func make() -> NSImage {
-        let side: CGFloat = 18
+        // Same uniform edge margin the stats glyphs use, so the
+        // perceived gap to the neighboring status items is identical.
+        let margin = StatsGlyphs.edgeMargin
+        let side: CGFloat = 18 + 2 * margin
         let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
-            let inset = rect.insetBy(dx: 2.2, dy: 2.2)
+            let inset = rect.insetBy(dx: 2.2 + margin, dy: 2.2)
             let sheet = NSBezierPath(roundedRect: inset, xRadius: 3.4, yRadius: 3.4)
             sheet.lineWidth = 1.5
             NSColor.black.setStroke()
