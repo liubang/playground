@@ -63,10 +63,54 @@ kernel void mllm_rmsnorm(
         }
         threadgroup_barrier(mem_flags::mem_threadgroup);
     }
-    const float denom = rsqrt(scratch[0] / (float)n + eps);
-    for (uint i = tid; i < n; i += tsize) {
-        orow[i] = xrow[i] * denom * w[i];
-    }
+const float denom = rsqrt(scratch[0] / (float)n + eps);
+for (uint i = tid; i < n; i += tsize) {
+orow[i] = xrow[i] * denom * w[i];
+}
+}
+
+// =========================================================================
+// Fused residual-add + RMSNorm (post-norm block boundary, one kernel):
+//   residual[i] += add[i]  (in place)
+//   out[i] = residual[i] / sqrt(mean(residual^2) + eps) * w[i]
+// Same reduction structure as mllm_rmsnorm so results match the unfused
+// composition bit-for-bit.
+// =========================================================================
+kernel void mllm_add_rmsnorm(
+device float* out       [[buffer(0)]],
+device float* residual  [[buffer(1)]],
+const device float* add [[buffer(2)]],
+const device float* w   [[buffer(3)]],
+constant uint& n       [[buffer(4)]],
+constant float& eps    [[buffer(5)]],
+uint tid   [[thread_index_in_threadgroup]],
+uint tgid  [[threadgroup_position_in_grid]],
+uint tsize [[threads_per_threadgroup]],
+threadgroup float* scratch [[threadgroup(0)]])
+{
+const uint row = tgid;
+device float* rrow = residual + (size_t)row * n;
+const device float* arow = add + (size_t)row * n;
+device float* orow = out + (size_t)row * n;
+
+float sum = 0.0f;
+for (uint i = tid; i < n; i += tsize) {
+const float v = rrow[i] + arow[i];
+rrow[i] = v;
+sum += v * v;
+}
+scratch[tid] = sum;
+threadgroup_barrier(mem_flags::mem_threadgroup);
+for (uint s = tsize / 2; s > 0; s >>= 1) {
+if (tid < s) {
+scratch[tid] += scratch[tid + s];
+}
+threadgroup_barrier(mem_flags::mem_threadgroup);
+}
+const float denom = rsqrt(scratch[0] / (float)n + eps);
+for (uint i = tid; i < n; i += tsize) {
+orow[i] = rrow[i] * denom * w[i];
+}
 }
 
 // =========================================================================
@@ -108,15 +152,75 @@ kernel void mllm_rope(
         p = (float)(position + (int)(h / kv_heads));
     }
 
-    const float theta = pow(freq_base, (float)(2 * i) / (float)head_dim);
-    const float angle = p / theta;
-    const float c = cos(angle);
-    const float s = sin(angle);
-    const float a = ptr[0];
-    const float b = ptr[hd2];
-    ptr[0] = a * c - b * s;
-    ptr[hd2] = a * s + b * c;
+const float theta = pow(freq_base, (float)(2 * i) / (float)head_dim);
+const float angle = p / theta;
+const float c = cos(angle);
+const float s = sin(angle);
+const float a = ptr[0];
+const float b = ptr[hd2];
+ptr[0] = a * c - b * s;
+ptr[hd2] = a * s + b * c;
 }
+
+// =========================================================================
+// Fused per-head Q/K RMSNorm + RoPE (Qwen3 family), decode (batch == 1).
+// One threadgroup per head row; grid = q_heads + kv_heads groups. First
+// q_heads groups handle Q, the rest handle K. The rotation consumes the
+// normalized values directly from registers after the row reduction,
+// replacing 2 separate norm kernels + 1 rope kernel with 1 dispatch.
+// Norm math mirrors mllm_rmsnorm (denom = rsqrt(mean + eps)).
+// =========================================================================
+kernel void mllm_rope_qknorm(
+device float* q        [[buffer(0)]],
+device float* k        [[buffer(1)]],
+const device float* qn [[buffer(2)]],
+const device float* kn [[buffer(3)]],
+constant uint& head_dim   [[buffer(4)]],
+constant float& freq_base [[buffer(5)]],
+constant int& position    [[buffer(6)]],
+constant uint& q_heads    [[buffer(7)]],
+constant float& eps       [[buffer(8)]],
+uint tid   [[thread_index_in_threadgroup]],
+uint tgid  [[threadgroup_position_in_grid]],
+uint tsize [[threads_per_threadgroup]],
+threadgroup float* scratch [[threadgroup(0)]])
+{
+const bool is_q = tgid < q_heads;
+device float* row = is_q ? q + (size_t)tgid * head_dim
+: k + (size_t)(tgid - q_heads) * head_dim;
+const device float* wn = is_q ? qn : kn;
+
+// Per-head RMSNorm: sum of squares over the row.
+float sum = 0.0f;
+for (uint i = tid; i < head_dim; i += tsize) {
+const float v = row[i];
+sum += v * v;
+}
+scratch[tid] = sum;
+threadgroup_barrier(mem_flags::mem_threadgroup);
+for (uint s = tsize / 2; s > 0; s >>= 1) {
+if (tid < s) {
+scratch[tid] += scratch[tid + s];
+}
+threadgroup_barrier(mem_flags::mem_threadgroup);
+}
+const float denom = rsqrt(scratch[0] / (float)head_dim + eps);
+
+// Rotate pairs with pre-normalized values (no extra kernel round trip).
+const uint hd2 = head_dim / 2;
+const float p = (float)position;
+for (uint i = tid; i < hd2; i += tsize) {
+const float theta = pow(freq_base, (float)(2 * i) / (float)head_dim);
+const float angle = p / theta;
+const float c = cos(angle);
+const float s = sin(angle);
+const float a = row[i] * denom * wn[i];
+const float b = row[i + hd2] * denom * wn[i + hd2];
+row[i] = a * c - b * s;
+row[i + hd2] = a * s + b * c;
+}
+}
+
 
 // =========================================================================
 // Flash-attention style kernel (single-token decode)

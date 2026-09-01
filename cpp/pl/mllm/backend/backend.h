@@ -34,10 +34,16 @@ struct WeightRef {
 
 // RoPE configuration matching LLaMA conventions.
 struct RopeConfig {
-    int32_t head_dim = 0;
-    float freq_base = 10000.0f;
-    // If >0, scale low-frequency dims (NTK-aware, NTK-by-parts, etc.).
-    float freq_scale = 1.0f;
+int32_t head_dim = 0;
+float freq_base = 10000.0f;
+// If >0, scale low-frequency dims (NTK-aware, NTK-by-parts, etc.).
+float freq_scale = 1.0f;
+// Optional per-head Q/K RMSNorm applied in-place before rotation (Qwen3
+// family). Invalid TensorView = feature off. Backends may fuse the norm
+// into the rotation kernel.
+TensorView q_norm{};
+TensorView k_norm{};
+float rms_eps = 1e-6f;
 };
 
 // Immutable view of one KV cache slot for a single layer.
@@ -94,9 +100,22 @@ public:
         return {};
     }
 
-    // RMSNorm: out = x / sqrt(mean(x^2) + eps) * weight
-    // x, out, weight shape: [batch, hidden] (or [1, hidden])
-    virtual Status RmsNorm(TensorView out, TensorView x, TensorView weight, float eps) = 0;
+// RMSNorm: out = x / sqrt(mean(x^2) + eps) * weight
+// x, out, weight shape: [batch, hidden] (or [1, hidden])
+virtual Status RmsNorm(TensorView out, TensorView x, TensorView weight, float eps) = 0;
+
+// Fused residual-add + RMSNorm (post-norm transformer block boundary):
+//   residual += add;  out = rmsnorm(residual) * weight
+// residual is updated in place. Default composes AddInPlace + RmsNorm;
+// backends with a fused kernel override it (saves one kernel dispatch).
+virtual Status RmsNormAdd(TensorView out,
+                          TensorView residual,
+                          TensorView add,
+                          TensorView weight,
+                          float eps) {
+if (auto s = AddInPlace(residual, add); !s.ok()) return s;
+return RmsNorm(out, residual, weight, eps);
+}
 
     // In-place RoPE for query/key tensors.
     // q shape: [batch, num_heads, head_dim]

@@ -85,44 +85,26 @@ Status TransformerLayer::Forward(TensorView hidden,
             return s;
     }
 
-    // 3b. Optional per-head Q/K RMSNorm (Qwen3), applied before RoPE.
-    //   q [1, heads*head_dim] -> [heads, head_dim] where each row is a head;
-    //   the norm weight is [head_dim]. In-place (out aliases x) is safe for
-    //   row-wise RMSNorm.
-    if (weights_.q_norm.valid()) {
-        auto q_heads = q.reshape({num_heads, head_dim});
-        if (!q_heads.ok())
-            return q_heads.status();
-        if (auto s = backend.RmsNorm(
-                q_heads.value(), q_heads.value(), weights_.q_norm, config.rms_norm_eps);
-            !s.ok()) {
-            return s;
-        }
-    }
-    if (weights_.k_norm.valid()) {
-        auto k_heads = k.reshape({num_kv_heads, head_dim});
-        if (!k_heads.ok())
-            return k_heads.status();
-        if (auto s = backend.RmsNorm(
-                k_heads.value(), k_heads.value(), weights_.k_norm, config.rms_norm_eps);
-            !s.ok()) {
-            return s;
-        }
-    }
+// 3b + 4. Optional per-head Q/K RMSNorm (Qwen3) FUSED into the RoPE call:
+// backends apply the norm before rotation inside one kernel (Metal) or
+// inline (CPU reference). Saves 2 kernel dispatches per layer on device
+// backends.
+auto q_reshaped = q.reshape({1, num_heads, head_dim});
+if (!q_reshaped.ok())
+return q_reshaped.status();
+auto k_reshaped = k.reshape({1, num_kv_heads, head_dim});
+if (!k_reshaped.ok())
+return k_reshaped.status();
 
-    // 4. RoPE on Q/K
-    // Reshape to [1, heads, head_dim]
-    auto q_reshaped = q.reshape({1, num_heads, head_dim});
-    if (!q_reshaped.ok())
-        return q_reshaped.status();
-    auto k_reshaped = k.reshape({1, num_kv_heads, head_dim});
-    if (!k_reshaped.ok())
-        return k_reshaped.status();
-
-    RopeConfig rope_cfg{
-        .head_dim = head_dim,
-        .freq_base = config.rope_freq_base,
-    };
+RopeConfig rope_cfg{
+.head_dim = head_dim,
+.freq_base = config.rope_freq_base,
+};
+if (weights_.q_norm.valid()) {
+rope_cfg.q_norm = weights_.q_norm;
+rope_cfg.k_norm = weights_.k_norm;
+rope_cfg.rms_eps = config.rms_norm_eps;
+}
     if (auto s = backend.RoPE(q_reshaped.value(), k_reshaped.value(), position, rope_cfg);
         !s.ok()) {
         return s;
@@ -184,17 +166,15 @@ Status TransformerLayer::Forward(TensorView hidden,
         return s;
     }
 
-    // 8. Residual add
-    if (auto s = backend.AddInPlace(hidden, proj); !s.ok())
-        return s;
-
-    // 9. MLP RMSNorm
+    // 8 + 9. Fused residual add + MLP RMSNorm (one dispatch on device
+    // backends; the default implementation composes add then norm).
     auto mlp_norm_out = scratch.AllocateTensor({1, hidden_size}, DType::kF32);
     if (!mlp_norm_out.ok())
         return mlp_norm_out.status();
     auto mlp_out = mlp_norm_out.value();
 
-    if (auto s = backend.RmsNorm(mlp_out, hidden, weights_.mlp_norm, config.rms_norm_eps);
+    if (auto s = backend.RmsNormAdd(mlp_out, hidden, proj, weights_.mlp_norm,
+                                    config.rms_norm_eps);
         !s.ok()) {
         return s;
     }

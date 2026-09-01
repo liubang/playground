@@ -59,8 +59,13 @@ public:
     Status MatMulFused(std::span<TensorView> outs,
                        TensorView x,
                        std::span<const std::string_view> weight_names) override;
-    Status RmsNorm(TensorView out, TensorView x, TensorView weight, float eps) override;
-    Status RoPE(TensorView q, TensorView k, int64_t position, const RopeConfig& config) override;
+Status RmsNorm(TensorView out, TensorView x, TensorView weight, float eps) override;
+Status RmsNormAdd(TensorView out,
+                  TensorView residual,
+                  TensorView add,
+                  TensorView weight,
+                  float eps) override;
+Status RoPE(TensorView q, TensorView k, int64_t position, const RopeConfig& config) override;
     Status Attention(TensorView out,
                      TensorView q,
                      const KVCacheView& kv,

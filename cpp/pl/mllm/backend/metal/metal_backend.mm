@@ -101,6 +101,8 @@ struct MetalBackend::Impl {
 
     // Pipeline states for compute kernels.
     id<MTLComputePipelineState> rmsnorm_ps = nil;
+    id<MTLComputePipelineState> add_rmsnorm_ps = nil; // fused residual-add + rmsnorm
+    id<MTLComputePipelineState> rope_qknorm_ps = nil; // fused per-head qk-norm + rope (decode)
     id<MTLComputePipelineState> rope_ps = nil;
     id<MTLComputePipelineState> attention_flash_ps = nil; // unified flash-attention (host + device KV)
     id<MTLComputePipelineState> attention_decode_ps = nil; // simdgroup decode flash (single row)
@@ -207,6 +209,8 @@ private:
             return ps;
         };
         rmsnorm_ps = make_ps("mllm_rmsnorm");
+        add_rmsnorm_ps = make_ps("mllm_add_rmsnorm");
+        rope_qknorm_ps = make_ps("mllm_rope_qknorm");
         rope_ps = make_ps("mllm_rope");
         attention_flash_ps = make_ps("mllm_attention_flash");
         attention_decode_ps = make_ps("mllm_attention_decode");
@@ -226,7 +230,8 @@ private:
         if (!init_error.ok()) {
             return;
         }
-        if (!rmsnorm_ps || !rope_ps || !attention_flash_ps ||
+        if (!rmsnorm_ps || !add_rmsnorm_ps || !rope_qknorm_ps || !rope_ps ||
+            !attention_flash_ps ||
             !attention_decode_ps ||
             !attention_flash_batch_ps ||
             !swiglu_ps || !add_ps || !add_bias_ps ||
@@ -793,6 +798,69 @@ Status MetalBackend::RmsNorm(TensorView out, TensorView x, TensorView weight,
 }
 
 // =========================================================================
+// RmsNormAdd — fused residual-add + RMSNorm
+// =========================================================================
+
+Status MetalBackend::RmsNormAdd(TensorView out, TensorView residual, TensorView add,
+                                TensorView weight, float eps) {
+    if (auto s = ensure_ready(*impl_); !s.ok()) return s;
+    if (auto s = check_contig_valid(out, "RmsNormAdd"); !s.ok()) return s;
+    if (auto s = check_contig_valid(residual, "RmsNormAdd"); !s.ok()) return s;
+    if (auto s = check_contig_valid(add, "RmsNormAdd"); !s.ok()) return s;
+    if (auto s = check_contig_valid(weight, "RmsNormAdd"); !s.ok()) return s;
+
+    const int32_t batch = static_cast<int32_t>(residual.shape().dim(0));
+    const int32_t hidden = static_cast<int32_t>(residual.shape().dim(1));
+    if (out.shape() != residual.shape() || add.shape() != residual.shape() ||
+        weight.shape().numel() != hidden) {
+        return Status::Error(ErrorCode::kInvalidArgument, "RmsNormAdd: shape mismatch");
+    }
+    if (!(eps > 0.0f)) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "RmsNormAdd: eps must be positive");
+    }
+    if (residual.dtype() != DType::kF32 || out.dtype() != DType::kF32) {
+        return Status::Error(ErrorCode::kUnsupported,
+                             "RmsNormAdd: tensors must be f32");
+    }
+
+    // residual is in-place AND read-after-write: shadow buffer serves both.
+    id<MTLBuffer> rbuf = upload_tensor(*impl_, residual);
+    id<MTLBuffer> abuf = upload_tensor(*impl_, add);
+    id<MTLBuffer> wbuf = upload_tensor(*impl_, weight);
+    const size_t out_bytes = static_cast<size_t>(batch) * static_cast<size_t>(hidden) * sizeof(float);
+    id<MTLBuffer> obuf = impl_->get_or_alloc_output(out.data(), out_bytes);
+    if (!rbuf || !abuf || !wbuf || !obuf) {
+        return Status::Error(ErrorCode::kBackendFailure,
+                             "RmsNormAdd: buffer alloc failed");
+    }
+    // Mark residual's device buffer dirty so the next consumer/SyncToHost
+    // picks up updated values.
+    impl_->shadow_[reinterpret_cast<uintptr_t>(residual.data())] =
+        {rbuf, static_cast<size_t>(batch) * static_cast<size_t>(hidden) * sizeof(float),
+         true};
+
+    const uint32_t n = static_cast<uint32_t>(hidden);
+    const float e = eps;
+
+    id<MTLComputeCommandEncoder> enc = impl_->encoder();
+    [enc setComputePipelineState:impl_->add_rmsnorm_ps];
+    [enc setBuffer:obuf offset:0 atIndex:0];
+    [enc setBuffer:rbuf offset:0 atIndex:1];
+    [enc setBuffer:abuf offset:0 atIndex:2];
+    [enc setBuffer:wbuf offset:0 atIndex:3];
+    [enc setBytes:&n length:sizeof(n) atIndex:4];
+    [enc setBytes:&e length:sizeof(e) atIndex:5];
+    const uint32_t tsize = static_cast<uint32_t>(std::min<int64_t>(
+        hidden, static_cast<int64_t>(impl_->device.maxThreadsPerThreadgroup.width)));
+    [enc setThreadgroupMemoryLength:tsize * sizeof(float) atIndex:0];
+    [enc dispatchThreadgroups:MTLSizeMake(static_cast<NSUInteger>(batch), 1, 1)
+         threadsPerThreadgroup:MTLSizeMake(tsize, 1, 1)];
+    // Deferred — no commit/wait.
+    return {};
+}
+
+// =========================================================================
 // RoPE
 // =========================================================================
 
@@ -850,6 +918,38 @@ Status MetalBackend::RoPE(TensorView q, TensorView k, int64_t position,
     const int32_t pos = static_cast<int32_t>(position);
 
     id<MTLComputeCommandEncoder> enc = impl_->encoder();
+
+    // Fused path (Qwen3 decode): per-head Q/K RMSNorm + rotation in a
+    // single dispatch. Only for batch == 1 (the batch prefill variant
+    // keeps the separate norm + rope kernels).
+    if (q.shape().dim(0) == 1 && config.q_norm.valid() && config.k_norm.valid()) {
+        id<MTLBuffer> qnbuf = upload_tensor(*impl_, config.q_norm);
+        id<MTLBuffer> knbuf = upload_tensor(*impl_, config.k_norm);
+        if (!qnbuf || !knbuf) {
+            return Status::Error(ErrorCode::kBackendFailure,
+                                 "RoPE: norm weight upload failed");
+        }
+        const float qk_eps = config.rms_eps;
+        [enc setComputePipelineState:impl_->rope_qknorm_ps];
+        [enc setBuffer:qbuf offset:0 atIndex:0];
+        [enc setBuffer:kbuf offset:0 atIndex:1];
+        [enc setBuffer:qnbuf offset:0 atIndex:2];
+        [enc setBuffer:knbuf offset:0 atIndex:3];
+        [enc setBytes:&hd length:sizeof(hd) atIndex:4];
+        [enc setBytes:&fb length:sizeof(fb) atIndex:5];
+        [enc setBytes:&pos length:sizeof(pos) atIndex:6];
+        [enc setBytes:&qh length:sizeof(qh) atIndex:7];
+        [enc setBytes:&qk_eps length:sizeof(qk_eps) atIndex:8];
+        const uint32_t tsize =
+            static_cast<uint32_t>(std::min<int64_t>(head_dim, 256));
+        [enc setThreadgroupMemoryLength:tsize * sizeof(float) atIndex:0];
+        [enc dispatchThreadgroups:MTLSizeMake(
+                 static_cast<NSUInteger>(num_heads + num_kv_heads), 1, 1)
+             threadsPerThreadgroup:MTLSizeMake(tsize, 1, 1)];
+        // Deferred.
+        return {};
+    }
+
     [enc setComputePipelineState:impl_->rope_ps];
     [enc setBuffer:qbuf offset:0 atIndex:0];
     [enc setBuffer:kbuf offset:0 atIndex:1];
