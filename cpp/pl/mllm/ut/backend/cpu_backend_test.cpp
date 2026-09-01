@@ -89,7 +89,7 @@ void ref_rmsnorm(float* out, const float* x, const float* w, int batch, int hidd
     }
 }
 
-// Naive RoPE reference (interleaved GPT-NeoX style).
+// Naive RoPE reference (GPT-NeoX half-split style, as used by LLaMA / Qwen).
 void ref_rope(float* q,
               float* k,
               int batch,
@@ -100,17 +100,18 @@ void ref_rope(float* q,
               float freq_base) {
     auto apply = [&](float* ptr) {
         const float p = static_cast<float>(position);
-        for (int i = 0; i < head_dim / 2; ++i) {
+        const int half = head_dim / 2;
+        for (int i = 0; i < half; ++i) {
             const float theta =
                 1.0f /
                 std::pow(freq_base, static_cast<float>(2 * i) / static_cast<float>(head_dim));
             const float angle = p * theta;
             const float c = std::cos(angle);
             const float s = std::sin(angle);
-            const float a = ptr[2 * i];
-            const float b = ptr[2 * i + 1];
-            ptr[2 * i] = a * c - b * s;
-            ptr[2 * i + 1] = a * s + b * c;
+            const float a = ptr[i];
+            const float b = ptr[i + half];
+            ptr[i] = a * c - b * s;
+            ptr[i + half] = a * s + b * c;
         }
     };
     for (int b = 0; b < batch; ++b) {

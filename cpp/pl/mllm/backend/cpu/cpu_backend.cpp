@@ -128,21 +128,24 @@ inline float rope_theta(int32_t i, int32_t head_dim, float freq_base) {
 }
 
 // Apply RoPE in-place to a single head of `head_dim` elements.
-// LLaMA uses "GPT-NeoX style" interleaved rotation:
-//   x'[2i]   = x[2i] * cos(p*theta_i) - x[2i+1] * sin(p*theta_i)
-//   x'[2i+1] = x[2i] * sin(p*theta_i) + x[2i+1] * cos(p*theta_i)
+// LLaMA / Qwen use GPT-NeoX style "half-split" rotation: the second half of
+// the head is paired with the first half (NOT the interleaved GPT-J scheme):
+//   x'[i]        = x[i] * cos(p*theta_i) - x[i + d/2] * sin(p*theta_i)
+//   x'[i + d/2]  = x[i] * sin(p*theta_i) + x[i + d/2] * cos(p*theta_i)
+//   theta_i      = freq_base^(-2i/head_dim)
 template <typename T>
 void apply_rope_head(T* ptr, int32_t head_dim, int64_t position, float freq_base) {
     const float p = static_cast<float>(position);
-    for (int32_t i = 0; i < head_dim / 2; ++i) {
+    const int32_t half = head_dim / 2;
+    for (int32_t i = 0; i < half; ++i) {
         const float theta = rope_theta(i, head_dim, freq_base);
         const float angle = p * theta;
         const float c = std::cos(angle);
         const float s = std::sin(angle);
-        const float a = static_cast<float>(ptr[2 * i]);
-        const float b = static_cast<float>(ptr[2 * i + 1]);
-        ptr[2 * i] = static_cast<T>(a * c - b * s);
-        ptr[2 * i + 1] = static_cast<T>(a * s + b * c);
+        const float a = static_cast<float>(ptr[i]);
+        const float b = static_cast<float>(ptr[i + half]);
+        ptr[i] = static_cast<T>(a * c - b * s);
+        ptr[i + half] = static_cast<T>(a * s + b * c);
     }
 }
 

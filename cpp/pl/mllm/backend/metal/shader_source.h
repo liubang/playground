@@ -70,10 +70,11 @@ kernel void mllm_rmsnorm(
 }
 
 // =========================================================================
-// RoPE — GPT-NeoX style interleaved rotation
-//   x'[2i]   = x[2i] * cos(p*theta_i) - x[2i+1] * sin(p*theta_i)
-//   x'[2i+1] = x[2i] * sin(p*theta_i) + x[2i+1] * cos(p*theta_i)
-//   theta_i  = freq_base^(-2i/head_dim)
+// RoPE — GPT-NeoX style half-split rotation (LLaMA / Qwen)
+//   x'[i]       = x[i] * cos(p*theta_i) - x[i + d/2] * sin(p*theta_i)
+//   x'[i + d/2] = x[i] * sin(p*theta_i) + x[i + d/2] * cos(p*theta_i)
+//   theta_i     = freq_base^(-2i/head_dim)
+// One thread per (head, pair) so each rotated pair is written exactly once.
 // =========================================================================
 kernel void mllm_rope(
     device float* q [[buffer(0)]],
@@ -86,23 +87,21 @@ kernel void mllm_rope(
     constant uint& kv_heads   [[buffer(7)]],
     uint gid [[thread_position_in_grid]])
 {
-    const uint q_pairs = q_elems / 2;
+    const uint hd2 = head_dim / 2;
+    const uint q_pairs = (q_elems / head_dim) * hd2;
     const float p = (float)position;
 
     device float* ptr;
-    uint h, i;
+    uint i;
     if (gid < q_pairs) {
-        const uint idx = gid * 2;
-        const uint rem = idx % (q_heads * head_dim);
-        h = rem / head_dim;
-        i = (rem % head_dim) / 2;
-        ptr = q + idx;
+        const uint h = gid / hd2;
+        i = gid % hd2;
+        ptr = q + h * head_dim + i;
     } else {
-        const uint idx = (gid - q_pairs) * 2;
-        const uint rem = idx % (kv_heads * head_dim);
-        h = rem / head_dim;
-        i = (rem % head_dim) / 2;
-        ptr = k + idx;
+        const uint g2 = gid - q_pairs;
+        const uint h = g2 / hd2;
+        i = g2 % hd2;
+        ptr = k + h * head_dim + i;
     }
 
     const float theta = pow(freq_base, (float)(2 * i) / (float)head_dim);
@@ -110,9 +109,9 @@ kernel void mllm_rope(
     const float c = cos(angle);
     const float s = sin(angle);
     const float a = ptr[0];
-    const float b = ptr[1];
+    const float b = ptr[hd2];
     ptr[0] = a * c - b * s;
-    ptr[1] = a * s + b * c;
+    ptr[hd2] = a * s + b * c;
 }
 
 // =========================================================================
