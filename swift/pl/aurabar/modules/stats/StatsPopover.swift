@@ -11,9 +11,9 @@ protocol StatsPopoverContent: View {
 extension StatsPopoverContent {
     var theme: Theme {
         (ThemePreference(rawValue: themePreference) ?? .system).theme(
-        for: colorScheme,
-        kind: ThemeKind(rawValue: themeKind) ?? .everforest,
-    )
+            for: colorScheme,
+            kind: ThemeKind(rawValue: themeKind) ?? .everforest,
+        )
     }
 
     var pinnedColorScheme: ColorScheme? {
@@ -449,7 +449,9 @@ private struct CopyableIPText: View {
 
     /// copied (success green) > hovered (accent) > resting color.
     private var textColor: Color {
-        if copied { return theme.ok }
+        if copied {
+            return theme.ok
+        }
         return hovering ? theme.accent : color
     }
 
