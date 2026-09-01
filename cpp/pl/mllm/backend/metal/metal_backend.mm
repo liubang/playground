@@ -103,6 +103,7 @@ struct MetalBackend::Impl {
     id<MTLComputePipelineState> rmsnorm_ps = nil;
     id<MTLComputePipelineState> rope_ps = nil;
     id<MTLComputePipelineState> attention_flash_ps = nil; // unified flash-attention (host + device KV)
+    id<MTLComputePipelineState> attention_decode_ps = nil; // simdgroup decode flash (single row)
     id<MTLComputePipelineState> attention_flash_batch_ps = nil; // batched prefill attention
     id<MTLComputePipelineState> swiglu_ps = nil;
     id<MTLComputePipelineState> add_ps = nil;
@@ -208,6 +209,7 @@ private:
         rmsnorm_ps = make_ps("mllm_rmsnorm");
         rope_ps = make_ps("mllm_rope");
         attention_flash_ps = make_ps("mllm_attention_flash");
+        attention_decode_ps = make_ps("mllm_attention_decode");
         attention_flash_batch_ps = make_ps("mllm_attention_flash_batch");
         swiglu_ps = make_ps("mllm_swiglu");
         add_ps = make_ps("mllm_add_inplace");
@@ -225,6 +227,7 @@ private:
             return;
         }
         if (!rmsnorm_ps || !rope_ps || !attention_flash_ps ||
+            !attention_decode_ps ||
             !attention_flash_batch_ps ||
             !swiglu_ps || !add_ps || !add_bias_ps ||
             !gemv_q8_0_ps || !gemv_f16_ps || !gemv_f32_ps ||
@@ -258,13 +261,13 @@ public:
         if (deferred_cb) {
             [deferred_cb commit];
             [deferred_cb waitUntilCompleted];
-            // Check error
             if (deferred_cb.error) {
                 // Error will be surfaced by the caller via status check.
             }
             deferred_cb = nil;
         }
     }
+
 
     // Check if there's a pending command buffer with an error.
     bool has_pending_error() const {
@@ -424,8 +427,8 @@ Status MetalBackend::ImportWeights(std::span<const TensorView> weights,
 // =========================================================================
 
 Status MetalBackend::MatMul(TensorView out, TensorView x,
-                            std::string_view weight_name) {
-    if (auto s = ensure_ready(*impl_); !s.ok()) return s;
+std::string_view weight_name) {
+if (auto s = ensure_ready(*impl_); !s.ok()) return s;
     if (auto s = check_contig_valid(out, "MatMul"); !s.ok()) return s;
     if (auto s = check_contig_valid(x, "MatMul"); !s.ok()) return s;
 
@@ -616,9 +619,9 @@ Status MetalBackend::MatMul(TensorView out, TensorView x,
 // =========================================================================
 
 Status MetalBackend::MatMulFused(std::span<TensorView> outs,
-                                  TensorView x,
-                                  std::span<const std::string_view> weight_names) {
-    if (auto s = ensure_ready(*impl_); !s.ok()) return s;
+TensorView x,
+std::span<const std::string_view> weight_names) {
+if (auto s = ensure_ready(*impl_); !s.ok()) return s;
     if (outs.size() != weight_names.size()) {
         return Status::Error(ErrorCode::kInvalidArgument, "MatMulFused: size mismatch");
     }
@@ -1260,7 +1263,16 @@ Status MetalBackend::AttentionKV(TensorView out, TensorView q, int32_t layer,
     const NSUInteger tg_red_bytes = tg_sc_bytes;
 
     id<MTLComputeCommandEncoder> enc = impl_->encoder();
-    [enc setComputePipelineState:impl_->attention_flash_ps];
+    // Decode flash: 8 simdgroups per 256-thread group, one group per head;
+    // barrier-free online softmax in the hot loop. Requires head_dim % 32
+    // == 0 and <= 256 (register budget); otherwise fall back to the
+    // blockwise flash kernel.
+    const bool use_decode = (head_dim % 32 == 0) && (head_dim <= 256);
+    if (use_decode) {
+        [enc setComputePipelineState:impl_->attention_decode_ps];
+    } else {
+        [enc setComputePipelineState:impl_->attention_flash_ps];
+    }
     [enc setBuffer:obuf offset:0 atIndex:0];
     [enc setBuffer:qbuf offset:0 atIndex:1];
     [enc setBuffer:kv.keys offset:0 atIndex:2];
@@ -1271,12 +1283,22 @@ Status MetalBackend::AttentionKV(TensorView out, TensorView q, int32_t layer,
     [enc setBytes:&sl length:sizeof(sl) atIndex:7];
     [enc setBytes:&sc length:sizeof(sc) atIndex:8];
     [enc setBytes:&kv_base length:sizeof(kv_base) atIndex:9];
-    [enc setThreadgroupMemoryLength:tg_q_bytes atIndex:0];
-    [enc setThreadgroupMemoryLength:tg_sc_bytes atIndex:1];
-    [enc setThreadgroupMemoryLength:tg_acc_bytes atIndex:2];
-    [enc setThreadgroupMemoryLength:tg_red_bytes atIndex:3];
-    [enc dispatchThreadgroups:MTLSizeMake(static_cast<NSUInteger>(num_heads), 1, 1)
-         threadsPerThreadgroup:MTLSizeMake(attn_tsize, 1, 1)];
+    if (use_decode) {
+        // 8 simdgroups x (head_dim + 2) floats merge scratch.
+        const NSUInteger tg_bytes =
+            static_cast<NSUInteger>(8) * (static_cast<NSUInteger>(head_dim) + 2) *
+            sizeof(float);
+        [enc setThreadgroupMemoryLength:tg_bytes atIndex:0];
+        [enc dispatchThreadgroups:MTLSizeMake(static_cast<NSUInteger>(num_heads), 1, 1)
+             threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
+    } else {
+        [enc setThreadgroupMemoryLength:tg_q_bytes atIndex:0];
+        [enc setThreadgroupMemoryLength:tg_sc_bytes atIndex:1];
+        [enc setThreadgroupMemoryLength:tg_acc_bytes atIndex:2];
+        [enc setThreadgroupMemoryLength:tg_red_bytes atIndex:3];
+        [enc dispatchThreadgroups:MTLSizeMake(static_cast<NSUInteger>(num_heads), 1, 1)
+             threadsPerThreadgroup:MTLSizeMake(attn_tsize, 1, 1)];
+    }
     // Deferred.
     return {};
 }

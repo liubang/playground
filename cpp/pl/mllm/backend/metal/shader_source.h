@@ -237,6 +237,111 @@ kernel void mllm_attention_flash(
     }
 }
 
+// =========================================================================
+// Decode flash attention (single query row). One threadgroup per head;
+// the 8 simdgroups of the group each own a contiguous slice of the KV
+// sequence and run online softmax fully lane-local (no barriers in the hot
+// loop): lanes permanently own head_dim/32 dims, scores reduce with one
+// simd_sum per position. Simdgroup partials are merged once at the end
+// through threadgroup memory. Requires head_dim % 32 == 0, head_dim <= 256.
+// =========================================================================
+kernel void mllm_attention_decode(
+device float* out            [[buffer(0)]],
+const device float* q        [[buffer(1)]],
+const device float* keys     [[buffer(2)]],
+const device float* values   [[buffer(3)]],
+constant uint& num_heads     [[buffer(4)]],
+constant uint& num_kv_heads  [[buffer(5)]],
+constant uint& head_dim      [[buffer(6)]],
+constant uint& seq_len       [[buffer(7)]],
+constant float& scale        [[buffer(8)]],
+constant ulong& kv_base      [[buffer(9)]],
+uint lane [[thread_index_in_simdgroup]],
+uint sg   [[simdgroup_index_in_threadgroup]],
+uint nsg  [[simdgroups_per_threadgroup]],
+uint tgid [[threadgroup_position_in_grid]],
+threadgroup float* tg_mem [[threadgroup(0)]])
+{
+const uint h = tgid;
+if (h >= num_heads) return;
+const uint group = num_heads / num_kv_heads;
+const uint kv_head = h / group;
+const size_t kv_stride = (size_t)num_kv_heads * head_dim;
+const device float* kb = keys + kv_base + (size_t)kv_head * head_dim;
+const device float* vb = values + kv_base + (size_t)kv_head * head_dim;
+const device float* qh = q + (size_t)h * head_dim;
+
+const uint dpl = head_dim / 32;  // dims per lane (head_dim <= 256 -> <= 8)
+
+float qreg[8];
+float acc[8];
+for (uint i = 0; i < dpl; ++i) {
+qreg[i] = qh[lane * dpl + i];
+acc[i] = 0.0f;
+}
+
+float m_run = -INFINITY;
+float l_run = 0.0f;
+
+const uint T = (seq_len + nsg - 1) / nsg;
+const uint j_begin = sg * T;
+const uint j_end = min(j_begin + T, seq_len);
+
+for (uint j = j_begin; j < j_end; ++j) {
+const device float* kj = kb + (size_t)j * kv_stride;
+float dot = 0.0f;
+for (uint i = 0; i < dpl; ++i) {
+dot += qreg[i] * kj[lane * dpl + i];
+}
+const float s = simd_sum(dot) * scale;
+const float m_new = max(m_run, s);
+const float corr = exp(m_run - m_new);
+const float w = exp(s - m_new);
+const device float* vj = vb + (size_t)j * kv_stride;
+for (uint i = 0; i < dpl; ++i) {
+acc[i] = acc[i] * corr + w * vj[lane * dpl + i];
+}
+l_run = l_run * corr + w;
+m_run = m_new;
+}
+
+// Merge simdgroup partials: per-sg entry = [head_dim acc, m, l].
+threadgroup float* my = tg_mem + sg * (head_dim + 2);
+for (uint i = 0; i < dpl; ++i) {
+my[lane * dpl + i] = acc[i];
+}
+if (lane == 0) {
+my[head_dim] = m_run;
+my[head_dim + 1] = l_run;
+}
+threadgroup_barrier(mem_flags::mem_threadgroup);
+
+if (sg == 0) {
+float face[8];
+for (uint i = 0; i < dpl; ++i) face[i] = 0.0f;
+float M = -INFINITY;
+float L = 0.0f;
+for (uint sgi = 0; sgi < nsg; ++sgi) {
+const threadgroup float* e = tg_mem + sgi * (head_dim + 2);
+const float m2 = e[head_dim];
+const float l2 = e[head_dim + 1];
+if (l2 <= 0.0f) continue; // empty slice
+const float Mn = max(M, m2);
+const float c1 = exp(M - Mn);
+const float c2 = exp(m2 - Mn);
+for (uint i = 0; i < dpl; ++i) {
+face[i] = face[i] * c1 + e[lane * dpl + i] * c2;
+}
+L = L * c1 + l2 * c2;
+M = Mn;
+}
+const float inv = 1.0f / L;
+for (uint i = 0; i < dpl; ++i) {
+out[(size_t)h * head_dim + lane * dpl + i] = face[i] * inv;
+}
+}
+}
+
 // Legacy mllm_attention_kv is replaced by mllm_attention_flash above.
 // Host path and device path both use mllm_attention_flash; the device path
 // passes kv_base = layer * capacity * num_kv_heads * head_dim.

@@ -78,9 +78,13 @@ int32_t Sampler::Sample(std::span<const float> logits,
         return -1;
     }
 
-    // Apply repeat penalty to specified tokens.
-    std::vector<float> adjusted(logits.begin(), logits.end());
+    // Apply repeat penalty to specified tokens. The logits are only copied
+    // when the penalty is active — the common greedy path samples straight
+    // from the input span (no per-token vocab-sized alloc + memcpy).
+    std::span<const float> eff = logits;
+    std::vector<float> adjusted;
     if (params_.repeat_penalty != 1.0f && !penalty_tokens_.empty()) {
+        adjusted.assign(logits.begin(), logits.end());
         for (const int32_t t : penalty_tokens_) {
             if (t >= 0 && t < n) {
                 // llama.cpp style: divide if positive, multiply if negative
@@ -89,15 +93,16 @@ int32_t Sampler::Sample(std::span<const float> logits,
                     (lp > 0.0f) ? lp / params_.repeat_penalty : lp * params_.repeat_penalty;
             }
         }
+        eff = adjusted;
     }
 
     // Greedy path.
     if (params_.temperature <= 0.0f) {
         int32_t best = 0;
-        float bestv = adjusted[0];
+        float bestv = eff[0];
         for (int32_t i = 1; i < n; ++i) {
-            if (adjusted[static_cast<size_t>(i)] > bestv) {
-                bestv = adjusted[static_cast<size_t>(i)];
+            if (eff[static_cast<size_t>(i)] > bestv) {
+                bestv = eff[static_cast<size_t>(i)];
                 best = i;
             }
         }
@@ -110,7 +115,7 @@ int32_t Sampler::Sample(std::span<const float> logits,
     std::vector<LogitProbs> cands;
     cands.reserve(static_cast<size_t>(n));
     for (int32_t i = 0; i < n; ++i) {
-        cands.push_back({i, adjusted[static_cast<size_t>(i)] / params_.temperature});
+        cands.push_back({i, eff[static_cast<size_t>(i)] / params_.temperature});
     }
 
     // top-k

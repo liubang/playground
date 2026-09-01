@@ -197,12 +197,30 @@ void bench_gemv_q8_0(Backend& backend, int out_dim, int in_dim) {
         },
         50);
 
+    // Batched: encode `kReps` dispatches into one command buffer, sync once.
+    // Reveals the true per-kernel cost (kernel + GPU-side dispatch gap) once
+    // the per-op commit+wait round trip is amortized away.
+    constexpr int kReps = 64;
+    const double chain_ms = bench_ms(
+        [&] {
+            for (int r = 0; r < kReps; ++r) {
+                auto s = backend.MatMul(out.view, x.view, w.name);
+                if (!s.ok())
+                    std::fprintf(stderr, "gemv q8_0 chain failed: %s\n", s.message.c_str());
+            }
+            sync_backend(backend);
+        },
+        20) /
+        kReps;
+
     const double bytes = (static_cast<double>(out_dim) * in_dim + in_dim + out_dim) * 4.0;
-    std::printf("gemv q8_0 %5d x %-6d : %9.3f ms  %8.1f GB/s\n",
+    std::printf("gemv q8_0 %5d x %-6d : %9.3f ms  %8.1f GB/s   (chained: %9.3f ms, %8.1f GB/s)\n",
                 out_dim,
                 in_dim,
                 ms,
-                bytes / (ms / 1e3) / 1e9);
+                bytes / (ms / 1e3) / 1e9,
+                chain_ms,
+                bytes / (chain_ms / 1e3) / 1e9);
 }
 
 // Attention
@@ -319,6 +337,15 @@ int main(int argc, char** argv) {
     std::printf("# gemv q8_0 fused dequant (metal decode path)\n");
     for (auto [o, i] : std::vector<std::pair<int, int>>{
              {4096, 4096}, {11008, 4096}, {4096, 11008}, {32000, 4096}}) {
+        bench_gemv_q8_0(*backend, o, i);
+    }
+    std::printf("# gemv q8_0 qwen3-0.6B decode shapes (q/k,v/o/gate,up/down/lm_head)\n");
+    for (auto [o, i] : std::vector<std::pair<int, int>>{{2048, 1024},
+                                                        {1024, 1024},
+                                                        {1024, 2048},
+                                                        {3072, 1024},
+                                                        {1024, 3072},
+                                                        {151936, 1024}}) {
         bench_gemv_q8_0(*backend, o, i);
     }
     std::printf("# attention seq lengths (32 heads, 8 kv heads, head_dim 128)\n");
