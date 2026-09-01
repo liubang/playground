@@ -51,6 +51,12 @@ struct Engine::Impl {
     // Embedding lookup buffer (f32 for CPU backend).
     TensorView token_embd; // non-owning view into GGUF mmap
     std::vector<Model::WeightEntry> weight_entries;
+
+    // Persistent hidden-state buffer for batched prefill:
+    // [kPrefillChunk, hidden_size] f32. Kept engine-owned (not in the scratch
+    // arena) because the residual stream must survive per-layer arena resets,
+    // and RunPrefill hands a view of the last row to the sampler.
+    OwnedBuffer prefill_hidden;
 };
 
 // Destructor must be in .cpp where Impl is complete.
@@ -192,15 +198,20 @@ Result<std::unique_ptr<Engine>> Engine::Create(Options options) {
         cache = std::make_unique<KVCache>(std::move(cache_result).value());
     }
 
-    // Arena: must hold all per-layer activations across ALL layers in one
-    // forward pass (arena is reset per-token, not per-layer). Each layer
-    // allocates roughly 10 * max(intermediate, heads*head_dim) * 4 bytes.
-    // Add headroom for logits and double the result for safety.
+    // Arena sizing: the decode path accumulates activations of ALL layers in
+    // one forward pass (arena reset per token), so it needs ~per_layer *
+    // num_layers * 2. The batched-prefill path resets the arena per layer and
+    // needs ~per_layer * kPrefillChunk * 2 (chunk rows instead of one).
+    // Allocate the max of both, with headroom for logits.
     const size_t per_layer_bytes =
         static_cast<size_t>(std::max(config.intermediate_size,
                                      config.num_attention_heads * config.effective_head_dim())) *
         10 * 4;
-    const size_t arena_bytes = per_layer_bytes * static_cast<size_t>(config.num_layers) * 2 + 65536;
+    const size_t arena_bytes =
+        std::max(per_layer_bytes * static_cast<size_t>(config.num_layers),
+                 per_layer_bytes * static_cast<size_t>(kPrefillChunk)) *
+            2 +
+        65536;
     auto arena_result = ScratchArena::Create(arena_bytes);
     if (!arena_result.ok()) {
         return arena_result.status();
@@ -215,6 +226,14 @@ Result<std::unique_ptr<Engine>> Engine::Create(Options options) {
 
     auto engine = std::unique_ptr<Engine>(new Engine());
     engine->impl_ = std::make_unique<Impl>();
+    auto prefill_buf =
+        OwnedBuffer::AllocateCpu(static_cast<size_t>(engine->kPrefillChunk) *
+                                     static_cast<size_t>(config.hidden_size) * sizeof(float),
+                                 64);
+    if (!prefill_buf.ok()) {
+        return prefill_buf.status();
+    }
+    engine->impl_->prefill_hidden = std::move(prefill_buf).value();
     engine->impl_->gguf = std::move(gguf);
     engine->impl_->config = config;
     engine->impl_->tokenizer = std::move(tokenizer);
@@ -236,37 +255,58 @@ Result<TensorView> Engine::RunPrefill(std::span<const int32_t> tokens) {
         return Status::Error(ErrorCode::kInvalidArgument, "prefill: empty prompt");
     }
 
-    TensorView last_hidden;
-    for (int64_t i = 0; i < static_cast<int64_t>(tokens.size()); ++i) {
-        int32_t tok = tokens[static_cast<size_t>(i)];
-        if (tok < 0 || tok >= impl.config.vocab_size) {
-            return Status::Error(ErrorCode::kInvalidArgument, "prefill: token out of vocab range");
-        }
+    // Batched prefill: process the prompt in chunks of kPrefillChunk tokens.
+    // All GEMMs/norms/activations run batch-wide; attention enforces causal
+    // masking by giving query row i exactly the [0, chunk_start + i] prefix.
+    auto* dst = static_cast<float*>(impl.prefill_hidden.data());
+    int64_t row_of_last = 0;
+    for (int64_t chunk_start = 0; chunk_start < static_cast<int64_t>(tokens.size());
+         chunk_start += kPrefillChunk) {
+        const int32_t n = static_cast<int32_t>(
+            std::min<int64_t>(kPrefillChunk,
+                              static_cast<int64_t>(tokens.size()) - chunk_start));
 
-        // Embedding lookup: dequantize the row into a writable arena buffer
-        // (Forward modifies hidden in-place). Handles f32/f16/Q8_0 weights.
-        impl.arena->Reset();
-        auto embd_buf = impl.arena->AllocateTensor({1, hidden}, DType::kF32);
-        if (!embd_buf.ok())
-            return embd_buf.status();
-        if (auto s = embedding_row(impl.token_embd, tok, hidden, embd_buf.value()); !s.ok()) {
+        // Embed the chunk's tokens into rows of the persistent prefill
+        // buffer (Forward modifies them in-place). Handles f32/f16/Q8_0.
+        for (int32_t i = 0; i < n; ++i) {
+            const int32_t tok = tokens[static_cast<size_t>(chunk_start + i)];
+            if (tok < 0 || tok >= impl.config.vocab_size) {
+                return Status::Error(ErrorCode::kInvalidArgument,
+                                     "prefill: token out of vocab range");
+            }
+            TensorView row(dst + static_cast<size_t>(i) * hidden,
+                           DType::kF32,
+                           Shape({1, hidden}));
+            if (auto s = embedding_row(impl.token_embd, tok, hidden, row); !s.ok()) {
+                return s;
+            }
+        }
+        TensorView batch(dst, DType::kF32, Shape({n, hidden}));
+        // The embedding writes happened on the host, outside the backend.
+        if (auto s = impl.backend->NotifyHostWrite(batch); !s.ok()) {
             return s;
         }
-        // The embedding write happened on the host, outside the backend.
-        if (auto s = impl.backend->NotifyHostWrite(embd_buf.value()); !s.ok()) {
-            return s;
-        }
 
-        if (auto s =
-                impl.model->Forward(embd_buf.value(), i, *impl.cache, *impl.backend, *impl.arena);
+        if (auto s = impl.model->Prefill(
+                batch, chunk_start, *impl.cache, *impl.backend, *impl.arena);
             !s.ok()) {
             return s;
         }
-        // Forward updates the embedding buffer in place; after the last
-        // token it holds the final hidden state used to sample token N+1.
-        last_hidden = embd_buf.value();
+        // Bring the transformed chunk back to host memory. The caller holds
+        // only row VIEWs of prefill_hidden afterwards; backends with device
+        // residency would otherwise serve stale host data when the logits
+        // path uploads the last row (the row pointer has no shadow entry).
+        if (auto s = impl.backend->SyncToHost(batch); !s.ok()) {
+            return s;
+        }
+        row_of_last = n - 1;
     }
-    return last_hidden;
+
+    // Return the final hidden state (last row of the last chunk) so the
+    // caller can sample the first generated token directly.
+    return TensorView(dst + row_of_last * static_cast<size_t>(hidden),
+                      DType::kF32,
+                      Shape({1, hidden}));
 }
 
 Result<std::vector<int32_t>> Engine::GenerateTokens(std::string_view prompt,

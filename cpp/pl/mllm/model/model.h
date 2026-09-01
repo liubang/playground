@@ -61,6 +61,19 @@ public:
                            Backend& backend,
                            ScratchArena& scratch) const = 0;
 
+    // Forward a run of n tokens through all layers with causal masking
+    // (batched prefill).
+    // hidden: [n, hidden_size] — embedded tokens; modified in-place by
+    // residual adds; must live outside the scratch arena (the arena is
+    // reset per layer). start_pos: absolute sequence position of row 0.
+    // cache: KV cache (appends all layers' K/V for the n tokens, then
+    // advances by n).
+    virtual Status Prefill(TensorView hidden,
+                           int64_t start_pos,
+                           KVCache& cache,
+                           Backend& backend,
+                           ScratchArena& scratch) const = 0;
+
     // Final norm + output projection (lm_head).
     // hidden: [1, hidden_size]; logits: [1, vocab_size] — output.
     virtual Status ComputeLogits(TensorView hidden,

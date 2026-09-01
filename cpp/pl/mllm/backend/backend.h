@@ -101,6 +101,9 @@ public:
     // In-place RoPE for query/key tensors.
     // q shape: [batch, num_heads, head_dim]
     // k shape: [batch, num_kv_heads, head_dim]
+    // Batch semantics: row b is rotated at sequence position `position + b`
+    // (decode uses batch == 1 with the absolute position; batched prefill
+    // passes the chunk's start position).
     virtual Status RoPE(TensorView q, TensorView k, int64_t position, const RopeConfig& config) = 0;
 
     // Causal multi-head attention with GQA.
@@ -169,8 +172,9 @@ public:
         return Status::Error(ErrorCode::kUnsupported, "device KV cache not supported");
     }
 
-    // Append one token's K/V for `layer` at absolute `position`.
-    // key/value shape: [1, num_kv_heads, head_dim]
+    // Append K/V for `layer` starting at absolute `position`.
+    // key/value shape: [n, num_kv_heads, head_dim]; row b is stored at
+    // position + b. Decode calls with n == 1; batched prefill with n > 1.
     virtual Status AppendKV(int32_t layer, TensorView key, TensorView value, int64_t position) {
         (void)layer;
         (void)key;
@@ -193,6 +197,38 @@ public:
         (void)seq_len;
         (void)config;
         return Status::Error(ErrorCode::kUnsupported, "device KV cache not supported");
+    }
+
+    // Batched causal attention over the device KV cache of `layer` (prefill).
+    // q shape: [n, num_heads, head_dim]; out shape: [n, num_heads * head_dim].
+    // Query row i attends to the first `seq_base + i` KV entries, so the
+    // caller passes seq_base = start_pos + 1 for strictly causal masking
+    // (row 0 sits at start_pos and sees itself).
+    // Default: naive per-row loop over AttentionKV (correct, slower); device
+    // backends override with a single batched kernel.
+    virtual Status AttentionPrefillKV(TensorView out,
+                                      TensorView q,
+                                      int32_t layer,
+                                      int64_t seq_base,
+                                      const AttentionConfig& config) {
+        const int64_t n = q.shape().dim(0);
+        const int64_t head_dim = q.shape().dim(2);
+        for (int64_t i = 0; i < n; ++i) {
+            TensorView q_row(static_cast<char*>(q.data()) +
+                                 static_cast<size_t>(i) * config.num_heads * head_dim *
+                                     sizeof(float),
+                             q.dtype(),
+                             Shape({1, config.num_heads, head_dim}));
+            TensorView out_row(static_cast<char*>(out.data()) +
+                                   static_cast<size_t>(i) * config.num_heads * head_dim *
+                                       sizeof(float),
+                               out.dtype(),
+                               Shape({1, config.num_heads * head_dim}));
+            if (auto s = AttentionKV(out_row, q_row, layer, seq_base + i, config); !s.ok()) {
+                return s;
+            }
+        }
+        return {};
     }
 };
 

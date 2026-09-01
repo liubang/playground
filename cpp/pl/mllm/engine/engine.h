@@ -89,10 +89,16 @@ public:
 private:
     Engine() = default;
 
-    // Run prefill: tokenize prompt, embed each token, forward through model.
-    // Returns the final hidden state (a view into the scratch arena, valid
-    // until the next arena Reset) so the caller can sample the first
-    // generated token from it without re-forwarding the last prompt token.
+    // Prompt tokens processed per batched-prefill forward pass. Larger
+    // chunks amortize weight-dequant and dispatch cost but grow the scratch
+    // arena (~per_layer_bytes * chunk * 2).
+    static constexpr int32_t kPrefillChunk = 64;
+
+    // Run prefill: tokenize prompt, embed each token, forward through model
+    // in batched chunks. Returns the final hidden state (a view into an
+    // engine-owned buffer, valid until the next RunPrefill) so the caller
+    // can sample the first generated token without re-forwarding the last
+    // prompt token.
     [[nodiscard]] Result<TensorView> RunPrefill(std::span<const int32_t> tokens);
 
     struct Impl;

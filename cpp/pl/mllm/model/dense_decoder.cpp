@@ -134,6 +134,30 @@ Status DenseDecoderModel::Forward(TensorView hidden,
     return {};
 }
 
+Status DenseDecoderModel::Prefill(TensorView hidden,
+                                  int64_t start_pos,
+                                  KVCache& cache,
+                                  Backend& backend,
+                                  ScratchArena& scratch) const {
+    const int32_t n = static_cast<int32_t>(hidden.shape().dim(0));
+    if (n <= 0) {
+        return Status::Error(ErrorCode::kInvalidArgument, "Prefill: empty batch");
+    }
+    // The residual stream must survive all layers; it lives in the
+    // caller-owned `hidden` buffer. Per-layer activations are intra-layer
+    // only, so the scratch arena can be reset before each layer.
+    for (const auto& layer : layers_) {
+        scratch.Reset();
+        if (auto s = layer.ForwardBatch(hidden, start_pos, cache, backend, scratch, config_);
+            !s.ok()) {
+            return s;
+        }
+    }
+    // All layers have appended the whole batch; advance the cache length.
+    cache.Advance(n);
+    return {};
+}
+
 Status DenseDecoderModel::ComputeLogits(TensorView hidden,
                                         TensorView logits,
                                         Backend& backend,

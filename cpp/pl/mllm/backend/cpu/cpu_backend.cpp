@@ -164,13 +164,15 @@ void apply_rope(TensorView q,
     const int32_t k_stride = num_kv_heads * head_dim;
 
     for (int32_t b = 0; b < batch; ++b) {
+        // Batch semantics: row b belongs to sequence position `position + b`
+        // (single-token decode passes batch == 1 with the absolute position).
         T* qb = qd + static_cast<size_t>(b) * static_cast<size_t>(q_stride);
         T* kb = kd + static_cast<size_t>(b) * static_cast<size_t>(k_stride);
         for (int32_t h = 0; h < num_heads; ++h) {
-            apply_rope_head(qb + h * head_dim, head_dim, position, freq_base);
+            apply_rope_head(qb + h * head_dim, head_dim, position + b, freq_base);
         }
         for (int32_t h = 0; h < num_kv_heads; ++h) {
-            apply_rope_head(kb + h * head_dim, head_dim, position, freq_base);
+            apply_rope_head(kb + h * head_dim, head_dim, position + b, freq_base);
         }
     }
 }

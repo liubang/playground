@@ -75,6 +75,8 @@ kernel void mllm_rmsnorm(
 //   x'[i + d/2] = x[i] * sin(p*theta_i) + x[i + d/2] * cos(p*theta_i)
 //   theta_i     = freq_base^(-2i/head_dim)
 // One thread per (head, pair) so each rotated pair is written exactly once.
+// Batch semantics: row b is rotated at `position + b` (batched prefill);
+// decode uses batch == 1 with the absolute position.
 // =========================================================================
 kernel void mllm_rope(
     device float* q [[buffer(0)]],
@@ -89,19 +91,21 @@ kernel void mllm_rope(
 {
     const uint hd2 = head_dim / 2;
     const uint q_pairs = (q_elems / head_dim) * hd2;
-    const float p = (float)position;
 
     device float* ptr;
     uint i;
+    float p;
     if (gid < q_pairs) {
         const uint h = gid / hd2;
         i = gid % hd2;
         ptr = q + h * head_dim + i;
+        p = (float)(position + (int)(h / q_heads));
     } else {
         const uint g2 = gid - q_pairs;
         const uint h = g2 / hd2;
         i = g2 % hd2;
         ptr = k + h * head_dim + i;
+        p = (float)(position + (int)(h / kv_heads));
     }
 
     const float theta = pow(freq_base, (float)(2 * i) / (float)head_dim);
@@ -238,6 +242,117 @@ kernel void mllm_attention_flash(
 // passes kv_base = layer * capacity * num_kv_heads * head_dim.
 
 // =========================================================================
+// Batched flash attention (prefill) — same math as mllm_attention_flash,
+// but one threadgroup per (head, query row). Query row i attends to exactly
+// the first seq_base + i KV entries (i.e. seq_base = start_pos + 1 makes
+// masking strict causal). 2D dispatch: x = head, y = query row.
+// q layout:   [rows, num_heads, head_dim]
+// out layout: [rows, num_heads * head_dim]
+// =========================================================================
+kernel void mllm_attention_flash_batch(
+    device float* out            [[buffer(0)]],
+    const device float* q        [[buffer(1)]],
+    const device float* keys     [[buffer(2)]],
+    const device float* values    [[buffer(3)]],
+    constant uint& num_heads     [[buffer(4)]],
+    constant uint& num_kv_heads  [[buffer(5)]],
+    constant uint& head_dim      [[buffer(6)]],
+    constant uint& seq_base      [[buffer(7)]],
+    constant float& scale        [[buffer(8)]],
+    constant ulong& kv_base      [[buffer(9)]],
+    uint tid   [[thread_index_in_threadgroup]],
+    uint2 tgid [[threadgroup_position_in_grid]],
+    uint2 tg_sz [[threads_per_threadgroup]],
+    threadgroup float* tg_q   [[threadgroup(0)]],
+    threadgroup float* tg_sc  [[threadgroup(1)]],
+    threadgroup float* tg_acc [[threadgroup(2)]],
+    threadgroup float* tg_red [[threadgroup(3)]])
+{
+    constexpr uint BLOCK = 128;
+    const uint tsize = tg_sz.x;
+    const uint h = tgid.x;
+    const uint row = tgid.y;
+    if (h >= num_heads) return;
+    const uint seq_len = seq_base + row; // causal prefix length for this row
+    const uint group = num_heads / num_kv_heads;
+    const uint kv_head = h / group;
+    const size_t kv_stride = (size_t)num_kv_heads * head_dim;
+    const device float* kb = keys + kv_base + (size_t)kv_head * head_dim;
+    const device float* vb = values + kv_base + (size_t)kv_head * head_dim;
+    const device float* qh = q + ((size_t)row * num_heads + h) * head_dim;
+
+    // Load q into threadgroup memory for broadcast-friendly access.
+    for (uint i = tid; i < head_dim; i += tsize) tg_q[i] = qh[i];
+    // Init output accumulator.
+    for (uint i = tid; i < head_dim; i += tsize) tg_acc[i] = 0.0f;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    float m_run = -INFINITY;
+    float l_run = 0.0f;
+
+    for (uint j0 = 0; j0 < seq_len; j0 += BLOCK) {
+        const uint bl = min(BLOCK, seq_len - j0);
+
+        // Stage A: cooperative score computation.
+        float s = -INFINITY;
+        if (tid < bl) {
+            const device float* kj = kb + (size_t)(j0 + tid) * kv_stride;
+            float dot = 0.0f;
+            for (uint dd = 0; dd < head_dim; ++dd) {
+                dot += tg_q[dd] * kj[dd];
+            }
+            s = dot * scale;
+        }
+        tg_sc[tid] = s;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+
+        // Stage B: block-max via tree reduction.
+        tg_red[tid] = s;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        for (uint st = BLOCK / 2; st > 0; st >>= 1) {
+            if (tid < st) tg_red[tid] = max(tg_red[tid], tg_red[tid + st]);
+            threadgroup_barrier(mem_flags::mem_threadgroup);
+        }
+        const float m_block = tg_red[0];
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+
+        // Stage C: weights w = exp(s - m_block); block sumexp.
+        float w = (tid < bl) ? exp(tg_sc[tid] - m_block) : 0.0f;
+        tg_sc[tid] = w;
+        tg_red[tid] = w;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        for (uint st = BLOCK / 2; st > 0; st >>= 1) {
+            if (tid < st) tg_red[tid] += tg_red[tid + st];
+            threadgroup_barrier(mem_flags::mem_threadgroup);
+        }
+        const float sum_block = tg_red[0];
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+
+        // Stage D: merge block into running acc using online softmax.
+        const float m_new = max(m_run, m_block);
+        const float corr_old = exp(m_run - m_new);
+        const float corr_new = exp(m_block - m_new);
+
+        for (uint d = tid; d < head_dim; d += tsize) {
+            float p = 0.0f;
+            for (uint jj = 0; jj < bl; ++jj) {
+                p += tg_sc[jj] * vb[(size_t)(j0 + jj) * kv_stride + d];
+            }
+            tg_acc[d] = tg_acc[d] * corr_old + p * corr_new;
+        }
+        l_run = l_run * corr_old + sum_block * corr_new;
+        m_run = m_new;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+
+    // Final write: out[row, h, d] = acc / l_run.
+    device float* orow = out + (size_t)row * num_heads * head_dim + (size_t)h * head_dim;
+    for (uint d = tid; d < head_dim; d += tsize) {
+        orow[d] = tg_acc[d] / l_run;
+    }
+}
+
+// =========================================================================
 // SwiGLU
 // out[i] = silu(gate[i]) * up[i]
 // =========================================================================
@@ -282,9 +397,12 @@ kernel void mllm_add_bias(
 }
 
 // =========================================================================
-// AppendKV — copy one token's K/V into the device KV cache buffer
+// AppendKV — copy K/V into the device KV cache buffer.
 // KV layout: [num_layers, capacity, num_kv_heads, head_dim]
-// src: [num_kv_heads, head_dim] (one token)
+// src: [rows, num_kv_heads, head_dim] — `position` is the absolute position
+// of src row 0; row b is stored at position + b (batched prefill; decode
+// passes a single row).
+// One thread per (row, element); dispatch rows * num_kv_heads * head_dim.
 // =========================================================================
 kernel void mllm_append_kv(
     device float* keys        [[buffer(0)]],
@@ -299,12 +417,13 @@ kernel void mllm_append_kv(
     uint gid [[thread_position_in_grid]])
 {
     const uint elems = num_kv_heads * head_dim;
-    if (gid >= elems) return;
+    const uint row = gid / elems;
+    const uint e = gid % elems;
 
     const size_t layer_offset = (size_t)layer * (size_t)capacity * elems;
-    const size_t pos_offset = (size_t)position * elems;
-    keys[layer_offset + pos_offset + gid] = key[gid];
-    values[layer_offset + pos_offset + gid] = value[gid];
+    const size_t pos_offset = ((size_t)position + (size_t)row) * elems;
+    keys[layer_offset + pos_offset + e] = key[gid];
+    values[layer_offset + pos_offset + e] = value[gid];
 }
 
 // =========================================================================
@@ -317,6 +436,36 @@ kernel void mllm_append_kv(
 // giving out_dim*4 threads → ~16x more threadgroups than the per-row kernel
 // at out_dim=4096, dramatically improving GPU occupancy on Apple GPUs.
 // =========================================================================
+// =========================================================================
+// Dequantization helpers for the batched-prefill MPS path. The MPS GEMM
+// needs f32 weight matrices; quantized/f16 weights are dequantized once into
+// a cached device buffer per weight.
+// =========================================================================
+
+// Q8_0 -> f32: one thread per 34-byte block ({fp16 scale, 32 int8}).
+kernel void mllm_dequant_q8_0(
+    const device uchar* src   [[buffer(0)]],
+    device float* dst         [[buffer(1)]],
+    uint gid [[thread_position_in_grid]])
+{
+    const device uchar* blk = src + gid * 34;
+    ushort sbits = (ushort)blk[0] | ((ushort)blk[1] << 8);
+    const float scale = as_type<half>(sbits);
+    device float* out = dst + gid * 32;
+    for (uint i = 0; i < 32; ++i) {
+        out[i] = scale * (float)(char)blk[2 + i];
+    }
+}
+
+// F16 -> f32: one thread per element.
+kernel void mllm_dequant_f16(
+    const device ushort* src [[buffer(0)]],
+    device float* dst        [[buffer(1)]],
+    uint gid [[thread_position_in_grid]])
+{
+    dst[gid] = (float)as_type<half>(src[gid]);
+}
+
 kernel void mllm_gemv_q8_0(
     device float* out        [[buffer(0)]],
     const device float* x    [[buffer(1)]],

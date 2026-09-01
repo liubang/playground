@@ -86,6 +86,11 @@ public:
                        int32_t layer,
                        int64_t seq_len,
                        const AttentionConfig& config) override;
+    Status AttentionPrefillKV(TensorView out,
+                              TensorView q,
+                              int32_t layer,
+                              int64_t seq_base,
+                              const AttentionConfig& config) override;
 
     // Opaque implementation handle (all Metal types live in the .mm TU).
     struct Impl;

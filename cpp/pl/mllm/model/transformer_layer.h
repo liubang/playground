@@ -75,6 +75,22 @@ public:
                    ScratchArena& scratch,
                    const ModelConfig& config) const;
 
+    // Batched forward pass for a run of n tokens (prefill).
+    // hidden: [n, hidden_size] — modified in-place (residual adds); must live
+    // outside the scratch arena (the caller resets the arena per layer).
+    // start_pos: absolute sequence position of row 0; row b uses position
+    // start_pos + b with causal masking (each token attends to itself and
+    // all earlier positions).
+    // cache: shared KV cache; K/V for all n tokens are appended for this
+    // layer (the caller advances the cache length by n afterwards).
+    // scratch: arena for intermediate activations (reset per layer by caller).
+    Status ForwardBatch(TensorView hidden,
+                        int64_t start_pos,
+                        KVCache& cache,
+                        Backend& backend,
+                        ScratchArena& scratch,
+                        const ModelConfig& config) const;
+
 private:
     int32_t layer_index_;
     LayerWeights weights_;

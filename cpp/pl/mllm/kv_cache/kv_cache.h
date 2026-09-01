@@ -48,12 +48,17 @@ public:
     // key/value shape: [1, num_kv_heads, head_dim]
     Status Append(int32_t layer, TensorView key, TensorView value);
 
+    // Append a contiguous run of tokens' K/V for a layer (batched prefill).
+    // key/value shape: [n, num_kv_heads, head_dim]; appended at the current
+    // length. The caller advances the length afterwards via Advance(n).
+    Status AppendBatch(int32_t layer, TensorView key, TensorView value);
+
     // View of the valid cache range for a single layer.
     [[nodiscard]] KVCacheView View(int32_t layer) const noexcept;
 
-    // Advance the valid length by one position. Called by the Model after all
-    // layers have appended for the current position.
-    void Advance() noexcept;
+    // Advance the valid length by n positions (default 1). Called by the
+    // Model after all layers have appended for the corresponding tokens.
+    void Advance(int32_t n = 1) noexcept;
 
     [[nodiscard]] int32_t length() const noexcept { return length_; }
     [[nodiscard]] int32_t capacity() const noexcept { return capacity_; }

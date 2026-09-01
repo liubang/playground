@@ -50,6 +50,12 @@ public:
                    Backend& backend,
                    ScratchArena& scratch) const override;
 
+    Status Prefill(TensorView hidden,
+                   int64_t start_pos,
+                   KVCache& cache,
+                   Backend& backend,
+                   ScratchArena& scratch) const override;
+
     Status ComputeLogits(TensorView hidden,
                          TensorView logits,
                          Backend& backend,

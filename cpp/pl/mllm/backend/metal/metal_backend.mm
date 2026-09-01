@@ -103,6 +103,7 @@ struct MetalBackend::Impl {
     id<MTLComputePipelineState> rmsnorm_ps = nil;
     id<MTLComputePipelineState> rope_ps = nil;
     id<MTLComputePipelineState> attention_flash_ps = nil; // unified flash-attention (host + device KV)
+    id<MTLComputePipelineState> attention_flash_batch_ps = nil; // batched prefill attention
     id<MTLComputePipelineState> swiglu_ps = nil;
     id<MTLComputePipelineState> add_ps = nil;
     id<MTLComputePipelineState> add_bias_ps = nil;
@@ -113,13 +114,17 @@ struct MetalBackend::Impl {
     id<MTLComputePipelineState> gemv_f16_fused_ps = nil;
     id<MTLComputePipelineState> gemv_f32_fused_ps = nil;
     id<MTLComputePipelineState> append_kv_ps = nil;
+    id<MTLComputePipelineState> dequant_q8_0_ps = nil;
+    id<MTLComputePipelineState> dequant_f16_ps = nil;
 
     // Weight table. f16 weights are kept as f16 (half bandwidth); Q8_0 kept
-    // raw; f32 kept as-is.
+    // raw; f32 kept as-is. `f32_buf` is a lazily materialized f32 copy used
+    // by the batched-prefill MPS path (dequantized once on first use).
     struct Weight {
         id<MTLBuffer> buf = nil;
         Shape shape;
         DType dtype = DType::kF32;
+        id<MTLBuffer> f32_buf = nil; // cached f32 version for MPS GEMMs
     };
     std::unordered_map<std::string, Weight> weights_;
 
@@ -203,6 +208,7 @@ private:
         rmsnorm_ps = make_ps("mllm_rmsnorm");
         rope_ps = make_ps("mllm_rope");
         attention_flash_ps = make_ps("mllm_attention_flash");
+        attention_flash_batch_ps = make_ps("mllm_attention_flash_batch");
         swiglu_ps = make_ps("mllm_swiglu");
         add_ps = make_ps("mllm_add_inplace");
         add_bias_ps = make_ps("mllm_add_bias");
@@ -213,14 +219,17 @@ private:
         gemv_f16_fused_ps = make_ps("mllm_gemv_f16_fused");
         gemv_f32_fused_ps = make_ps("mllm_gemv_f32_fused");
         append_kv_ps = make_ps("mllm_append_kv");
+        dequant_q8_0_ps = make_ps("mllm_dequant_q8_0");
+        dequant_f16_ps = make_ps("mllm_dequant_f16");
         if (!init_error.ok()) {
             return;
         }
         if (!rmsnorm_ps || !rope_ps || !attention_flash_ps ||
+            !attention_flash_batch_ps ||
             !swiglu_ps || !add_ps || !add_bias_ps ||
             !gemv_q8_0_ps || !gemv_f16_ps || !gemv_f32_ps ||
             !gemv_q8_0_fused_ps || !gemv_f16_fused_ps || !gemv_f32_fused_ps ||
-            !append_kv_ps) {
+            !append_kv_ps || !dequant_q8_0_ps || !dequant_f16_ps) {
             init_error = Status::Error(ErrorCode::kBackendFailure,
                                        "MetalBackend: missing pipeline state");
         }
@@ -428,7 +437,7 @@ Status MetalBackend::MatMul(TensorView out, TensorView x,
         return Status::Error(ErrorCode::kNotFound,
                              "MatMul: weight '" + std::string(weight_name) + "' not found");
     }
-    const Impl::Weight& w = it->second;
+    Impl::Weight& w = it->second; // mutable: lazily materializes f32 cache
     const int32_t out_dim = static_cast<int32_t>(w.shape.dim(0));
 
     if (out.shape().dim(0) != batch || out.shape().dim(1) != out_dim) {
@@ -497,6 +506,44 @@ Status MetalBackend::MatMul(TensorView out, TensorView x,
     }
 
     // --- MPS path (batch > 1, prefill) ---
+    // MPS needs f32 weight matrices; Q8_0/F16 weights are dequantized once
+    // into a per-weight device cache. Encode the dequant into the deferred
+    // command buffer, flush, then run MPS in its own command buffer.
+    id<MTLBuffer> w_f32 = w.buf;
+    if (w.dtype == DType::kQ8_0 || w.dtype == DType::kF16) {
+        if (!w.f32_buf) {
+            const size_t numel = static_cast<size_t>(out_dim) * static_cast<size_t>(in_dim);
+            w.f32_buf = [impl_->device
+                newBufferWithLength:numel * sizeof(float)
+                            options:MTLResourceStorageModeShared];
+            if (!w.f32_buf) {
+                return Status::Error(ErrorCode::kBackendFailure,
+                                     "MatMul: f32 weight cache alloc failed");
+            }
+            id<MTLComputeCommandEncoder> enc = impl_->encoder();
+            if (w.dtype == DType::kQ8_0) {
+                if (in_dim % kQ8_0BlockSize != 0) {
+                    return Status::Error(ErrorCode::kInvalidArgument,
+                                         "MatMul: in_dim not Q8_0 block-aligned");
+                }
+                [enc setComputePipelineState:impl_->dequant_q8_0_ps];
+                [enc setBuffer:w.buf offset:0 atIndex:0];
+                [enc setBuffer:w.f32_buf offset:0 atIndex:1];
+                const NSUInteger num_blocks =
+                    static_cast<NSUInteger>(numel / kQ8_0BlockSize);
+                [enc dispatchThreads:MTLSizeMake(num_blocks, 1, 1)
+                    threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
+            } else {
+                [enc setComputePipelineState:impl_->dequant_f16_ps];
+                [enc setBuffer:w.buf offset:0 atIndex:0];
+                [enc setBuffer:w.f32_buf offset:0 atIndex:1];
+                [enc dispatchThreads:MTLSizeMake(static_cast<NSUInteger>(numel), 1, 1)
+                    threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
+            }
+        }
+        w_f32 = w.f32_buf;
+    }
+
     // For prefill we still use MPS (which needs its own command buffer).
     // Flush any deferred work first, then run MPS, then resume deferred mode.
     impl_->flush();
@@ -530,7 +577,7 @@ Status MetalBackend::MatMul(TensorView out, TensorView x,
     // TODO: optimize prefill path later; decode is the critical path.
 
     MPSMatrix* mA = [[MPSMatrix alloc] initWithBuffer:a_buf descriptor:a_desc];
-    MPSMatrix* mB = [[MPSMatrix alloc] initWithBuffer:w.buf descriptor:b_desc];
+    MPSMatrix* mB = [[MPSMatrix alloc] initWithBuffer:w_f32 descriptor:b_desc];
     MPSMatrix* mC = [[MPSMatrix alloc] initWithBuffer:obuf descriptor:c_desc];
 
     MPSMatrixMultiplication* mul = [[MPSMatrixMultiplication alloc]
@@ -1111,7 +1158,12 @@ Status MetalBackend::AppendKV(int32_t layer, TensorView key, TensorView value,
     if (layer < 0 || layer >= kv.num_layers) {
         return Status::Error(ErrorCode::kInvalidArgument, "AppendKV: layer out of range");
     }
-    if (position < 0 || position >= kv.capacity) {
+    if (key.shape().rank() != 3 || key.shape().dim(1) != kv.num_kv_heads ||
+        key.shape().dim(2) != kv.head_dim || value.shape() != key.shape()) {
+        return Status::Error(ErrorCode::kInvalidArgument, "AppendKV: key/value shape mismatch");
+    }
+    const int64_t rows = key.shape().dim(0);
+    if (position < 0 || position + rows > kv.capacity) {
         return Status::Error(ErrorCode::kInvalidArgument, "AppendKV: position out of range");
     }
 
@@ -1141,8 +1193,8 @@ Status MetalBackend::AppendKV(int32_t layer, TensorView key, TensorView value,
     [enc setBytes:&lay length:sizeof(lay) atIndex:7];
     [enc setBytes:&pos length:sizeof(pos) atIndex:8];
 
-    // One thread per element of the K/V pair for this layer+position.
-    const uint32_t elems = nkv * hd;
+    // One thread per (row, element); row b lands at position + b.
+    const NSUInteger elems = static_cast<NSUInteger>(rows) * nkv * hd;
     [enc dispatchThreads:MTLSizeMake(elems, 1, 1)
         threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
     // Deferred.
@@ -1219,6 +1271,99 @@ Status MetalBackend::AttentionKV(TensorView out, TensorView q, int32_t layer,
     [enc setThreadgroupMemoryLength:tg_acc_bytes atIndex:2];
     [enc setThreadgroupMemoryLength:tg_red_bytes atIndex:3];
     [enc dispatchThreadgroups:MTLSizeMake(static_cast<NSUInteger>(num_heads), 1, 1)
+         threadsPerThreadgroup:MTLSizeMake(attn_tsize, 1, 1)];
+    // Deferred.
+    return {};
+}
+
+Status MetalBackend::AttentionPrefillKV(TensorView out, TensorView q, int32_t layer,
+                                        int64_t seq_base, const AttentionConfig& config) {
+    if (auto s = ensure_ready(*impl_); !s.ok()) return s;
+    if (auto s = check_contig_valid(out, "AttentionPrefillKV"); !s.ok()) return s;
+    if (auto s = check_contig_valid(q, "AttentionPrefillKV"); !s.ok()) return s;
+
+    const auto& kv = impl_->device_kv_;
+    const int32_t num_heads = config.num_heads;
+    const int32_t num_kv_heads = config.num_kv_heads;
+    const int32_t head_dim = config.head_dim;
+    const int64_t n = q.shape().dim(0);
+    const float scale = config.scale > 0.0f
+        ? config.scale
+        : 1.0f / std::sqrt(static_cast<float>(head_dim));
+
+    if (n <= 0) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "AttentionPrefillKV: empty batch");
+    }
+    if (layer < 0 || layer >= kv.num_layers) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "AttentionPrefillKV: layer out of range");
+    }
+    if (kv.num_kv_heads != num_kv_heads || kv.head_dim != head_dim) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "AttentionPrefillKV: KV shape mismatch");
+    }
+    if (q.shape().rank() != 3 || q.shape().dim(1) != num_heads ||
+        q.shape().dim(2) != head_dim) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "AttentionPrefillKV: q shape mismatch");
+    }
+    if (out.shape().rank() != 2 || out.shape().dim(0) != n ||
+        out.shape().dim(1) != num_heads * head_dim) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "AttentionPrefillKV: output shape mismatch");
+    }
+    if (out.dtype() != DType::kF32) {
+        return Status::Error(ErrorCode::kUnsupported,
+                             "AttentionPrefillKV: output must be f32");
+    }
+    if (seq_base <= 0 || seq_base + n - 1 > kv.capacity) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "AttentionPrefillKV: seq_base out of range");
+    }
+
+    id<MTLBuffer> qbuf = upload_tensor(*impl_, q);
+    const size_t out_bytes = static_cast<size_t>(n) * static_cast<size_t>(num_heads) *
+                             static_cast<size_t>(head_dim) * sizeof(float);
+    id<MTLBuffer> obuf = impl_->get_or_alloc_output(out.data(), out_bytes);
+    if (!qbuf || !obuf) {
+        return Status::Error(ErrorCode::kBackendFailure,
+                             "AttentionPrefillKV: buffer alloc failed");
+    }
+
+    const uint32_t nh = static_cast<uint32_t>(num_heads);
+    const uint32_t nkh = static_cast<uint32_t>(num_kv_heads);
+    const uint32_t hd = static_cast<uint32_t>(head_dim);
+    const uint32_t sb = static_cast<uint32_t>(seq_base);
+    const uint64_t kv_base = static_cast<uint64_t>(layer)
+                           * static_cast<uint64_t>(kv.capacity)
+                           * static_cast<uint64_t>(num_kv_heads)
+                           * static_cast<uint64_t>(head_dim);
+    const float sc = scale;
+    const uint32_t attn_tsize = 128; // matches BLOCK in the flash kernel
+    const NSUInteger tg_q_bytes = static_cast<NSUInteger>(head_dim) * sizeof(float);
+    const NSUInteger tg_sc_bytes = 128 * sizeof(float);
+
+    id<MTLComputeCommandEncoder> enc = impl_->encoder();
+    [enc setComputePipelineState:impl_->attention_flash_batch_ps];
+    [enc setBuffer:obuf offset:0 atIndex:0];
+    [enc setBuffer:qbuf offset:0 atIndex:1];
+    [enc setBuffer:kv.keys offset:0 atIndex:2];
+    [enc setBuffer:kv.values offset:0 atIndex:3];
+    [enc setBytes:&nh length:sizeof(nh) atIndex:4];
+    [enc setBytes:&nkh length:sizeof(nkh) atIndex:5];
+    [enc setBytes:&hd length:sizeof(hd) atIndex:6];
+    [enc setBytes:&sb length:sizeof(sb) atIndex:7];
+    [enc setBytes:&sc length:sizeof(sc) atIndex:8];
+    [enc setBytes:&kv_base length:sizeof(kv_base) atIndex:9];
+    [enc setThreadgroupMemoryLength:tg_q_bytes atIndex:0];
+    [enc setThreadgroupMemoryLength:tg_sc_bytes atIndex:1];
+    [enc setThreadgroupMemoryLength:tg_q_bytes atIndex:2];
+    [enc setThreadgroupMemoryLength:tg_sc_bytes atIndex:3];
+    // One threadgroup per (head, query row).
+    [enc dispatchThreadgroups:MTLSizeMake(static_cast<NSUInteger>(num_heads),
+                                          static_cast<NSUInteger>(n),
+                                          1)
          threadsPerThreadgroup:MTLSizeMake(attn_tsize, 1, 1)];
     // Deferred.
     return {};

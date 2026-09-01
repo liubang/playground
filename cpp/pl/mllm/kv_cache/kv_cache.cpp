@@ -17,6 +17,7 @@
 
 #include "cpp/pl/mllm/kv_cache/kv_cache.h"
 
+#include <algorithm>
 #include <cstring>
 
 namespace pl::mllm {
@@ -129,10 +130,39 @@ Status KVCache::Append(int32_t layer, TensorView key, TensorView value) {
     return {};
 }
 
-void KVCache::Advance() noexcept {
-    if (length_ < capacity_) {
-        ++length_;
+Status KVCache::AppendBatch(int32_t layer, TensorView key, TensorView value) {
+    if (layer < 0 || layer >= num_layers_) {
+        return Status::Error(ErrorCode::kInvalidArgument, "KVCache: layer out of range");
     }
+    if (key.shape().rank() != 3 || key.shape().dim(1) != num_kv_heads_ ||
+        key.shape().dim(2) != head_dim_) {
+        return Status::Error(ErrorCode::kInvalidArgument, "KVCache: key shape mismatch");
+    }
+    if (value.shape() != key.shape()) {
+        return Status::Error(ErrorCode::kInvalidArgument, "KVCache: value shape mismatch");
+    }
+    if (key.dtype() != dtype_ || value.dtype() != dtype_) {
+        return Status::Error(ErrorCode::kInvalidArgument, "KVCache: dtype mismatch");
+    }
+    const int32_t n = static_cast<int32_t>(key.shape().dim(0));
+    if (length_ + n > capacity_) {
+        return Status::Error(ErrorCode::kInvalidArgument, "KVCache: capacity exceeded");
+    }
+    if (n == 0) {
+        return {};
+    }
+
+    // K/V for consecutive tokens are contiguous in both the source view and
+    // the destination cache, so the whole batch is one memcpy per tensor.
+    const size_t copy_bytes = static_cast<size_t>(n) * per_token_stride_;
+    std::memcpy(k_ptr(layer, length_), key.data(), copy_bytes);
+    std::memcpy(v_ptr(layer, length_), value.data(), copy_bytes);
+
+    return {};
+}
+
+void KVCache::Advance(int32_t n) noexcept {
+    length_ = std::min(length_ + n, capacity_);
 }
 
 KVCacheView KVCache::View(int32_t layer) const noexcept {
