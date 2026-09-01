@@ -57,6 +57,10 @@ struct Engine::Impl {
     // arena) because the residual stream must survive per-layer arena resets,
     // and RunPrefill hands a view of the last row to the sampler.
     OwnedBuffer prefill_hidden;
+
+    // Raw `tokenizer.chat_template` from GGUF metadata (jinja source).
+    // Empty = model ships no template.
+    std::string chat_template;
 };
 
 // Destructor must be in .cpp where Impl is complete.
@@ -224,6 +228,12 @@ Result<std::unique_ptr<Engine>> Engine::Create(Options options) {
         return embd_result.status();
     }
 
+    // Chat template (jinja source) — empty when the model ships none.
+    std::string chat_template;
+    if (auto tmpl = gguf->string_meta("tokenizer.chat_template"); tmpl.ok()) {
+        chat_template = std::move(tmpl).value();
+    }
+
     auto engine = std::unique_ptr<Engine>(new Engine());
     engine->impl_ = std::make_unique<Impl>();
     auto prefill_buf =
@@ -243,6 +253,7 @@ Result<std::unique_ptr<Engine>> Engine::Create(Options options) {
     engine->impl_->arena = std::move(arena);
     engine->impl_->token_embd = embd_result.value();
     engine->impl_->weight_entries = std::move(weight_entries);
+    engine->impl_->chat_template = std::move(chat_template);
 
     return engine;
 }
@@ -307,6 +318,63 @@ Result<TensorView> Engine::RunPrefill(std::span<const int32_t> tokens) {
     return TensorView(dst + row_of_last * static_cast<size_t>(hidden),
                       DType::kF32,
                       Shape({1, hidden}));
+}
+
+bool Engine::has_chat_template() const noexcept {
+    return !impl_->chat_template.empty();
+}
+
+// Minimal chat-template renderer. Full jinja is out of scope; instead we
+// recognize the template FAMILY by its control tokens and emit the
+// well-known canonical serialization for a single user turn (this matches
+// what llama.cpp's jinja renderer produces for plain conversations).
+std::string Engine::FormatChatPrompt(std::string_view user, std::string_view system) const {
+    const std::string& tpl = impl_->chat_template;
+
+    // ChatML family (Qwen, DeepSeek, ...): "<|im_start|>" markers.
+    if (tpl.find("<|im_start|>") != std::string::npos) {
+        std::string out;
+        if (!system.empty()) {
+            out += "<|im_start|>system\n";
+            out += system;
+            out += "<|im_end|>\n";
+        }
+        out += "<|im_start|>user\n";
+        out += user;
+        out += "<|im_end|>\n<|im_start|>assistant\n";
+        return out;
+    }
+
+    // Llama-3 family: "<|start_header_id|>"/"<|eot_id|>" markers.
+    if (tpl.find("<|start_header_id|>") != std::string::npos) {
+        std::string out = "<|begin_of_text|>";
+        if (!system.empty()) {
+            out += "<|start_header_id|>system<|end_header_id|>\n\n";
+            out += system;
+            out += "<|eot_id|>";
+        }
+        out += "<|start_header_id|>user<|end_header_id|>\n\n";
+        out += user;
+        out += "<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n";
+        return out;
+    }
+
+    // Llama-2 family: "[INST]" markers. System goes inside the first
+    // instruction, per the reference template.
+    if (tpl.find("[INST]") != std::string::npos) {
+        std::string out = "[INST] ";
+        if (!system.empty()) {
+            out += "<<SYS>>\n";
+            out += system;
+            out += "\n<</SYS>>\n\n";
+        }
+        out += user;
+        out += " [/INST]";
+        return out;
+    }
+
+    // No recognized template: pass the user message through verbatim.
+    return std::string(user);
 }
 
 Result<std::vector<int32_t>> Engine::GenerateTokens(std::string_view prompt,
@@ -377,6 +445,9 @@ Status Engine::GenerateStream(std::string_view prompt,
     // embeds the sampled token and forwards it to produce the next one.
     std::vector<int32_t> generated;
     generated.reserve(static_cast<size_t>(params.max_tokens));
+    // Scratch for the repetition-penalty context window (only touched when
+    // repeat_penalty is enabled).
+    std::vector<int32_t> penalty_ctx;
     int64_t pos = static_cast<int64_t>(prompt_tokens.size());
 
     auto decode_start = Clock::now();
@@ -396,8 +467,24 @@ Status Engine::GenerateStream(std::string_view prompt,
             return s;
         }
 
-        // Sample.
-        sp.penalty_tokens = generated;
+        // Sample. The repetition penalty applies to the recent context:
+        // prompt tail + generated tokens, capped at a 64-token window
+        // (llama.cpp's penalty_last_n default).
+        if (params.repeat_penalty != 1.0f) {
+            constexpr size_t kPenaltyLastN = 64;
+            // Only the last kPenaltyLastN tokens of (prompt + generated)
+            // matter; build the window directly instead of copying both
+            // full vectors (O(window) instead of O(context) per step).
+            const size_t take_gen = std::min(kPenaltyLastN, generated.size());
+            size_t take_prompt = prompt_tokens.size();
+            if (take_gen + take_prompt > kPenaltyLastN) {
+                take_prompt = kPenaltyLastN - take_gen;
+            }
+            penalty_ctx.assign(prompt_tokens.end() - take_prompt, prompt_tokens.end());
+            penalty_ctx.insert(
+                penalty_ctx.end(), generated.end() - take_gen, generated.end());
+            sampler.set_penalty_tokens(std::span<const int32_t>(penalty_ctx));
+        }
         int32_t next = sampler.Sample(logits.span_as<float>());
 
         if (first_token) {

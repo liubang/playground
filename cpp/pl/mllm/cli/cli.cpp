@@ -28,17 +28,23 @@ using namespace pl::mllm;
 static void usage(const char* prog) {
     std::fprintf(stderr,
                  "usage: %s -m <model.gguf> -p <prompt> [-n max_tokens] [-t temp] "
-                 "[-s seed] [--backend cpu|metal]\n",
+                 "[-s seed] [--backend cpu|metal] [--chat] [--system <msg>] "
+                 "[--repeat-penalty <f>] [--top-k <k>] [--top-p <p>]\n",
                  prog);
 }
 
 int main(int argc, char** argv) {
     std::string model_path;
     std::string prompt;
+    std::string system_msg;
     int32_t max_tokens = 128;
+    int32_t top_k = 0;
     float temperature = 0.0f;
+    float top_p = 1.0f;
+    float repeat_penalty = 1.0f;
     uint64_t seed = 0;
     BackendKind backend = BackendKind::kCpu;
+    bool chat_mode = false;
 
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "-m") == 0 && i + 1 < argc) {
@@ -54,6 +60,17 @@ int main(int argc, char** argv) {
         } else if (std::strcmp(argv[i], "--backend") == 0 && i + 1 < argc) {
             const char* value = argv[++i];
             backend = std::strcmp(value, "metal") == 0 ? BackendKind::kMetal : BackendKind::kCpu;
+        } else if (std::strcmp(argv[i], "--chat") == 0) {
+            chat_mode = true;
+        } else if (std::strcmp(argv[i], "--system") == 0 && i + 1 < argc) {
+            system_msg = argv[++i];
+            chat_mode = true;
+        } else if (std::strcmp(argv[i], "--repeat-penalty") == 0 && i + 1 < argc) {
+            repeat_penalty = static_cast<float>(std::atof(argv[++i]));
+        } else if (std::strcmp(argv[i], "--top-k") == 0 && i + 1 < argc) {
+            top_k = std::atoi(argv[++i]);
+        } else if (std::strcmp(argv[i], "--top-p") == 0 && i + 1 < argc) {
+            top_p = static_cast<float>(std::atof(argv[++i]));
         } else if (std::strcmp(argv[i], "-h") == 0) {
             usage(argv[0]);
             return 0;
@@ -79,10 +96,20 @@ int main(int argc, char** argv) {
     GenerateParams gp;
     gp.max_tokens = max_tokens;
     gp.temperature = temperature;
+    gp.top_k = top_k;
+    gp.top_p = top_p;
+    gp.repeat_penalty = repeat_penalty;
     gp.seed = seed;
 
+    // Chat mode: wrap the user message with the model's chat template
+    // (Qwen ChatML / Llama-2 / Llama-3 families, detected from GGUF
+    // metadata). Raw prompts pass through unchanged (embedding of the
+    // assistant-turn opener makes generation continue as the assistant).
+    std::string effective_prompt =
+        chat_mode ? engine->FormatChatPrompt(prompt, system_msg) : prompt;
+
     std::string output;
-    auto status = engine->GenerateStream(prompt, gp, [&](std::string_view piece, int32_t /*tok*/) {
+    auto status = engine->GenerateStream(effective_prompt, gp, [&](std::string_view piece, int32_t /*tok*/) {
         std::cout << piece << std::flush;
         output.append(piece);
         return true;

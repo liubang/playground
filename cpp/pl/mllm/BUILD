@@ -126,6 +126,16 @@ cc_test(
 )
 
 cc_test(
+    name = "sampler_test",
+    srcs = ["ut/sampler/sampler_test.cpp"],
+    copts = TEST_COPTS,
+    deps = [
+        "//cpp/pl/mllm/sampler",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "engine_test",
     srcs = ["ut/engine/engine_test.cpp"],
     copts = TEST_COPTS,

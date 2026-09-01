@@ -31,7 +31,6 @@ struct SamplerParams {
     int32_t top_k = 0;           // 0 = disabled
     float top_p = 1.0f;          // 1.0 = disabled
     float repeat_penalty = 1.0f; // 1.0 = disabled
-    std::span<const int32_t> penalty_tokens{};
     uint64_t seed = 0;
 };
 
@@ -45,13 +44,29 @@ class Sampler {
 public:
     explicit Sampler(SamplerParams params);
 
+    // Update the token window the repetition penalty applies to. Pass the
+    // recent context (prompt tail + generated tokens). The span must stay
+    // valid until the next Sample call.
+    void set_penalty_tokens(std::span<const int32_t> tokens);
+
     // Returns the sampled token id and (optionally) the full candidate list.
     [[nodiscard]] int32_t Sample(std::span<const float> logits) const;
     [[nodiscard]] int32_t Sample(std::span<const float> logits,
                                  std::vector<LogitProbs>& out_candidates) const;
 
 private:
+    // xoshiro128** PRNG: small, fast, deterministic across platforms.
+    struct Rng {
+        uint64_t s[4];
+        explicit Rng(uint64_t seed);
+        uint32_t operator()();
+    };
+
     SamplerParams params_;
+    std::span<const int32_t> penalty_tokens_{};
+    // Persistent PRNG state: reseeding per Sample would produce the same
+    // draw for every token.
+    mutable Rng rng_;
 };
 
 } // namespace pl::mllm

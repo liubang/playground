@@ -27,42 +27,44 @@ namespace pl::mllm {
 
 namespace {
 
-// xoshiro128** PRNG: small, fast, deterministic across platforms.
-struct Rng {
-    uint64_t s[4];
-    explicit Rng(uint64_t seed) {
-        // splitmix64 seeding
-        uint64_t z = seed;
-        const auto next = [&] {
-            z += 0x9E3779B97F4A7C15ull;
-            uint64_t x = z;
-            x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ull;
-            x = (x ^ (x >> 27)) * 0x94D049BB133111EBull;
-            x = x ^ (x >> 31);
-            return x;
-        };
-        s[0] = next();
-        s[1] = next();
-        s[2] = next();
-        s[3] = next();
-    }
-    uint32_t operator()() {
-        const uint32_t result = static_cast<uint32_t>(rotl(s[1] * 5, 7) * 9);
-        const uint64_t t = s[1] << 17;
-        s[2] ^= s[0];
-        s[3] ^= s[1];
-        s[1] ^= s[2];
-        s[0] ^= s[3];
-        s[2] ^= t;
-        s[3] = rotl(s[3], 45);
-        return result;
-    }
-    static uint64_t rotl(uint64_t x, int k) { return (x << k) | (x >> (64 - k)); }
-};
+uint64_t rotl(uint64_t x, int k) { return (x << k) | (x >> (64 - k)); }
 
 } // namespace
 
-Sampler::Sampler(SamplerParams params) : params_(params) {}
+Sampler::Rng::Rng(uint64_t seed) {
+    // splitmix64 seeding
+    uint64_t z = seed;
+    const auto next = [&] {
+        z += 0x9E3779B97F4A7C15ull;
+        uint64_t x = z;
+        x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ull;
+        x = (x ^ (x >> 27)) * 0x94D049BB133111EBull;
+        x = x ^ (x >> 31);
+        return x;
+    };
+    s[0] = next();
+    s[1] = next();
+    s[2] = next();
+    s[3] = next();
+}
+
+uint32_t Sampler::Rng::operator()() {
+    const uint32_t result = static_cast<uint32_t>(rotl(s[1] * 5, 7) * 9);
+    const uint64_t t = s[1] << 17;
+    s[2] ^= s[0];
+    s[3] ^= s[1];
+    s[1] ^= s[2];
+    s[0] ^= s[3];
+    s[2] ^= t;
+    s[3] = rotl(s[3], 45);
+    return result;
+}
+
+Sampler::Sampler(SamplerParams params) : params_(params), rng_(params.seed) {}
+
+void Sampler::set_penalty_tokens(std::span<const int32_t> tokens) {
+    penalty_tokens_ = tokens;
+}
 
 int32_t Sampler::Sample(std::span<const float> logits) const {
     std::vector<LogitProbs> tmp;
@@ -78,8 +80,8 @@ int32_t Sampler::Sample(std::span<const float> logits,
 
     // Apply repeat penalty to specified tokens.
     std::vector<float> adjusted(logits.begin(), logits.end());
-    if (params_.repeat_penalty != 1.0f && !params_.penalty_tokens.empty()) {
-        for (const int32_t t : params_.penalty_tokens) {
+    if (params_.repeat_penalty != 1.0f && !penalty_tokens_.empty()) {
+        for (const int32_t t : penalty_tokens_) {
             if (t >= 0 && t < n) {
                 // llama.cpp style: divide if positive, multiply if negative
                 const float lp = adjusted[static_cast<size_t>(t)];
@@ -151,8 +153,7 @@ int32_t Sampler::Sample(std::span<const float> logits,
             z += c.logit;
     }
 
-    Rng rng(params_.seed);
-    float r = static_cast<float>(rng() >> 11) / static_cast<float>(1u << 21);
+    float r = static_cast<float>(rng_() >> 11) / static_cast<float>(1u << 21);
     float cum = 0.0f;
     int32_t chosen = cands.back().token;
     for (const auto& c : cands) {

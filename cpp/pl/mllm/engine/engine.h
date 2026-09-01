@@ -86,6 +86,18 @@ public:
 
     [[nodiscard]] const PerfStats& last_perf_stats() const noexcept { return perf_; }
 
+    // Format a user (and optional system) message with the model's chat
+    // template, taken from the GGUF `tokenizer.chat_template` metadata.
+    // Supports the ChatML (Qwen), Llama-2 and Llama-3 template families;
+    // falls back to the raw user message when no template is present.
+    // The result ends with the assistant-turn opener, so the model
+    // continues as the assistant.
+    [[nodiscard]] std::string FormatChatPrompt(std::string_view user,
+                                               std::string_view system = {}) const;
+
+    // Whether the model ships a recognized chat template.
+    [[nodiscard]] bool has_chat_template() const noexcept;
+
 private:
     Engine() = default;
 

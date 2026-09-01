@@ -71,6 +71,12 @@ mllm_generate() {
     "$MLLM_CLI" -m "$model" -p "$prompt" -n "$n" --backend "$backend" 2>/dev/null
 }
 
+# Same but with chat-mode (--chat applies the model's chat template).
+mllm_generate_chat() {
+    local backend="$1" model="$2" prompt="$3" n="$4"
+    "$MLLM_CLI" -m "$model" -p "$prompt" -n "$n" --backend "$backend" --chat 2>/dev/null
+}
+
 # check <name> <backend> <model> <our_prompt> <llama_prompt> <n> <mode> <needle>
 check() {
     local name="$1" backend="$2" model="$3" our_prompt="$4" llama_prompt="$5"
@@ -119,6 +125,23 @@ check "qwen3-0.6b chat-template" cpu "qwen3-0.6b-q8_0.gguf" \
     "$QWEN3_TEMPLATE" "Hello" 32 exact
 check "qwen3-1.7b chat-template" metal "Qwen3-1.7B-Q8_0.gguf" \
     "$QWEN3_TEMPLATE" "Hello" 32 exact
+
+# --- chat-mode flag: --chat must apply the model's chat template and match
+# llama.cpp's jinja rendering token-for-token ---
+model_path="$MODELS_DIR/qwen3-0.6b-q8_0.gguf"
+if [[ -f "$model_path" ]]; then
+    cases=$((cases + 1))
+    ours="$(normalize "$(mllm_generate_chat metal "$model_path" "Hello" 32)")"
+    llama="$(normalize "$(llama_generate "$model_path" "Hello" 32)")"
+    if [[ "$ours" == "$llama" ]]; then
+        echo "PASS: qwen3-0.6b --chat flag (byte-identical)"
+    else
+        echo "FAIL: qwen3-0.6b --chat flag"
+        echo "  ours : $(printf '%.120s' "$ours")"
+        echo "  llama: $(printf '%.120s' "$llama")"
+        failures=$((failures + 1))
+    fi
+fi
 
 # --- semantic cases: outputs may diverge at early close-call argmax points,
 # so require the answer to appear rather than byte equality ---
