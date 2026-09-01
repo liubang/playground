@@ -489,18 +489,20 @@ Status MetalBackend::MatMul(TensorView out, TensorView x,
         const uint32_t in_d = static_cast<uint32_t>(in_dim);
         const uint32_t out_d = static_cast<uint32_t>(out_dim);
 
-        id<MTLComputeCommandEncoder> enc = impl_->encoder();
-        [enc setComputePipelineState:ps];
-        [enc setBuffer:obuf offset:0 atIndex:0];
-        [enc setBuffer:xbuf offset:0 atIndex:1];
-        [enc setBuffer:w.buf offset:0 atIndex:2];
-        [enc setBytes:&in_d length:sizeof(in_d) atIndex:3];
-        [enc setBytes:&out_d length:sizeof(out_d) atIndex:4];
-        // Split-K GEMV: NT=4 threads per output row, tsize=256 → 64 rows/group.
-        // Grid = out_dim * NT threads. Threadgroup memory: 256 floats.
-        [enc setThreadgroupMemoryLength:256 * sizeof(float) atIndex:0];
-        [enc dispatchThreads:MTLSizeMake(static_cast<NSUInteger>(out_dim) * 4, 1, 1)
-            threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
+    id<MTLComputeCommandEncoder> enc = impl_->encoder();
+    [enc setComputePipelineState:ps];
+    [enc setBuffer:obuf offset:0 atIndex:0];
+    [enc setBuffer:xbuf offset:0 atIndex:1];
+    [enc setBuffer:w.buf offset:0 atIndex:2];
+    [enc setBytes:&in_d length:sizeof(in_d) atIndex:3];
+    [enc setBytes:&out_d length:sizeof(out_d) atIndex:4];
+    // Q8_0 uses one simdgroup (32 lanes) per output row; F16/F32 keep
+    // split-K with NT=4 lanes/row and threadgroup-memory reduction.
+    const bool simd_per_row = (w.dtype == DType::kQ8_0);
+    [enc setThreadgroupMemoryLength:256 * sizeof(float) atIndex:0];
+    [enc dispatchThreads:MTLSizeMake(static_cast<NSUInteger>(out_dim) * (simd_per_row ? 32 : 4),
+                                     1, 1)
+        threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
         // Deferred — no commit/wait here.
         return {};
     }
@@ -727,8 +729,11 @@ Status MetalBackend::MatMulFused(std::span<TensorView> outs,
     if (n >= 2) [enc setBuffer:ws[1]->buf offset:0 atIndex:5];
     if (n >= 3) [enc setBuffer:ws[2]->buf offset:0 atIndex:6];
     [enc setBytes:params length:sizeof(params) atIndex:7];
+    // Q8_0 fused: one simdgroup per row; F16/F32 keep NT=4 split-K.
+    const bool simd_per_row = (wtype == DType::kQ8_0);
     [enc setThreadgroupMemoryLength:256 * sizeof(float) atIndex:0];
-    [enc dispatchThreads:MTLSizeMake(static_cast<NSUInteger>(total_rows) * 4, 1, 1)
+    [enc dispatchThreads:MTLSizeMake(static_cast<NSUInteger>(total_rows) * (simd_per_row ? 32 : 4),
+                                     1, 1)
         threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
     // Deferred.
     return {};

@@ -467,47 +467,46 @@ kernel void mllm_dequant_f16(
 }
 
 kernel void mllm_gemv_q8_0(
-    device float* out        [[buffer(0)]],
-    const device float* x    [[buffer(1)]],
-    const device uchar* w    [[buffer(2)]],
-    constant uint& in_dim    [[buffer(3)]],
-    constant uint& out_dim   [[buffer(4)]],
-    uint tid   [[thread_index_in_threadgroup]],
-    uint tgid  [[threadgroup_position_in_grid]],
-    uint tsize [[threads_per_threadgroup]],
-    threadgroup float* partial [[threadgroup(0)]])
+device float* out        [[buffer(0)]],
+const device float* x    [[buffer(1)]],
+const device uchar* w    [[buffer(2)]],
+constant uint& in_dim    [[buffer(3)]],
+constant uint& out_dim   [[buffer(4)]],
+uint tid   [[thread_index_in_threadgroup]],
+uint tgid  [[threadgroup_position_in_grid]],
+uint tsize [[threads_per_threadgroup]])
 {
-    constexpr uint NT = 4;
-    const uint rows_per_group = tsize / NT;
-    const uint lane = tid % NT;
-    const uint row = tgid * rows_per_group + (tid / NT);
+// One full simdgroup per output row: each lane dots one 34-byte block per
+// iteration (or shares several), so the serial per-thread work is minimal
+// and the reduction is a barrier-free simd_sum instead of threadgroup
+// memory + barrier.
+const uint rows_per_group = tsize / 32;
+const uint lane = tid % 32;
+const uint row = tgid * rows_per_group + (tid / 32);
 
-    float acc = 0.0f;
-    if (row < out_dim) {
-        const uint num_blocks = in_dim / 32;
-        const size_t row_stride = (size_t)num_blocks * 34;
-        const device uchar* wrow = w + (size_t)row * row_stride;
-        for (uint blk = lane; blk < num_blocks; blk += NT) {
-            const device uchar* b = wrow + (size_t)blk * 34;
-            const ushort sb = (ushort)b[0] | ((ushort)b[1] << 8);
-            const float scale = (float)as_type<half>(sb);
-            float dot = 0.0f;
-            #pragma unroll
-            for (uint j = 0; j < 32; ++j) {
-                int q = (int)b[2 + j];
-                if (q >= 128) q -= 256;
-                dot += x[blk * 32 + j] * (float)q;
-            }
-            acc += dot * scale;
-        }
-    }
-    partial[tid] = acc;
-    threadgroup_barrier(mem_flags::mem_threadgroup);
-    if (lane == 0 && row < out_dim) {
-        const uint base = (tid / NT) * NT;
-        out[row] = partial[base] + partial[base + 1]
-                 + partial[base + 2] + partial[base + 3];
-    }
+float acc = 0.0f;
+if (row < out_dim) {
+const uint num_blocks = in_dim / 32;
+const size_t row_stride = (size_t)num_blocks * 34;
+const device uchar* wrow = w + (size_t)row * row_stride;
+for (uint blk = lane; blk < num_blocks; blk += 32) {
+const device uchar* b = wrow + (size_t)blk * 34;
+const ushort sb = (ushort)b[0] | ((ushort)b[1] << 8);
+const float scale = (float)as_type<half>(sb);
+float dot = 0.0f;
+#pragma unroll
+for (uint j = 0; j < 32; ++j) {
+int q = (int)b[2 + j];
+if (q >= 128) q -= 256;
+dot += x[blk * 32 + j] * (float)q;
+}
+acc += dot * scale;
+}
+}
+acc = simd_sum(acc);
+if (lane == 0 && row < out_dim) {
+out[row] = acc;
+}
 }
 
 // =========================================================================
@@ -580,18 +579,19 @@ kernel void mllm_gemv_q8_0_fused(
     constant uint* params  [[buffer(7)]],  // [out0, out1, out2, off0, off1, off2, in_dim, n]
     uint tid   [[thread_index_in_threadgroup]],
     uint tgid  [[threadgroup_position_in_grid]],
-    uint tsize [[threads_per_threadgroup]],
-    threadgroup float* partial [[threadgroup(0)]])
+    uint tsize [[threads_per_threadgroup]])
 {
-    constexpr uint NT = 4;
-    const uint rows_per_group = tsize / NT;
-    const uint lane = tid % NT;
-    const uint row_global = tgid * rows_per_group + (tid / NT);
+    // One full simdgroup per output row (see mllm_gemv_q8_0).
+    const uint rows_per_group = tsize / 32;
+    const uint lane = tid % 32;
+    const uint row_global = tgid * rows_per_group + (tid / 32);
 
     const uint n = params[7];
     const uint in_dim = params[6];
 
-    // Determine which weight segment this row belongs to.
+    // Determine which weight segment this row belongs to. Row selection is
+    // uniform across the whole simdgroup, so the early-out below never
+    // diverges within a simdgroup (safe w.r.t. simd_sum later).
     const device uchar* wrow = nullptr;
     device float* outrow = nullptr;
     uint row = 0;
@@ -617,7 +617,7 @@ kernel void mllm_gemv_q8_0_fused(
     const device uchar* wr = wrow + (size_t)row * row_stride;
 
     float acc = 0.0f;
-    for (uint blk = lane; blk < num_blocks; blk += NT) {
+    for (uint blk = lane; blk < num_blocks; blk += 32) {
         const device uchar* b = wr + (size_t)blk * 34;
         const ushort sb = (ushort)b[0] | ((ushort)b[1] << 8);
         const float scale = (float)as_type<half>(sb);
@@ -630,12 +630,9 @@ kernel void mllm_gemv_q8_0_fused(
         }
         acc += dot * scale;
     }
-    partial[tid] = acc;
-    threadgroup_barrier(mem_flags::mem_threadgroup);
+    acc = simd_sum(acc);
     if (lane == 0) {
-        const uint base = (tid / NT) * NT;
-        outrow[row] = partial[base] + partial[base + 1]
-                   + partial[base + 2] + partial[base + 3];
+        outrow[row] = acc;
     }
 }
 
