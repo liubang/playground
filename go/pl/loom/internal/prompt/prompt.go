@@ -31,6 +31,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -88,6 +89,13 @@ type Builder struct {
 	skills        SkillsProvider
 	clock         domain.Clock
 	managed       *managedBase
+	// overviewMu guards the frozen workspace overview: the overview is
+	// captured once per builder — one builder instance is shared by the
+	// loop and by read-only projections (EstimateOverheadTokens can call
+	// Build concurrently).
+	overviewMu     sync.Mutex
+	overviewFrozen bool
+	overview       string
 }
 
 // managedBase carries a Langfuse-managed system prompt that replaces the
@@ -259,6 +267,8 @@ func (b *Builder) BuildSections(ctx context.Context) (Sections, error) {
 	env, collectErr := b.env.Collect(ctx)
 	if collectErr != nil {
 		env = Environment{WorkspaceRoot: b.workspaceRoot, Now: b.clock.Now()}
+	} else {
+		env.WorkspaceOverview = b.freezeOverview(env.WorkspaceOverview)
 	}
 	dynamicText, dynamicRefs := renderSections([]promptSection{{
 		source: "loom://builtin/environment",
@@ -271,6 +281,27 @@ func (b *Builder) BuildSections(ctx context.Context) (Sections, error) {
 		Dynamic: dynamicText,
 		Refs:    append(refs, dynamicRefs...),
 	}, nil
+}
+
+// freezeOverview pins the workspace overview to the value captured by the
+// builder's first successful collection. The overview is orientation-only,
+// so session-scoped staleness is acceptable — files the agent itself
+// creates or deletes inside a run already surface through file.changed
+// events in the transcript, and glob/search reflects the current tree.
+// Freezing it keeps the per-request environment section byte-stable across
+// the run-internal writes that would otherwise churn the dynamic prompt
+// part and repeatedly invalidate provider prompt caches (sessions keep one
+// builder, so resume processes re-collect once at their builder's birth).
+// Git state and the date still refresh per request: both are stable in
+// practice and, unlike the tree walk, carry facts the transcript cannot.
+func (b *Builder) freezeOverview(current string) string {
+	b.overviewMu.Lock()
+	defer b.overviewMu.Unlock()
+	if !b.overviewFrozen {
+		b.overview = current
+		b.overviewFrozen = true
+	}
+	return b.overview
 }
 
 // renderSections renders sections in the canonical "# title\nbody" form and

@@ -25,6 +25,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -504,4 +505,81 @@ func TestModelFamilyNormalization(t *testing.T) {
 	assert.Equal(t, "openai", modelFamily("openai/o4-mini"))
 	assert.Equal(t, "deepseek", modelFamily("deepseek-chat"))
 	assert.Equal(t, "custom-model", modelFamily("custom-model"))
+}
+
+// mutableEnvProvider returns a different workspace overview on every call,
+// simulating a workspace whose tree changes between model requests (the
+// agent's own writes are the most common trigger).
+type mutableEnvProvider struct {
+	calls int
+	env   Environment
+}
+
+func (p *mutableEnvProvider) Collect(context.Context) (Environment, error) {
+	p.calls++
+	p.env.WorkspaceOverview = fmt.Sprintf("overview-render-%d", p.calls)
+	return p.env, nil
+}
+
+func TestBuildFreezesWorkspaceOverviewAcrossBuilds(t *testing.T) {
+	provider := &mutableEnvProvider{env: testEnvironment()}
+	b := NewBuilder("/ws", WithEnvProvider(provider), noRules)
+
+	first, refs1, err := b.Build(context.Background())
+	require.NoError(t, err)
+	second, refs2, err := b.Build(context.Background())
+	require.NoError(t, err)
+
+	// Every collection ran (the rest of the snapshot stays fresh), but the
+	// rendered overview is pinned to the first capture for the session.
+	assert.Equal(t, 2, provider.calls)
+	assert.Contains(t, first, "overview-render-1")
+	assert.Contains(t, second, "overview-render-1")
+	assert.NotContains(t, second, "overview-render-2")
+	// The dynamic section and its audit hash stay byte-stable between
+	// requests, so provider prompt caches survive run-internal file writes.
+	assert.Equal(t, refs1, refs2)
+	assert.Equal(t, first, second)
+}
+
+func TestBuildFrozenOverviewDoesNotLeakAcrossBuilders(t *testing.T) {
+	provider := &mutableEnvProvider{env: testEnvironment()}
+
+	b1 := NewBuilder("/ws", WithEnvProvider(provider), noRules)
+	text1, _, err := b1.Build(context.Background())
+	require.NoError(t, err)
+	assert.Contains(t, text1, "overview-render-1")
+
+	// A new builder (a fresh session) re-collects and pins its own value.
+	b2 := NewBuilder("/ws", WithEnvProvider(provider), noRules)
+	text2, _, err := b2.Build(context.Background())
+	require.NoError(t, err)
+	assert.Contains(t, text2, "overview-render-2")
+}
+
+func TestBuildFrozenOverviewSurvivesConcurrentBuilds(t *testing.T) {
+	provider := &mutableEnvProvider{env: testEnvironment()}
+	b := NewBuilder("/ws", WithEnvProvider(provider), noRules)
+	first, _, err := b.Build(context.Background())
+	require.NoError(t, err)
+
+	const workers = 8
+	texts := make([]string, workers)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			text, _, err := b.Build(context.Background())
+			if err != nil {
+				t.Errorf("Build: %v", err)
+				return
+			}
+			texts[i] = text
+		}(i)
+	}
+	wg.Wait()
+	for i, text := range texts {
+		assert.Equal(t, first, text, "concurrent build %d diverged", i)
+	}
 }
