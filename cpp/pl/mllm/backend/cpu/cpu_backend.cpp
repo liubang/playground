@@ -197,7 +197,7 @@ Status CpuBackend::ImportWeights(std::span<const TensorView> weights,
 }
 
 const TensorView* CpuBackend::FindWeight(std::string_view name) const {
-    auto it = weights_.find(std::string(name));
+    auto it = weights_.find(name);
     return it != weights_.end() ? &it->second : nullptr;
 }
 
@@ -209,7 +209,7 @@ Status CpuBackend::MatMul(TensorView out, TensorView x, std::string_view weight_
     if (auto s = check_contiguous(x, "MatMul"); !s.ok())
         return s;
 
-    auto it = weights_.find(std::string(weight_name));
+    auto it = weights_.find(weight_name);
     if (it == weights_.end()) {
         return Status::Error(ErrorCode::kNotFound,
                              "MatMul: weight '" + std::string(weight_name) + "' not found");
@@ -347,54 +347,54 @@ Status CpuBackend::RoPE(TensorView q, TensorView k, int64_t position, const Rope
         return Status::Error(ErrorCode::kInvalidArgument, "RoPE: head_dim must be even");
     }
 
-if (q.dtype() != k.dtype()) {
-return Status::Error(ErrorCode::kInvalidArgument, "RoPE: q/k dtype mismatch");
-}
-
-// Optional per-head Q/K RMSNorm (Qwen3 family) applied before rotation.
-// Matches standalone RmsNorm math exactly (serial accumulation, 1/sqrt).
-const auto apply_qk_norm = [&](TensorView t, int32_t heads, TensorView w) -> Status {
-    if (t.dtype() != DType::kF32 || w.dtype() != DType::kF32) {
-        return Status::Error(ErrorCode::kUnsupported,
-                             "RoPE qk_norm: f32 required (CPU reference)");
+    if (q.dtype() != k.dtype()) {
+        return Status::Error(ErrorCode::kInvalidArgument, "RoPE: q/k dtype mismatch");
     }
-    float* d = t.data_as<float>();
-    const float* wd = w.data_as<const float>();
-    const float inv = 1.0f / static_cast<float>(head_dim);
-    for (int32_t h = 0; h < heads; ++h) {
-        float* row = d + static_cast<size_t>(h) * static_cast<size_t>(head_dim);
-        float ms = 0.0f;
-        for (int32_t i = 0; i < head_dim; ++i) {
-            ms += row[i] * row[i];
-        }
-        ms *= inv;
-        const float denom = 1.0f / std::sqrt(ms + config.rms_eps);
-        for (int32_t i = 0; i < head_dim; ++i) {
-            row[i] = row[i] * denom * wd[i];
-        }
-    }
-    return {};
-};
-if (config.q_norm.valid()) {
-    // q reshaped view: rows are (batch * heads); batch==1 in decode, but
-    // flatten the convention: every row of [batch, heads, hd] gets normed.
-    const int32_t rows = static_cast<int32_t>(q.shape().dim(0)) * num_heads;
-    const int32_t krows = static_cast<int32_t>(k.shape().dim(0)) * num_kv_heads;
-    auto q3 = q.reshape({rows, head_dim});
-    auto k3 = k.reshape({krows, head_dim});
-    if (!q3.ok())
-        return q3.status();
-    if (!k3.ok())
-        return k3.status();
-    if (auto s = apply_qk_norm(q3.value(), rows, config.q_norm); !s.ok())
-        return s;
-    if (auto s = apply_qk_norm(k3.value(), krows, config.k_norm); !s.ok())
-        return s;
-}
 
-if (q.dtype() == DType::kF32) {
-apply_rope<float>(q, k, position, head_dim, num_heads, num_kv_heads, config.freq_base);
-} else if (q.dtype() == DType::kF16) {
+    // Optional per-head Q/K RMSNorm (Qwen3 family) applied before rotation.
+    // Matches standalone RmsNorm math exactly (serial accumulation, 1/sqrt).
+    const auto apply_qk_norm = [&](TensorView t, int32_t heads, TensorView w) -> Status {
+        if (t.dtype() != DType::kF32 || w.dtype() != DType::kF32) {
+            return Status::Error(ErrorCode::kUnsupported,
+                                 "RoPE qk_norm: f32 required (CPU reference)");
+        }
+        float* d = t.data_as<float>();
+        const float* wd = w.data_as<const float>();
+        const float inv = 1.0f / static_cast<float>(head_dim);
+        for (int32_t h = 0; h < heads; ++h) {
+            float* row = d + static_cast<size_t>(h) * static_cast<size_t>(head_dim);
+            float ms = 0.0f;
+            for (int32_t i = 0; i < head_dim; ++i) {
+                ms += row[i] * row[i];
+            }
+            ms *= inv;
+            const float denom = 1.0f / std::sqrt(ms + config.rms_eps);
+            for (int32_t i = 0; i < head_dim; ++i) {
+                row[i] = row[i] * denom * wd[i];
+            }
+        }
+        return {};
+    };
+    if (config.q_norm.valid()) {
+        // q reshaped view: rows are (batch * heads); batch==1 in decode, but
+        // flatten the convention: every row of [batch, heads, hd] gets normed.
+        const int32_t rows = static_cast<int32_t>(q.shape().dim(0)) * num_heads;
+        const int32_t krows = static_cast<int32_t>(k.shape().dim(0)) * num_kv_heads;
+        auto q3 = q.reshape({rows, head_dim});
+        auto k3 = k.reshape({krows, head_dim});
+        if (!q3.ok())
+            return q3.status();
+        if (!k3.ok())
+            return k3.status();
+        if (auto s = apply_qk_norm(q3.value(), rows, config.q_norm); !s.ok())
+            return s;
+        if (auto s = apply_qk_norm(k3.value(), krows, config.k_norm); !s.ok())
+            return s;
+    }
+
+    if (q.dtype() == DType::kF32) {
+        apply_rope<float>(q, k, position, head_dim, num_heads, num_kv_heads, config.freq_base);
+    } else if (q.dtype() == DType::kF16) {
         apply_rope<uint16_t>(q, k, position, head_dim, num_heads, num_kv_heads, config.freq_base);
     } else {
         return Status::Error(ErrorCode::kUnsupported, "RoPE: unsupported dtype");

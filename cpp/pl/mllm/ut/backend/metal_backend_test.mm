@@ -443,7 +443,12 @@ TEST(MetalParityTest, MatMulFused3Q8_0) {
 // RmsNorm parity
 
 // Batched (prefill) GEMM parity: batch > 1 routes through the Metal backend's
-// MPS path with a lazily dequantized f32 weight cache.
+// MPS path with a lazily dequantized f16 weight cache and f16 GEMM
+// operands.  f16 prefill is the industry standard (llama.cpp mul_mm, vLLM
+// bf16) and the end-to-end byte-exact gate against llama.cpp holds; the
+// tolerance therefore reflects f16 operand rounding (~1e-3 relative per
+// element, RSS over the dot product) rather than f32.
+// Layout/pitch bugs produce O(1) errors and are still caught.
 TEST(MetalParityTest, MatMulQ8_0BatchPrefill) {
     REQUIRE_METAL();
     const int batch = 4, in_dim = 256, out_dim = 32;
@@ -470,7 +475,41 @@ TEST(MetalParityTest, MatMulQ8_0BatchPrefill) {
     ASSERT_TRUE(gpu.MatMul(out_gpu.view, x.view, "w0").ok());
     ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
 
-    expect_close(out_cpu.view, out_gpu.view, 2e-3f, 2e-3f);
+    expect_close(out_cpu.view, out_gpu.view, 1e-2f, 1e-2f);
+}
+
+// Batched f16-weight GEMM parity: f16 weights bind directly into the f16
+// MPS GEMM (no dequant copy).
+TEST(MetalParityTest, MatMulF16BatchPrefill) {
+    REQUIRE_METAL();
+    const int batch = 4, in_dim = 256, out_dim = 32;
+    auto x = HostTensor::alloc({batch, in_dim}, DType::kF32);
+    auto w = HostTensor::alloc({out_dim, in_dim}, DType::kF16);
+    auto out_cpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    auto out_gpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    fill_random(x.view.data_as<float>(), batch * in_dim, 81);
+
+    std::vector<float> w_f32(static_cast<size_t>(out_dim) * in_dim);
+    fill_random(w_f32.data(), w_f32.size(), 82);
+    auto* wh = w.view.data_as<uint16_t>();
+    for (size_t i = 0; i < w_f32.size(); ++i) {
+        wh[i] = fp32_to_fp16(w_f32[i]);
+    }
+
+    CpuBackend cpu;
+    std::array names_cpu = {std::string_view{"w0"}};
+    std::array<TensorView, 1> views_cpu = {w.view};
+    ASSERT_TRUE(cpu.ImportWeights(views_cpu, names_cpu).ok());
+    ASSERT_TRUE(cpu.MatMul(out_cpu.view, x.view, "w0").ok());
+
+    MetalBackend gpu;
+    std::array names_gpu = {std::string_view{"w0"}};
+    std::array<TensorView, 1> views_gpu = {w.view};
+    ASSERT_TRUE(gpu.ImportWeights(views_gpu, names_gpu).ok());
+    ASSERT_TRUE(gpu.MatMul(out_gpu.view, x.view, "w0").ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
+
+    expect_close(out_cpu.view, out_gpu.view, 1e-2f, 1e-2f);
 }
 
 // Same as MatMulQ8_0BatchPrefill but at real model dimensions
@@ -501,7 +540,7 @@ TEST(MetalParityTest, MatMulQ8_0BatchPrefillRealDims) {
     ASSERT_TRUE(gpu.MatMul(out_gpu.view, x.view, "w0").ok());
     ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
 
-    expect_close(out_cpu.view, out_gpu.view, 2e-3f, 2e-3f);
+    expect_close(out_cpu.view, out_gpu.view, 1e-2f, 1e-2f);
 }
 
 // Batched RoPE parity: row b must be rotated at position + b.
@@ -814,6 +853,29 @@ TEST(MetalParityTest, SwiGLUParity) {
     ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
 
     expect_close(out_cpu.view, out_gpu.view, 1e-5f, 1e-5f);
+}
+
+// Error propagation: a GPU-side failure must surface from Synchronize /
+// SyncToHost and turn every subsequent op into an error (fail loud). Before
+// the fix, flush() cleared the command buffer BEFORE checking its status, so
+// the error check could never fire and device faults were silently dropped.
+// Real MTLCommandBuffer errors need hardware faults, so this test injects a
+// synthetic error through the test-only seam and verifies the contract.
+TEST(MetalBackendErrorTest, GpuErrorIsStickyAndReported) {
+    REQUIRE_METAL();
+    MetalBackend gpu;
+    gpu.InjectGpuErrorForTest(
+        Status::Error(ErrorCode::kBackendFailure, "synthetic GPU fault"));
+
+    auto s = gpu.Synchronize();
+    ASSERT_FALSE(s.ok());
+    EXPECT_EQ(s.code, ErrorCode::kBackendFailure);
+    EXPECT_NE(s.message.find("synthetic GPU fault"), std::string::npos);
+
+    auto x = HostTensor::alloc({1, 16}, DType::kF32);
+    auto y = HostTensor::alloc({1, 16}, DType::kF32);
+    EXPECT_FALSE(gpu.SyncToHost(x.view).ok());
+    EXPECT_FALSE(gpu.AddInPlace(x.view, y.view).ok());
 }
 
 TEST(MetalParityTest, AddInPlaceParity) {

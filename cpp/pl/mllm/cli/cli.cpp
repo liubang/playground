@@ -109,11 +109,12 @@ int main(int argc, char** argv) {
         chat_mode ? engine->FormatChatPrompt(prompt, system_msg) : prompt;
 
     std::string output;
-    auto status = engine->GenerateStream(effective_prompt, gp, [&](std::string_view piece, int32_t /*tok*/) {
-        std::cout << piece << std::flush;
-        output.append(piece);
-        return true;
-    });
+    auto status =
+        engine->GenerateStream(effective_prompt, gp, [&](std::string_view piece, int32_t /*tok*/) {
+            std::cout << piece << std::flush;
+            output.append(piece);
+            return true;
+        });
 
     std::cout << std::endl;
 

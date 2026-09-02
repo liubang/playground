@@ -675,6 +675,51 @@ kernel void mllm_dequant_f16(
     dst[gid] = (float)as_type<half>(src[gid]);
 }
 
+// Q8_0 -> f16 for the batched-prefill MPS path: one thread per 34-byte
+// block.  Halves both the per-weight cache memory and the MPS GEMM read
+// bandwidth vs dequantizing to f32 (prefill is weight-bandwidth bound).
+kernel void mllm_dequant_q8_0_f16(
+    const device uchar* src   [[buffer(0)]],
+    device half* dst          [[buffer(1)]],
+    uint gid [[thread_position_in_grid]])
+{
+    const device uchar* blk = src + gid * 34;
+    ushort sbits = (ushort)blk[0] | ((ushort)blk[1] << 8);
+    const half scale = as_type<half>(sbits);
+    device half* out = dst + gid * 32;
+    for (uint i = 0; i < 32; ++i) {
+        out[i] = scale * (half)(char)blk[2 + i];
+    }
+}
+
+// Elementwise f32 -> f16 with explicit destination row pitch (elements), so
+// the output can feed an MPS matrix layout directly.
+kernel void mllm_cvt_f32_to_f16(
+    const device float* src     [[buffer(0)]],
+    device half* dst            [[buffer(1)]],
+    constant uint& in_dim       [[buffer(2)]],
+    constant uint& dst_row_elems [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    const uint r = gid / in_dim;
+    const uint c = gid % in_dim;
+    dst[r * dst_row_elems + c] = (half)src[gid];
+}
+
+// Elementwise f16 -> f32 with explicit source row pitch (elements); packs
+// the MPS result matrix back into a dense f32 buffer.
+kernel void mllm_cvt_f16_to_f32(
+    const device half* src      [[buffer(0)]],
+    device float* dst           [[buffer(1)]],
+    constant uint& out_dim      [[buffer(2)]],
+    constant uint& src_row_elems [[buffer(3)]],
+    uint gid [[thread_position_in_grid]])
+{
+    const uint r = gid / out_dim;
+    const uint c = gid % out_dim;
+    dst[gid] = (float)src[r * src_row_elems + c];
+}
+
 kernel void mllm_gemv_q8_0(
 device float* out        [[buffer(0)]],
 const device float* x    [[buffer(1)]],

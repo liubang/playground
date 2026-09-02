@@ -201,16 +201,17 @@ void bench_gemv_q8_0(Backend& backend, int out_dim, int in_dim) {
     // Reveals the true per-kernel cost (kernel + GPU-side dispatch gap) once
     // the per-op commit+wait round trip is amortized away.
     constexpr int kReps = 64;
-    const double chain_ms = bench_ms(
-        [&] {
-            for (int r = 0; r < kReps; ++r) {
-                auto s = backend.MatMul(out.view, x.view, w.name);
-                if (!s.ok())
-                    std::fprintf(stderr, "gemv q8_0 chain failed: %s\n", s.message.c_str());
-            }
-            sync_backend(backend);
-        },
-        20) /
+    const double chain_ms =
+        bench_ms(
+            [&] {
+                for (int r = 0; r < kReps; ++r) {
+                    auto s = backend.MatMul(out.view, x.view, w.name);
+                    if (!s.ok())
+                        std::fprintf(stderr, "gemv q8_0 chain failed: %s\n", s.message.c_str());
+                }
+                sync_backend(backend);
+            },
+            20) /
         kReps;
 
     const double bytes = (static_cast<double>(out_dim) * in_dim + in_dim + out_dim) * 4.0;

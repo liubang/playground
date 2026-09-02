@@ -463,11 +463,6 @@ Result<std::shared_ptr<GGUFFile>> GGUFFile::Open(std::string path) {
         // has been consumed.
         info.file_offset = static_cast<size_t>(offset);
 
-        file->name_to_index_.emplace(file->tensors_.size() == 0 ? std::string_view{}
-                                                                // placeholder; fixed below
-                                                                : std::string_view{},
-                                     file->tensors_.size());
-        (void)file;
         file->tensors_.push_back(std::move(info));
     }
 
@@ -498,13 +493,17 @@ namespace {
 } // namespace
 
 bool GGUFFile::has_tensor(std::string_view name) const noexcept {
-    return name_to_index_.find(name) != name_to_index_.end();
+    return tensor_info(name).ok();
 }
 
 Result<TensorInfo> GGUFFile::tensor_info(std::string_view name) const {
     const auto it = name_to_index_.find(name);
     if (it == name_to_index_.end()) {
         return Status::Error(ErrorCode::kNotFound, "tensor not found: " + std::string(name));
+    }
+    if (it->second >= tensors_.size()) {
+        return Status::Error(ErrorCode::kInvalidFormat,
+                             "tensor name index out of range: " + std::string(name));
     }
     return tensors_[it->second];
 }
@@ -513,6 +512,10 @@ Result<TensorView> GGUFFile::tensor(std::string_view name) const {
     const auto it = name_to_index_.find(name);
     if (it == name_to_index_.end()) {
         return Status::Error(ErrorCode::kNotFound, "tensor not found: " + std::string(name));
+    }
+    if (it->second >= tensors_.size()) {
+        return Status::Error(ErrorCode::kInvalidFormat,
+                             "tensor name index out of range: " + std::string(name));
     }
     const auto& info = tensors_[it->second];
     auto* ptr = const_cast<uint8_t*>(mapped_.bytes().data() + info.file_offset);

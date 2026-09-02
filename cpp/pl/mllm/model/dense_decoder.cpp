@@ -33,6 +33,57 @@ TensorView find_weight(std::span<const Model::WeightEntry> weights, std::string_
     return {};
 }
 
+const char* dtype_label(DType d) {
+    switch (d) {
+        case DType::kF32:
+            return "f32";
+        case DType::kF16:
+            return "f16";
+        case DType::kQ4_0:
+            return "q4_0";
+        case DType::kQ8_0:
+            return "q8_0";
+    }
+    return "unknown";
+}
+
+// Dtypes with end-to-end support in every backend's MatMul path.
+bool is_supported_matmul_dtype(DType d) {
+    return d == DType::kF32 || d == DType::kF16 || d == DType::kQ8_0;
+}
+
+// Norms / biases are consumed elementwise (RmsNorm, AddBiasInPlace) and must
+// be dense floats; a block-quantized dtype here would read garbage (CPU
+// elem_to_f32 yields 0 for Q4_0 -> silent all-zero activations).
+bool is_supported_elementwise_dtype(DType d) {
+    return d == DType::kF32 || d == DType::kF16;
+}
+
+// Fail fast on missing or unsupported weights so a broken checkpoint errors
+// at load time with the tensor name, instead of surfacing deep inside the
+// first forward pass (or, worse, silently producing wrong activations).
+Status require_matmul_weight(std::span<const Model::WeightEntry> weights, std::string_view name) {
+    const TensorView w = find_weight(weights, name);
+    if (!w.valid()) {
+        return Status::Error(ErrorCode::kNotFound, "missing weight: " + std::string(name));
+    }
+    if (!is_supported_matmul_dtype(w.dtype())) {
+        return Status::Error(ErrorCode::kUnsupported,
+                             "unsupported dtype " + std::string(dtype_label(w.dtype())) +
+                                 " for weight: " + std::string(name));
+    }
+    return {};
+}
+
+Status require_elementwise_weight(const TensorView& w, std::string_view name) {
+    if (!is_supported_elementwise_dtype(w.dtype())) {
+        return Status::Error(ErrorCode::kUnsupported,
+                             "unsupported dtype " + std::string(dtype_label(w.dtype())) +
+                                 " for weight: " + std::string(name));
+    }
+    return {};
+}
+
 } // namespace
 
 Result<std::unique_ptr<DenseDecoderModel>> DenseDecoderModel::Create(
@@ -46,6 +97,12 @@ Result<std::unique_ptr<DenseDecoderModel>> DenseDecoderModel::Create(
 
     // Resolve output norm weight
     model->output_norm_ = find_weight(weights, "output_norm.weight");
+    if (!model->output_norm_.valid()) {
+        return Status::Error(ErrorCode::kNotFound, "missing weight: output_norm.weight");
+    }
+    if (auto s = require_elementwise_weight(model->output_norm_, "output_norm.weight"); !s.ok()) {
+        return s;
+    }
 
     // Reserve enough capacity so string_views stay valid (no reallocation).
     // 1 (output) + up to 7 (per-layer matmul names) * num_layers
@@ -55,12 +112,21 @@ Result<std::unique_ptr<DenseDecoderModel>> DenseDecoderModel::Create(
     TensorView output_w = find_weight(weights, "output.weight");
     if (output_w.valid()) {
         model->tied_output_ = false;
+        if (!is_supported_matmul_dtype(output_w.dtype())) {
+            return Status::Error(ErrorCode::kUnsupported,
+                                 "unsupported dtype " + std::string(dtype_label(output_w.dtype())) +
+                                     " for weight: output.weight");
+        }
         model->name_storage_.push_back("output.weight");
         model->output_weight_name_ = model->name_storage_.back();
     } else {
         model->tied_output_ = true;
         model->name_storage_.push_back("token_embd.weight");
         model->output_weight_name_ = model->name_storage_.back();
+    }
+    // token_embd.weight always participates (embedding + possibly tied output).
+    if (auto s = require_matmul_weight(weights, "token_embd.weight"); !s.ok()) {
+        return s;
     }
 
     // Build per-layer weight references from the standard GGUF naming scheme,
@@ -91,6 +157,26 @@ Result<std::unique_ptr<DenseDecoderModel>> DenseDecoderModel::Create(
             return Status::Error(ErrorCode::kNotFound,
                                  "missing norm weight for layer " + std::to_string(l));
         }
+        if (auto s = require_elementwise_weight(lw.attn_norm, names.attn_norm); !s.ok()) {
+            return s;
+        }
+        if (auto s = require_elementwise_weight(lw.mlp_norm, names.mlp_norm); !s.ok()) {
+            return s;
+        }
+
+        // Matmul weights: existence + supported dtype (fail fast at load —
+        // previously missing ones only errored deep inside the first MatMul).
+        for (const std::string_view wname : {lw.q_weight_name,
+                                             lw.k_weight_name,
+                                             lw.v_weight_name,
+                                             lw.o_weight_name,
+                                             lw.gate_weight_name,
+                                             lw.up_weight_name,
+                                             lw.down_weight_name}) {
+            if (auto s = require_matmul_weight(weights, wname); !s.ok()) {
+                return s;
+            }
+        }
 
         // Optional family tensors; each is mandatory when its feature flag
         // is set so a malformed file fails fast instead of silently
@@ -103,6 +189,15 @@ Result<std::unique_ptr<DenseDecoderModel>> DenseDecoderModel::Create(
                 return Status::Error(ErrorCode::kNotFound,
                                      "missing qkv bias weight for layer " + std::to_string(l));
             }
+            if (auto s = require_elementwise_weight(lw.q_bias, names.q_bias); !s.ok()) {
+                return s;
+            }
+            if (auto s = require_elementwise_weight(lw.k_bias, names.k_bias); !s.ok()) {
+                return s;
+            }
+            if (auto s = require_elementwise_weight(lw.v_bias, names.v_bias); !s.ok()) {
+                return s;
+            }
         }
         if (config.qk_norm) {
             lw.q_norm = find_weight(weights, names.q_norm);
@@ -110,6 +205,12 @@ Result<std::unique_ptr<DenseDecoderModel>> DenseDecoderModel::Create(
             if (!lw.q_norm.valid() || !lw.k_norm.valid()) {
                 return Status::Error(ErrorCode::kNotFound,
                                      "missing qk norm weight for layer " + std::to_string(l));
+            }
+            if (auto s = require_elementwise_weight(lw.q_norm, names.q_norm); !s.ok()) {
+                return s;
+            }
+            if (auto s = require_elementwise_weight(lw.k_norm, names.k_norm); !s.ok()) {
+                return s;
             }
         }
 

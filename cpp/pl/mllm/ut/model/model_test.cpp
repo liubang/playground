@@ -359,6 +359,71 @@ TEST(ModelTest, Qwen2MissingBiasFailsFast) {
     EXPECT_EQ(model_result.status().code, ErrorCode::kNotFound);
 }
 
+// Regression: a Q4_0 checkpoint must fail fast at model creation with a
+// clear error. Before the fix, Create() succeeded and the unsupported dtype
+// surfaced only much later: matmul weights errored inside the first MatMul,
+// while Q4_0 norm weights were read through the scalar elem_to_f32 path that
+// silently returns 0 for Q4_0 (rmsnorm -> scale=0 -> all-zero hidden state).
+TEST(ModelTest, CreateRejectsUnsupportedMatMulDtype) {
+    auto cfg = make_tiny_config();
+    auto store = make_all_weights(cfg);
+
+    // 16x16 = 256 elements -> 8 Q4_0 blocks of 18 bytes.
+    std::vector<uint8_t> q4_storage(dtype_nbytes(DType::kQ4_0, 16 * 16), 0);
+    TensorView q4_view(q4_storage.data(), DType::kQ4_0, {16, 16});
+    bool replaced = false;
+    for (auto& e : store.entries) {
+        if (e.name == "blk.0.attn_q.weight") {
+            e.view = q4_view;
+            replaced = true;
+        }
+    }
+    ASSERT_TRUE(replaced);
+
+    auto model_result = CreateModel(cfg, store.entries);
+    ASSERT_FALSE(model_result.ok());
+    EXPECT_EQ(model_result.status().code, ErrorCode::kUnsupported);
+}
+
+TEST(ModelTest, CreateRejectsUnsupportedNormDtype) {
+    auto cfg = make_tiny_config();
+    auto store = make_all_weights(cfg);
+
+    // One full Q4_0 block (32 elements); Create() only checks the dtype.
+    std::vector<uint8_t> q4_storage(dtype_nbytes(DType::kQ4_0, 32), 0);
+    TensorView q4_view(q4_storage.data(), DType::kQ4_0, {32});
+    bool replaced = false;
+    for (auto& e : store.entries) {
+        if (e.name == "blk.0.attn_norm.weight") {
+            e.view = q4_view;
+            replaced = true;
+        }
+    }
+    ASSERT_TRUE(replaced);
+
+    auto model_result = CreateModel(cfg, store.entries);
+    ASSERT_FALSE(model_result.ok());
+    EXPECT_EQ(model_result.status().code, ErrorCode::kUnsupported);
+}
+
+TEST(ModelTest, CreateRejectsMissingMatMulWeight) {
+    auto cfg = make_tiny_config();
+    auto store = make_all_weights(cfg);
+
+    // Drop blk.1 down projection: previously accepted here, failing much
+    // later inside MatMul with a backend-level "weight not found".
+    store.entries.erase(std::remove_if(store.entries.begin(),
+                                       store.entries.end(),
+                                       [](const Model::WeightEntry& e) {
+                                           return e.name == "blk.1.ffn_down.weight";
+                                       }),
+                        store.entries.end());
+
+    auto model_result = CreateModel(cfg, store.entries);
+    ASSERT_FALSE(model_result.ok());
+    EXPECT_EQ(model_result.status().code, ErrorCode::kNotFound);
+}
+
 TEST(ModelTest, FactoryRejectsUnknownArchitecture) {
     auto cfg = make_tiny_config();
     cfg.architecture = "mamba";

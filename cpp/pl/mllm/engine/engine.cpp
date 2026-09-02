@@ -211,11 +211,10 @@ Result<std::unique_ptr<Engine>> Engine::Create(Options options) {
         static_cast<size_t>(std::max(config.intermediate_size,
                                      config.num_attention_heads * config.effective_head_dim())) *
         10 * 4;
-    const size_t arena_bytes =
-        std::max(per_layer_bytes * static_cast<size_t>(config.num_layers),
-                 per_layer_bytes * static_cast<size_t>(kPrefillChunk)) *
-            2 +
-        65536;
+    const size_t arena_bytes = std::max(per_layer_bytes * static_cast<size_t>(config.num_layers),
+                                        per_layer_bytes * static_cast<size_t>(kPrefillChunk)) *
+                                   2 +
+                               65536;
     auto arena_result = ScratchArena::Create(arena_bytes);
     if (!arena_result.ok()) {
         return arena_result.status();
@@ -274,8 +273,7 @@ Result<TensorView> Engine::RunPrefill(std::span<const int32_t> tokens) {
     for (int64_t chunk_start = 0; chunk_start < static_cast<int64_t>(tokens.size());
          chunk_start += kPrefillChunk) {
         const int32_t n = static_cast<int32_t>(
-            std::min<int64_t>(kPrefillChunk,
-                              static_cast<int64_t>(tokens.size()) - chunk_start));
+            std::min<int64_t>(kPrefillChunk, static_cast<int64_t>(tokens.size()) - chunk_start));
 
         // Embed the chunk's tokens into rows of the persistent prefill
         // buffer (Forward modifies them in-place). Handles f32/f16/Q8_0.
@@ -285,9 +283,7 @@ Result<TensorView> Engine::RunPrefill(std::span<const int32_t> tokens) {
                 return Status::Error(ErrorCode::kInvalidArgument,
                                      "prefill: token out of vocab range");
             }
-            TensorView row(dst + static_cast<size_t>(i) * hidden,
-                           DType::kF32,
-                           Shape({1, hidden}));
+            TensorView row(dst + static_cast<size_t>(i) * hidden, DType::kF32, Shape({1, hidden}));
             if (auto s = embedding_row(impl.token_embd, tok, hidden, row); !s.ok()) {
                 return s;
             }
@@ -298,8 +294,8 @@ Result<TensorView> Engine::RunPrefill(std::span<const int32_t> tokens) {
             return s;
         }
 
-        if (auto s = impl.model->Prefill(
-                batch, chunk_start, *impl.cache, *impl.backend, *impl.arena);
+        if (auto s =
+                impl.model->Prefill(batch, chunk_start, *impl.cache, *impl.backend, *impl.arena);
             !s.ok()) {
             return s;
         }
@@ -315,9 +311,8 @@ Result<TensorView> Engine::RunPrefill(std::span<const int32_t> tokens) {
 
     // Return the final hidden state (last row of the last chunk) so the
     // caller can sample the first generated token directly.
-    return TensorView(dst + row_of_last * static_cast<size_t>(hidden),
-                      DType::kF32,
-                      Shape({1, hidden}));
+    return TensorView(
+        dst + row_of_last * static_cast<size_t>(hidden), DType::kF32, Shape({1, hidden}));
 }
 
 bool Engine::has_chat_template() const noexcept {
@@ -481,8 +476,7 @@ Status Engine::GenerateStream(std::string_view prompt,
                 take_prompt = kPenaltyLastN - take_gen;
             }
             penalty_ctx.assign(prompt_tokens.end() - take_prompt, prompt_tokens.end());
-            penalty_ctx.insert(
-                penalty_ctx.end(), generated.end() - take_gen, generated.end());
+            penalty_ctx.insert(penalty_ctx.end(), generated.end() - take_gen, generated.end());
             sampler.set_penalty_tokens(std::span<const int32_t>(penalty_ctx));
         }
         int32_t next = sampler.Sample(logits.span_as<float>());

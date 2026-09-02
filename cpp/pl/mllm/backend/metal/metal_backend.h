@@ -59,13 +59,10 @@ public:
     Status MatMulFused(std::span<TensorView> outs,
                        TensorView x,
                        std::span<const std::string_view> weight_names) override;
-Status RmsNorm(TensorView out, TensorView x, TensorView weight, float eps) override;
-Status RmsNormAdd(TensorView out,
-                  TensorView residual,
-                  TensorView add,
-                  TensorView weight,
-                  float eps) override;
-Status RoPE(TensorView q, TensorView k, int64_t position, const RopeConfig& config) override;
+    Status RmsNorm(TensorView out, TensorView x, TensorView weight, float eps) override;
+    Status RmsNormAdd(
+        TensorView out, TensorView residual, TensorView add, TensorView weight, float eps) override;
+    Status RoPE(TensorView q, TensorView k, int64_t position, const RopeConfig& config) override;
     Status Attention(TensorView out,
                      TensorView q,
                      const KVCacheView& kv,
@@ -96,6 +93,11 @@ Status RoPE(TensorView q, TensorView k, int64_t position, const RopeConfig& conf
                               int32_t layer,
                               int64_t seq_base,
                               const AttentionConfig& config) override;
+
+    // Test-only: inject a synthetic GPU error to exercise sticky error
+    // propagation (real MTLCommandBuffer errors cannot be raised
+    // deterministically from a unit test). Not for production use.
+    void InjectGpuErrorForTest(Status error);
 
     // Opaque implementation handle (all Metal types live in the .mm TU).
     struct Impl;

@@ -17,9 +17,7 @@
 
 #pragma once
 
-#include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 
 #include "cpp/pl/mllm/backend/backend.h"
@@ -54,7 +52,8 @@ public:
 private:
     // Named weight table. TensorViews are non-owning; the caller (Model)
     // guarantees the backing mmap / OwnedBuffer outlives the backend.
-    std::unordered_map<std::string, TensorView> weights_;
+    // Heterogeneous string_view lookup (no per-op std::string temp).
+    StringKeyMap<TensorView> weights_;
 };
 
 } // namespace pl::mllm

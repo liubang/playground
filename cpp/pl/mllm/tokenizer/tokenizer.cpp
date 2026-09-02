@@ -223,6 +223,37 @@ int utf8_len(unsigned char c) {
     return {static_cast<int32_t>(c), 1};
 }
 
+// GPT-2/Qwen2 contraction suffixes: 's|'t|'re|'ve|'m|'ll|'d (case-insensitive),
+// returning the piece length including the apostrophe, or 0 if `text[pos..]`
+// does not start a contraction. The reference regex binds these tighter than
+// the word rules, so "don't" splits as ["don", "'t"] and BPE can consume the
+// contraction as one unit (real Qwen vocabs carry "'t"-style pieces with the
+// matching merges). Splitting the apostrophe into a punctuation run instead
+// tokenizes every contraction differently from llama.cpp/HF.
+[[nodiscard]] size_t gpt2_contraction_len(std::string_view text, size_t pos) {
+    if (pos >= text.size() || text[pos] != '\'') {
+        return 0;
+    }
+    const size_t rem = text.size() - pos;
+    if (rem < 2) {
+        return 0;
+    }
+    const auto lower = [](char c) {
+        return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+    };
+    const char c1 = lower(text[pos + 1]);
+    if (c1 == 's' || c1 == 't' || c1 == 'm' || c1 == 'd') {
+        return 2;
+    }
+    if (rem >= 3) {
+        const char c2 = lower(text[pos + 2]);
+        if ((c1 == 'r' && c2 == 'e') || (c1 == 'v' && c2 == 'e') || (c1 == 'l' && c2 == 'l')) {
+            return 3;
+        }
+    }
+    return 0;
+}
+
 // GPT-2 pre-tokenization regex (simplified but correct for common inputs):
 // Split text into words by whitespace, keeping the leading space with the word,
 // then further split on word boundaries. This is a faithful implementation of
@@ -238,6 +269,15 @@ int utf8_len(unsigned char c) {
     size_t i = 0;
 
     while (i < text.size()) {
+        // Contraction suffixes bind tighter than the word rules (and a
+        // contraction never carries a leading space — the space belongs to
+        // the previous piece), so check before consuming any space.
+        if (const size_t clen = gpt2_contraction_len(text, i); clen > 0) {
+            pieces.emplace_back(text.substr(i, clen));
+            i += clen;
+            continue;
+        }
+
         // Consume optional leading space (at most one, per GPT-2 convention).
         bool has_leading_space = false;
         if (i < text.size() && text[i] == ' ') {

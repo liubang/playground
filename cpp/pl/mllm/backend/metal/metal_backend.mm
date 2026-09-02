@@ -117,19 +117,21 @@ struct MetalBackend::Impl {
     id<MTLComputePipelineState> gemv_f16_fused_ps = nil;
     id<MTLComputePipelineState> gemv_f32_fused_ps = nil;
     id<MTLComputePipelineState> append_kv_ps = nil;
-    id<MTLComputePipelineState> dequant_q8_0_ps = nil;
-    id<MTLComputePipelineState> dequant_f16_ps = nil;
+    id<MTLComputePipelineState> dequant_q8_0_f16_ps = nil; // q8_0 -> f16 for MPS prefill
+    id<MTLComputePipelineState> cvt_f32_to_f16_ps = nil;   // GEMM A conversion
+    id<MTLComputePipelineState> cvt_f16_to_f32_ps = nil;   // GEMM C conversion
 
     // Weight table. f16 weights are kept as f16 (half bandwidth); Q8_0 kept
-    // raw; f32 kept as-is. `f32_buf` is a lazily materialized f32 copy used
+    // raw; f32 kept as-is. `f16_buf` is a lazily materialized f16 copy used
     // by the batched-prefill MPS path (dequantized once on first use).
     struct Weight {
         id<MTLBuffer> buf = nil;
         Shape shape;
         DType dtype = DType::kF32;
-        id<MTLBuffer> f32_buf = nil; // cached f32 version for MPS GEMMs
+        id<MTLBuffer> f16_buf = nil; // cached f16 version for MPS GEMMs
     };
-    std::unordered_map<std::string, Weight> weights_;
+    // Heterogeneous string_view lookup (no per-op std::string temp).
+    StringKeyMap<Weight> weights_;
 
     // --- Shadow buffer cache ------------------------------------------------
     // Maps host data pointer -> device buffer so that repeated ops on the same
@@ -152,6 +154,25 @@ struct MetalBackend::Impl {
     id<MTLCommandBuffer> deferred_cb = nil;
     id<MTLComputeCommandEncoder> deferred_enc = nil;
 
+    // --- f16 MPS prefill scratch -------------------------------------------
+    // Grow-on-demand buffers for the GEMM input (A) / output (C) half-
+    // precision staging.  Sized with the MPS row pitch.
+    id<MTLBuffer> mps_scratch_a_ = nil;
+    size_t mps_scratch_a_bytes_ = 0;
+    id<MTLBuffer> mps_scratch_c_ = nil;
+    size_t mps_scratch_c_bytes_ = 0;
+
+    // Returns `old` when it is big enough, otherwise allocates a fresh
+    // buffer and updates `cap`.
+    id<MTLBuffer> ensure_scratch(size_t bytes, id<MTLBuffer> old, size_t& cap) {
+        if (old != nil && cap >= bytes) {
+            return old;
+        }
+        id<MTLBuffer> buf = [device newBufferWithLength:bytes options:MTLResourceStorageModeShared];
+        cap = (buf != nil) ? bytes : 0;
+        return buf;
+    }
+
     // --- Device KV cache ----------------------------------------------------
     struct DeviceKV {
         id<MTLBuffer> keys = nil;   // [num_layers, capacity, num_kv_heads, head_dim] f32
@@ -165,10 +186,25 @@ struct MetalBackend::Impl {
     // Constructor errors surface on the first op call.
     Status init_error;
 
+    // Sticky GPU error: once ANY committed command buffer finishes with an
+    // error the backend is unusable and every subsequent op/sync surfaces the
+    // same error (fail loud). Previously flush() cleared deferred_cb BEFORE
+    // checking its status, so command-buffer errors were permanently lost.
+    Status gpu_error_ = {};
+
+    // Record a command buffer error as the sticky GPU error and return it.
+    Status note_command_buffer_error(id<MTLCommandBuffer> cb) {
+        NSString* desc = (cb.error != nil) ? cb.error.localizedDescription : @"status=error";
+        gpu_error_ = Status::Error(
+            ErrorCode::kBackendFailure,
+            "Metal command buffer error: " + std::string(desc.UTF8String));
+        return gpu_error_;
+    }
+
     explicit Impl() { init(); }
 
     ~Impl() {
-        flush();
+        (void)flush();
     }
 
 private:
@@ -225,8 +261,9 @@ private:
         gemv_f16_fused_ps = make_ps("mllm_gemv_f16_fused");
         gemv_f32_fused_ps = make_ps("mllm_gemv_f32_fused");
         append_kv_ps = make_ps("mllm_append_kv");
-        dequant_q8_0_ps = make_ps("mllm_dequant_q8_0");
-        dequant_f16_ps = make_ps("mllm_dequant_f16");
+        dequant_q8_0_f16_ps = make_ps("mllm_dequant_q8_0_f16");
+        cvt_f32_to_f16_ps = make_ps("mllm_cvt_f32_to_f16");
+        cvt_f16_to_f32_ps = make_ps("mllm_cvt_f16_to_f32");
         if (!init_error.ok()) {
             return;
         }
@@ -237,7 +274,8 @@ private:
             !swiglu_ps || !add_ps || !add_bias_ps ||
             !gemv_q8_0_ps || !gemv_f16_ps || !gemv_f32_ps ||
             !gemv_q8_0_fused_ps || !gemv_f16_fused_ps || !gemv_f32_fused_ps ||
-            !append_kv_ps || !dequant_q8_0_ps || !dequant_f16_ps) {
+            !append_kv_ps || !dequant_q8_0_f16_ps || !cvt_f32_to_f16_ps ||
+            !cvt_f16_to_f32_ps) {
             init_error = Status::Error(ErrorCode::kBackendFailure,
                                        "MetalBackend: missing pipeline state");
         }
@@ -257,26 +295,23 @@ public:
         return deferred_enc;
     }
 
-    // Commit pending work and wait for completion.
-    void flush() {
+    // Commit pending work and wait for completion.  A GPU-side error becomes
+    // sticky (gpu_error_) and is returned to the caller.
+    Status flush() {
         if (deferred_enc) {
             [deferred_enc endEncoding];
             deferred_enc = nil;
         }
         if (deferred_cb) {
-            [deferred_cb commit];
-            [deferred_cb waitUntilCompleted];
-            if (deferred_cb.error) {
-                // Error will be surfaced by the caller via status check.
-            }
+            id<MTLCommandBuffer> cb = deferred_cb;
             deferred_cb = nil;
+            [cb commit];
+            [cb waitUntilCompleted];
+            if (cb.error != nil) {
+                return note_command_buffer_error(cb);
+            }
         }
-    }
-
-
-    // Check if there's a pending command buffer with an error.
-    bool has_pending_error() const {
-        return deferred_cb != nil && deferred_cb.error != nil;
+        return gpu_error_;
     }
 
     // --- Shadow buffer cache ---
@@ -347,7 +382,12 @@ MetalBackend::~MetalBackend() = default;
 namespace {
 
 Status ensure_ready(MetalBackend::Impl& impl) {
-    return impl.init_error;
+    if (!impl.init_error.ok()) {
+        return impl.init_error;
+    }
+    // After a sticky GPU error every op fails fast instead of encoding new
+    // work on top of corrupted state.
+    return impl.gpu_error_;
 }
 
 Status check_contig_valid(const TensorView& t, std::string_view op) {
@@ -440,7 +480,7 @@ if (auto s = ensure_ready(*impl_); !s.ok()) return s;
     const int32_t batch = static_cast<int32_t>(x.shape().dim(0));
     const int32_t in_dim = static_cast<int32_t>(x.shape().dim(1));
 
-    auto it = impl_->weights_.find(std::string(weight_name));
+    auto it = impl_->weights_.find(weight_name);
     if (it == impl_->weights_.end()) {
         return Status::Error(ErrorCode::kNotFound,
                              "MatMul: weight '" + std::string(weight_name) + "' not found");
@@ -516,79 +556,108 @@ if (auto s = ensure_ready(*impl_); !s.ok()) return s;
     }
 
     // --- MPS path (batch > 1, prefill) ---
-    // MPS needs f32 weight matrices; Q8_0/F16 weights are dequantized once
-    // into a per-weight device cache. Encode the dequant into the deferred
-    // command buffer, flush, then run MPS in its own command buffer.
-    id<MTLBuffer> w_f32 = w.buf;
-    if (w.dtype == DType::kQ8_0 || w.dtype == DType::kF16) {
-        if (!w.f32_buf) {
-            const size_t numel = static_cast<size_t>(out_dim) * static_cast<size_t>(in_dim);
-            w.f32_buf = [impl_->device
-                newBufferWithLength:numel * sizeof(float)
-                            options:MTLResourceStorageModeShared];
-            if (!w.f32_buf) {
-                return Status::Error(ErrorCode::kBackendFailure,
-                                     "MatMul: f32 weight cache alloc failed");
+    // Per-dtype handling:
+    //   f16  -> weights bound directly, f16 MPS GEMM (zero copy)
+    //   q8_0 -> cached f16 dequant, then f16 MPS GEMM (halves both the
+    //           per-weight cache memory and the MPS GEMM read bandwidth vs
+    //           the previous dequant-to-f32; prefill is bandwidth bound)
+    //   f32  -> weights bound directly, f32 MPS GEMM (unchanged)
+    // For the f16 modes the f32 activations are converted in/out by tiny
+    // elementwise kernels (batch x dim elements — negligible vs the GEMM).
+    const bool f16_mode = (w.dtype != DType::kF32);
+
+    MPSDataType mps_dt = MPSDataTypeFloat32;
+    size_t a_row = align16(static_cast<size_t>(in_dim) * sizeof(float));
+    size_t b_row = a_row;
+    size_t c_row = align16(static_cast<size_t>(out_dim) * sizeof(float));
+    id<MTLBuffer> a_mps = xbuf;
+    id<MTLBuffer> c_mps = obuf;
+    id<MTLBuffer> b_mps = w.buf;
+
+    if (f16_mode) {
+        if ((in_dim % 8) != 0 || (out_dim % 8) != 0) {
+            return Status::Error(ErrorCode::kUnsupported,
+                                 "MatMul: prefill requires dims to be 8-element aligned");
+        }
+        if (w.dtype == DType::kQ8_0) {
+            if (in_dim % kQ8_0BlockSize != 0) {
+                return Status::Error(ErrorCode::kInvalidArgument,
+                                     "MatMul: in_dim not Q8_0 block-aligned");
             }
-            id<MTLComputeCommandEncoder> enc = impl_->encoder();
-            if (w.dtype == DType::kQ8_0) {
-                if (in_dim % kQ8_0BlockSize != 0) {
-                    return Status::Error(ErrorCode::kInvalidArgument,
-                                         "MatMul: in_dim not Q8_0 block-aligned");
+            if (!w.f16_buf) {
+                const size_t numel = static_cast<size_t>(out_dim) * static_cast<size_t>(in_dim);
+                w.f16_buf = [impl_->device
+                    newBufferWithLength:numel * sizeof(uint16_t)
+                                options:MTLResourceStorageModeShared];
+                if (!w.f16_buf) {
+                    return Status::Error(ErrorCode::kBackendFailure,
+                                         "MatMul: f16 weight cache alloc failed");
                 }
-                [enc setComputePipelineState:impl_->dequant_q8_0_ps];
+                id<MTLComputeCommandEncoder> enc = impl_->encoder();
+                [enc setComputePipelineState:impl_->dequant_q8_0_f16_ps];
                 [enc setBuffer:w.buf offset:0 atIndex:0];
-                [enc setBuffer:w.f32_buf offset:0 atIndex:1];
+                [enc setBuffer:w.f16_buf offset:0 atIndex:1];
                 const NSUInteger num_blocks =
                     static_cast<NSUInteger>(numel / kQ8_0BlockSize);
                 [enc dispatchThreads:MTLSizeMake(num_blocks, 1, 1)
                     threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
-            } else {
-                [enc setComputePipelineState:impl_->dequant_f16_ps];
-                [enc setBuffer:w.buf offset:0 atIndex:0];
-                [enc setBuffer:w.f32_buf offset:0 atIndex:1];
-                [enc dispatchThreads:MTLSizeMake(static_cast<NSUInteger>(numel), 1, 1)
-                    threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
             }
+            b_mps = w.f16_buf;
+        } else if (w.dtype != DType::kF16) {
+            return Status::Error(ErrorCode::kUnsupported,
+                                 "MatMul: unsupported weight dtype for batched prefill");
         }
-        w_f32 = w.f32_buf;
+        mps_dt = MPSDataTypeFloat16;
+        a_row = align16(static_cast<size_t>(in_dim) * sizeof(uint16_t));
+        b_row = static_cast<size_t>(in_dim) * sizeof(uint16_t);
+        c_row = align16(static_cast<size_t>(out_dim) * sizeof(uint16_t));
+
+        // Stage A (x, f32) into the f16 scratch at MPS row pitch; C (f16)
+        // likewise — the result is converted back to f32 after the GEMM.
+        impl_->mps_scratch_a_ = impl_->ensure_scratch(static_cast<size_t>(batch) * a_row,
+                                                      impl_->mps_scratch_a_,
+                                                      impl_->mps_scratch_a_bytes_);
+        impl_->mps_scratch_c_ = impl_->ensure_scratch(static_cast<size_t>(batch) * c_row,
+                                                      impl_->mps_scratch_c_,
+                                                      impl_->mps_scratch_c_bytes_);
+        a_mps = impl_->mps_scratch_a_;
+        c_mps = impl_->mps_scratch_c_;
+        if (a_mps == nil || c_mps == nil) {
+            return Status::Error(ErrorCode::kBackendFailure, "MatMul: MPS scratch alloc failed");
+        }
+
+        id<MTLComputeCommandEncoder> enc = impl_->encoder();
+        [enc setComputePipelineState:impl_->cvt_f32_to_f16_ps];
+        [enc setBuffer:xbuf offset:0 atIndex:0];
+        [enc setBuffer:a_mps offset:0 atIndex:1];
+        uint32_t in_d = static_cast<uint32_t>(in_dim);
+        uint32_t pitch = static_cast<uint32_t>(a_row / sizeof(uint16_t));
+        [enc setBytes:&in_d length:sizeof(in_d) atIndex:2];
+        [enc setBytes:&pitch length:sizeof(pitch) atIndex:3];
+        const NSUInteger total = static_cast<NSUInteger>(batch) * static_cast<NSUInteger>(in_dim);
+        [enc dispatchThreads:MTLSizeMake(total, 1, 1)
+            threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
     }
-
-    // For prefill we still use MPS (which needs its own command buffer).
-    // Flush any deferred work first, then run MPS, then resume deferred mode.
-    impl_->flush();
-
-    const size_t a_row = align16(static_cast<size_t>(in_dim) * sizeof(float));
-    const size_t b_row = align16(static_cast<size_t>(in_dim) * sizeof(float));
-    const size_t c_row = align16(static_cast<size_t>(out_dim) * sizeof(float));
 
     MPSMatrixDescriptor* a_desc = [MPSMatrixDescriptor
         matrixDescriptorWithRows:static_cast<NSUInteger>(batch)
                          columns:static_cast<NSUInteger>(in_dim)
                         rowBytes:a_row
-                        dataType:MPSDataTypeFloat32];
+                        dataType:mps_dt];
     MPSMatrixDescriptor* b_desc = [MPSMatrixDescriptor
         matrixDescriptorWithRows:static_cast<NSUInteger>(out_dim)
                          columns:static_cast<NSUInteger>(in_dim)
                         rowBytes:b_row
-                        dataType:MPSDataTypeFloat32];
+                        dataType:mps_dt];
     MPSMatrixDescriptor* c_desc = [MPSMatrixDescriptor
         matrixDescriptorWithRows:static_cast<NSUInteger>(batch)
                          columns:static_cast<NSUInteger>(out_dim)
                         rowBytes:c_row
-                        dataType:MPSDataTypeFloat32];
+                        dataType:mps_dt];
 
-    // For MPS, we need the input in a properly aligned buffer.
-    // If x is f32 and already in shadow, we can use it; otherwise upload.
-    id<MTLBuffer> a_buf = xbuf;
-    // MPS requires rowBytes aligned; if the shadow buffer doesn't match,
-    // we'd need a staging copy.  For correctness in prefill, re-upload
-    // with proper alignment if needed.
-    // TODO: optimize prefill path later; decode is the critical path.
-
-    MPSMatrix* mA = [[MPSMatrix alloc] initWithBuffer:a_buf descriptor:a_desc];
-    MPSMatrix* mB = [[MPSMatrix alloc] initWithBuffer:w_f32 descriptor:b_desc];
-    MPSMatrix* mC = [[MPSMatrix alloc] initWithBuffer:obuf descriptor:c_desc];
+    MPSMatrix* mA = [[MPSMatrix alloc] initWithBuffer:a_mps descriptor:a_desc];
+    MPSMatrix* mB = [[MPSMatrix alloc] initWithBuffer:b_mps descriptor:b_desc];
+    MPSMatrix* mC = [[MPSMatrix alloc] initWithBuffer:c_mps descriptor:c_desc];
 
     MPSMatrixMultiplication* mul = [[MPSMatrixMultiplication alloc]
         initWithDevice:impl_->device
@@ -603,12 +672,36 @@ if (auto s = ensure_ready(*impl_); !s.ok()) return s;
         return Status::Error(ErrorCode::kBackendFailure, "MatMul: MPS init failed");
     }
 
-    id<MTLCommandBuffer> cb = [impl_->queue commandBuffer];
-    [mul encodeToCommandBuffer:cb leftMatrix:mA rightMatrix:mB resultMatrix:mC];
-    [cb commit];
-    [cb waitUntilCompleted];
-    if (cb.error != nil) {
-        return Status::Error(ErrorCode::kBackendFailure, "MatMul: MPS command buffer error");
+    // Encode the MPS GEMM into the SAME deferred command buffer the compute
+    // kernels use (closing the open compute encoder first).  Execution order
+    // inside one command buffer is preserved, so the GEMM sees the dequant
+    // results and its output is visible to the next kernel — but nothing is
+    // committed or waited on here.  The CPU only blocks once per prefill
+    // chunk at SyncToHost/Synchronize instead of once per matmul (that was
+    // ~0.5-1 ms x 7 GEMMs x num_layers x chunks of pure sync overhead).
+    if (impl_->deferred_enc != nil) {
+        [impl_->deferred_enc endEncoding];
+        impl_->deferred_enc = nil;
+    }
+    if (impl_->deferred_cb == nil) {
+        impl_->deferred_cb = [impl_->queue commandBuffer];
+    }
+    [mul encodeToCommandBuffer:impl_->deferred_cb leftMatrix:mA rightMatrix:mB resultMatrix:mC];
+
+    if (f16_mode) {
+        // Convert the f16 GEMM result back to dense f32 in the shadow
+        // output buffer (fresh compute encoder on the same command buffer).
+        id<MTLComputeCommandEncoder> enc = impl_->encoder();
+        [enc setComputePipelineState:impl_->cvt_f16_to_f32_ps];
+        [enc setBuffer:c_mps offset:0 atIndex:0];
+        [enc setBuffer:obuf offset:0 atIndex:1];
+        uint32_t out_d = static_cast<uint32_t>(out_dim);
+        uint32_t pitch = static_cast<uint32_t>(c_row / sizeof(uint16_t));
+        [enc setBytes:&out_d length:sizeof(out_d) atIndex:2];
+        [enc setBytes:&pitch length:sizeof(pitch) atIndex:3];
+        const NSUInteger total = static_cast<NSUInteger>(batch) * static_cast<NSUInteger>(out_dim);
+        [enc dispatchThreads:MTLSizeMake(total, 1, 1)
+            threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
     }
 
     // Mark the output buffer as dirty in shadow so the next op picks it up.
@@ -653,7 +746,7 @@ if (auto s = ensure_ready(*impl_); !s.ok()) return s;
     DType wtype = DType::kF32;
     for (size_t i = 0; i < n; ++i) {
         if (auto s = check_contig_valid(outs[i], "MatMulFused"); !s.ok()) return s;
-        auto it = impl_->weights_.find(std::string(weight_names[i]));
+        auto it = impl_->weights_.find(weight_names[i]);
         if (it == impl_->weights_.end()) {
             return Status::Error(ErrorCode::kNotFound,
                                  "MatMulFused: weight '" + std::string(weight_names[i]) + "' not found");
@@ -1195,11 +1288,7 @@ Status MetalBackend::AddBiasInPlace(TensorView x, TensorView bias) {
 // =========================================================================
 
 Status MetalBackend::Synchronize() {
-    impl_->flush();
-    if (impl_->has_pending_error()) {
-        return Status::Error(ErrorCode::kBackendFailure, "Synchronize: command buffer error");
-    }
-    return {};
+    return impl_->flush();
 }
 
 // =========================================================================
@@ -1213,13 +1302,19 @@ Status MetalBackend::NotifyHostWrite(TensorView t) {
 
 Status MetalBackend::SyncToHost(TensorView t) {
     // Flush any pending GPU work, then download the buffer to host memory.
-    impl_->flush();
-    if (impl_->has_pending_error()) {
-        return Status::Error(ErrorCode::kBackendFailure,
-                             "SyncToHost: command buffer error");
+    if (auto s = impl_->flush(); !s.ok()) {
+        return s;
     }
     impl_->download(t.data(), t.byte_size());
     return {};
+}
+
+// Test-only: simulate a GPU-side failure.  Real MTLCommandBuffer errors
+// cannot be raised deterministically from a unit test (they require hardware
+// faults, timeouts, or debug-layer asserts that abort the process), so the
+// error-injection seam exercises the sticky-error propagation path instead.
+void MetalBackend::InjectGpuErrorForTest(Status error) {
+    impl_->gpu_error_ = std::move(error);
 }
 
 // =========================================================================

@@ -299,6 +299,99 @@ TEST(TokenizerTest, Gpt2SpecialTokensNotSplit) {
 }
 
 // ---------------------------------------------------------------------------
+// GPT-2 contraction handling ("don't" -> ["don", "'t"])
+// ---------------------------------------------------------------------------
+
+// The GPT-2/Qwen2 reference pretokenizer regex binds contractions
+// ('s|'t|'re|'ve|'m|'ll|'d, case-insensitive) tighter than the letter run,
+// so "don't" yields pieces ["don", "'t"]. Without this the apostrophe starts
+// a punctuation run, BPE can never apply the "'"+"t" merge across piece
+// boundaries, and real Qwen checkpoints tokenize differently from
+// llama.cpp/HF (EXTRA_TOKENS or wrong merges on every contraction).
+td::GgufWriter make_gpt2_contraction_writer() {
+    td::GgufWriter w("qwen2");
+    w.meta_string("tokenizer.ggml.model", "gpt2");
+
+    const std::string sp = "\xC4\xA0";
+    //                    0      1    2    3     4     5      6     7     8    9    10
+    w.meta_str_array("tokenizer.ggml.tokens",
+                     {"don", "'", "t", "'t", "we", "'re", "it", "'s", "r", sp, "<|endoftext|>"});
+    w.meta_str_array("tokenizer.ggml.merges", {"' t"});
+    w.meta_bool("tokenizer.ggml.add_bos_token", false);
+    w.meta_u32("tokenizer.ggml.bos_token_id", 0);
+    w.meta_u32("tokenizer.ggml.eos_token_id", 10);
+
+    w.meta_u32("qwen2.context_length", 32);
+    w.meta_u32("qwen2.embedding_length", 8);
+    w.meta_u32("qwen2.feed_forward_length", 16);
+    w.meta_u32("qwen2.block_count", 1);
+    w.meta_u32("qwen2.attention.head_count", 2);
+    w.meta_u32("qwen2.attention.head_count_kv", 1);
+    w.meta_f32("qwen2.attention.layer_norm_rms_epsilon", 1e-5f);
+
+    std::vector<uint8_t> emb(8 * 11 * 4, 0); // [8, 11] ggml order
+    w.tensor({"token_embd.weight", {8, 11}, td::GgufType::kF32, emb});
+
+    return w;
+}
+
+TEST(TokenizerTest, Gpt2ContractionDont) {
+    auto w = make_gpt2_contraction_writer();
+    TempFile tmp(w.build(32));
+    auto file = GGUFFile::Open(tmp.path());
+    ASSERT_TRUE(file.ok()) << file.status().message;
+    auto tok = Tokenizer::FromGGUF(*file.value());
+    ASSERT_TRUE(tok.ok()) << tok.status().message;
+
+    // "don't" -> ["don", "'t"]: the contraction is one BPE piece.
+    auto ids = tok.value().Encode("don't", false);
+    ASSERT_TRUE(ids.ok()) << ids.status().message;
+    ASSERT_EQ(ids.value().size(), 2u);
+    EXPECT_EQ(ids.value()[0], 0); // "don"
+    EXPECT_EQ(ids.value()[1], 3); // "'t"
+
+    // Multi-letter and uppercase contractions behave the same.
+    ids = tok.value().Encode("we're", false);
+    ASSERT_TRUE(ids.ok()) << ids.status().message;
+    ASSERT_EQ(ids.value().size(), 2u);
+    EXPECT_EQ(ids.value()[0], 4); // "we"
+    EXPECT_EQ(ids.value()[1], 5); // "'re"
+
+    // An apostrophe NOT starting a known contraction stays a punctuation run.
+    ids = tok.value().Encode("don'r", false);
+    ASSERT_TRUE(ids.ok()) << ids.status().message;
+    ASSERT_EQ(ids.value().size(), 3u);
+    EXPECT_EQ(ids.value()[0], 0); // "don"
+    EXPECT_EQ(ids.value()[1], 1); // "'"
+    EXPECT_EQ(ids.value()[2], 8); // "r"
+
+    // Leading space still belongs to the preceding word piece, the
+    // contraction piece has no space (" don't" -> [" don", "'t"]).
+    ids = tok.value().Encode(" don't", false);
+    ASSERT_TRUE(ids.ok()) << ids.status().message;
+    ASSERT_EQ(ids.value().size(), 3u);
+    EXPECT_EQ(ids.value()[0], 9); // sp (byte-level space)
+    EXPECT_EQ(ids.value()[1], 0); // "don"
+    EXPECT_EQ(ids.value()[2], 3); // "'t"
+}
+
+TEST(TokenizerTest, Gpt2ContractionRoundTrip) {
+    auto w = make_gpt2_contraction_writer();
+    TempFile tmp(w.build(32));
+    auto file = GGUFFile::Open(tmp.path());
+    ASSERT_TRUE(file.ok()) << file.status().message;
+    auto tok = Tokenizer::FromGGUF(*file.value());
+    ASSERT_TRUE(tok.ok()) << tok.status().message;
+
+    const std::string input = "don't we're don't";
+    auto ids = tok.value().Encode(input, false);
+    ASSERT_TRUE(ids.ok()) << ids.status().message;
+    auto decoded = tok.value().Decode(std::span<const int32_t>(ids.value()));
+    ASSERT_TRUE(decoded.ok()) << decoded.status().message;
+    EXPECT_EQ(decoded.value(), input);
+}
+
+// ---------------------------------------------------------------------------
 // LLaMA BPE test fixtures
 // ---------------------------------------------------------------------------
 

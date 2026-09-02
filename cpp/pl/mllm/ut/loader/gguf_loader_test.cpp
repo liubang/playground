@@ -146,6 +146,30 @@ TEST(GgufLoaderTest, TensorDirectoryAndShape) {
     EXPECT_EQ(view.value().dtype(), DType::kF16);
 }
 
+// Regression: the loader used to populate name_to_index_ from
+// tensors_[0].name for every i (loop bound `i <= size` also indexed
+// one-past-the-end). tensor_info("name") therefore returned an index that
+// was 1) wrong for any name and 2) matched the empty string for every
+// import request that had no real match — silently alias-loading the first
+// tensor for a missing weight.
+TEST(GgufLoaderTest, UnknownAndEmptyTensorNamesNotFound) {
+    auto w = make_minimal_writer();
+    w.tensor(
+        {"token_embd.weight", {16, 3}, td::GgufType::kF32, std::vector<uint8_t>(16 * 3 * 4, 0)});
+    TempFile tmp(w.build(32));
+    auto file = GGUFFile::Open(tmp.path());
+    ASSERT_TRUE(file.ok()) << file.status().message;
+
+    // The real tensor resolves normally.
+    EXPECT_TRUE(file.value()->has_tensor("token_embd.weight"));
+
+    // "" and unknown names must NOT alias tensors_[0].
+    EXPECT_FALSE(file.value()->has_tensor(""));
+    EXPECT_FALSE(file.value()->tensor_info("").ok());
+    EXPECT_FALSE(file.value()->has_tensor("does.not.exist"));
+    EXPECT_FALSE(file.value()->tensor_info("does.not.exist").ok());
+}
+
 TEST(GgufLoaderTest, ModelConfigFromMetadata) {
     auto w = make_minimal_writer();
     w.tensor(

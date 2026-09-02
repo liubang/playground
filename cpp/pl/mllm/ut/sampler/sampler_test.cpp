@@ -21,11 +21,10 @@
 //  2. Stochastic sampling reseeded the PRNG on every Sample call, producing
 //     the identical uniform draw for every token.
 
-#include "cpp/pl/mllm/sampler/sampler.h"
-
+#include <gtest/gtest.h>
 #include <vector>
 
-#include <gtest/gtest.h>
+#include "cpp/pl/mllm/sampler/sampler.h"
 
 using namespace pl::mllm;
 

@@ -85,26 +85,26 @@ Status TransformerLayer::Forward(TensorView hidden,
             return s;
     }
 
-// 3b + 4. Optional per-head Q/K RMSNorm (Qwen3) FUSED into the RoPE call:
-// backends apply the norm before rotation inside one kernel (Metal) or
-// inline (CPU reference). Saves 2 kernel dispatches per layer on device
-// backends.
-auto q_reshaped = q.reshape({1, num_heads, head_dim});
-if (!q_reshaped.ok())
-return q_reshaped.status();
-auto k_reshaped = k.reshape({1, num_kv_heads, head_dim});
-if (!k_reshaped.ok())
-return k_reshaped.status();
+    // 3b + 4. Optional per-head Q/K RMSNorm (Qwen3) FUSED into the RoPE call:
+    // backends apply the norm before rotation inside one kernel (Metal) or
+    // inline (CPU reference). Saves 2 kernel dispatches per layer on device
+    // backends.
+    auto q_reshaped = q.reshape({1, num_heads, head_dim});
+    if (!q_reshaped.ok())
+        return q_reshaped.status();
+    auto k_reshaped = k.reshape({1, num_kv_heads, head_dim});
+    if (!k_reshaped.ok())
+        return k_reshaped.status();
 
-RopeConfig rope_cfg{
-.head_dim = head_dim,
-.freq_base = config.rope_freq_base,
-};
-if (weights_.q_norm.valid()) {
-rope_cfg.q_norm = weights_.q_norm;
-rope_cfg.k_norm = weights_.k_norm;
-rope_cfg.rms_eps = config.rms_norm_eps;
-}
+    RopeConfig rope_cfg{
+        .head_dim = head_dim,
+        .freq_base = config.rope_freq_base,
+    };
+    if (weights_.q_norm.valid()) {
+        rope_cfg.q_norm = weights_.q_norm;
+        rope_cfg.k_norm = weights_.k_norm;
+        rope_cfg.rms_eps = config.rms_norm_eps;
+    }
     if (auto s = backend.RoPE(q_reshaped.value(), k_reshaped.value(), position, rope_cfg);
         !s.ok()) {
         return s;
@@ -173,8 +173,7 @@ rope_cfg.rms_eps = config.rms_norm_eps;
         return mlp_norm_out.status();
     auto mlp_out = mlp_norm_out.value();
 
-    if (auto s = backend.RmsNormAdd(mlp_out, hidden, proj, weights_.mlp_norm,
-                                    config.rms_norm_eps);
+    if (auto s = backend.RmsNormAdd(mlp_out, hidden, proj, weights_.mlp_norm, config.rms_norm_eps);
         !s.ok()) {
         return s;
     }
@@ -236,11 +235,10 @@ TensorView row_slice(TensorView t, int32_t i) {
         dims[j] = src[static_cast<size_t>(j)];
     }
     const int64_t row_elems = t.shape().numel() / t.shape().dim(0);
-    return TensorView(
-        static_cast<char*>(t.data()) +
-            static_cast<size_t>(i) * dtype_nbytes(t.dtype(), row_elems),
-        t.dtype(),
-        Shape(std::span<const int64_t>(dims.data(), static_cast<size_t>(rank))));
+    return TensorView(static_cast<char*>(t.data()) +
+                          static_cast<size_t>(i) * dtype_nbytes(t.dtype(), row_elems),
+                      t.dtype(),
+                      Shape(std::span<const int64_t>(dims.data(), static_cast<size_t>(rank))));
 }
 
 } // namespace
@@ -377,16 +375,13 @@ Status TransformerLayer::ForwardBatch(TensorView hidden,
         // buffers are keyed by base pointer, so a row slice would be
         // re-uploaded from stale host memory. AppendKV/AttentionPrefillKV
         // take the whole [n, ...] tensor at once.
-        if (auto s = backend.AppendKV(
-                layer_index_, k_reshaped.value(), v_reshaped.value(), start_pos);
+        if (auto s =
+                backend.AppendKV(layer_index_, k_reshaped.value(), v_reshaped.value(), start_pos);
             !s.ok()) {
             return s;
         }
-        if (auto s = backend.AttentionPrefillKV(attn_ctx,
-                                                q_reshaped.value(),
-                                                layer_index_,
-                                                start_pos + 1,
-                                                attn_cfg);
+        if (auto s = backend.AttentionPrefillKV(
+                attn_ctx, q_reshaped.value(), layer_index_, start_pos + 1, attn_cfg);
             !s.ok()) {
             return s;
         }

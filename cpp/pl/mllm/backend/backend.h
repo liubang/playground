@@ -18,13 +18,29 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <span>
+#include <string>
 #include <string_view>
+#include <unordered_map>
 
 #include "cpp/pl/mllm/core/status.h"
 #include "cpp/pl/mllm/core/tensor.h"
 
 namespace pl::mllm {
+
+// Heterogeneous lookup for std::string-keyed maps: find()/count() accept
+// std::string_view keys directly without constructing a temporary
+// std::string (one per MatMul call otherwise, on the per-token hot path).
+struct TransparentStringHash {
+    using is_transparent = void;
+    size_t operator()(std::string_view sv) const noexcept {
+        return std::hash<std::string_view>{}(sv);
+    }
+};
+
+template <typename T>
+using StringKeyMap = std::unordered_map<std::string, T, TransparentStringHash, std::equal_to<>>;
 
 // Weight reference passed to backends. The name maps to a tensor that was
 // imported via ImportWeights; the backend owns the actual device buffer.
@@ -34,16 +50,16 @@ struct WeightRef {
 
 // RoPE configuration matching LLaMA conventions.
 struct RopeConfig {
-int32_t head_dim = 0;
-float freq_base = 10000.0f;
-// If >0, scale low-frequency dims (NTK-aware, NTK-by-parts, etc.).
-float freq_scale = 1.0f;
-// Optional per-head Q/K RMSNorm applied in-place before rotation (Qwen3
-// family). Invalid TensorView = feature off. Backends may fuse the norm
-// into the rotation kernel.
-TensorView q_norm{};
-TensorView k_norm{};
-float rms_eps = 1e-6f;
+    int32_t head_dim = 0;
+    float freq_base = 10000.0f;
+    // If >0, scale low-frequency dims (NTK-aware, NTK-by-parts, etc.).
+    float freq_scale = 1.0f;
+    // Optional per-head Q/K RMSNorm applied in-place before rotation (Qwen3
+    // family). Invalid TensorView = feature off. Backends may fuse the norm
+    // into the rotation kernel.
+    TensorView q_norm{};
+    TensorView k_norm{};
+    float rms_eps = 1e-6f;
 };
 
 // Immutable view of one KV cache slot for a single layer.
@@ -100,22 +116,20 @@ public:
         return {};
     }
 
-// RMSNorm: out = x / sqrt(mean(x^2) + eps) * weight
-// x, out, weight shape: [batch, hidden] (or [1, hidden])
-virtual Status RmsNorm(TensorView out, TensorView x, TensorView weight, float eps) = 0;
+    // RMSNorm: out = x / sqrt(mean(x^2) + eps) * weight
+    // x, out, weight shape: [batch, hidden] (or [1, hidden])
+    virtual Status RmsNorm(TensorView out, TensorView x, TensorView weight, float eps) = 0;
 
-// Fused residual-add + RMSNorm (post-norm transformer block boundary):
-//   residual += add;  out = rmsnorm(residual) * weight
-// residual is updated in place. Default composes AddInPlace + RmsNorm;
-// backends with a fused kernel override it (saves one kernel dispatch).
-virtual Status RmsNormAdd(TensorView out,
-                          TensorView residual,
-                          TensorView add,
-                          TensorView weight,
-                          float eps) {
-if (auto s = AddInPlace(residual, add); !s.ok()) return s;
-return RmsNorm(out, residual, weight, eps);
-}
+    // Fused residual-add + RMSNorm (post-norm transformer block boundary):
+    //   residual += add;  out = rmsnorm(residual) * weight
+    // residual is updated in place. Default composes AddInPlace + RmsNorm;
+    // backends with a fused kernel override it (saves one kernel dispatch).
+    virtual Status RmsNormAdd(
+        TensorView out, TensorView residual, TensorView add, TensorView weight, float eps) {
+        if (auto s = AddInPlace(residual, add); !s.ok())
+            return s;
+        return RmsNorm(out, residual, weight, eps);
+    }
 
     // In-place RoPE for query/key tensors.
     // q shape: [batch, num_heads, head_dim]
@@ -233,14 +247,14 @@ return RmsNorm(out, residual, weight, eps);
         const int64_t n = q.shape().dim(0);
         const int64_t head_dim = q.shape().dim(2);
         for (int64_t i = 0; i < n; ++i) {
-            TensorView q_row(static_cast<char*>(q.data()) +
-                                 static_cast<size_t>(i) * config.num_heads * head_dim *
-                                     sizeof(float),
+            TensorView q_row(static_cast<char*>(q.data()) + static_cast<size_t>(i) *
+                                                                config.num_heads * head_dim *
+                                                                sizeof(float),
                              q.dtype(),
                              Shape({1, config.num_heads, head_dim}));
-            TensorView out_row(static_cast<char*>(out.data()) +
-                                   static_cast<size_t>(i) * config.num_heads * head_dim *
-                                       sizeof(float),
+            TensorView out_row(static_cast<char*>(out.data()) + static_cast<size_t>(i) *
+                                                                    config.num_heads * head_dim *
+                                                                    sizeof(float),
                                out.dtype(),
                                Shape({1, config.num_heads * head_dim}));
             if (auto s = AttentionKV(out_row, q_row, layer, seq_base + i, config); !s.ok()) {
