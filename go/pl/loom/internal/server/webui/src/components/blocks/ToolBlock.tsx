@@ -2,18 +2,19 @@
 // The live event's preview is a bounded excerpt; full content is fetched on demand
 // via fetchToolOutput. The snapshot rebuild path has full_text and never needs it.
 
-import { memo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import type { ToolCompletion } from '../../app/transcript'
 import { fmtDuration, copyText } from '../../lib/format'
+import { diffForToolCall } from '../../lib/diff'
 import { Icon, type IconName } from '../../lib/icons'
 import { DiffView } from './DiffView'
 import { ArtifactBlock, InlineImage } from './images'
 
-// st → [icon, label]; note className uses err (CSS class) while the status text uses error
+// st → [icon, label]；className 用英文短码（err/error/canceled），文案统一中文
 const TOOL_STATUS: Record<string, ['check' | 'xmark' | 'ban', string]> = {
-  ok: ['check', 'ok'],
-  err: ['xmark', 'error'],
-  canceled: ['ban', 'canceled'],
+  ok: ['check', '成功'],
+  err: ['xmark', '失败'],
+  canceled: ['ban', '已取消'],
 }
 
 // Tool kind → [icon, plain-language verb]: the header row shows verb + target
@@ -55,6 +56,8 @@ export interface ToolBlockProps {
   toolName: string
   target?: string
   diff?: string
+  // 快照重建块：diff 不在快照里，进入渲染窗口才从 edit/write 参数重算
+  diffArgs?: { name: string; args: unknown }
   diffSuppressed?: boolean // during approval the diff moves into the approval card
   completion?: ToolCompletion
   // fetchToolOutput: for copying the full output (the live path's preview is bounded)
@@ -66,15 +69,23 @@ export const ToolBlock = memo(function ToolBlock({
   toolName,
   target,
   diff,
+  diffArgs,
   diffSuppressed,
   completion,
   fetchToolOutput,
 }: ToolBlockProps) {
   const [targetExpanded, setTargetExpanded] = useState(false)
+  // 惰性 diff：本组件只在虚拟化渲染窗口内才会被挂载，useMemo 按引用的
+  // diffArgs 缓存，滚动离开后 LCS 不会重复计算
+  const diffText = useMemo(
+    () =>
+      diff ?? (diffArgs ? diffForToolCall(diffArgs.name, diffArgs.args) || undefined : undefined),
+    [diff, diffArgs],
+  )
 
   let statusEl
   if (!completion) {
-    statusEl = <span className="tool-status running">running</span>
+    statusEl = <span className="tool-status running">执行中</span>
   } else {
     const st =
       completion.status === 'success' ? 'ok' : completion.status === 'error' ? 'err' : 'canceled'
@@ -142,7 +153,7 @@ export const ToolBlock = memo(function ToolBlock({
           : (completion.artifacts || []).map((art) => (
               <ArtifactBlock key={art.id} artifact={art} />
             )))}
-      {diff && !diffSuppressed && <DiffView diffText={diff} />}
+      {diffText && !diffSuppressed && <DiffView diffText={diffText} />}
     </div>
   )
 })
@@ -157,13 +168,13 @@ function ToolOutput({
   preview: string
   getFullText: () => Promise<string>
 }) {
-  const [label, setLabel] = useState<'copy' | 'copied' | 'copy failed'>('copy')
+  const [label, setLabel] = useState<'复制' | '已复制' | '复制失败'>('复制')
   const truncated = preview.endsWith('\n…')
   return (
     <details className="tool-output disclosure">
       <summary>
         <span className="tool-output-label">
-          {`output · ${preview.length} chars${truncated ? ' · truncated' : ''}`}
+          {`输出 · ${preview.length} 字符${truncated ? ' · 已截断' : ''}`}
         </span>
         <button
           type="button"
@@ -175,16 +186,16 @@ function ToolOutput({
             try {
               const text = await getFullText()
               if (!(await copyText(text))) throw new Error('clipboard unavailable')
-              setLabel('copied')
+              setLabel('已复制')
             } catch {
-              setLabel('copy failed')
+              setLabel('复制失败')
             }
-            setTimeout(() => setLabel('copy'), 1500)
+            setTimeout(() => setLabel('复制'), 1500)
           }}
         >
-          {label === 'copied' ? (
+          {label === '已复制' ? (
             <>
-              <Icon name="check" /> copied
+              <Icon name="check" /> 已复制
             </>
           ) : (
             label

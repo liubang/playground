@@ -287,8 +287,8 @@ export function ResolvedNotice({ ok, actor, what }: { ok: boolean; actor: string
         <Icon name={ok ? 'check' : 'xmark'} />
       </span>
       <span>
-        <b>{(ok ? 'Allowed' : 'Denied') + ' '}</b>
-        {`(${actor}) · ${what}`}
+        <b>{(ok ? '已允许' : '已拒绝') + ' '}</b>
+        {`（${actor}）· ${what}`}
       </span>
     </div>
   )
@@ -315,18 +315,18 @@ export const CompactBlock = memo(function CompactBlock({
   const before = fmtTokens(p.est_tokens_before) || '?'
   const after = fmtTokens(p.est_tokens_after) || '?'
   const details: string[] = []
-  if (p.trigger) details.push('trigger: ' + p.trigger)
+  if (p.trigger) details.push('触发：' + p.trigger)
   if (p.masked_outputs) {
-    const bytes = p.masked_bytes ? ` (${fmtBytes(p.masked_bytes)})` : ''
-    details.push(`mask ${p.masked_outputs} outputs${bytes}`)
+    const bytes = p.masked_bytes ? `（${fmtBytes(p.masked_bytes)}）` : ''
+    details.push(`裁剪 ${p.masked_outputs} 条输出${bytes}`)
   }
-  if (p.archived_messages) details.push(`archive ${p.archived_messages} msgs`)
-  if (p.summarized) details.push('summary handoff')
+  if (p.archived_messages) details.push(`归档 ${p.archived_messages} 条消息`)
+  if (p.summarized) details.push('摘要交接')
   return (
     <div className="notice compact">
       <div className="compact-head">
         <Icon name="bolt" />
-        {` context compacted · ${before} → ${after}`}
+        {` 上下文已压缩 · ${before} → ${after}`}
       </div>
       {details.length > 0 && <div className="compact-detail">{details.join(' · ')}</div>}
     </div>

@@ -28,7 +28,7 @@ export const ApprovalCard = memo(function ApprovalCard({
     <div className="block card-approval">
       <div className="card-title">
         <span className="card-title-label">
-          <Icon name="circle-question" /> Approval required
+          <Icon name="circle-question" /> 需要审批
         </span>
         <span className="risk">{'R' + (payload.risk ?? '?')}</span>
         <span className="mono">{payload.tool_name || ''}</span>
@@ -50,7 +50,7 @@ export const ApprovalCard = memo(function ApprovalCard({
           disabled={resolving}
           onClick={() => onResolve('allow', false)}
         >
-          Allow
+          允许
         </button>
         {preview && (
           <button
@@ -59,7 +59,7 @@ export const ApprovalCard = memo(function ApprovalCard({
             disabled={resolving}
             onClick={() => onResolve('allow', true)}
           >
-            Allow always
+            总是允许
           </button>
         )}
         {trustPreview && (
@@ -69,7 +69,7 @@ export const ApprovalCard = memo(function ApprovalCard({
             disabled={resolving}
             onClick={() => onResolve('allow', true, 'unsandboxed')}
           >
-            Trust (no sandbox)
+            信任（无沙箱）
           </button>
         )}
         <button
@@ -78,13 +78,13 @@ export const ApprovalCard = memo(function ApprovalCard({
           disabled={resolving}
           onClick={() => onResolve('deny', false)}
         >
-          Deny
+          拒绝
         </button>
         {preview && (
-          <span className="memo">{`allow always remembers "${preview}" for the workspace`}</span>
+          <span className="memo">{`“总是允许”会把 "${preview}" 记入此工作区的规则`}</span>
         )}
         {trustPreview && (
-          <span className="memo">{`trust remembers "${trustPreview}" with FULL user privileges`}</span>
+          <span className="memo">{`“信任”会以完整用户权限记住 "${trustPreview}"`}</span>
         )}
       </div>
     </div>
@@ -121,7 +121,7 @@ export const QuestionCard = memo(function QuestionCard({
   return (
     <div className="block card-question">
       <div className="card-title">
-        <span>? Loom asks</span>
+        <span>? Loom 提问</span>
         {q.allow_multiple && <span className="multi">（可多选）</span>}
       </div>
       <div className="q-text">{q.text || ''}</div>
@@ -143,7 +143,7 @@ export const QuestionCard = memo(function QuestionCard({
       ))}
       <input
         type="text"
-        placeholder="custom answer… (optional)"
+        placeholder="自定义回答…（可选）"
         value={custom}
         disabled={resolving}
         onChange={(e) => setCustom(e.target.value)}
@@ -155,7 +155,7 @@ export const QuestionCard = memo(function QuestionCard({
           disabled={resolving}
           onClick={() => onAnswer({ selected, custom_text: custom.trim(), skipped: false })}
         >
-          Submit
+          提交
         </button>
         <button
           type="button"
@@ -163,7 +163,7 @@ export const QuestionCard = memo(function QuestionCard({
           disabled={resolving}
           onClick={() => onAnswer({ selected: [], custom_text: '', skipped: true })}
         >
-          Skip
+          跳过
         </button>
       </div>
     </div>

@@ -97,7 +97,7 @@ export const Header = memo(function Header({
       <button
         id="hdr-session"
         className="sess mono"
-        title="copy session id"
+        title="复制 session ID"
         hidden={!showSessionChrome}
         onClick={() => void controller.copySessionId()}
       >

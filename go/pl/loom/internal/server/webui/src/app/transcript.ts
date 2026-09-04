@@ -71,6 +71,11 @@ export type BlockModel = Base &
         toolName: string
         target?: string
         diff?: string
+        // 快照重建的惰性 diff 参数：edit/write 的历史 diff 不在快照里，需本地
+        // 重算（LCS 400×400 上限）；由 ToolBlock 在块进入渲染窗口时按需算出，
+        // 不在 buildFromSnapshot 里同步堆到主线程（1K 消息快照的批量 LCS
+        // 曾拖慢首次渲染）。审批卡摘抄 diff 时同步算一次（低频路径）。
+        diffArgs?: { name: string; args: unknown }
         diffSuppressed?: boolean // during approval the diff moves into the approval card
         completion?: ToolCompletion
       }
@@ -85,6 +90,16 @@ export type BlockModel = Base &
     | { kind: 'artifact'; artifact: ArtifactRef }
   )
 
+// 会话内全文搜索的状态：view 层（TranscriptSearch）持有输入文本的本地副本，
+// 每次变更经防抖写入这里；matches 是命中的块 id 列表，navSeq 在每次
+// 查询变更/翻页时递增——view 层据此滚动定位（与 followSeq 同机制）。
+export interface TranscriptSearchState {
+  query: string
+  matches: string[]
+  index: number
+  navSeq: number
+}
+
 export interface TranscriptState {
   blocks: BlockModel[]
   // Scroll-follow intent: the view layer uses this to decide whether to snap
@@ -97,6 +112,7 @@ export interface TranscriptState {
   // before applySnapshot(preserveScroll); the view layer restores it after the
   // DOM rebuild and clears it.
   preserveScrollTop?: number | null
+  search: TranscriptSearchState | null
 }
 
 // --- IO dependencies (injected by AppController) ---
@@ -121,6 +137,7 @@ export class TranscriptController {
     blocks: [],
     following: true,
     followSeq: 0,
+    search: null,
   })
 
   private io: TranscriptIO
@@ -252,6 +269,7 @@ export class TranscriptController {
     this.store.update((s) => {
       s.blocks = []
       s.following = true
+      s.search = null // 会话切换/清空：搜索随会话关闭
     })
   }
 
@@ -450,15 +468,15 @@ export class TranscriptController {
             flushText()
             if (p.tool_call) {
               // Diffs are not persisted (they only exist in the live
-              // tool.prepared payload): recompute locally from edit/write
-              // arguments during history rebuild (diff.ts diffForToolCall)
-              const diffText = diffForToolCall(p.tool_call.name || '', p.tool_call.arguments)
+              // tool.prepared payload): rebuild computes them lazily from
+              // edit/write arguments when the block becomes visible (see
+              // diffArgs on the tool block model; diff.ts diffForToolCall)
               const id = this.append({
                 kind: 'tool',
                 callId: p.tool_call.id,
                 toolName: p.tool_call.name || 'tool',
                 target: histTarget(p.tool_call),
-                diff: diffText || undefined,
+                diffArgs: { name: p.tool_call.name || '', args: p.tool_call.arguments },
               })
               if (p.tool_call.id) {
                 histTools.set(p.tool_call.id, id)
@@ -597,7 +615,7 @@ export class TranscriptController {
         if (p.error && !this.turnErrorShown) {
           this.append({
             kind: 'fatal',
-            text: `turn failed — ${String(p.error || '').slice(0, 300)}`,
+            text: `本轮失败 — ${String(p.error || '').slice(0, 300)}`,
           })
           this.turnErrorShown = true
         }
@@ -653,7 +671,7 @@ export class TranscriptController {
         const waitS = Math.max(1, Math.round(((p.wait_ms as number) || 0) / 1000))
         this.append({
           kind: 'notice',
-          text: `model request ${(p.code as string) || 'failed'} — retrying in ${waitS}s (attempt ${(p.attempt as string) || '?'}/${(p.max_attempts as string) || '?'})`,
+          text: `模型请求 ${(p.code as string) || '失败'}，${waitS}s 后重试（第 ${(p.attempt as string) || '?'}/${(p.max_attempts as string) || '?'} 次）`,
           warn: true,
         })
         this.showThinking()
@@ -709,7 +727,7 @@ export class TranscriptController {
         this.collapseApproval(
           (p.approval_id as string) || '',
           p.decision === 'allow',
-          (p.actor as string) || 'another client',
+          (p.actor as string) || '其他客户端',
         )
         this.showThinking()
         break
@@ -736,11 +754,11 @@ export class TranscriptController {
         break
       }
       case 'run.cancel_requested':
-        this.append({ kind: 'notice', text: 'cancelling…' })
+        this.append({ kind: 'notice', text: '正在取消…' })
         break
       case 'run.cancelled':
         this.hideThinking()
-        this.append({ kind: 'notice', text: 'turn cancelled', warn: true })
+        this.append({ kind: 'notice', text: '本轮已取消', warn: true })
         this.finalizeStream()
         this.finalizeReasoning(evt.time || '')
         this.attachTurnActions()
@@ -751,18 +769,18 @@ export class TranscriptController {
       case 'budget.notice':
         // The backend already produced the concrete copy (graduated reminder /
         // soft landing); display it directly
-        this.append({ kind: 'notice', text: (p.text as string) || 'budget notice', warn: true })
+        this.append({ kind: 'notice', text: (p.text as string) || '预算提醒', warn: true })
         break
       case 'runtime.warning':
         this.append({
           kind: 'notice',
-          text: (p.message as string) || 'runtime warning',
+          text: (p.message as string) || '运行警告',
           warn: true,
         })
         break
       case 'runtime.fatal':
         this.hideThinking()
-        this.append({ kind: 'fatal', text: (p.message as string) || 'runtime fatal' })
+        this.append({ kind: 'fatal', text: (p.message as string) || '严重错误' })
         this.turnErrorShown = true
         this.finalizeReasoning(evt.time || '')
         this.attachTurnActions()
@@ -770,13 +788,13 @@ export class TranscriptController {
       case 'subagent.started':
         this.append({
           kind: 'notice',
-          text: `subagent started: ${(p.role as string) || (p.session_id as string) || ''}`,
+          text: `子代理已启动：${(p.role as string) || (p.session_id as string) || ''}`,
         })
         break
       case 'subagent.finished':
         this.append({
           kind: 'notice',
-          text: `subagent finished: ${(p.role as string) || (p.session_id as string) || ''}`,
+          text: `子代理已完成：${(p.role as string) || (p.session_id as string) || ''}`,
         })
         break
       default:
@@ -787,14 +805,14 @@ export class TranscriptController {
   // --- pending steer notice lifecycle (queued → injected / turn.started handoff) ---
 
   private addSteerNotice(text: string) {
-    const id = this.append({ kind: 'notice', text: `steer queued: “${text}”` })
+    const id = this.append({ kind: 'notice', text: `已排队干预：“${text}”` })
     this.steers.push({ id, text })
   }
 
   private addFollowupNotice(text: string) {
     const id = this.append({
       kind: 'notice',
-      text: `followup queued: “${text}” — runs as the next turn`,
+      text: `已排队到下轮：“${text}”，将作为下一轮运行`,
     })
     this.followups.push({ id, text })
   }
@@ -991,9 +1009,15 @@ export class TranscriptController {
     let diff: string | undefined
     if (toolBlockId) {
       const tb = this.blocksNow().find((b) => b.id === toolBlockId)
-      if (tb && tb.kind === 'tool' && tb.diff) {
-        diff = tb.diff
-        this.patchBlock(toolBlockId, { diffSuppressed: true })
+      if (tb && tb.kind === 'tool') {
+        // 重连/快照路径下 diff 可能是惰性的（diffArgs）：审批卡低频，同步
+        // 算一次是可以接受的价格
+        const d =
+          tb.diff ?? (tb.diffArgs ? diffForToolCall(tb.diffArgs.name, tb.diffArgs.args) : '')
+        if (d) {
+          diff = d
+          this.patchBlock(toolBlockId, { diffSuppressed: true })
+        }
       }
     }
     const id = this.append({ kind: 'approval', payload, diff })
@@ -1014,14 +1038,14 @@ export class TranscriptController {
     this.patchBlock(id, { resolving: true })
     try {
       await this.io.resolveApproval(block.payload, { decision, always, trust })
-      this.collapseApproval(approvalId, decision === 'allow', 'you')
+      this.collapseApproval(approvalId, decision === 'allow', '你')
     } catch (e) {
       const err = e as Error & { code?: string; status?: number }
       // binding_mismatch / not_idle both mean the approval was already handled
       // or expired (e.g. a duplicate request from the same origin was auto-
       // allowed by a remembered rule) — collapse silently
       if (err.code === 'binding_mismatch' || err.code === 'not_idle') {
-        this.collapseApproval(approvalId, true, 'another client')
+        this.collapseApproval(approvalId, true, '其他客户端')
       } else {
         this.patchBlock(id, { resolving: false })
         this.io.onError(err)
@@ -1051,7 +1075,7 @@ export class TranscriptController {
       kind: 'resolved',
       ok: allowed,
       actor,
-      what: 'approval',
+      what: '审批',
     } as BlockModel
     this.setBlocks(next)
     this.requestFollow(false)
@@ -1097,10 +1121,78 @@ export class TranscriptController {
       id: next[i].id,
       v: next[i].v + 1,
       kind: 'notice',
-      text: skipped ? 'question skipped' : 'question answered',
+      text: skipped ? '问题已跳过' : '问题已回答',
     } as BlockModel
     this.setBlocks(next)
     this.requestFollow(false)
+  }
+
+  // --- in-session full-text search ---
+  //
+  // 虚拟滚动下浏览器 Cmd+F 搜不到视口外渲染窗口之外的块——必须用内置搜索
+  // 补偿（搜 BlockModel 文本并滚动定位）。搜索范围：消息文本 / reasoning /
+  // 通知 / 工具名+目标+输出预览 / 审批与问答卡片的描述。
+
+  openSearch() {
+    if (this.store.get().search) return
+    this.store.update((s) => {
+      s.search = { query: '', matches: [], index: 0, navSeq: 0 }
+    })
+  }
+
+  closeSearch() {
+    if (!this.store.get().search) return
+    this.store.update((s) => {
+      s.search = null
+    })
+  }
+
+  private computeMatches(query: string): string[] {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    return this.store
+      .get()
+      .blocks.filter((b) => blockSearchText(b).toLowerCase().includes(q))
+      .map((b) => b.id)
+  }
+
+  // 查询变更：重算命中并跳到第一条（navSeq 递增触发 view 层滚动）。
+  setSearchQuery(query: string) {
+    this.store.update((s) => {
+      if (!s.search) return
+      s.search = {
+        query,
+        matches: this.computeMatches(query),
+        index: 0,
+        navSeq: s.search.navSeq + 1,
+      }
+    })
+  }
+
+  // 翻页（循环）。跳转到远离底部的命中时脱离滚动跟随。
+  searchNav(delta: 1 | -1) {
+    this.store.update((s) => {
+      const sh = s.search
+      if (!sh || sh.matches.length === 0) return
+      const index = (sh.index + delta + sh.matches.length) % sh.matches.length
+      s.search = { ...sh, index, navSeq: sh.navSeq + 1 }
+    })
+  }
+
+  // 流式期间新块可能命中当前查询：安静刷新命中数（不触发滚动、不打断
+  // 用户正在查看的命中项——index 按 id 保持）。
+  refreshSearch() {
+    const sh = this.store.get().search
+    if (!sh || !sh.query.trim()) return
+    const matches = this.computeMatches(sh.query)
+    if (matches.length === sh.matches.length && matches.every((id, i) => id === sh.matches[i]))
+      return
+    const current = sh.matches[sh.index]
+    const index = Math.max(0, matches.indexOf(current))
+    this.store.update((s) => {
+      if (!s.search) return
+      s.search = { ...s.search, matches, index }
+    })
   }
 
   // Feedback vote (invoked by the view layer): failures are rethrown so the
@@ -1113,6 +1205,33 @@ export class TranscriptController {
       this.io.onError(e as Error & { code?: string })
       throw e
     }
+  }
+}
+
+// blockSearchText 提取块的可搜索文本（approval/question 卡片按描述+目标搜）。
+export function blockSearchText(b: BlockModel): string {
+  switch (b.kind) {
+    case 'user':
+    case 'assistant':
+    case 'stream':
+    case 'reasoning':
+    case 'notice':
+    case 'fatal':
+    case 'interrupted':
+      return b.text
+    case 'tool': {
+      // 搜索是显式用户动作：惰性 diff 在此按值算一次（编辑内容是重要语料）
+      const d = b.diff ?? (b.diffArgs ? diffForToolCall(b.diffArgs.name, b.diffArgs.args) : '')
+      return [b.toolName, b.target || '', d, b.completion?.preview || ''].join('\n')
+    }
+    case 'approval':
+      return [b.payload.tool_name || '', b.payload.target || '', b.payload.description || ''].join(
+        '\n',
+      )
+    case 'question':
+      return b.payload.text || ''
+    default:
+      return ''
   }
 }
 
@@ -1172,8 +1291,8 @@ export function histCompletion(r: ToolResult): ToolCompletion {
 // before and after switching sessions.
 export function failureText(err: FailurePayload): string {
   const detail = (err.message || '').slice(0, 300)
-  if (!err.code && !err.stage) return `turn failed — ${detail}`
-  const head = `model request failed (${err.stage || 'unknown'}): ${err.code || ''}`
+  if (!err.code && !err.stage) return `本轮失败 — ${detail}`
+  const head = `模型请求失败（${err.stage || 'unknown'}）：${err.code || ''}`
   return detail ? `${head} — ${detail}` : head
 }
 

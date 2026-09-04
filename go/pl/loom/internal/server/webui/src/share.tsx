@@ -96,8 +96,14 @@ function ShareApp() {
 
   useEffect(() => {
     // 主题与主应用一致：默认深色，仅显式存了 "light" 才用浅色。
-    const saved = sessionStorage.getItem(THEME_KEY)
-    document.documentElement.dataset.theme = saved !== 'light' ? 'dark' : 'light'
+    // （share.html 头部已在首帧前预置 data-theme，这里只是兜底同步）
+    let saved = ''
+    try {
+      saved = localStorage.getItem(THEME_KEY) || ''
+    } catch {
+      /* private mode: default dark */
+    }
+    document.documentElement.dataset.theme = saved === 'light' ? 'light' : 'dark'
   }, [])
 
   useEffect(() => {
@@ -243,7 +249,7 @@ function ShareApp() {
         id="share-top"
         className="share-top"
         type="button"
-        title="back to top"
+        title="回到顶部"
         hidden={!showTop}
         onClick={() => scrollerRef.current.el?.scrollTo({ top: 0, behavior: 'smooth' })}
       >

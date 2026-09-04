@@ -5,7 +5,73 @@
 
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import hljs from 'highlight.js/lib/common'
+// hljs 按需注册：只打包 diff 高亮白名单（lib/diff.ts EXT_TO_LANG）覆盖的
+// 语言——highlight.js/lib/common 全量约 40 种语言是共享 chunk 的最大单项
+// 之一，按子集注册可再减约四分之一体积。
+import hljs from 'highlight.js/lib/core'
+import type { LanguageFn } from 'highlight.js'
+import bash from 'highlight.js/lib/languages/bash'
+import c from 'highlight.js/lib/languages/c'
+import cpp from 'highlight.js/lib/languages/cpp'
+import csharp from 'highlight.js/lib/languages/csharp'
+import css from 'highlight.js/lib/languages/css'
+import diff from 'highlight.js/lib/languages/diff'
+import go from 'highlight.js/lib/languages/go'
+import graphql from 'highlight.js/lib/languages/graphql'
+import ini from 'highlight.js/lib/languages/ini'
+import java from 'highlight.js/lib/languages/java'
+import javascript from 'highlight.js/lib/languages/javascript'
+import json from 'highlight.js/lib/languages/json'
+import kotlin from 'highlight.js/lib/languages/kotlin'
+import less from 'highlight.js/lib/languages/less'
+import lua from 'highlight.js/lib/languages/lua'
+import makefile from 'highlight.js/lib/languages/makefile'
+import markdownLang from 'highlight.js/lib/languages/markdown'
+import perl from 'highlight.js/lib/languages/perl'
+import php from 'highlight.js/lib/languages/php'
+import python from 'highlight.js/lib/languages/python'
+import r from 'highlight.js/lib/languages/r'
+import ruby from 'highlight.js/lib/languages/ruby'
+import rust from 'highlight.js/lib/languages/rust'
+import scss from 'highlight.js/lib/languages/scss'
+import sql from 'highlight.js/lib/languages/sql'
+import swift from 'highlight.js/lib/languages/swift'
+import typescript from 'highlight.js/lib/languages/typescript'
+import xml from 'highlight.js/lib/languages/xml'
+import yaml from 'highlight.js/lib/languages/yaml'
+
+const HLJS_LANGS: [string, LanguageFn][] = [
+  ['bash', bash],
+  ['c', c],
+  ['cpp', cpp],
+  ['csharp', csharp],
+  ['css', css],
+  ['diff', diff],
+  ['go', go],
+  ['graphql', graphql],
+  ['ini', ini],
+  ['java', java],
+  ['javascript', javascript],
+  ['json', json],
+  ['kotlin', kotlin],
+  ['less', less],
+  ['lua', lua],
+  ['makefile', makefile],
+  ['markdown', markdownLang],
+  ['perl', perl],
+  ['php', php],
+  ['python', python],
+  ['r', r],
+  ['ruby', ruby],
+  ['rust', rust],
+  ['scss', scss],
+  ['sql', sql],
+  ['swift', swift],
+  ['typescript', typescript],
+  ['xml', xml],
+  ['yaml', yaml],
+]
+for (const [name, fn] of HLJS_LANGS) hljs.registerLanguage(name, fn)
 
 marked.setOptions({ gfm: true, breaks: false })
 

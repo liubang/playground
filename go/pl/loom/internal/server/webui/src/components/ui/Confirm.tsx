@@ -40,6 +40,24 @@ export function ConfirmHost() {
       if (e.key === 'Escape') {
         e.stopPropagation()
         done(false)
+        return
+      }
+      if (e.key === 'Tab') {
+        // Focus trap：Tab/Shift+Tab 在弹窗内部循环，不泄入背后的页面
+        const modal = document.querySelector<HTMLElement>('#confirm-modal .modal')
+        if (!modal) return
+        const focusables = [...modal.querySelectorAll<HTMLElement>('button:not([disabled])')]
+        if (focusables.length === 0) return
+        const first = focusables[0]
+        const last = focusables[focusables.length - 1]
+        const active = document.activeElement as HTMLElement | null
+        if (e.shiftKey && (active === first || !modal.contains(active))) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && (active === last || !modal.contains(active))) {
+          e.preventDefault()
+          first.focus()
+        }
       }
       // 不在 document 捕获阶段消费 Enter：弹窗出现时用户焦点可能还停留在
       // 背后的输入框里，全局 Enter=确认 会把一次普通的输入回车变成危险操作。

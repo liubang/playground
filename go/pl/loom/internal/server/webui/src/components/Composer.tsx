@@ -327,10 +327,10 @@ export function Composer({ controller }: { controller: AppController }) {
     placeholder = readOnlyLabel || '只读'
   } else if (focused) {
     placeholder = busy
-      ? 'Enter to steer · Ctrl+Enter to queue · Shift+Enter for newline'
-      : 'Enter to send · Shift+Enter for newline'
+      ? 'Enter 干预本轮 · Ctrl+Enter 排队下一轮 · Shift+Enter 换行'
+      : 'Enter 发送 · Shift+Enter 换行'
   } else {
-    placeholder = busy ? 'Steer this turn…' : 'Message loom…'
+    placeholder = busy ? '干预本轮…' : '给 loom 发消息…'
   }
 
   // Reasoning capsule: default state shows the entry name; non-default shows
@@ -548,7 +548,7 @@ export function Composer({ controller }: { controller: AppController }) {
               id="send-btn"
               className={'send-btn' + (busy ? ' is-stop' : '')}
               title={
-                busy ? '取消当前 turn' : '发送 (Enter) · Ctrl+Enter 排队下一轮 · Shift+Enter 换行'
+                busy ? '取消当前轮' : '发送（Enter）· Ctrl+Enter 排队下一轮 · Shift+Enter 换行'
               }
               disabled={locked}
               onClick={() => (busy ? controller.cancelTurn() : submit())}
@@ -559,7 +559,7 @@ export function Composer({ controller }: { controller: AppController }) {
         </div>
       </div>
       {picker === 'model' && (
-        <PickerMenu anchorId="model-btn" onClose={() => setPicker('')}>
+        <PickerMenu anchorId="model-btn" navKeys onClose={() => setPicker('')}>
           <ModelMenu
             models={models}
             currentRef={curModelRef}
@@ -571,7 +571,7 @@ export function Composer({ controller }: { controller: AppController }) {
         </PickerMenu>
       )}
       {picker === 'reasoning' && (
-        <PickerMenu anchorId="reasoning-btn" onClose={() => setPicker('')}>
+        <PickerMenu anchorId="reasoning-btn" navKeys onClose={() => setPicker('')}>
           <ReasoningMenu
             current={curReasoning}
             onPick={(effort) => {
@@ -582,7 +582,7 @@ export function Composer({ controller }: { controller: AppController }) {
         </PickerMenu>
       )}
       {picker === 'approval' && (
-        <PickerMenu anchorId="approval-btn" onClose={() => setPicker('')}>
+        <PickerMenu anchorId="approval-btn" navKeys onClose={() => setPicker('')}>
           <ApprovalMenu
             current={approvalMode || 'on-request'}
             onPick={(mode) => {
@@ -622,28 +622,35 @@ export function Composer({ controller }: { controller: AppController }) {
 // PickerMenu — shared popover for model/reasoning/approval: anchored above the
 // trigger button (the composer sits at the viewport bottom, so opening downward
 // would be clipped); closes on outside click / Esc / window blur.
+// navKeys（picker 菜单打开）：↑/↓ 在菜单项间循环移动焦点，Enter/Space 原生
+// 触发点击；选项超出一屏时滚动跟随。自动补全菜单（navKeys=false）的方向键
+// 由 textarea 自己的处理器消费（避免双重导航）。
 function PickerMenu({
   anchorId,
   onClose,
+  navKeys,
   children,
 }: {
   anchorId: string
   onClose: () => void
+  navKeys?: boolean
   children: React.ReactNode
 }) {
   const popRef = useRef<HTMLDivElement>(null)
   const [style, setStyle] = useState<React.CSSProperties>({})
 
   useEffect(() => {
-    const anchor = document.getElementById(anchorId)
-    const pop = popRef.current
-    if (anchor && pop) {
+    const place = () => {
+      const anchor = document.getElementById(anchorId)
+      const pop = popRef.current
+      if (!anchor || !pop) return
       const r = anchor.getBoundingClientRect()
       setStyle({
         left: Math.max(8, Math.min(r.left, innerWidth - pop.offsetWidth - 8)) + 'px',
         bottom: innerHeight - r.top + 6 + 'px',
       })
     }
+    place()
     const onDocClick = (e: MouseEvent) => {
       const t = e.target as Node
       if (popRef.current?.contains(t)) return
@@ -652,21 +659,48 @@ function PickerMenu({
       onClose()
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (!navKeys || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return
+      const pop = popRef.current
+      if (!pop) return
+      const items = [...pop.querySelectorAll<HTMLElement>('.menu-item')]
+      if (items.length === 0) return
+      e.preventDefault()
+      const idx = items.indexOf(document.activeElement as HTMLElement)
+      // 未聚焦任何项时从“当前选中项”（或首项）出发，不会跳两步
+      const base =
+        idx >= 0
+          ? idx
+          : Math.max(0, items.indexOf(pop.querySelector('.menu-item.is-active') as HTMLElement))
+      const next = items[(base + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]
+      next.focus()
+      next.scrollIntoView({ block: 'nearest' })
     }
     const onBlur = () => onClose()
     document.addEventListener('click', onDocClick)
     document.addEventListener('keydown', onKey)
     window.addEventListener('blur', onBlur)
+    window.addEventListener('resize', place)
     return () => {
       document.removeEventListener('click', onDocClick)
       document.removeEventListener('keydown', onKey)
       window.removeEventListener('blur', onBlur)
+      window.removeEventListener('resize', place)
     }
-  }, [anchorId, onClose])
+  }, [anchorId, onClose, navKeys])
 
   return createPortal(
-    <div id="menu" className="menu" ref={popRef} style={style}>
+    <div
+      id="menu"
+      className="menu"
+      ref={popRef}
+      style={style}
+      role="menu"
+      aria-orientation="vertical"
+    >
       {children}
     </div>,
     document.body,

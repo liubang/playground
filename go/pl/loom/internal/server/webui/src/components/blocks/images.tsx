@@ -211,7 +211,7 @@ function ArtifactFile({
     >
       <summary>
         <span className="artifact-file-label">
-          {`${isText ? 'output artifact' : 'artifact'} · ${mediaType || 'binary'} · ${fmtBytes(size)}`}
+          {`${isText ? '输出附件' : '附件'} · ${mediaType || '二进制'} · ${fmtBytes(size)}`}
         </span>
         <a
           className="artifact-download"
@@ -220,7 +220,7 @@ function ArtifactFile({
           title="下载完整内容"
           onClick={(e) => e.stopPropagation()}
         >
-          download
+          下载
         </a>
       </summary>
       {isText && <div className="tool-preview mono">{text ?? ''}</div>}

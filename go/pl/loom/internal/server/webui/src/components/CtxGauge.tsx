@@ -43,7 +43,7 @@ export const CtxGauge = memo(function CtxGauge({ controller }: { controller: App
       : DEFAULT_TRIGGER_RATIO
   const cls = ratio >= triggerRatio ? 'is-hot' : ratio >= WARM_RATIO ? 'is-warm' : ''
 
-  const parts = [`context ${fmtTokens(occupancy)} / ${fmtTokens(win.effective)} (${pct}%)`]
+  const parts = [`上下文 ${fmtTokens(occupancy)} / ${fmtTokens(win.effective)}（${pct}%）`]
   if (win.compact_trigger && win.compact_trigger > 0) {
     parts.push(`compact 触发于 ~${fmtTokens(win.compact_trigger)}`)
   }

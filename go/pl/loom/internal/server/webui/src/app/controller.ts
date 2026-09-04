@@ -23,6 +23,9 @@ import { toast } from '../components/ui/Toast'
 import { confirmDialog } from '../components/ui/Confirm'
 
 export const TOKEN_KEY = 'loom_token'
+// 主题持久化在 localStorage（跨标签页一致、重开浏览器保留）；早期版本
+// 用过 sessionStorage，initTheme 里带一次性迁移。index.html 头部的内联
+// 脚本在首帧前预置 data-theme，要与这里的键名/取值保持一致。
 const THEME_KEY = 'loom_theme'
 const SIDEBAR_KEY = 'loom_sidebar_collapsed'
 const RIGHT_PANEL_KEY = 'loom_right_panel'
@@ -69,6 +72,7 @@ export interface AppState {
   banner: BannerState | null
   sessions: SessionSummary[]
   showArchived: boolean
+  sessionLoading: boolean // openSession 的 snapshot fetch 进行中（驱动骨架屏/加载态）
   workspaces: Workspace[]
   noWorkspace: boolean // zero-workspace onboarding state
   landingHint: string // landing page copy
@@ -125,9 +129,10 @@ function initialState(): AppState {
     banner: null,
     sessions: [],
     showArchived: false,
+    sessionLoading: false,
     workspaces: [],
     noWorkspace: false,
-    landingHint: 'No session selected. Start a new one, or pick one from the list.',
+    landingHint: '未选择会话：新建一个，或从左侧列表挑选。',
     landingShowAddWs: false,
     landingVisible: true,
     models: [],
@@ -261,7 +266,8 @@ export class AppController {
           return ''
         }
       },
-      onError: (e) => toast(e.message),
+      // 审批/问答/反馈失败：错误类 toast 常驻（sticky），留够读和复制的时间
+      onError: (e) => toast(e.message, false, true),
     })
     this.stream = new EventStream({
       getToken: () => this.token,
@@ -284,7 +290,21 @@ export class AppController {
 
   initTheme() {
     // Dark by default (user preference); light only when explicitly stored.
-    const saved = sessionStorage.getItem(THEME_KEY)
+    // One-shot migration: legacy copies lived in sessionStorage.
+    let saved = ''
+    try {
+      saved = localStorage.getItem(THEME_KEY) || ''
+      if (!saved) {
+        const legacy = sessionStorage.getItem(THEME_KEY)
+        if (legacy) {
+          localStorage.setItem(THEME_KEY, legacy)
+          sessionStorage.removeItem(THEME_KEY)
+          saved = legacy
+        }
+      }
+    } catch {
+      /* private mode etc.: default theme */
+    }
     const dark = saved !== 'light'
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
     this.store.set({ theme: dark ? 'dark' : 'light' })
@@ -294,7 +314,11 @@ export class AppController {
     const nowDark = document.documentElement.dataset.theme === 'dark'
     const next = nowDark ? 'light' : 'dark'
     document.documentElement.dataset.theme = next
-    sessionStorage.setItem(THEME_KEY, next)
+    try {
+      localStorage.setItem(THEME_KEY, next)
+    } catch {
+      /* private mode: in-memory theme still applies */
+    }
     this.store.set({ theme: next as 'dark' | 'light' })
   }
 
@@ -450,7 +474,7 @@ export class AppController {
       })
       return
     }
-    this.showGate('token invalid or expired — paste the current serve token')
+    this.showGate('token 无效或已过期——请粘贴当前 serve token')
   }
 
   submitGateToken(token: string) {
@@ -686,7 +710,7 @@ export class AppController {
   // preview; the full content comes from the snapshot message history by call_id.
   fetchToolOutput = async (callId: string): Promise<string> => {
     const sid = this.store.get().sessionId
-    if (!sid || !callId) throw new Error('no active session')
+    if (!sid || !callId) throw new Error('当前没有活跃会话')
     const snap = await this.api.snapshot(sid)
     for (const m of snap.messages || []) {
       for (const part of m.parts || []) {
@@ -698,10 +722,10 @@ export class AppController {
         const out = texts.join('\n')
         if (out) return out
         if (r.error && r.error.message) return r.error.message
-        throw new Error('tool output unavailable (empty or compacted)')
+        throw new Error('工具输出不可用（为空或已被压缩）')
       }
     }
-    throw new Error('tool result not found in session history')
+    throw new Error('未在会话历史中找到该工具结果')
   }
 
   // ---------- model / reasoning state sync ----------
@@ -950,7 +974,7 @@ export class AppController {
     // After detach, anything left in the catch-up queue predates the old
     // session/snapshot; the new snapshot covers it — safe to drop.
     this.eventQueue.length = 0
-    this.store.set({ sessionId: id, landingVisible: false })
+    this.store.set({ sessionId: id, landingVisible: false, sessionLoading: true })
     this.restoreComposerDraft(id)
     this.collapseSidebarIfNarrow()
     this.syncHdrWorkspace()
@@ -964,6 +988,7 @@ export class AppController {
         await this.api.resumeSession(id)
         snap = await this.api.snapshot(id)
       } else {
+        this.store.set({ sessionLoading: false })
         throw e
       }
     }
@@ -990,7 +1015,7 @@ export class AppController {
       })
     }
     this.transcript.applySnapshot(snap, { preserveScroll: isResync })
-    this.store.set({ plan: snap.plan || null })
+    this.store.set({ plan: snap.plan || null, sessionLoading: false })
     this.setReadOnly(snap)
     this.setSessionState(snap.state || '')
     this.applySnapshotMeta(snap)
@@ -1018,7 +1043,8 @@ export class AppController {
     // A session opened from the archived view = archived (read-only); the
     // default view = active sessions
     this.openSession(id, { archived: this.store.get().showArchived }).catch((e) => {
-      if ((e as ApiError).status !== 401) toast('open session: ' + (e as Error).message)
+      if ((e as ApiError).status !== 401)
+        toast('打开会话失败：' + (e as Error).message, false, true)
     })
   }
 
@@ -1095,7 +1121,8 @@ export class AppController {
 
   onNewSession = (wsId: string) => {
     this.newSession(wsId).catch((e) => {
-      if ((e as ApiError).status !== 401) toast('new session: ' + (e as Error).message)
+      if ((e as ApiError).status !== 401)
+        toast('创建会话失败：' + (e as Error).message, false, true)
     })
   }
 
@@ -1153,8 +1180,8 @@ export class AppController {
     const hasSessions = this.store.get().sessions.length > 0
     this.store.set({
       landingHint: hasSessions
-        ? 'Pick a session from the sidebar, or just start typing.'
-        : 'No sessions yet — add a workspace, or just start typing.',
+        ? '从侧栏选择会话，或直接开始输入。'
+        : '还没有会话——添加工作区，或直接开始输入。',
       landingShowAddWs: !hasSessions,
       landingVisible: true,
       hdrWorkspace: '',
@@ -1223,7 +1250,7 @@ export class AppController {
         toast('会话已归档，仅可查看；取消归档后可继续对话')
         return
       }
-      toast('send failed: ' + err.message)
+      toast('发送失败：' + err.message, false, true)
     }
   }
 
@@ -1231,7 +1258,7 @@ export class AppController {
     const sid = this.store.get().sessionId
     if (!sid) return
     this.api.cancelTurn(sid).catch((e) => {
-      if ((e as ApiError).status !== 401) toast('cancel: ' + (e as Error).message)
+      if ((e as ApiError).status !== 401) toast('取消失败：' + (e as Error).message)
     })
   }
 
@@ -1329,7 +1356,7 @@ export class AppController {
     try {
       await this.openSession(sid, { archived: this.store.get().archived })
     } catch (e) {
-      if ((e as ApiError).status !== 401) toast('resync failed: ' + (e as Error).message)
+      if ((e as ApiError).status !== 401) toast('重连失败：' + (e as Error).message, false, true)
     }
   }
 
@@ -1393,7 +1420,7 @@ export class AppController {
   copySessionId = async () => {
     const sid = this.store.get().sessionId
     if (!sid) return
-    if (await copyText(sid)) toast('session id copied', true)
+    if (await copyText(sid)) toast('已复制 session ID', true)
     else toast('剪贴板不可用，session id: ' + sid)
   }
 

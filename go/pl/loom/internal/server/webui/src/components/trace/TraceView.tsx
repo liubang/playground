@@ -467,9 +467,9 @@ const RhythmStrip = memo(function RhythmStrip({
   return (
     <div className="trace-strip" title="点击跳转到对应轮次">
       <div className="trace-strip-labels">
-        <span>Input</span>
-        <span>Model</span>
-        <span>Tools</span>
+        <span>输入</span>
+        <span>模型</span>
+        <span>工具</span>
       </div>
       <svg
         className="trace-strip-svg"

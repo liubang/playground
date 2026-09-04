@@ -114,6 +114,34 @@ function fitLabel(s: string, budget: number): string {
   return s.slice(0, i) + '…'
 }
 
+// useRafState coalesces high-frequency setter calls (per-event pointer/wheel
+// updates during pan/zoom/brush) into one state commit per animation frame —
+// the whole SVG subtree re-renders at most once per frame during gestures,
+// instead of once per raw input event (trackpads can fire >100/s).
+function useRafState<S>(initial: S): [S, (v: S) => void] {
+  const [state, setState] = useState(initial)
+  const pendingRef = useRef<{ has: boolean; value: S }>({ has: false, value: initial })
+  const rafRef = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+    },
+    [],
+  )
+  const set = useCallback((v: S) => {
+    pendingRef.current = { has: true, value: v }
+    if (rafRef.current !== null) return // 已有挂起帧：合并为最新值
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null
+      const p = pendingRef.current
+      if (!p.has) return
+      p.has = false
+      setState(p.value)
+    })
+  }, [])
+  return [state, set]
+}
+
 function tokLabel(n: MazeNode): string {
   const parts: string[] = []
   if (n.rz_ms != null && n.rz_ms > 0) parts.push(`推理 ${fmtDuration(n.rz_ms)}`)
@@ -153,7 +181,9 @@ export const MazeView = memo(function MazeView({
 }) {
   const data = useMemo(() => normalizeMaze(rawData), [rawData])
   const wrapRef = useRef<HTMLDivElement>(null)
-  const [win, setWin] = useState<[number, number] | null>(null) // display-domain window; null = whole map
+  // win/brush are updated by per-event pointer/wheel handlers: rAF-coalesced
+  // so a gesture costs one SVG re-render per frame, not one per input event.
+  const [win, setWin] = useRafState<[number, number] | null>(null) // display-domain window; null = whole map
   const [hover, setHover] = useState<HoverCard | null>(null)
   const [selected, setSelected] = useState<SelectedNode | null>(null)
   const [failOnly, setFailOnly] = useState(false)
@@ -166,7 +196,7 @@ export const MazeView = memo(function MazeView({
   >(null)
   // Brush selection in canvas-relative pixels; non-null while a range drag
   // is past the click threshold.
-  const [brush, setBrush] = useState<{ x0: number; x1: number } | null>(null)
+  const [brush, setBrush] = useRafState<{ x0: number; x1: number } | null>(null)
   // A completed brush suppresses the trailing click so it doesn't select
   // whatever node happens to sit under the mouse-up point.
   const suppressClickRef = useRef(false)
@@ -188,11 +218,28 @@ export const MazeView = memo(function MazeView({
   // Canvas pixel width, tracked with a ResizeObserver: x coordinates are
   // absolute pixels (no viewBox), so a container resize must re-render.
   const [canvasW, setCanvasW] = useState(800)
+  // Cached canvas rect: nav/brush math only consumes x-coordinates (left /
+  // width), and ResizeObserver catches the cases that change them (sidebar /
+  // panel toggles, window resize) — pointerdown refreshes as a backstop. This
+  // keeps getBoundingClientRect (a forced-layout read) off the per-event
+  // wheel/pointermove hot path.
+  const rectRef = useRef<DOMRect | null>(null)
+  const getRect = useCallback(() => {
+    const el = wrapRef.current
+    if (!el) return null
+    const r = rectRef.current ?? el.getBoundingClientRect()
+    rectRef.current = r
+    return r
+  }, [])
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
     setCanvasW(el.clientWidth)
-    const ro = new ResizeObserver(() => setCanvasW(el.clientWidth))
+    rectRef.current = el.getBoundingClientRect()
+    const ro = new ResizeObserver(() => {
+      setCanvasW(el.clientWidth)
+      rectRef.current = el.getBoundingClientRect()
+    })
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
@@ -248,7 +295,7 @@ export const MazeView = memo(function MazeView({
   // vertical page scroll stays available via the scrollbar (tall lanes).
   const navRef = useRef<(clientX: number, deltaX: number, deltaY: number) => void>(() => {})
   navRef.current = (clientX, deltaX, deltaY) => {
-    const rect = wrapRef.current?.getBoundingClientRect()
+    const rect = getRect()
     if (!rect) return
     const span = dEnd - dStart
     if (Math.abs(deltaX) > Math.abs(deltaY)) {
@@ -343,6 +390,7 @@ export const MazeView = memo(function MazeView({
         return
       }
       const rect = e.currentTarget.getBoundingClientRect()
+      rectRef.current = rect // gesture 起点：刷新缓存，随后走 getRect
       dragRef.current = {
         mode: 'brush',
         x0: e.clientX - rect.left,
@@ -359,7 +407,7 @@ export const MazeView = memo(function MazeView({
       // Pinch: iterative zoom (distance ratio) + pan (midpoint travel)
       // around the midpoint's domain point.
       if (pinchRef.current && pointersRef.current.size >= 2) {
-        const rect = wrapRef.current?.getBoundingClientRect()
+        const rect = getRect()
         if (!rect) return
         const [a, b] = [...pointersRef.current.values()]
         const d = Math.abs(b - a)
@@ -404,7 +452,8 @@ export const MazeView = memo(function MazeView({
         return
       }
       // brush: a sub-threshold drag is still a click (node select)
-      const rect = e.currentTarget.getBoundingClientRect()
+      const rect = getRect()
+      if (!rect) return
       const x1 = e.clientX - rect.left
       if (!drag.active && Math.abs(x1 - drag.x0) < 4) return
       if (!drag.active) {
@@ -431,7 +480,7 @@ export const MazeView = memo(function MazeView({
     setBrush(null)
     if (!drag.active) return // plain click: let node click handlers run
     suppressClickRef.current = true
-    const rect = wrapRef.current?.getBoundingClientRect()
+    const rect = getRect()
     if (!rect) return
     const w = Math.max(rect.width - PAD_X * 2, 1)
     const span = drag.win[1] - drag.win[0]
@@ -445,7 +494,7 @@ export const MazeView = memo(function MazeView({
   // Time span covered by the in-progress brush, shown on the selection.
   const brushLabel = useMemo(() => {
     if (!brush) return ''
-    const rect = wrapRef.current?.getBoundingClientRect()
+    const rect = getRect()
     if (!rect) return ''
     const w = Math.max(rect.width - PAD_X * 2, 1)
     const span = dEnd - dStart
@@ -453,7 +502,7 @@ export const MazeView = memo(function MazeView({
     const lo = toD(Math.min(brush.x0, brush.x1))
     const hi = toD(Math.max(brush.x0, brush.x1))
     return formatDur(hi - lo)
-  }, [brush, dStart, dEnd])
+  }, [brush, dStart, dEnd, getRect])
 
   const ticks = useMemo(() => axisTicks(axis, dStart, dEnd), [axis, dStart, dEnd])
 

@@ -217,6 +217,11 @@ button {
 .disclosure summary::-webkit-details-marker {
   display: none;
 }
+/* details 展开时内容柔淡入：高度动画要 JS 测量且占 layout 帧，性价比低；
+   一次透明度过渡即可消除内容的「硬闪」，prefers-reduced-motion 下全局归零。 */
+.disclosure[open] > *:not(summary) {
+  animation: fadein 0.15s ease;
+}
 .disclosure summary::before {
   content: '\25B6';
   flex: none;
@@ -833,6 +838,102 @@ button {
   padding: 5px 14px;
   font-size: var(--text-sm);
   box-shadow: var(--shadow-sm);
+}
+
+/* In-session search bar (components/TranscriptView TranscriptSearch): pinned
+   overlay at the top-right of the chat pane (Cmd/Ctrl+F). */
+.chat-pane {
+  position: relative;
+}
+.transcript-search {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  z-index: var(--z-follow);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 10px;
+  background: var(--bg1);
+  border: 1px solid var(--bg2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  animation: menu-pop 0.12s ease;
+}
+.transcript-search .ts-input {
+  width: 200px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--fg);
+  font-size: var(--text-md);
+}
+.transcript-search .ts-input::placeholder {
+  color: var(--muted);
+}
+.transcript-search .ts-count {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  min-width: 34px;
+  text-align: center;
+  user-select: none;
+}
+/* Search hit flash: outline-color eases out so the located block is visible
+   without a persistent marker competing with the content. */
+.block-wrap.search-flash {
+  outline: 2px solid transparent;
+  outline-offset: 4px;
+  border-radius: var(--radius-md);
+  animation: search-flash 1.2s ease-out;
+}
+@keyframes search-flash {
+  0% {
+    outline-color: var(--primary);
+  }
+  100% {
+    outline-color: transparent;
+  }
+}
+
+/* Session loading: when a snapshot is being fetched, old content dims (it is
+   about to be replaced); empty transcripts get skeleton rows instead. */
+.transcript.is-loading .transcript-inner {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+.skeleton-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 6px 2px;
+}
+.sk-row {
+  height: 14px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, var(--bg1) 25%, var(--bg2) 50%, var(--bg1) 75%);
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.4s linear infinite;
+}
+@keyframes sk-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+.sk-w-40 {
+  width: 40%;
+}
+.sk-w-55 {
+  width: 55%;
+}
+.sk-w-70 {
+  width: 70%;
+}
+.sk-w-85 {
+  width: 85%;
 }
 
 /* ============================== Blocks (§6.3) ============================== */

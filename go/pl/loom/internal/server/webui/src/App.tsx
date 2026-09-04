@@ -2,13 +2,17 @@
 // composer + status bar) + global overlays (toast / confirm / settings /
 // directory browser / banner).
 
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import type { AppController } from './app/controller'
 import { useStore } from './store/store'
 import { Gate } from './components/Gate'
 import { Header } from './components/Header'
 import { Sidebar } from './components/Sidebar'
-import { TranscriptView, type TranscriptViewIO } from './components/TranscriptView'
+import {
+  TranscriptSearch,
+  TranscriptView,
+  type TranscriptViewIO,
+} from './components/TranscriptView'
 import { Composer } from './components/Composer'
 import { StatusBar } from './components/StatusBar'
 import { DirPicker } from './components/DirPicker'
@@ -27,7 +31,7 @@ const TracePage = lazy(() =>
 )
 import { SessionTabs } from './components/SessionTabs'
 import { ToastHost } from './components/ui/Toast'
-import { ConfirmHost } from './components/ui/Confirm'
+import { ConfirmHost, isConfirmOpen } from './components/ui/Confirm'
 import { BlocksIOContext } from './components/blocks/context'
 import { Icon } from './lib/icons'
 
@@ -42,6 +46,7 @@ export function App({ controller }: { controller: AppController }) {
   const mainView = useStore(controller.store, (s) => s.mainView)
   const rightPanelOpen = useStore(controller.store, (s) => s.rightPanelOpen)
   const sessionId = useStore(controller.store, (s) => s.sessionId)
+  const sessionLoading = useStore(controller.store, (s) => s.sessionLoading)
   const connState = useStore(controller.store, (s) => s.connState)
   const [revealWs, setRevealWs] = useState<{ wsId: string; seq: number } | null>(null)
 
@@ -60,6 +65,36 @@ export function App({ controller }: { controller: AppController }) {
   )
 
   const blocksIO = useMemo(() => ({ fetchArtifactURL: controller.fetchArtifactURL }), [controller])
+
+  // 全局快捷键：
+  // - Cmd/Ctrl+F 打开会话内搜索（虚拟滚动下浏览器原生 Cmd+F 搜不到
+  //   视口外的块，必须接管）。仅在聊天视图接管，trace/maze 列表不虛拟化，
+  //   浏览器原生搜索可用。
+  // - Esc 取消当前 turn。避让顺序：确认弹窗（自带处理）→ 搜索条（关
+  //   闭自身）→ busy 取消；defaultPrevented 说明已被更内层消费
+  //   （如补全菜单 Esc、picker Esc），不再重复响应。
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F')) {
+        if (controller.store.get().view !== 'app' || controller.store.get().mainView !== 'chat')
+          return
+        e.preventDefault()
+        controller.transcript.openSearch()
+        return
+      }
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      if (isConfirmOpen()) return
+      if (controller.store.get().settingsOpen) return // 设置面板自带 Esc（脏时确认）
+      if (controller.store.get().dirPickerOpen) return
+      if (controller.transcript.store.get().search) {
+        controller.transcript.closeSearch()
+        return
+      }
+      if (controller.store.get().busy) controller.cancelTurn()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [controller])
 
   if (view === 'boot') {
     // Auth check in progress: render nothing (equivalent to the old index.html
@@ -140,10 +175,12 @@ export function App({ controller }: { controller: AppController }) {
                     {/* The chat tree stays mounted but hidden on other
                         tabs so its state survives the switch. */}
                     <div className="chat-pane" hidden={mainView !== 'chat'}>
+                      <TranscriptSearch controller={controller.transcript} />
                       <TranscriptView
                         controller={controller.transcript}
                         io={transcriptIO}
                         scrollerOut={controller.scrollerRef}
+                        loading={sessionLoading}
                         className={
                           connState !== 'live' && connState !== '' ? 'is-offline' : undefined
                         }
@@ -180,7 +217,7 @@ export function App({ controller }: { controller: AppController }) {
           )}
         </div>
 
-        <div id="banner" className="banner" hidden={!banner}>
+        <div id="banner" className="banner" role="alert" aria-live="assertive" hidden={!banner}>
           {banner && (
             <>
               <span>

@@ -7,6 +7,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>loom · shared session</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- 防主题闪变（FOUC）：首帧绘制前预置 data-theme（分享页无主题切换，
+         但读取主应用持久化的偏好，保持观感一致）。 -->
+    <script>
+      try {
+        var t = localStorage.getItem('loom_theme')
+        document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark'
+      } catch (e) {}
+    </script>
   </head>
   <body class="share-body">
     <div id="root"></div>

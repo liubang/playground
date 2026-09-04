@@ -22,7 +22,7 @@ export const Gate = memo(function Gate({ controller }: { controller: AppControll
         }}
       >
         <div className="brand">◆ loom</div>
-        <p>Enter the serve token to connect.</p>
+        <p>输入 serve token 以连接。</p>
         <input
           id="gate-token"
           type="password"
@@ -43,13 +43,13 @@ export const Gate = memo(function Gate({ controller }: { controller: AppControll
           style={{ width: '100%' }}
           hidden={gateLocked}
         >
-          Connect
+          连接
         </button>
         <div className="hint">
-          Stored in sessionStorage only.
+          仅保存在 sessionStorage 中。
           <br />
-          The token is printed on first <code>loom serve</code> start, or see{' '}
-          <code>serve.token</code> in the loom data directory.
+          首次启动 <code>loom serve</code> 时会打印 token，也可在 loom 数据目录查看{' '}
+          <code>serve.token</code>。
         </div>
       </form>
     </div>
