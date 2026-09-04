@@ -48,6 +48,9 @@ struct Engine::Impl {
     std::unique_ptr<KVCache> cache;
     std::unique_ptr<ScratchArena> arena;
 
+    // Ring (sliding-window) cache mode — mirrors Engine::Options.ring.
+    bool ring = false;
+
     // Embedding lookup buffer (f32 for CPU backend).
     TensorView token_embd; // non-owning view into GGUF mmap
     std::vector<Model::WeightEntry> weight_entries;
@@ -81,8 +84,15 @@ struct Q8Block {
 };
 static_assert(sizeof(Q8Block) == kQ8_0TypeSize);
 
+// Q4_0 block layout: fp16 scale + 16 packed 4-bit values.
+struct Q4Block {
+    uint16_t scale; // fp16
+    uint8_t qs[16];
+};
+static_assert(sizeof(Q4Block) == kQ4_0TypeSize);
+
 // Copy the embedding row for `token` (row index of token_embd.weight, shape
-// [vocab, hidden]) into `out` as f32. Handles f32/f16/Q8_0 embeddings;
+// [vocab, hidden]) into `out` as f32. Handles f32/f16/Q8_0/Q4_0 embeddings;
 // quantized rows are dequantized on the fly (a quantized tensor cannot be
 // sliced at arbitrary offsets).
 Status embedding_row(const TensorView& embd, int32_t token, int32_t hidden, TensorView out) {
@@ -113,10 +123,51 @@ Status embedding_row(const TensorView& embd, int32_t token, int32_t hidden, Tens
         }
         return {};
     }
+    if (embd.dtype() == DType::kQ4_0) {
+        const int64_t blocks_per_row = hidden / kQ4_0BlockSize;
+        const auto* blocks = static_cast<const Q4Block*>(embd.data()) +
+                             static_cast<size_t>(token) * static_cast<size_t>(blocks_per_row);
+        for (int32_t i = 0; i < hidden; ++i) {
+            const int64_t blk = i / kQ4_0BlockSize;
+            const int64_t in = i % kQ4_0BlockSize;
+            const uint8_t packed = blocks[blk].qs[in % 16];
+            const int32_t nibble = (in < 16) ? (packed & 0x0F) : (packed >> 4);
+            od[i] = fp16_to_fp32(blocks[blk].scale) * static_cast<float>(nibble - 8);
+        }
+        return {};
+    }
     return Status::Error(ErrorCode::kUnsupported, "embedding: unsupported dtype");
 }
 
 } // namespace
+
+// Ring-mode device-KV room keeper: before K/V for absolute positions
+// [abs_pos, abs_pos + incoming) are appended to a device KV cache, ensure the
+// window (capacity) can hold them by dropping the oldest tokens. Each drop is
+// a chunk (ceil(capacity/2)) so shifts amortize to O(1) per token, mirroring
+// the host-side compaction inside KVCache. The device buffers and the host shell
+// are advanced together (Backend::ShiftKV + KVCache::WindowShift). Only
+// called for device-KV backends in ring mode; the host cache compacts itself.
+Status Engine::EnsureDeviceKvRoom(Impl& impl, int64_t abs_pos, int32_t incoming) {
+    auto& cache = *impl.cache;
+    const int64_t origin = cache.window_origin();
+    const int64_t capacity = cache.capacity();
+    const int64_t len_before = abs_pos - origin; // physical rows already cached
+    const int64_t overflow = len_before + incoming - capacity;
+    if (overflow <= 0) {
+        return {};
+    }
+    // Drop at least `overflow`; prefer a half-window chunk for amortization.
+    // Rounds up (ceil) so the retained span is never longer than the dropped
+    // one, which keeps the device-side shift a single non-overlapping blit in
+    // the common case (smaller flushes are chunked inside Backend::ShiftKV).
+    int64_t drop = std::max<int64_t>(overflow, (capacity + 1) / 2);
+    drop = std::min(drop, len_before);
+    if (auto s = impl.backend->ShiftKV(drop); !s.ok()) {
+        return s;
+    }
+    return cache.WindowShift(drop);
+}
 
 Result<std::unique_ptr<Engine>> Engine::Create(Options options) {
     auto gguf_result = GGUFFile::Open(options.model_path);
@@ -179,23 +230,26 @@ Result<std::unique_ptr<Engine>> Engine::Create(Options options) {
         }
     }
 
+    // The cache capacity doubles as the sliding-window size in ring mode.
     int32_t max_tokens = std::min(options.max_context, config.context_length);
+    const KVCacheMode cache_mode = options.ring ? KVCacheMode::kRing : KVCacheMode::kStrict;
     std::unique_ptr<KVCache> cache;
     if (backend->HasDeviceKV()) {
         // The backend owns the real K/V storage on device; the host cache is
-        // a metadata-only shell for length/capacity bookkeeping.
+        // a metadata-only shell for length/capacity/origin bookkeeping. In
+        // ring mode the Engine drives Backend::ShiftKV + shell WindowShift.
         if (auto s = backend->ConfigureDeviceKV(
                 config.num_layers, config.num_kv_heads, config.effective_head_dim(), max_tokens);
             !s.ok()) {
             return s;
         }
-        auto shell_result = KVCache::CreateShell(config, max_tokens);
+        auto shell_result = KVCache::CreateShell(config, max_tokens, cache_mode);
         if (!shell_result.ok()) {
             return shell_result.status();
         }
         cache = std::make_unique<KVCache>(std::move(shell_result).value());
     } else {
-        auto cache_result = KVCache::Create(config, max_tokens, DType::kF32);
+        auto cache_result = KVCache::Create(config, max_tokens, DType::kF32, cache_mode);
         if (!cache_result.ok()) {
             return cache_result.status();
         }
@@ -253,6 +307,7 @@ Result<std::unique_ptr<Engine>> Engine::Create(Options options) {
     engine->impl_->token_embd = embd_result.value();
     engine->impl_->weight_entries = std::move(weight_entries);
     engine->impl_->chat_template = std::move(chat_template);
+    engine->impl_->ring = options.ring;
 
     return engine;
 }
@@ -268,12 +323,15 @@ Result<TensorView> Engine::RunPrefill(std::span<const int32_t> tokens) {
     // Batched prefill: process the prompt in chunks of kPrefillChunk tokens.
     // All GEMMs/norms/activations run batch-wide; attention enforces causal
     // masking by giving query row i exactly the [0, chunk_start + i] prefix.
+    // In ring mode a chunk must fit the window, so cap it at the cache
+    // capacity (ring allows prompts longer than the window).
+    const int32_t chunk_max = std::min<int32_t>(kPrefillChunk, impl.cache->capacity());
     auto* dst = static_cast<float*>(impl.prefill_hidden.data());
     int64_t row_of_last = 0;
     for (int64_t chunk_start = 0; chunk_start < static_cast<int64_t>(tokens.size());
-         chunk_start += kPrefillChunk) {
+         chunk_start += chunk_max) {
         const int32_t n = static_cast<int32_t>(
-            std::min<int64_t>(kPrefillChunk, static_cast<int64_t>(tokens.size()) - chunk_start));
+            std::min<int64_t>(chunk_max, static_cast<int64_t>(tokens.size()) - chunk_start));
 
         // Embed the chunk's tokens into rows of the persistent prefill
         // buffer (Forward modifies them in-place). Handles f32/f16/Q8_0.
@@ -292,6 +350,14 @@ Result<TensorView> Engine::RunPrefill(std::span<const int32_t> tokens) {
         // The embedding writes happened on the host, outside the backend.
         if (auto s = impl.backend->NotifyHostWrite(batch); !s.ok()) {
             return s;
+        }
+
+        // Ring mode + device KV: make room in the device window for this
+        // chunk before the model appends (host caches compact themselves).
+        if (impl.ring && impl.backend->HasDeviceKV()) {
+            if (auto s = EnsureDeviceKvRoom(impl, chunk_start, n); !s.ok()) {
+                return s;
+            }
         }
 
         if (auto s =
@@ -399,10 +465,17 @@ Status Engine::GenerateStream(std::string_view prompt,
     }
     auto prompt_tokens = enc_result.value();
 
-    if (static_cast<int32_t>(prompt_tokens.size()) + params.max_tokens > impl.cache->capacity()) {
+    // Ring mode allows sequences longer than the cache: overflow is handled
+    // by dropping the oldest tokens (sliding window). Strict mode rejects
+    // prompts that cannot fit up front.
+    if (!impl.ring &&
+        static_cast<int32_t>(prompt_tokens.size()) + params.max_tokens > impl.cache->capacity()) {
         return Status::Error(ErrorCode::kInvalidArgument,
                              "prompt + max_tokens exceeds cache capacity");
     }
+
+    // Start from an empty cache (an Engine may be reused across calls).
+    impl.cache->Clear();
 
     auto t_start = Clock::now();
 
@@ -522,6 +595,14 @@ Status Engine::GenerateStream(std::string_view prompt,
         // The embedding write happened on the host, outside the backend.
         if (auto s = impl.backend->NotifyHostWrite(embd_buf.value()); !s.ok()) {
             return s;
+        }
+
+        // Ring mode + device KV: make room in the device window for this
+        // token before the model appends (host caches compact themselves).
+        if (impl.ring && impl.backend->HasDeviceKV()) {
+            if (auto s = EnsureDeviceKvRoom(impl, pos, 1); !s.ok()) {
+                return s;
+            }
         }
 
         if (auto s =

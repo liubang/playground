@@ -49,7 +49,7 @@ const char* dtype_label(DType d) {
 
 // Dtypes with end-to-end support in every backend's MatMul path.
 bool is_supported_matmul_dtype(DType d) {
-    return d == DType::kF32 || d == DType::kF16 || d == DType::kQ8_0;
+    return d == DType::kF32 || d == DType::kF16 || d == DType::kQ8_0 || d == DType::kQ4_0;
 }
 
 // Norms / biases are consumed elementwise (RmsNorm, AddBiasInPlace) and must

@@ -22,7 +22,10 @@
 
 namespace pl::mllm {
 
-Result<KVCache> KVCache::Create(const ModelConfig& config, int32_t max_tokens, DType dtype) {
+Result<KVCache> KVCache::Create(const ModelConfig& config,
+                                int32_t max_tokens,
+                                DType dtype,
+                                KVCacheMode mode) {
     if (max_tokens <= 0) {
         return Status::Error(ErrorCode::kInvalidArgument, "KVCache: max_tokens must be positive");
     }
@@ -31,6 +34,7 @@ Result<KVCache> KVCache::Create(const ModelConfig& config, int32_t max_tokens, D
     }
 
     KVCache cache;
+    cache.mode_ = mode;
     cache.num_layers_ = config.num_layers;
     cache.num_kv_heads_ = config.num_kv_heads;
     cache.head_dim_ = config.effective_head_dim();
@@ -61,12 +65,16 @@ Result<KVCache> KVCache::Create(const ModelConfig& config, int32_t max_tokens, D
     return cache;
 }
 
-Result<KVCache> KVCache::CreateShell(const ModelConfig& config, int32_t max_tokens) {
+Result<KVCache> KVCache::CreateShell(const ModelConfig& config,
+                                     int32_t max_tokens,
+                                     KVCacheMode mode) {
     if (max_tokens <= 0) {
         return Status::Error(ErrorCode::kInvalidArgument, "KVCache: max_tokens must be positive");
     }
 
     KVCache cache;
+    cache.mode_ = mode;
+    cache.shell_ = true;
     cache.num_layers_ = config.num_layers;
     cache.num_kv_heads_ = config.num_kv_heads;
     cache.head_dim_ = config.effective_head_dim();
@@ -105,12 +113,41 @@ void* KVCache::v_ptr(int32_t layer, int32_t pos) noexcept {
     return static_cast<char*>(v_buffer_.data()) + layer_offset + pos_offset;
 }
 
+Status KVCache::WindowShift(int64_t drop) {
+    if (drop < 0 || drop > length_) {
+        return Status::Error(ErrorCode::kInvalidArgument, "KVCache: shift out of range");
+    }
+    if (drop == 0) {
+        return {};
+    }
+    if (!shell_) {
+        // Move the retained suffix of every layer down to slot 0. Physical
+        // slot i afterwards holds absolute position origin_ + drop + i.
+        const int64_t keep = static_cast<int64_t>(length_) - drop;
+        const size_t move_bytes = static_cast<size_t>(keep) * per_token_stride_;
+        for (int32_t l = 0; l < num_layers_; ++l) {
+            std::memmove(k_ptr(l, 0), k_ptr(l, static_cast<int32_t>(drop)), move_bytes);
+            std::memmove(v_ptr(l, 0), v_ptr(l, static_cast<int32_t>(drop)), move_bytes);
+        }
+    }
+    origin_ += drop;
+    length_ -= static_cast<int32_t>(drop);
+    return {};
+}
+
 Status KVCache::Append(int32_t layer, TensorView key, TensorView value) {
     if (layer < 0 || layer >= num_layers_) {
         return Status::Error(ErrorCode::kInvalidArgument, "KVCache: layer out of range");
     }
     if (length_ >= capacity_) {
-        return Status::Error(ErrorCode::kInvalidArgument, "KVCache: capacity exceeded");
+        if (!ring()) {
+            return Status::Error(ErrorCode::kInvalidArgument, "KVCache: capacity exceeded");
+        }
+        // Ring mode: drop the oldest ring_shift() tokens for all layers at
+        // once (compaction shifts the whole cache, not just this layer).
+        if (auto s = WindowShift(ring_shift()); !s.ok()) {
+            return s;
+        }
     }
     if (key.dtype() != dtype_ || value.dtype() != dtype_) {
         return Status::Error(ErrorCode::kInvalidArgument, "KVCache: dtype mismatch");
@@ -144,9 +181,31 @@ Status KVCache::AppendBatch(int32_t layer, TensorView key, TensorView value) {
     if (key.dtype() != dtype_ || value.dtype() != dtype_) {
         return Status::Error(ErrorCode::kInvalidArgument, "KVCache: dtype mismatch");
     }
-    const int32_t n = static_cast<int32_t>(key.shape().dim(0));
+    int32_t n = static_cast<int32_t>(key.shape().dim(0));
+    const void* k_src = key.data();
+    const void* v_src = value.data();
     if (length_ + n > capacity_) {
-        return Status::Error(ErrorCode::kInvalidArgument, "KVCache: capacity exceeded");
+        if (!ring()) {
+            return Status::Error(ErrorCode::kInvalidArgument, "KVCache: capacity exceeded");
+        }
+        if (n >= capacity_) {
+            // The batch alone exceeds the window: only its newest
+            // `capacity_` rows can be retained. (The Engine chunks prefill
+            // to <= capacity, so this is a robustness fallback, not the
+            // steady-state path.)
+            const int64_t skip = static_cast<int64_t>(n) - capacity_;
+            origin_ += static_cast<int64_t>(length_) + skip;
+            length_ = 0;
+            n = capacity_;
+            k_src = static_cast<const char*>(k_src) + static_cast<size_t>(skip) * per_token_stride_;
+            v_src = static_cast<const char*>(v_src) + static_cast<size_t>(skip) * per_token_stride_;
+        } else {
+            const int64_t needed = static_cast<int64_t>(length_) + n - capacity_;
+            const int64_t drop = std::max<int64_t>(needed, ring_shift());
+            if (auto s = WindowShift(drop); !s.ok()) {
+                return s;
+            }
+        }
     }
     if (n == 0) {
         return {};
@@ -155,8 +214,8 @@ Status KVCache::AppendBatch(int32_t layer, TensorView key, TensorView value) {
     // K/V for consecutive tokens are contiguous in both the source view and
     // the destination cache, so the whole batch is one memcpy per tensor.
     const size_t copy_bytes = static_cast<size_t>(n) * per_token_stride_;
-    std::memcpy(k_ptr(layer, length_), key.data(), copy_bytes);
-    std::memcpy(v_ptr(layer, length_), value.data(), copy_bytes);
+    std::memcpy(k_ptr(layer, length_), k_src, copy_bytes);
+    std::memcpy(v_ptr(layer, length_), v_src, copy_bytes);
 
     return {};
 }

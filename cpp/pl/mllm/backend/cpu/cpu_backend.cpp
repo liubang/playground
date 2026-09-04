@@ -36,6 +36,15 @@ struct Q8Block {
 };
 static_assert(sizeof(Q8Block) == kQ8_0TypeSize);
 
+// Q4_0 block: fp16 scale + 16 packed 4-bit values (ggml layout).
+// Elements 0..15 come from the low nibbles of qs[0..15], elements 16..31
+// from the high nibbles; each value is (nibble - 8) * scale.
+struct Q4Block {
+    uint16_t scale; // fp16
+    uint8_t qs[16];
+};
+static_assert(sizeof(Q4Block) == kQ4_0TypeSize);
+
 // Validation helpers
 
 Status check_contiguous(const TensorView& t, std::string_view op) {
@@ -63,12 +72,30 @@ float elem_to_f32(const void* base, DType dtype, int64_t idx) {
             const float scale = fp16_to_fp32(blocks[block_idx].scale);
             return scale * static_cast<float>(blocks[block_idx].qs[in_block]);
         }
-        default:
-            return 0.0f; // Q4_0 not yet in CPU backend
+        case DType::kQ4_0: {
+            const auto* blocks = static_cast<const Q4Block*>(base);
+            const int64_t block_idx = idx / kQ4_0BlockSize;
+            const int64_t in_block = idx % kQ4_0BlockSize;
+            const float scale = fp16_to_fp32(blocks[block_idx].scale);
+            // j in [0,16): low nibble -> element j; high nibble -> element j+16.
+            const uint8_t packed = blocks[block_idx].qs[in_block % 16];
+            const int32_t nibble = (in_block < 16) ? (packed & 0x0F) : (packed >> 4);
+            return scale * static_cast<float>(nibble - 8);
+        }
     }
+    return 0.0f;
 }
 
 // MatMul kernels
+
+// Convert one x element (f32 or f16) to float.
+template <typename XT> inline float xt_to_f32(XT v) {
+    if constexpr (std::is_same_v<XT, uint16_t>) {
+        return fp16_to_fp32(v);
+    } else {
+        return static_cast<float>(v);
+    }
+}
 
 // out[b, o] = sum_i x[b, i] * w[o, i]   (w stored as [out_dim, in_dim])
 // XT/WT are the element types of x/weight; both convert to float for the MAC.
@@ -112,6 +139,37 @@ void matmul_q8_0(
                 for (int j = 0; j < block; ++j) {
                     dot += static_cast<float>(xb[blk * static_cast<int32_t>(block) + j]) *
                            static_cast<float>(wr[blk].qs[j]);
+                }
+                acc += dot * scale;
+            }
+            ob[o] = acc;
+        }
+    }
+}
+
+// Fused Q4_0 GEMV: x is f32/f16, weight is Q4_0 blocks.
+template <typename XT>
+void matmul_q4_0(
+    float* out, const XT* x, const Q4Block* w, int32_t batch, int32_t out_dim, int32_t in_dim) {
+    constexpr int64_t block = kQ4_0BlockSize;
+    const int32_t num_blocks = in_dim / static_cast<int32_t>(block);
+
+    for (int32_t b = 0; b < batch; ++b) {
+        const XT* xb = x + static_cast<size_t>(b) * static_cast<size_t>(in_dim);
+        float* ob = out + static_cast<size_t>(b) * static_cast<size_t>(out_dim);
+        for (int32_t o = 0; o < out_dim; ++o) {
+            const Q4Block* wr = w + static_cast<size_t>(o) * static_cast<size_t>(num_blocks);
+            float acc = 0.0f;
+            for (int32_t blk = 0; blk < num_blocks; ++blk) {
+                const float scale = fp16_to_fp32(wr[blk].scale);
+                const int32_t base = blk * static_cast<int32_t>(block);
+                float dot = 0.0f;
+                // Low nibbles cover elements [0,16), high nibbles [16,32).
+                for (int j = 0; j < 16; ++j) {
+                    const int32_t lo = wr[blk].qs[j] & 0x0F;
+                    const int32_t hi = wr[blk].qs[j] >> 4;
+                    dot += xt_to_f32(xb[base + j]) * static_cast<float>(lo - 8) +
+                           xt_to_f32(xb[base + j + 16]) * static_cast<float>(hi - 8);
                 }
                 acc += dot * scale;
             }
@@ -233,6 +291,22 @@ Status CpuBackend::MatMul(TensorView out, TensorView x, std::string_view weight_
 
     auto* out_ptr = out.data_as<float>();
 
+    if (w.dtype() == DType::kQ4_0) {
+        if (in_dim % kQ4_0BlockSize != 0) {
+            return Status::Error(ErrorCode::kInvalidArgument,
+                                 "MatMul: in_dim not Q4_0 block-aligned");
+        }
+        const auto* wq = static_cast<const Q4Block*>(w.data());
+        if (x.dtype() == DType::kF32) {
+            matmul_q4_0(out_ptr, x.data_as<float>(), wq, batch, out_dim, in_dim);
+        } else if (x.dtype() == DType::kF16) {
+            matmul_q4_0(out_ptr, x.data_as<uint16_t>(), wq, batch, out_dim, in_dim);
+        } else {
+            return Status::Error(ErrorCode::kUnsupported,
+                                 "MatMul: Q4_0 weight requires f32/f16 input");
+        }
+        return {};
+    }
     if (w.dtype() == DType::kQ8_0) {
         if (in_dim % kQ8_0BlockSize != 0) {
             return Status::Error(ErrorCode::kInvalidArgument,

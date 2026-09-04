@@ -83,6 +83,7 @@ public:
                              int32_t head_dim,
                              int32_t capacity) override;
     Status AppendKV(int32_t layer, TensorView key, TensorView value, int64_t position) override;
+    Status ShiftKV(int64_t drop_tokens) override;
     Status AttentionKV(TensorView out,
                        TensorView q,
                        int32_t layer,

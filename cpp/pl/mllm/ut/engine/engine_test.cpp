@@ -71,6 +71,34 @@ std::vector<uint8_t> f32_bytes(const std::vector<float>& values) {
     return out;
 }
 
+// Q4_0 encoding helper (ggml layout): each 32-element block becomes 18
+// bytes {fp16 scale, 16 packed nibbles}; value = (nibble - 8) * scale.
+std::vector<uint8_t> q4_0_bytes(const std::vector<float>& values) {
+    const size_t num_blocks = values.size() / 32;
+    std::vector<uint8_t> out;
+    out.reserve(num_blocks * 18);
+    auto push16 = [&out](uint16_t v) {
+        out.push_back(static_cast<uint8_t>(v & 0xFF));
+        out.push_back(static_cast<uint8_t>(v >> 8));
+    };
+    for (size_t blk = 0; blk < num_blocks; ++blk) {
+        const float* src = values.data() + blk * 32;
+        float max_abs = 0.0f;
+        for (int j = 0; j < 32; ++j) {
+            max_abs = std::max(max_abs, std::abs(src[j]));
+        }
+        const float scale = max_abs >= 1e-8f ? max_abs / -8.0f : 1.0f;
+        push16(fp32_to_fp16(scale));
+        for (int j = 0; j < 16; ++j) {
+            const int q0 = std::max(-8, std::min(7, static_cast<int>(std::lround(src[j] / scale))));
+            const int q1 =
+                std::max(-8, std::min(7, static_cast<int>(std::lround(src[j + 16] / scale))));
+            out.push_back(static_cast<uint8_t>((q0 + 8) | ((q1 + 8) << 4)));
+        }
+    }
+    return out;
+}
+
 // Tiny model configuration
 //
 // hidden_size     = 16  (2 heads * 8 head_dim)
@@ -457,6 +485,259 @@ TEST(EngineE2ETest, Qwen3CreateAndGenerate) {
     ASSERT_TRUE(status.ok()) << status.message;
     EXPECT_GT(generated.size(), 0u);
 }
+
+// All-Q4_0 tiny model end-to-end: the loader, embedding lookup, every
+// matmul (Q/K/V/O/gate/up/down + tied output), and greedy decode must all
+// work with quantized weights, deterministically.
+td::GgufWriter make_tiny_q4_model_writer() {
+    // hidden = 32 keeps every matmul in-dim Q4_0 block aligned.
+    constexpr int64_t kHidden4 = 32;
+    constexpr int64_t kHeads4 = 4;
+    constexpr int64_t kKVHeads4 = 2;
+    constexpr int64_t kInter4 = 64;
+
+    td::GgufWriter w("llama");
+    w.meta_u32("llama.context_length", kCtx);
+    w.meta_u32("llama.embedding_length", static_cast<uint32_t>(kHidden4));
+    w.meta_u32("llama.feed_forward_length", static_cast<uint32_t>(kInter4));
+    w.meta_u32("llama.block_count", 1);
+    w.meta_u32("llama.attention.head_count", static_cast<uint32_t>(kHeads4));
+    w.meta_u32("llama.attention.head_count_kv", static_cast<uint32_t>(kKVHeads4));
+    w.meta_f32("llama.attention.layer_norm_rms_epsilon", 1e-5f);
+    w.meta_f32("llama.rope.freq_base", 10000.0f);
+
+    w.meta_str_array("tokenizer.ggml.tokens", kVocab);
+    w.meta_f32_array("tokenizer.ggml.scores",
+                     {0.0f, 0.0f, -1.0f, -2.0f, -3.0f, -4.0f, -5.0f, -6.0f});
+    w.meta_bool("tokenizer.ggml.add_bos_token", true);
+    w.meta_u32("tokenizer.ggml.bos_token_id", 0);
+    w.meta_u32("tokenizer.ggml.eos_token_id", 1);
+
+    auto q4_weight = [&w](std::string name,
+                          std::initializer_list<uint64_t> ggml_dims,
+                          uint32_t seed,
+                          size_t count) {
+        w.tensor({std::move(name),
+                  std::vector<uint64_t>(ggml_dims),
+                  td::GgufType::kQ4_0,
+                  q4_0_bytes(make_weights(seed, count))});
+    };
+
+    // ggml dims {in, out}; loaded row-major becomes [out, in].
+    // All in-dims (32 or 64) are Q4_0 block aligned. Embedding doubles as
+    // the tied output weight.
+    q4_weight("token_embd.weight",
+              {static_cast<uint64_t>(kHidden4), static_cast<uint64_t>(kVocabSize)},
+              kWeightSeed,
+              kHidden4 * kVocabSize);
+    w.tensor({"output_norm.weight",
+              {static_cast<uint64_t>(kHidden4)},
+              td::GgufType::kF32,
+              f32_bytes(ones(kHidden4))});
+
+    const std::string p = "blk.0.";
+    w.tensor({p + "attn_norm.weight",
+              {static_cast<uint64_t>(kHidden4)},
+              td::GgufType::kF32,
+              f32_bytes(ones(kHidden4))});
+    q4_weight(p + "attn_q.weight", {32, 32}, kWeightSeed + 1, 32 * 32);
+    q4_weight(p + "attn_k.weight",
+              {32, static_cast<uint64_t>(kKVHeads4 * kHeadDim)},
+              kWeightSeed + 2,
+              16 * 32);
+    q4_weight(p + "attn_v.weight",
+              {32, static_cast<uint64_t>(kKVHeads4 * kHeadDim)},
+              kWeightSeed + 3,
+              16 * 32);
+    q4_weight(p + "attn_output.weight", {32, 32}, kWeightSeed + 4, 32 * 32);
+    w.tensor({p + "ffn_norm.weight",
+              {static_cast<uint64_t>(kHidden4)},
+              td::GgufType::kF32,
+              f32_bytes(ones(kHidden4))});
+    q4_weight(
+        p + "ffn_gate.weight", {32, static_cast<uint64_t>(kInter4)}, kWeightSeed + 5, kInter4 * 32);
+    q4_weight(
+        p + "ffn_up.weight", {32, static_cast<uint64_t>(kInter4)}, kWeightSeed + 6, kInter4 * 32);
+    q4_weight(
+        p + "ffn_down.weight", {static_cast<uint64_t>(kInter4), 32}, kWeightSeed + 7, 32 * kInter4);
+    return w;
+}
+
+TEST(EngineE2ETest, Q4EngineCreateAndGenerateDeterministic) {
+    auto w = make_tiny_q4_model_writer();
+    TempFile tmp(w.build(32));
+
+    Engine::Options opts;
+    opts.model_path = tmp.path();
+    opts.backend = BackendKind::kCpu;
+
+    auto result = Engine::Create(opts);
+    ASSERT_TRUE(result.ok()) << result.status().message;
+    auto engine = std::move(result).value();
+
+    GenerateParams gp;
+    gp.max_tokens = 4;
+    gp.temperature = 0.0f; // greedy
+
+    std::vector<int32_t> generated;
+    auto status = engine->GenerateStream("a", gp, [&](std::string_view, int32_t tok) {
+        generated.push_back(tok);
+        return true;
+    });
+    ASSERT_TRUE(status.ok()) << status.message;
+    EXPECT_GT(generated.size(), 0u);
+
+    std::vector<int32_t> generated2;
+    auto status2 = engine->GenerateStream("a", gp, [&](std::string_view, int32_t tok) {
+        generated2.push_back(tok);
+        return true;
+    });
+    ASSERT_TRUE(status2.ok()) << status2.message;
+    EXPECT_EQ(generated, generated2);
+}
+
+// Ring (sliding-window) KV cache: sequences longer than the window must not
+// fail — the oldest tokens' K/V are dropped behind a window origin and
+// generation continues indefinitely.
+
+TEST(EngineE2ETest, RingAllowsGenerationBeyondWindow) {
+    auto w = make_tiny_model_writer();
+    TempFile tmp(w.build(32));
+
+    // Window of 8 tokens: prompt (2 incl. BOS) + 20 generated >> 8.
+    Engine::Options opts;
+    opts.model_path = tmp.path();
+    opts.backend = BackendKind::kCpu;
+    opts.ring = true;
+    opts.max_context = 8;
+
+    auto result = Engine::Create(opts);
+    ASSERT_TRUE(result.ok()) << result.status().message;
+    auto engine = std::move(result).value();
+
+    GenerateParams gp;
+    gp.max_tokens = 20;
+    gp.temperature = 0.0f;
+    gp.seed = 42;
+
+    auto run = [&](std::vector<int32_t>& out) {
+        return engine->GenerateStream("a", gp, [&](std::string_view, int32_t tok) {
+            out.push_back(tok);
+            return true;
+        });
+    };
+
+    std::vector<int32_t> generated;
+    auto status = run(generated);
+    ASSERT_TRUE(status.ok()) << status.message;
+    // The prompt itself (2 tokens) already exceeds half the window, so the
+    // sequence MUST have crossed the window boundary to produce this many.
+    EXPECT_GT(generated.size(), 12u);
+
+    // Same seed + greedy -> deterministic across runs.
+    std::vector<int32_t> generated2;
+    auto status2 = run(generated2);
+    ASSERT_TRUE(status2.ok()) << status2.message;
+    EXPECT_EQ(generated, generated2);
+}
+
+TEST(EngineE2ETest, RingStrictRejectsBeyondWindow) {
+    auto w = make_tiny_model_writer();
+    TempFile tmp(w.build(32));
+
+    Engine::Options opts;
+    opts.model_path = tmp.path();
+    opts.backend = BackendKind::kCpu;
+    opts.ring = false; // strict MVP semantics
+    opts.max_context = 8;
+
+    auto result = Engine::Create(opts);
+    ASSERT_TRUE(result.ok()) << result.status().message;
+    auto engine = std::move(result).value();
+
+    GenerateParams gp;
+    gp.max_tokens = 20; // 2 prompt + 20 generated > 8 -> must be rejected
+    gp.temperature = 0.0f;
+
+    auto status = engine->GenerateStream("a", gp, [](std::string_view, int32_t) { return true; });
+    ASSERT_FALSE(status.ok());
+    EXPECT_EQ(status.code, ErrorCode::kInvalidArgument);
+}
+
+// Ring mode must be bit-identical to strict mode whenever the sequence fits
+// inside the window (no compaction ever fires, so the physical layout and
+// every computation are unchanged).
+TEST(EngineE2ETest, RingMatchesStrictWithinWindow) {
+    auto w = make_tiny_model_writer();
+    TempFile tmp(w.build(32));
+
+    auto run = [&](bool ring, std::vector<int32_t>& out) {
+        Engine::Options opts;
+        opts.model_path = tmp.path();
+        opts.backend = BackendKind::kCpu;
+        opts.ring = ring;
+        opts.max_context = 32; // capacity 32 >= 2 prompt + 8 generated
+        auto engine_result = Engine::Create(opts);
+        ASSERT_TRUE(engine_result.ok()) << engine_result.status().message;
+        auto engine = std::move(engine_result).value();
+
+        GenerateParams gp;
+        gp.max_tokens = 8;
+        gp.temperature = 0.0f;
+        gp.seed = 42;
+        auto status = engine->GenerateStream("abc", gp, [&](std::string_view, int32_t tok) {
+            out.push_back(tok);
+            return true;
+        });
+        ASSERT_TRUE(status.ok()) << status.message;
+    };
+
+    std::vector<int32_t> strict_tokens;
+    run(false, strict_tokens);
+    std::vector<int32_t> ring_tokens;
+    run(true, ring_tokens);
+    EXPECT_EQ(strict_tokens, ring_tokens);
+}
+
+// Ring parity across backends: CPU (host cache, host compaction) and Metal
+// (device KV, blit-driven ShiftKV) must emit identical greedy tokens even
+// past the window, where both run the same shift policy.
+#if defined(__APPLE__)
+TEST(EngineE2ETest, RingMetalMatchesCpu) {
+    auto w = make_tiny_model_writer();
+    TempFile tmp(w.build(32));
+
+    auto run = [&](BackendKind backend, std::vector<int32_t>& out) {
+        Engine::Options opts;
+        opts.model_path = tmp.path();
+        opts.backend = backend;
+        opts.ring = true;
+        opts.max_context = 16; // 2 prompt + 26 generated > 16 -> shifting
+        auto engine_result = Engine::Create(opts);
+        ASSERT_TRUE(engine_result.ok()) << engine_result.status().message;
+        auto engine = std::move(engine_result).value();
+
+        GenerateParams gp;
+        gp.max_tokens = 26;
+        gp.temperature = 0.0f;
+        gp.seed = 42;
+        auto status = engine->GenerateStream("a", gp, [&](std::string_view, int32_t tok) {
+            out.push_back(tok);
+            return true;
+        });
+        if (!status.ok() && backend == BackendKind::kMetal) {
+            GTEST_SKIP() << "Metal backend unavailable: " << status.message;
+        }
+        ASSERT_TRUE(status.ok()) << status.message;
+    };
+
+    std::vector<int32_t> cpu_tokens;
+    run(BackendKind::kCpu, cpu_tokens);
+    std::vector<int32_t> metal_tokens;
+    run(BackendKind::kMetal, metal_tokens);
+    EXPECT_EQ(cpu_tokens, metal_tokens);
+}
+#endif // __APPLE__
 
 TEST(EngineE2ETest, UnsupportedArchitectureRejected) {
     // A llama-shaped metadata layout but a foreign arch prefix must be

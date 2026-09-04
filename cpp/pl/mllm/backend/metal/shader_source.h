@@ -675,6 +675,25 @@ kernel void mllm_dequant_f16(
     dst[gid] = (float)as_type<half>(src[gid]);
 }
 
+// Q4_0 -> f16 for the batched-prefill MPS path: one thread per 18-byte
+// block ({fp16 scale, 16 packed nibbles}).  Low nibbles map to elements
+// [0,16), high nibbles to [16,32); value = (nibble - 8) * scale.
+kernel void mllm_dequant_q4_0_f16(
+    const device uchar* src   [[buffer(0)]],
+    device half* dst          [[buffer(1)]],
+    uint gid [[thread_position_in_grid]])
+{
+    const device uchar* blk = src + gid * 18;
+    ushort sbits = (ushort)blk[0] | ((ushort)blk[1] << 8);
+    const half scale = as_type<half>(sbits);
+    device half* out = dst + gid * 32;
+    for (uint i = 0; i < 16; ++i) {
+        const uchar packed = blk[2 + i];
+        out[i] = scale * (half)((int)(packed & 0x0F) - 8);
+        out[i + 16] = scale * (half)((int)(packed >> 4) - 8);
+    }
+}
+
 // Q8_0 -> f16 for the batched-prefill MPS path: one thread per 34-byte
 // block.  Halves both the per-weight cache memory and the MPS GEMM read
 // bandwidth vs dequantizing to f32 (prefill is weight-bandwidth bound).
@@ -761,6 +780,56 @@ acc = simd_sum(acc);
 if (lane == 0 && row < out_dim) {
 out[row] = acc;
 }
+}
+
+// =========================================================================
+// Q4_0 fused dequant GEMV (one simdgroup per output row)
+//   out[o] = sum_i x[i] * dequant(w[o, i])
+// w layout (ggml Q4_0): [out_dim][num_blocks], block = {fp16 scale, 16
+//   packed nibbles} == 18 bytes.  Low nibbles -> elements [0,16), high
+//   nibbles -> [16,32); value = (nibble - 8) * scale.
+// Same structure as mllm_gemv_q8_0: each lane dots one 18-byte block per
+// iteration, barrier-free simd_sum reduction.
+// =========================================================================
+kernel void mllm_gemv_q4_0(
+    device float* out        [[buffer(0)]],
+    const device float* x    [[buffer(1)]],
+    const device uchar* w    [[buffer(2)]],
+    constant uint& in_dim    [[buffer(3)]],
+    constant uint& out_dim   [[buffer(4)]],
+    uint tid   [[thread_index_in_threadgroup]],
+    uint tgid  [[threadgroup_position_in_grid]],
+    uint tsize [[threads_per_threadgroup]])
+{
+    const uint rows_per_group = tsize / 32;
+    const uint lane = tid % 32;
+    const uint row = tgid * rows_per_group + (tid / 32);
+
+    float acc = 0.0f;
+    if (row < out_dim) {
+        const uint num_blocks = in_dim / 32;
+        const size_t row_stride = (size_t)num_blocks * 18;
+        const device uchar* wrow = w + (size_t)row * row_stride;
+        for (uint blk = lane; blk < num_blocks; blk += 32) {
+            const device uchar* b = wrow + (size_t)blk * 18;
+            const ushort sb = (ushort)b[0] | ((ushort)b[1] << 8);
+            const float scale = (float)as_type<half>(sb);
+            float dot = 0.0f;
+            #pragma unroll
+            for (uint j = 0; j < 16; ++j) {
+                const uchar packed = b[2 + j];
+                const int lo = (int)(packed & 0x0F) - 8;
+                const int hi = (int)(packed >> 4) - 8;
+                dot += x[blk * 32 + j] * (float)lo +
+                       x[blk * 32 + j + 16] * (float)hi;
+            }
+            acc += dot * scale;
+        }
+    }
+    acc = simd_sum(acc);
+    if (lane == 0 && row < out_dim) {
+        out[row] = acc;
+    }
 }
 
 // =========================================================================
@@ -881,6 +950,75 @@ kernel void mllm_gemv_q8_0_fused(
             int q = (int)b[2 + j];
             if (q >= 128) q -= 256;
             dot += x[blk * 32 + j] * (float)q;
+        }
+        acc += dot * scale;
+    }
+    acc = simd_sum(acc);
+    if (lane == 0) {
+        outrow[row] = acc;
+    }
+}
+
+// Fused Q4_0 GEMV (max 3 weights) — same fused-dispatch structure as
+// mllm_gemv_q8_0_fused, with the Q4_0 18-byte block math from
+// mllm_gemv_q4_0.
+kernel void mllm_gemv_q4_0_fused(
+    device float* out0  [[buffer(0)]],
+    device float* out1  [[buffer(1)]],
+    device float* out2  [[buffer(2)]],
+    const device float* x  [[buffer(3)]],
+    const device uchar* w0 [[buffer(4)]],
+    const device uchar* w1 [[buffer(5)]],
+    const device uchar* w2 [[buffer(6)]],
+    constant uint* params  [[buffer(7)]],  // [out0, out1, out2, off0, off1, off2, in_dim, n]
+    uint tid   [[thread_index_in_threadgroup]],
+    uint tgid  [[threadgroup_position_in_grid]],
+    uint tsize [[threads_per_threadgroup]])
+{
+    const uint rows_per_group = tsize / 32;
+    const uint lane = tid % 32;
+    const uint row_global = tgid * rows_per_group + (tid / 32);
+
+    const uint n = params[7];
+    const uint in_dim = params[6];
+
+    const device uchar* wrow = nullptr;
+    device float* outrow = nullptr;
+    uint row = 0;
+
+    if (n >= 1 && row_global < params[3]) {
+        wrow = w0;
+        outrow = out0;
+        row = row_global;
+    } else if (n >= 2 && row_global < params[4]) {
+        wrow = w1;
+        outrow = out1;
+        row = row_global - params[3];
+    } else if (n >= 3 && row_global < params[5]) {
+        wrow = w2;
+        outrow = out2;
+        row = row_global - params[4];
+    } else {
+        return;
+    }
+
+    const uint num_blocks = in_dim / 32;
+    const size_t row_stride = (size_t)num_blocks * 18;
+    const device uchar* wr = wrow + (size_t)row * row_stride;
+
+    float acc = 0.0f;
+    for (uint blk = lane; blk < num_blocks; blk += 32) {
+        const device uchar* b = wr + (size_t)blk * 18;
+        const ushort sb = (ushort)b[0] | ((ushort)b[1] << 8);
+        const float scale = (float)as_type<half>(sb);
+        float dot = 0.0f;
+        #pragma unroll
+        for (uint j = 0; j < 16; ++j) {
+            const uchar packed = b[2 + j];
+            const int lo = (int)(packed & 0x0F) - 8;
+            const int hi = (int)(packed >> 4) - 8;
+            dot += x[blk * 32 + j] * (float)lo +
+                   x[blk * 32 + j + 16] * (float)hi;
         }
         acc += dot * scale;
     }

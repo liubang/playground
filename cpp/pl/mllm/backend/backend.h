@@ -232,6 +232,22 @@ public:
         return Status::Error(ErrorCode::kUnsupported, "device KV cache not supported");
     }
 
+    // Ring-mode sliding-window support for device KV caches (SPEC §7.2):
+    // drop the oldest `drop_tokens` entries from EVERY layer (memmove
+    // semantics: positions [drop, len) shift down to [0, len - drop)). The
+    // caller (Engine) advances the host cache shell's window origin by the
+    // same amount; implementations must keep same-buffer copies
+    // non-overlapping (e.g. chunking at the delta), and afterwards the
+    // model passes physical positions
+    // (absolute_pos - window_origin) to AppendKV/AttentionKV. Deferred like
+    // every other device op — ordering against surrounding compute work is
+    // preserved by the backend's command stream. Only meaningful when
+    // HasDeviceKV() is true.
+    virtual Status ShiftKV(int64_t drop_tokens) {
+        (void)drop_tokens;
+        return Status::Error(ErrorCode::kUnsupported, "device KV shift not supported");
+    }
+
     // Batched causal attention over the device KV cache of `layer` (prefill).
     // q shape: [n, num_heads, head_dim]; out shape: [n, num_heads * head_dim].
     // Query row i attends to the first `seq_base + i` KV entries, so the

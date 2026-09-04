@@ -28,8 +28,14 @@ using namespace pl::mllm;
 static void usage(const char* prog) {
     std::fprintf(stderr,
                  "usage: %s -m <model.gguf> -p <prompt> [-n max_tokens] [-t temp] "
-                 "[-s seed] [--backend cpu|metal] [--chat] [--system <msg>] "
-                 "[--repeat-penalty <f>] [--top-k <k>] [--top-p <p>]\n",
+                 "[-s seed] [--backend cpu|metal] [--ring] [--ctx <n>] [--chat] "
+                 "[--system <msg>] [--repeat-penalty <f>] [--top-k <k>] [--top-p <p>]\n"
+                 "  --ring   sliding-window (ring) KV cache: once the context \n"
+                 "           outgrows the cache, the oldest tokens are dropped\n"
+                 "           instead of failing, so arbitrarily long prompts /\n"
+                 "           generations are allowed\n"
+                 "  --ctx n  max context / KV-cache capacity (default 4096); in\n"
+                 "           ring mode this is the sliding-window size\n",
                  prog);
 }
 
@@ -45,6 +51,8 @@ int main(int argc, char** argv) {
     uint64_t seed = 0;
     BackendKind backend = BackendKind::kCpu;
     bool chat_mode = false;
+    bool ring_mode = false;
+    int32_t max_context = 4096;
 
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "-m") == 0 && i + 1 < argc) {
@@ -60,6 +68,10 @@ int main(int argc, char** argv) {
         } else if (std::strcmp(argv[i], "--backend") == 0 && i + 1 < argc) {
             const char* value = argv[++i];
             backend = std::strcmp(value, "metal") == 0 ? BackendKind::kMetal : BackendKind::kCpu;
+        } else if (std::strcmp(argv[i], "--ring") == 0) {
+            ring_mode = true;
+        } else if (std::strcmp(argv[i], "--ctx") == 0 && i + 1 < argc) {
+            max_context = std::atoi(argv[++i]);
         } else if (std::strcmp(argv[i], "--chat") == 0) {
             chat_mode = true;
         } else if (std::strcmp(argv[i], "--system") == 0 && i + 1 < argc) {
@@ -85,6 +97,8 @@ int main(int argc, char** argv) {
     Engine::Options opts;
     opts.model_path = model_path;
     opts.backend = backend;
+    opts.ring = ring_mode;
+    opts.max_context = max_context;
 
     auto engine_result = Engine::Create(opts);
     if (!engine_result.ok()) {

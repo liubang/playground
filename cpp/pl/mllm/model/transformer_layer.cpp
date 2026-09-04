@@ -129,14 +129,17 @@ Status TransformerLayer::Forward(TensorView hidden,
         .scale = scale,
     };
     if (backend.HasDeviceKV()) {
+        // Device KV buffers are addressed physically: slot = absolute
+        // position - window origin (0 in strict mode, >0 after ring drops).
+        const int64_t phys_pos = position - cache.window_origin();
         if (auto s =
-                backend.AppendKV(layer_index_, k_reshaped.value(), v_reshaped.value(), position);
+                backend.AppendKV(layer_index_, k_reshaped.value(), v_reshaped.value(), phys_pos);
             !s.ok()) {
             return s;
         }
         // The query attends to positions [0, position] inclusive.
         if (auto s = backend.AttentionKV(
-                attn_ctx_out, q_reshaped.value(), layer_index_, position + 1, attn_cfg);
+                attn_ctx_out, q_reshaped.value(), layer_index_, phys_pos + 1, attn_cfg);
             !s.ok()) {
             return s;
         }
@@ -375,13 +378,15 @@ Status TransformerLayer::ForwardBatch(TensorView hidden,
         // buffers are keyed by base pointer, so a row slice would be
         // re-uploaded from stale host memory. AppendKV/AttentionPrefillKV
         // take the whole [n, ...] tensor at once.
-        if (auto s =
-                backend.AppendKV(layer_index_, k_reshaped.value(), v_reshaped.value(), start_pos);
+        // Device KV is addressed physically (absolute - window origin).
+        const int64_t origin = cache.window_origin();
+        if (auto s = backend.AppendKV(
+                layer_index_, k_reshaped.value(), v_reshaped.value(), start_pos - origin);
             !s.ok()) {
             return s;
         }
         if (auto s = backend.AttentionPrefillKV(
-                attn_ctx, q_reshaped.value(), layer_index_, start_pos + 1, attn_cfg);
+                attn_ctx, q_reshaped.value(), layer_index_, start_pos + 1 - origin, attn_cfg);
             !s.ok()) {
             return s;
         }
@@ -390,12 +395,15 @@ Status TransformerLayer::ForwardBatch(TensorView hidden,
             !s.ok()) {
             return s;
         }
+        // Read the origin AFTER AppendBatch: in ring mode the append may
+        // have compacted (dropped the oldest tokens), advancing the origin.
         KVCacheView kv_base = cache.View(layer_index_);
-        // kv_base reports the length BEFORE this layer's batch was advanced
-        // (== start_pos); query row i sees start_pos + i + 1 entries.
+        const int64_t origin = cache.window_origin();
+        // Query row i sits at physical slot start_pos + i - origin and sees
+        // every entry up to and including itself (strictly causal).
         for (int32_t i = 0; i < n; ++i) {
             KVCacheView kv = kv_base;
-            kv.seq_len = static_cast<int32_t>(start_pos) + i + 1;
+            kv.seq_len = static_cast<int32_t>(start_pos + i + 1 - origin);
             if (auto s = backend.Attention(
                     row_slice(attn_ctx, i), row_slice(q_reshaped.value(), i), kv, attn_cfg);
                 !s.ok()) {

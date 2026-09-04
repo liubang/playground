@@ -84,17 +84,17 @@
   <rect class="mask" x="420" y="200" width="140" height="60" rx="6"/>
   <rect class="backend" x="420" y="200" width="140" height="60" rx="6"/>
   <text class="node-title" x="490" y="225" text-anchor="middle">Model</text>
-  <text class="node-sub" x="490" y="243" text-anchor="middle">layers, forward loop</text>
+  <text class="node-sub" x="490" y="243" text-anchor="middle">layers, decode / prefill</text>
 
   <rect class="mask" x="420" y="280" width="140" height="60" rx="6"/>
   <rect class="data" x="420" y="280" width="140" height="60" rx="6"/>
   <text class="node-title" x="490" y="305" text-anchor="middle">KV Cache</text>
-  <text class="node-sub" x="490" y="323" text-anchor="middle">continuous window</text>
+  <text class="node-sub" x="490" y="323" text-anchor="middle">strict / ring window</text>
 
   <rect class="mask" x="420" y="360" width="140" height="60" rx="6"/>
   <rect class="backend" x="420" y="360" width="140" height="60" rx="6"/>
   <text class="node-title" x="490" y="385" text-anchor="middle">Sampler</text>
-  <text class="node-sub" x="490" y="403" text-anchor="middle">greedy first, seeded</text>
+  <text class="node-sub" x="490" y="403" text-anchor="middle">greedy, top-k/p, penalty</text>
 
   <rect class="mask" x="420" y="440" width="140" height="60" rx="6"/>
   <rect class="backend" x="420" y="440" width="140" height="60" rx="6"/>
@@ -110,12 +110,12 @@
   <rect class="mask" x="640" y="240" width="140" height="60" rx="6"/>
   <rect class="kernel" x="640" y="240" width="140" height="60" rx="6"/>
   <text class="node-title" x="710" y="265" text-anchor="middle">Metal</text>
-  <text class="node-sub" x="710" y="283" text-anchor="middle">.mm + .metal kernels</text>
+  <text class="node-sub" x="710" y="283" text-anchor="middle">.mm + embedded shaders</text>
 
   <rect class="mask" x="640" y="400" width="140" height="60" rx="6"/>
   <rect class="generic" x="640" y="400" width="140" height="60" rx="6"/>
-  <text class="node-title" x="710" y="425" text-anchor="middle">CPU Debug</text>
-  <text class="node-sub" x="710" y="443" text-anchor="middle">reference ops only</text>
+  <text class="node-title" x="710" y="425" text-anchor="middle">CPU (reference)</text>
+  <text class="node-sub" x="710" y="443" text-anchor="middle">pure C++ reference</text>
 
   <rect class="mask" x="640" y="480" width="140" height="60" rx="6"/>
   <rect class="data" x="640" y="480" width="140" height="60" rx="6"/>

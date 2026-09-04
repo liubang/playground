@@ -224,6 +224,78 @@ void bench_gemv_q8_0(Backend& backend, int out_dim, int in_dim) {
                 bytes / (chain_ms / 1e3) / 1e9);
 }
 
+void bench_gemv_q4_0(Backend& backend, int out_dim, int in_dim) {
+    static std::vector<BenchWeight> pool;
+    auto& w = pool.emplace_back(HostBuf::alloc({out_dim, in_dim}, DType::kQ4_0),
+                                "w" + std::to_string(pool.size()));
+    auto x = HostBuf::alloc({1, in_dim}, DType::kF32);
+    auto out = HostBuf::alloc({1, out_dim}, DType::kF32);
+    x.fill_random(1);
+
+    // Fill with a deterministic quantized pattern (ggml Q4_0 block layout).
+    const int64_t num_blocks = static_cast<int64_t>(out_dim) * in_dim / kQ4_0BlockSize;
+    std::mt19937 rng(7);
+    std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+    for (int64_t blk = 0; blk < num_blocks; ++blk) {
+        float max_abs = 0.0f;
+        float vals[32];
+        for (int j = 0; j < 32; ++j) {
+            vals[j] = dist(rng);
+            max_abs = std::max(max_abs, std::abs(vals[j]));
+        }
+        const float scale = max_abs / -8.0f;
+        auto* bytes = static_cast<uint8_t*>(w.buf.view.data()) + blk * 18;
+        const uint16_t scale_bits = fp32_to_fp16(scale);
+        std::memcpy(bytes, &scale_bits, 2);
+        for (int j = 0; j < 16; ++j) {
+            const int q0 = std::max(-8, std::min(7, static_cast<int>(std::round(vals[j] / scale))));
+            const int q1 =
+                std::max(-8, std::min(7, static_cast<int>(std::round(vals[j + 16] / scale))));
+            bytes[2 + j] = static_cast<uint8_t>((q0 + 8) | ((q1 + 8) << 4));
+        }
+    }
+
+    std::array names = {std::string_view{w.name}};
+    std::array<TensorView, 1> views = {w.buf.view};
+    if (!backend.ImportWeights(views, names).ok()) {
+        std::fprintf(stderr, "gemv q4_0: import failed\n");
+        return;
+    }
+
+    const double ms = bench_ms(
+        [&] {
+            auto s = backend.MatMul(out.view, x.view, w.name);
+            if (!s.ok())
+                std::fprintf(stderr, "gemv q4_0 failed: %s\n", s.message.c_str());
+            sync_backend(backend);
+        },
+        50);
+
+    // Chained version amortizes the per-op commit+wait round trip.
+    constexpr int kReps = 64;
+    const double chain_ms =
+        bench_ms(
+            [&] {
+                for (int r = 0; r < kReps; ++r) {
+                    auto s = backend.MatMul(out.view, x.view, w.name);
+                    if (!s.ok())
+                        std::fprintf(stderr, "gemv q4_0 chain failed: %s\n", s.message.c_str());
+                }
+                sync_backend(backend);
+            },
+            20) /
+        kReps;
+
+    const double bytes = (static_cast<double>(out_dim) * in_dim + in_dim + out_dim) * 4.0;
+    std::printf("gemv q4_0 %5d x %-6d : %9.3f ms  %8.1f GB/s   (chained: %9.3f ms, %8.1f GB/s)\n",
+                out_dim,
+                in_dim,
+                ms,
+                bytes / (ms / 1e3) / 1e9,
+                chain_ms,
+                bytes / (chain_ms / 1e3) / 1e9);
+}
+
 // Attention
 
 void bench_attention(Backend& backend, int seq_len, int num_heads, int num_kv_heads, int head_dim) {
@@ -348,6 +420,20 @@ int main(int argc, char** argv) {
                                                         {1024, 3072},
                                                         {151936, 1024}}) {
         bench_gemv_q8_0(*backend, o, i);
+    }
+    std::printf("# gemv q4_0 fused dequant (same decode shapes as q8_0)\n");
+    for (auto [o, i] : std::vector<std::pair<int, int>>{
+             {4096, 4096}, {11008, 4096}, {4096, 11008}, {32000, 4096}}) {
+        bench_gemv_q4_0(*backend, o, i);
+    }
+    std::printf("# gemv q4_0 qwen3-0.6B decode shapes\n");
+    for (auto [o, i] : std::vector<std::pair<int, int>>{{2048, 1024},
+                                                        {1024, 1024},
+                                                        {1024, 2048},
+                                                        {3072, 1024},
+                                                        {1024, 3072},
+                                                        {151936, 1024}}) {
+        bench_gemv_q4_0(*backend, o, i);
     }
     std::printf("# attention seq lengths (32 heads, 8 kv heads, head_dim 128)\n");
     for (int seq : {128, 512, 2048, 4096}) {

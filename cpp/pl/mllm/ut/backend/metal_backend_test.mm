@@ -64,6 +64,17 @@ struct HostTensor {
         TensorView view(buf.data(), DType::kQ8_0, shape);
         return {std::move(buf), view};
     }
+
+    static HostTensor alloc_q4_0(std::initializer_list<int64_t> dims) {
+        Shape shape(dims);
+        int64_t numel = shape.numel();
+        EXPECT_EQ(numel % kQ4_0BlockSize, 0);
+        size_t bytes = dtype_nbytes(DType::kQ4_0, numel);
+        auto buf = OwnedBuffer::AllocateCpu(bytes, 64).value();
+        std::memset(buf.data(), 0, bytes);
+        TensorView view(buf.data(), DType::kQ4_0, shape);
+        return {std::move(buf), view};
+    }
 };
 
 // Skip the enclosing test when no Metal device is available (e.g. CI without
@@ -101,6 +112,37 @@ struct Q8Block {
     uint16_t scale;
     int8_t qs[32];
 };
+
+// Q4_0 block (ggml layout): fp16 scale + 16 packed nibbles; low nibbles
+// map to elements [0,16), high nibbles to [16,32).
+struct Q4Block {
+    uint16_t scale;
+    uint8_t qs[16];
+};
+static_assert(sizeof(Q4Block) == kQ4_0TypeSize);
+
+// Build a Q4_0 weight buffer from f32 data (block-aligned in_dim).
+void fill_q4_0(HostTensor& w, const std::vector<float>& w_f32) {
+    auto* blocks = static_cast<Q4Block*>(w.buf.data());
+    const int64_t numel = w.view.shape().numel();
+    const int64_t num_blocks = numel / kQ4_0BlockSize;
+    for (int64_t blk = 0; blk < num_blocks; ++blk) {
+        const float* src = w_f32.data() + blk * 32;
+        float max_abs = 0.0f;
+        for (int j = 0; j < 32; ++j) {
+            max_abs = std::max(max_abs, std::abs(src[j]));
+        }
+        const float scale = max_abs >= 1e-8f ? max_abs / -8.0f : 1.0f;
+        Q4Block& b = blocks[static_cast<size_t>(blk)];
+        b.scale = fp32_to_fp16(scale);
+        for (int j = 0; j < 16; ++j) {
+            const int q0 = std::max(-8, std::min(7, static_cast<int>(std::round(src[j] / scale))));
+            const int q1 =
+                std::max(-8, std::min(7, static_cast<int>(std::round(src[j + 16] / scale))));
+            b.qs[j] = static_cast<uint8_t>((q0 + 8) | ((q1 + 8) << 4));
+        }
+    }
+}
 
 // Build a Q8_0 weight buffer from f32 data (block-aligned in_dim).
 void fill_q8_0(HostTensor& w, const std::vector<float>& w_f32) {
@@ -278,6 +320,37 @@ TEST(MetalParityTest, MatMulF16WeightRealDims) {
     expect_close(out_cpu.view, out_gpu.view, 1e-2f, 1e-2f);
 }
 
+TEST(MetalParityTest, MatMulQ4_0Weight) {
+    REQUIRE_METAL();
+    const int batch = 1, in_dim = 64, out_dim = 8;
+    auto x = HostTensor::alloc({batch, in_dim}, DType::kF32);
+    auto w = HostTensor::alloc_q4_0({out_dim, in_dim});
+    auto out_cpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    auto out_gpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    fill_random(x.view.data_as<float>(), batch * in_dim, 101);
+
+    std::vector<float> w_f32(static_cast<size_t>(out_dim) * in_dim);
+    fill_random(w_f32.data(), w_f32.size(), 102);
+    fill_q4_0(w, w_f32);
+
+    CpuBackend cpu;
+    std::array names_cpu = {std::string_view{"w0"}};
+    std::array<TensorView, 1> views_cpu = {w.view};
+    ASSERT_TRUE(cpu.ImportWeights(views_cpu, names_cpu).ok());
+    ASSERT_TRUE(cpu.MatMul(out_cpu.view, x.view, "w0").ok());
+
+    MetalBackend gpu;
+    std::array names_gpu = {std::string_view{"w0"}};
+    std::array<TensorView, 1> views_gpu = {w.view};
+    ASSERT_TRUE(gpu.ImportWeights(views_gpu, names_gpu).ok());
+    ASSERT_TRUE(gpu.MatMul(out_gpu.view, x.view, "w0").ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
+
+    // Both dequantize Q4_0 identically before the MAC; parity is exact
+    // modulo f32 accumulation order.
+    expect_close(out_cpu.view, out_gpu.view, 1e-3f, 1e-3f);
+}
+
 TEST(MetalParityTest, MatMulQ8_0WeightRealDims) {
     REQUIRE_METAL();
     const int batch = 1, in_dim = 1024, out_dim = 1024;
@@ -391,6 +464,35 @@ TEST(MetalParityTest, MatMulFused2F16) {
     expect_close(o1_cpu.view, o1_gpu.view, 1e-2f, 1e-2f);
 }
 
+TEST(MetalParityTest, MatMulQ4_0WeightRealDims) {
+    REQUIRE_METAL();
+    const int batch = 1, in_dim = 1024, out_dim = 1024;
+    auto x = HostTensor::alloc({batch, in_dim}, DType::kF32);
+    auto w = HostTensor::alloc_q4_0({out_dim, in_dim});
+    auto out_cpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    auto out_gpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    fill_random(x.view.data_as<float>(), batch * in_dim, 111);
+
+    std::vector<float> w_f32(static_cast<size_t>(out_dim) * in_dim);
+    fill_random(w_f32.data(), w_f32.size(), 112);
+    fill_q4_0(w, w_f32);
+
+    CpuBackend cpu;
+    std::array names_cpu = {std::string_view{"w0"}};
+    std::array<TensorView, 1> views_cpu = {w.view};
+    ASSERT_TRUE(cpu.ImportWeights(views_cpu, names_cpu).ok());
+    ASSERT_TRUE(cpu.MatMul(out_cpu.view, x.view, "w0").ok());
+
+    MetalBackend gpu;
+    std::array names_gpu = {std::string_view{"w0"}};
+    std::array<TensorView, 1> views_gpu = {w.view};
+    ASSERT_TRUE(gpu.ImportWeights(views_gpu, names_gpu).ok());
+    ASSERT_TRUE(gpu.MatMul(out_gpu.view, x.view, "w0").ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
+
+    expect_close(out_cpu.view, out_gpu.view, 1.0f, 1e-2f);
+}
+
 // Fused MatMul parity: 3 weights, Q8_0
 
 TEST(MetalParityTest, MatMulFused3Q8_0) {
@@ -418,6 +520,53 @@ TEST(MetalParityTest, MatMulFused3Q8_0) {
     fill_q8_0(w0, w0_f32);
     fill_q8_0(w1, w1_f32);
     fill_q8_0(w2, w2_f32);
+
+    CpuBackend cpu;
+    std::array names = {std::string_view{"w0"}, std::string_view{"w1"}, std::string_view{"w2"}};
+    std::array<TensorView, 3> views = {w0.view, w1.view, w2.view};
+    ASSERT_TRUE(cpu.ImportWeights(views, names).ok());
+    ASSERT_TRUE(cpu.MatMul(o0_cpu.view, x.view, "w0").ok());
+    ASSERT_TRUE(cpu.MatMul(o1_cpu.view, x.view, "w1").ok());
+    ASSERT_TRUE(cpu.MatMul(o2_cpu.view, x.view, "w2").ok());
+
+    MetalBackend gpu;
+    ASSERT_TRUE(gpu.ImportWeights(views, names).ok());
+    std::array<TensorView, 3> fused_outs = {o0_gpu.view, o1_gpu.view, o2_gpu.view};
+    ASSERT_TRUE(gpu.MatMulFused(fused_outs, x.view, names).ok());
+    ASSERT_TRUE(gpu.SyncToHost(o0_gpu.view).ok());
+    ASSERT_TRUE(gpu.SyncToHost(o1_gpu.view).ok());
+    ASSERT_TRUE(gpu.SyncToHost(o2_gpu.view).ok());
+
+    expect_close(o0_cpu.view, o0_gpu.view, 1.0f, 1e-2f);
+    expect_close(o1_cpu.view, o1_gpu.view, 1.0f, 1e-2f);
+    expect_close(o2_cpu.view, o2_gpu.view, 1.0f, 1e-2f);
+}
+
+TEST(MetalParityTest, MatMulFused3Q4_0) {
+    REQUIRE_METAL();
+    const int batch = 1, in_dim = 1024;
+    const int out0 = 1024, out1 = 256, out2 = 256;
+    auto x = HostTensor::alloc({batch, in_dim}, DType::kF32);
+    auto w0 = HostTensor::alloc_q4_0({out0, in_dim});
+    auto w1 = HostTensor::alloc_q4_0({out1, in_dim});
+    auto w2 = HostTensor::alloc_q4_0({out2, in_dim});
+    auto o0_cpu = HostTensor::alloc({batch, out0}, DType::kF32);
+    auto o1_cpu = HostTensor::alloc({batch, out1}, DType::kF32);
+    auto o2_cpu = HostTensor::alloc({batch, out2}, DType::kF32);
+    auto o0_gpu = HostTensor::alloc({batch, out0}, DType::kF32);
+    auto o1_gpu = HostTensor::alloc({batch, out1}, DType::kF32);
+    auto o2_gpu = HostTensor::alloc({batch, out2}, DType::kF32);
+    fill_random(x.view.data_as<float>(), batch * in_dim, 121);
+
+    std::vector<float> w0_f32(static_cast<size_t>(out0) * in_dim);
+    std::vector<float> w1_f32(static_cast<size_t>(out1) * in_dim);
+    std::vector<float> w2_f32(static_cast<size_t>(out2) * in_dim);
+    fill_random(w0_f32.data(), w0_f32.size(), 122);
+    fill_random(w1_f32.data(), w1_f32.size(), 123);
+    fill_random(w2_f32.data(), w2_f32.size(), 124);
+    fill_q4_0(w0, w0_f32);
+    fill_q4_0(w1, w1_f32);
+    fill_q4_0(w2, w2_f32);
 
     CpuBackend cpu;
     std::array names = {std::string_view{"w0"}, std::string_view{"w1"}, std::string_view{"w2"}};
@@ -526,6 +675,37 @@ TEST(MetalParityTest, MatMulQ8_0BatchPrefillRealDims) {
     std::vector<float> w_f32(static_cast<size_t>(out_dim) * in_dim);
     fill_random(w_f32.data(), w_f32.size(), 72);
     fill_q8_0(w, w_f32);
+
+    CpuBackend cpu;
+    std::array names_cpu = {std::string_view{"w0"}};
+    std::array<TensorView, 1> views_cpu = {w.view};
+    ASSERT_TRUE(cpu.ImportWeights(views_cpu, names_cpu).ok());
+    ASSERT_TRUE(cpu.MatMul(out_cpu.view, x.view, "w0").ok());
+
+    MetalBackend gpu;
+    std::array names_gpu = {std::string_view{"w0"}};
+    std::array<TensorView, 1> views_gpu = {w.view};
+    ASSERT_TRUE(gpu.ImportWeights(views_gpu, names_gpu).ok());
+    ASSERT_TRUE(gpu.MatMul(out_gpu.view, x.view, "w0").ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
+
+    expect_close(out_cpu.view, out_gpu.view, 1e-2f, 1e-2f);
+}
+
+// Batched Q4_0 GEMM parity: the prefill path lazily dequantizes the
+// weight to f16 and runs the f16 MPS GEMM.
+TEST(MetalParityTest, MatMulQ4_0BatchPrefill) {
+    REQUIRE_METAL();
+    const int batch = 4, in_dim = 256, out_dim = 32;
+    auto x = HostTensor::alloc({batch, in_dim}, DType::kF32);
+    auto w = HostTensor::alloc_q4_0({out_dim, in_dim});
+    auto out_cpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    auto out_gpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    fill_random(x.view.data_as<float>(), batch * in_dim, 131);
+
+    std::vector<float> w_f32(static_cast<size_t>(out_dim) * in_dim);
+    fill_random(w_f32.data(), w_f32.size(), 132);
+    fill_q4_0(w, w_f32);
 
     CpuBackend cpu;
     std::array names_cpu = {std::string_view{"w0"}};
@@ -787,6 +967,70 @@ TEST(MetalParityTest, DeviceKVPrefillAttentionParity) {
         SCOPED_TRACE("row " + std::to_string(i) + " (seq=" + std::to_string(row_seq) + ")");
         expect_close(out_ref.view, gpu_row, 1e-5f, 1e-5f);
     }
+}
+
+// Ring-mode device-KV shift parity: AppendKV writes 8 distinct positions,
+// ShiftKV(3) compacts them (memmove semantics), and the attention result over
+// the remaining physical range must equal CPU attention over the retained
+// positions — proving the shift moved exactly the right K/V rows.
+TEST(MetalParityTest, DeviceKVShiftParity) {
+    REQUIRE_METAL();
+    const int num_heads = 2, num_kv_heads = 1, head_dim = 8;
+    const int capacity = 8, drop = 3;
+    auto q = HostTensor::alloc({1, num_heads, head_dim}, DType::kF32);
+    fill_random(q.view.data_as<float>(), num_heads * head_dim, 31);
+
+    // CPU reference: attention over retained positions [drop, capacity).
+    auto all_k = HostTensor::alloc({capacity, num_kv_heads, head_dim}, DType::kF32);
+    auto all_v = HostTensor::alloc({capacity, num_kv_heads, head_dim}, DType::kF32);
+    fill_random(all_k.view.data_as<float>(), capacity * num_kv_heads * head_dim, 32);
+    fill_random(all_v.view.data_as<float>(), capacity * num_kv_heads * head_dim, 33);
+    KVCacheView kv_host{
+        .keys = static_cast<char*>(all_k.view.data()) +
+                static_cast<size_t>(drop) * num_kv_heads * head_dim * sizeof(float),
+        .values = static_cast<char*>(all_v.view.data()) +
+                  static_cast<size_t>(drop) * num_kv_heads * head_dim * sizeof(float),
+        .seq_len = capacity - drop,
+        .num_kv_heads = num_kv_heads,
+        .head_dim = head_dim,
+        .dtype = DType::kF32,
+    };
+    AttentionConfig cfg{
+        .num_heads = num_heads,
+        .num_kv_heads = num_kv_heads,
+        .head_dim = head_dim,
+        .scale = 1.0f / std::sqrt(static_cast<float>(head_dim)),
+    };
+    auto out_cpu = HostTensor::alloc({1, num_heads * head_dim}, DType::kF32);
+    CpuBackend cpu;
+    ASSERT_TRUE(cpu.Attention(out_cpu.view, q.view, kv_host, cfg).ok());
+
+    // Metal: device KV, full append then ShiftKV(drop).
+    MetalBackend gpu;
+    ASSERT_TRUE(gpu.ConfigureDeviceKV(1, num_kv_heads, head_dim, capacity).ok());
+    for (int s = 0; s < capacity; ++s) {
+        TensorView k_slice(
+            static_cast<char*>(all_k.view.data()) +
+                static_cast<size_t>(s) * num_kv_heads * head_dim * sizeof(float),
+            DType::kF32,
+            Shape({1, num_kv_heads, head_dim}));
+        TensorView v_slice(
+            static_cast<char*>(all_v.view.data()) +
+                static_cast<size_t>(s) * num_kv_heads * head_dim * sizeof(float),
+            DType::kF32,
+            Shape({1, num_kv_heads, head_dim}));
+        ASSERT_TRUE(gpu.AppendKV(0, k_slice, v_slice, s).ok());
+    }
+    // Invalid shift sizes are rejected up front.
+    EXPECT_FALSE(gpu.ShiftKV(-1).ok());
+    EXPECT_FALSE(gpu.ShiftKV(capacity + 1).ok());
+    ASSERT_TRUE(gpu.ShiftKV(drop).ok());
+
+    auto out_gpu = HostTensor::alloc({1, num_heads * head_dim}, DType::kF32);
+    ASSERT_TRUE(gpu.AttentionKV(out_gpu.view, q.view, 0, capacity - drop, cfg).ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
+
+    expect_close(out_cpu.view, out_gpu.view, 1e-5f, 1e-5f);
 }
 
 // Attention parity at real-model dimensions (Qwen3-like):

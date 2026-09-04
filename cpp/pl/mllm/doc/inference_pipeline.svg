@@ -53,7 +53,7 @@
   <path class="loop" d="M930 460 V535 H1010 V380 H970"/>
   <text class="label-loop" x="1018" y="460">until EOS</text>
   <text class="label-loop" x="1018" y="474">or max_tokens</text>
-  <text class="label-loop" x="1018" y="488">or overflow</text>
+  <text class="label-loop" x="1018" y="488">or overflow (strict)</text>
   <text class="label-loop" x="1018" y="502">or cancel</text>
   <path class="line" d="M245 585 H845"/>
 
@@ -74,12 +74,12 @@
   <rect class="mask" x="245" y="130" width="130" height="60" rx="6"/>
   <rect class="runtime" x="245" y="130" width="130" height="60" rx="6"/>
   <text class="step-title" x="310" y="154" text-anchor="middle">Tokenizer</text>
-  <text class="step-sub" x="310" y="172" text-anchor="middle">token ids + BOS</text>
+  <text class="step-sub" x="310" y="172" text-anchor="middle">token ids (+ BOS)</text>
 
   <rect class="mask" x="445" y="130" width="130" height="60" rx="6"/>
   <rect class="kernel" x="445" y="130" width="130" height="60" rx="6"/>
   <text class="step-title" x="510" y="154" text-anchor="middle">Prefill Forward</text>
-  <text class="step-sub" x="510" y="172" text-anchor="middle">one token first</text>
+  <text class="step-sub" x="510" y="172" text-anchor="middle">batched chunks</text>
 
   <rect class="mask" x="645" y="130" width="130" height="60" rx="6"/>
   <rect class="state" x="645" y="130" width="130" height="60" rx="6"/>
@@ -95,32 +95,32 @@
   <rect class="mask" x="845" y="260" width="130" height="60" rx="6"/>
   <rect class="runtime" x="845" y="260" width="130" height="60" rx="6"/>
   <text class="step-title" x="910" y="284" text-anchor="middle">First Sample</text>
-  <text class="step-sub" x="910" y="302" text-anchor="middle">greedy argmax</text>
+  <text class="step-sub" x="910" y="302" text-anchor="middle">from last logits</text>
 
   <!-- Decode nodes -->
   <rect class="mask" x="845" y="380" width="130" height="80" rx="6"/>
   <rect class="runtime" x="845" y="380" width="130" height="80" rx="6"/>
   <text class="step-title" x="910" y="408" text-anchor="middle">Sampler</text>
-  <text class="step-sub" x="910" y="426" text-anchor="middle">greedy first</text>
-  <text class="step-sub" x="910" y="442" text-anchor="middle">seeded later</text>
+  <text class="step-sub" x="910" y="426" text-anchor="middle">greedy / temperature</text>
+  <text class="step-sub" x="910" y="442" text-anchor="middle">top-k / top-p / penalty</text>
 
   <rect class="mask" x="645" y="380" width="130" height="80" rx="6"/>
   <rect class="kernel" x="645" y="380" width="130" height="80" rx="6"/>
   <text class="step-title" x="710" y="408" text-anchor="middle">Decode Forward</text>
   <text class="step-sub" x="710" y="426" text-anchor="middle">single token</text>
-  <text class="step-sub" x="710" y="442" text-anchor="middle">Metal backend</text>
+  <text class="step-sub" x="710" y="442" text-anchor="middle">Metal / CPU</text>
 
   <rect class="mask" x="445" y="380" width="130" height="80" rx="6"/>
   <rect class="state" x="445" y="380" width="130" height="80" rx="6"/>
   <text class="step-title" x="510" y="408" text-anchor="middle">Update Cache</text>
   <text class="step-sub" x="510" y="426" text-anchor="middle">capacity checked</text>
-  <text class="step-sub" x="510" y="442" text-anchor="middle">no ring overwrite</text>
+  <text class="step-sub" x="510" y="442" text-anchor="middle">ring shifts oldest</text>
 
   <rect class="mask" x="245" y="380" width="130" height="80" rx="6"/>
   <rect class="runtime" x="245" y="380" width="130" height="80" rx="6"/>
   <text class="step-title" x="310" y="408" text-anchor="middle">Next Logits</text>
-  <text class="step-sub" x="310" y="426" text-anchor="middle">top-k parity</text>
-  <text class="step-sub" x="310" y="442" text-anchor="middle">for tests</text>
+  <text class="step-sub" x="310" y="426" text-anchor="middle">logits out</text>
+  <text class="step-sub" x="310" y="442" text-anchor="middle">to sampler / tests</text>
 
   <rect class="mask" x="65" y="380" width="110" height="80" rx="6"/>
   <rect class="io" x="65" y="380" width="110" height="80" rx="6"/>

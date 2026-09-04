@@ -64,7 +64,7 @@
   <text class="boundary-title" x="60" y="132">Model Lifetime</text>
 
   <rect class="boundary" x="40" y="380" width="1038" height="240" rx="12"/>
-  <text class="boundary-title" x="60" y="407">Generation Lifetime</text>
+  <text class="boundary-title" x="60" y="407">Engine-Owned Scratch &amp; KV State</text>
 
   <!-- Model lifetime row -->
   <rect class="mask" x="85" y="155" width="120" height="70" rx="6"/>
@@ -99,13 +99,13 @@
 
   <rect class="mask" x="520" y="255" width="145" height="45" rx="6"/>
   <rect class="viewbox" x="520" y="255" width="145" height="45" rx="6"/>
-  <text class="node-title" x="592.5" y="282" text-anchor="middle">WeightTable</text>
+  <text class="node-title" x="592.5" y="282" text-anchor="middle">WeightEntry</text>
 
   <!-- Generation lifetime row -->
   <rect class="mask" x="115" y="440" width="220" height="70" rx="6"/>
   <rect class="owner" x="115" y="440" width="220" height="70" rx="6"/>
   <text class="node-title" x="225" y="468" text-anchor="middle">ScratchArena</text>
-  <text class="node-sub" x="225" y="486" text-anchor="middle">temporary activations</text>
+  <text class="node-sub" x="225" y="486" text-anchor="middle">engine-owned, reused per call</text>
 
   <rect class="mask" x="480" y="440" width="160" height="70" rx="6"/>
   <rect class="viewbox" x="480" y="440" width="160" height="70" rx="6"/>
@@ -120,12 +120,12 @@
   <rect class="mask" x="115" y="530" width="220" height="70" rx="6"/>
   <rect class="owner" x="115" y="530" width="220" height="70" rx="6"/>
   <text class="node-title" x="225" y="558" text-anchor="middle">KV Cache</text>
-  <text class="node-sub" x="225" y="576" text-anchor="middle">generation-owned</text>
+  <text class="node-sub" x="225" y="576" text-anchor="middle">engine-owned; device-KV: shell</text>
 
   <rect class="mask" x="785" y="530" width="170" height="70" rx="6"/>
   <rect class="viewbox" x="785" y="530" width="170" height="70" rx="6"/>
   <text class="node-title" x="870" y="558" text-anchor="middle">KVCacheView</text>
-  <text class="node-sub" x="870" y="576" text-anchor="middle">continuous range</text>
+  <text class="node-sub" x="870" y="576" text-anchor="middle">host view; device on GPU</text>
 
   <!-- Legend -->
   <rect x="55" y="655" width="1010" height="40" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
@@ -138,5 +138,5 @@
   <text class="note" x="478" y="672">temporary</text>
   <line x1="580" y1="668" x2="620" y2="668" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
   <text class="note" x="628" y="672">data flow</text>
-  <text class="note" x="75" y="688">Rule: TensorView must not outlive its owner. ScratchArena resets every token.</text>
+  <text class="note" x="75" y="688">Rule: TensorView must not outlive its owner. Engine creates KV cache &amp; scratch once (per model), clears them per generation; scratch resets per token (decode) or per layer (prefill).</text>
 </svg>

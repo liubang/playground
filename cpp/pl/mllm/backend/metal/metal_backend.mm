@@ -57,6 +57,12 @@ struct Q8Block {
 };
 static_assert(sizeof(Q8Block) == kQ8_0TypeSize);
 
+struct Q4Block {
+    uint16_t scale; // fp16
+    uint8_t qs[16];
+};
+static_assert(sizeof(Q4Block) == kQ4_0TypeSize);
+
 float elem_to_f32(const void* base, DType dtype, int64_t idx) {
     switch (dtype) {
     case DType::kF32:
@@ -70,9 +76,17 @@ float elem_to_f32(const void* base, DType dtype, int64_t idx) {
         const float scale = fp16_to_fp32(blocks[block_idx].scale);
         return scale * static_cast<float>(blocks[block_idx].qs[in_block]);
     }
-    default:
-        return 0.0f;
+    case DType::kQ4_0: {
+        const auto* blocks = static_cast<const Q4Block*>(base);
+        const int64_t block_idx = idx / kQ4_0BlockSize;
+        const int64_t in_block = idx % kQ4_0BlockSize;
+        const float scale = fp16_to_fp32(blocks[block_idx].scale);
+        const uint8_t packed = blocks[block_idx].qs[in_block % 16];
+        const int32_t nibble = (in_block < 16) ? (packed & 0x0F) : (packed >> 4);
+        return scale * static_cast<float>(nibble - 8);
     }
+    }
+    return 0.0f;
 }
 
 // Convert any supported tensor (f32/f16/Q8_0) into a host f32 vector.
@@ -111,13 +125,16 @@ struct MetalBackend::Impl {
     id<MTLComputePipelineState> add_ps = nil;
     id<MTLComputePipelineState> add_bias_ps = nil;
     id<MTLComputePipelineState> gemv_q8_0_ps = nil;
+    id<MTLComputePipelineState> gemv_q4_0_ps = nil;
     id<MTLComputePipelineState> gemv_f16_ps = nil;
     id<MTLComputePipelineState> gemv_f32_ps = nil;
     id<MTLComputePipelineState> gemv_q8_0_fused_ps = nil;
+    id<MTLComputePipelineState> gemv_q4_0_fused_ps = nil;
     id<MTLComputePipelineState> gemv_f16_fused_ps = nil;
     id<MTLComputePipelineState> gemv_f32_fused_ps = nil;
     id<MTLComputePipelineState> append_kv_ps = nil;
     id<MTLComputePipelineState> dequant_q8_0_f16_ps = nil; // q8_0 -> f16 for MPS prefill
+    id<MTLComputePipelineState> dequant_q4_0_f16_ps = nil; // q4_0 -> f16 for MPS prefill
     id<MTLComputePipelineState> cvt_f32_to_f16_ps = nil;   // GEMM A conversion
     id<MTLComputePipelineState> cvt_f16_to_f32_ps = nil;   // GEMM C conversion
 
@@ -255,13 +272,16 @@ private:
         add_ps = make_ps("mllm_add_inplace");
         add_bias_ps = make_ps("mllm_add_bias");
         gemv_q8_0_ps = make_ps("mllm_gemv_q8_0");
+        gemv_q4_0_ps = make_ps("mllm_gemv_q4_0");
         gemv_f16_ps = make_ps("mllm_gemv_f16");
         gemv_f32_ps = make_ps("mllm_gemv_f32");
         gemv_q8_0_fused_ps = make_ps("mllm_gemv_q8_0_fused");
+        gemv_q4_0_fused_ps = make_ps("mllm_gemv_q4_0_fused");
         gemv_f16_fused_ps = make_ps("mllm_gemv_f16_fused");
         gemv_f32_fused_ps = make_ps("mllm_gemv_f32_fused");
         append_kv_ps = make_ps("mllm_append_kv");
         dequant_q8_0_f16_ps = make_ps("mllm_dequant_q8_0_f16");
+        dequant_q4_0_f16_ps = make_ps("mllm_dequant_q4_0_f16");
         cvt_f32_to_f16_ps = make_ps("mllm_cvt_f32_to_f16");
         cvt_f16_to_f32_ps = make_ps("mllm_cvt_f16_to_f32");
         if (!init_error.ok()) {
@@ -272,9 +292,11 @@ private:
             !attention_decode_ps ||
             !attention_flash_batch_ps ||
             !swiglu_ps || !add_ps || !add_bias_ps ||
-            !gemv_q8_0_ps || !gemv_f16_ps || !gemv_f32_ps ||
-            !gemv_q8_0_fused_ps || !gemv_f16_fused_ps || !gemv_f32_fused_ps ||
-            !append_kv_ps || !dequant_q8_0_f16_ps || !cvt_f32_to_f16_ps ||
+            !gemv_q8_0_ps || !gemv_q4_0_ps || !gemv_f16_ps || !gemv_f32_ps ||
+            !gemv_q8_0_fused_ps || !gemv_q4_0_fused_ps || !gemv_f16_fused_ps ||
+            !gemv_f32_fused_ps ||
+            !append_kv_ps || !dequant_q8_0_f16_ps || !dequant_q4_0_f16_ps ||
+            !cvt_f32_to_f16_ps ||
             !cvt_f16_to_f32_ps) {
             init_error = Status::Error(ErrorCode::kBackendFailure,
                                        "MetalBackend: missing pipeline state");
@@ -523,6 +545,13 @@ if (auto s = ensure_ready(*impl_); !s.ok()) return s;
             }
             ps = impl_->gemv_q8_0_ps;
             break;
+        case DType::kQ4_0:
+            if (in_dim % kQ4_0BlockSize != 0) {
+                return Status::Error(ErrorCode::kInvalidArgument,
+                                     "MatMul: in_dim not Q4_0 block-aligned");
+            }
+            ps = impl_->gemv_q4_0_ps;
+            break;
         case DType::kF16:
             ps = impl_->gemv_f16_ps;
             break;
@@ -544,9 +573,9 @@ if (auto s = ensure_ready(*impl_); !s.ok()) return s;
     [enc setBuffer:w.buf offset:0 atIndex:2];
     [enc setBytes:&in_d length:sizeof(in_d) atIndex:3];
     [enc setBytes:&out_d length:sizeof(out_d) atIndex:4];
-    // Q8_0 uses one simdgroup (32 lanes) per output row; F16/F32 keep
+    // Quants use one simdgroup (32 lanes) per output row; F16/F32 keep
     // split-K with NT=4 lanes/row and threadgroup-memory reduction.
-    const bool simd_per_row = (w.dtype == DType::kQ8_0);
+    const bool simd_per_row = is_quantized(w.dtype);
     [enc setThreadgroupMemoryLength:256 * sizeof(float) atIndex:0];
     [enc dispatchThreads:MTLSizeMake(static_cast<NSUInteger>(out_dim) * (simd_per_row ? 32 : 4),
                                      1, 1)
@@ -579,10 +608,11 @@ if (auto s = ensure_ready(*impl_); !s.ok()) return s;
             return Status::Error(ErrorCode::kUnsupported,
                                  "MatMul: prefill requires dims to be 8-element aligned");
         }
-        if (w.dtype == DType::kQ8_0) {
-            if (in_dim % kQ8_0BlockSize != 0) {
+        if (is_quantized(w.dtype)) {
+            const int64_t block_size = dtype_block_size(w.dtype);
+            if (in_dim % block_size != 0) {
                 return Status::Error(ErrorCode::kInvalidArgument,
-                                     "MatMul: in_dim not Q8_0 block-aligned");
+                                     "MatMul: in_dim not quant block-aligned");
             }
             if (!w.f16_buf) {
                 const size_t numel = static_cast<size_t>(out_dim) * static_cast<size_t>(in_dim);
@@ -594,11 +624,13 @@ if (auto s = ensure_ready(*impl_); !s.ok()) return s;
                                          "MatMul: f16 weight cache alloc failed");
                 }
                 id<MTLComputeCommandEncoder> enc = impl_->encoder();
-                [enc setComputePipelineState:impl_->dequant_q8_0_f16_ps];
+                [enc setComputePipelineState:(w.dtype == DType::kQ8_0)
+                                                 ? impl_->dequant_q8_0_f16_ps
+                                                 : impl_->dequant_q4_0_f16_ps];
                 [enc setBuffer:w.buf offset:0 atIndex:0];
                 [enc setBuffer:w.f16_buf offset:0 atIndex:1];
                 const NSUInteger num_blocks =
-                    static_cast<NSUInteger>(numel / kQ8_0BlockSize);
+                    static_cast<NSUInteger>(numel / static_cast<size_t>(block_size));
                 [enc dispatchThreads:MTLSizeMake(num_blocks, 1, 1)
                     threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
             }
@@ -774,11 +806,12 @@ if (auto s = ensure_ready(*impl_); !s.ok()) return s;
     id<MTLComputePipelineState> ps = nil;
     switch (wtype) {
     case DType::kQ8_0:
-        if (in_dim % kQ8_0BlockSize != 0) {
+    case DType::kQ4_0:
+        if (in_dim % dtype_block_size(wtype) != 0) {
             return Status::Error(ErrorCode::kInvalidArgument,
-                                 "MatMulFused: in_dim not Q8_0 block-aligned");
+                                 "MatMulFused: in_dim not quant block-aligned");
         }
-        ps = impl_->gemv_q8_0_fused_ps;
+        ps = (wtype == DType::kQ8_0) ? impl_->gemv_q8_0_fused_ps : impl_->gemv_q4_0_fused_ps;
         break;
     case DType::kF16:
         ps = impl_->gemv_f16_fused_ps;
@@ -830,8 +863,8 @@ if (auto s = ensure_ready(*impl_); !s.ok()) return s;
     if (n >= 2) [enc setBuffer:ws[1]->buf offset:0 atIndex:5];
     if (n >= 3) [enc setBuffer:ws[2]->buf offset:0 atIndex:6];
     [enc setBytes:params length:sizeof(params) atIndex:7];
-    // Q8_0 fused: one simdgroup per row; F16/F32 keep NT=4 split-K.
-    const bool simd_per_row = (wtype == DType::kQ8_0);
+    // Fused quants: one simdgroup per row; F16/F32 keep NT=4 split-K.
+    const bool simd_per_row = is_quantized(wtype);
     [enc setThreadgroupMemoryLength:256 * sizeof(float) atIndex:0];
     [enc dispatchThreads:MTLSizeMake(static_cast<NSUInteger>(total_rows) * (simd_per_row ? 32 : 4),
                                      1, 1)
@@ -1401,6 +1434,69 @@ Status MetalBackend::AppendKV(int32_t layer, TensorView key, TensorView value,
     [enc dispatchThreads:MTLSizeMake(elems, 1, 1)
         threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
     // Deferred.
+    return {};
+}
+
+Status MetalBackend::ShiftKV(int64_t drop_tokens) {
+    if (auto s = ensure_ready(*impl_); !s.ok()) return s;
+
+    const auto& kv = impl_->device_kv_;
+    if (kv.keys == nil || kv.values == nil) {
+        return Status::Error(ErrorCode::kBackendFailure, "ShiftKV: device KV not configured");
+    }
+    if (drop_tokens < 0 || drop_tokens > kv.capacity) {
+        return Status::Error(ErrorCode::kInvalidArgument, "ShiftKV: drop out of range");
+    }
+    if (drop_tokens == 0 || drop_tokens == kv.capacity) {
+        // Full drop needs no data movement (stale slots are never read
+        // before being overwritten by the next appends).
+        return {};
+    }
+
+    // Keep stream ordering with surrounding compute work: close the pending
+    // compute encoder and encode the copies on the same command buffer via
+    // a blit encoder. The next op lazily opens a fresh compute encoder on
+    // this same command buffer.
+    if (impl_->deferred_enc != nil) {
+        [impl_->deferred_enc endEncoding];
+        impl_->deferred_enc = nil;
+    }
+    if (impl_->deferred_cb == nil) {
+        impl_->deferred_cb = [impl_->queue commandBuffer];
+    }
+    id<MTLBlitCommandEncoder> blit = [impl_->deferred_cb blitCommandEncoder];
+
+    const size_t row_bytes = static_cast<size_t>(kv.num_kv_heads) *
+                             static_cast<size_t>(kv.head_dim) * sizeof(float);
+    const size_t layer_stride = row_bytes * static_cast<size_t>(kv.capacity);
+    const NSUInteger src_delta = static_cast<NSUInteger>(drop_tokens) * row_bytes;
+    const NSUInteger shifted_bytes = layer_stride - src_delta;
+
+    // Copy in forward chunks no larger than `src_delta` so every individual
+    // blit is strictly non-overlapping within the same buffer (an explicit
+    // chunk is only needed when the Engine flushes a partially-filled
+    // window and drop_tokens < capacity - drop_tokens; the usual
+    // ceil(capacity/2) compaction chunk takes exactly one blit). Forward
+    // chunked copies reproduce memmove semantics for a left shift.
+    const NSUInteger chunk_bytes = std::min<NSUInteger>(shifted_bytes, src_delta);
+    for (int32_t l = 0; l < kv.num_layers; ++l) {
+        const NSUInteger layer_base = static_cast<NSUInteger>(l) * layer_stride;
+        for (NSUInteger moved = 0; moved < shifted_bytes; moved += chunk_bytes) {
+            const NSUInteger size = std::min<NSUInteger>(shifted_bytes - moved, chunk_bytes);
+            [blit copyFromBuffer:kv.keys
+                    sourceOffset:layer_base + src_delta + moved
+                        toBuffer:kv.keys
+               destinationOffset:layer_base + moved
+                            size:size];
+            [blit copyFromBuffer:kv.values
+                    sourceOffset:layer_base + src_delta + moved
+                        toBuffer:kv.values
+               destinationOffset:layer_base + moved
+                            size:size];
+        }
+    }
+    [blit endEncoding];
+    // Deferred (committed at the next flush like every other op).
     return {};
 }
 

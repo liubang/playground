@@ -58,7 +58,61 @@ struct HostTensor {
         TensorView view(buf.data(), DType::kQ8_0, shape);
         return {std::move(buf), view};
     }
+
+    // HostTensor for Q4_0: numel must be block-aligned.
+    static HostTensor alloc_q4_0(std::initializer_list<int64_t> dims) {
+        Shape shape(dims);
+        int64_t numel = shape.numel();
+        EXPECT_EQ(numel % kQ4_0BlockSize, 0);
+        size_t bytes = dtype_nbytes(DType::kQ4_0, numel);
+        auto buf = OwnedBuffer::AllocateCpu(bytes, 64).value();
+        std::memset(buf.data(), 0, bytes);
+        TensorView view(buf.data(), DType::kQ4_0, shape);
+        return {std::move(buf), view};
+    }
 };
+
+// Q4_0 block (ggml layout): fp16 scale + 16 packed nibbles.
+// Low nibbles -> elements [0,16), high nibbles -> [16,32).
+struct Q4Block {
+    uint16_t scale;
+    uint8_t qs[16];
+};
+static_assert(sizeof(Q4Block) == kQ4_0TypeSize);
+
+// Q8_0 block (ggml layout).
+struct Q8Block {
+    uint16_t scale;
+    int8_t qs[32];
+};
+static_assert(sizeof(Q8Block) == kQ8_0TypeSize);
+
+// Quantize one 32-element block (ggml quantize_row_q4_0_ref semantics):
+// scale = max_abs / -8 so the symmetric range [-8, 7] covers the data.
+void quantize_q4_0_block(const float* src, Q4Block* dst) {
+    float max_abs = 0.0f;
+    for (int i = 0; i < 32; ++i) {
+        max_abs = std::max(max_abs, std::abs(src[i]));
+    }
+    const float scale = max_abs >= 1e-8f ? max_abs / -8.0f : 1.0f;
+    dst->scale = fp32_to_fp16(scale);
+    for (int j = 0; j < 16; ++j) {
+        const float v0 = src[j] / scale;
+        const float v1 = src[j + 16] / scale;
+        const int q0 = std::max(-8, std::min(7, static_cast<int>(std::round(v0))));
+        const int q1 = std::max(-8, std::min(7, static_cast<int>(std::round(v1))));
+        dst->qs[j] = static_cast<uint8_t>((q0 + 8) | ((q1 + 8) << 4));
+    }
+}
+
+// Dequantize a Q4_0 block back to f32.
+void dequantize_q4_0_block(const Q4Block* src, float* dst) {
+    const float scale = fp16_to_fp32(src->scale);
+    for (int j = 0; j < 16; ++j) {
+        dst[j] = scale * static_cast<float>(static_cast<int>(src->qs[j] & 0x0F) - 8);
+        dst[j + 16] = scale * static_cast<float>(static_cast<int>(src->qs[j] >> 4) - 8);
+    }
+}
 
 // Naive matmul reference (all f32).
 void ref_matmul(float* out, const float* x, const float* w, int batch, int out_dim, int in_dim) {
@@ -252,11 +306,7 @@ TEST(CpuBackendTest, MatMulQ8_0) {
         x.view.data_as<float>()[i] = dist(rng);
     }
 
-    // Create a Q8_0 weight block from random f32 data
-    struct Q8Block {
-        uint16_t scale;
-        int8_t qs[32];
-    };
+    // Create a Q8_0 weight block from random f32 data (see Q8Block helper)
     auto* blocks = static_cast<Q8Block*>(w.buf.data());
     std::vector<float> w_f32(out_dim * in_dim);
     const int num_blocks = in_dim / 32;
@@ -308,6 +358,66 @@ TEST(CpuBackendTest, MatMulQ8_0) {
     for (int i = 0; i < batch * out_dim; ++i) {
         EXPECT_NEAR(
             out.view.data_as<float>()[i], expected[i], std::abs(expected[i]) * 0.02f + 1e-3f);
+    }
+}
+
+TEST(CpuBackendTest, MatMulQ4_0) {
+    const int batch = 1, in_dim = 64, out_dim = 4;
+    auto x = HostTensor::alloc({batch, in_dim}, DType::kF32);
+    auto w = HostTensor::alloc_q4_0({out_dim, in_dim});
+    auto out = HostTensor::alloc({batch, out_dim}, DType::kF32);
+
+    std::mt19937 rng(42);
+    std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+    for (int i = 0; i < batch * in_dim; ++i) {
+        x.view.data_as<float>()[i] = dist(rng);
+    }
+
+    auto* blocks = static_cast<Q4Block*>(w.buf.data());
+    const int num_blocks = in_dim / static_cast<int>(kQ4_0BlockSize);
+    std::vector<float> w_src(out_dim * in_dim);
+    for (int o = 0; o < out_dim; ++o) {
+        for (int blk = 0; blk < num_blocks; ++blk) {
+            for (int j = 0; j < 32; ++j) {
+                w_src[o * in_dim + blk * 32 + j] = dist(rng);
+            }
+            quantize_q4_0_block(w_src.data() + o * in_dim + blk * 32,
+                                &blocks[o * num_blocks + blk]);
+        }
+    }
+
+    CpuBackend backend;
+    std::array names = {std::string_view{"w0"}};
+    std::array<TensorView, 1> views = {w.view};
+    ASSERT_TRUE(backend.ImportWeights(views, names).ok());
+
+    ASSERT_TRUE(backend.MatMul(out.view, x.view, "w0").ok());
+
+    // Reference: dequantize Q4_0 and compute naive matmul.
+    std::vector<float> w_dequant(out_dim * in_dim);
+    for (int o = 0; o < out_dim; ++o) {
+        for (int blk = 0; blk < num_blocks; ++blk) {
+            dequantize_q4_0_block(&blocks[o * num_blocks + blk],
+                                  w_dequant.data() + o * in_dim + blk * 32);
+        }
+    }
+
+    std::vector<float> expected(batch * out_dim);
+    ref_matmul(expected.data(), x.view.data_as<float>(), w_dequant.data(), batch, out_dim, in_dim);
+
+    // Exact block decomposition: both do sum over (dot * scale) per block.
+    for (int i = 0; i < batch * out_dim; ++i) {
+        EXPECT_NEAR(
+            out.view.data_as<float>()[i], expected[i], std::abs(expected[i]) * 1e-5f + 1e-5f);
+    }
+
+    // Quantized result must also track the original f32 weight. Q4_0 uses a
+    // 4-bit grid (step = max_abs/8), so allow the looser ~15% relative that
+    // per-element rounding can produce after summation.
+    std::vector<float> ideal(batch * out_dim);
+    ref_matmul(ideal.data(), x.view.data_as<float>(), w_src.data(), batch, out_dim, in_dim);
+    for (int i = 0; i < batch * out_dim; ++i) {
+        EXPECT_NEAR(out.view.data_as<float>()[i], ideal[i], std::abs(ideal[i]) * 0.15f + 1e-3f);
     }
 }
 

@@ -67,6 +67,15 @@ public:
         std::string model_path;
         int32_t max_context = 4096;
         BackendKind backend = BackendKind::kCpu;
+        // Sliding-window ("ring") KV cache (SPEC §7.2). When true, the
+        // cache capacity = min(max_context, model context length) acts as a
+        // window: once the sequence outgrows it, the oldest tokens' K/V are
+        // dropped (chunked compaction behind the window origin) instead of
+        // failing, so prompts/generations of arbitrary length are allowed.
+        // RoPE positions stay absolute; attention over the retained window
+        // stays exact-window causal. Quality beyond the window follows
+        // sliding-window semantics (no attention sink).
+        bool ring = false;
     };
 
     [[nodiscard]] static Result<std::unique_ptr<Engine>> Create(Options options);
@@ -115,6 +124,13 @@ private:
 
     struct Impl;
     std::unique_ptr<Impl> impl_;
+
+    // Ring-mode device-KV room keeper (see engine.cpp): before appending K/V
+    // for absolute positions [abs_pos, abs_pos + incoming) to a device KV
+    // cache, ensure the window can hold them by shifting out the oldest
+    // tokens (ceil(capacity/2) per shift). Device buffers and the host shell stay
+    // in sync. Only called when ring mode + device KV are active.
+    static Status EnsureDeviceKvRoom(Impl& impl, int64_t abs_pos, int32_t incoming);
     PerfStats perf_;
 };
 

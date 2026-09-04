@@ -16,6 +16,7 @@
 // Created: 2026/08/29 22:15
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <gtest/gtest.h>
 #include <memory>
@@ -359,30 +360,85 @@ TEST(ModelTest, Qwen2MissingBiasFailsFast) {
     EXPECT_EQ(model_result.status().code, ErrorCode::kNotFound);
 }
 
-// Regression: a Q4_0 checkpoint must fail fast at model creation with a
-// clear error. Before the fix, Create() succeeded and the unsupported dtype
-// surfaced only much later: matmul weights errored inside the first MatMul,
-// while Q4_0 norm weights were read through the scalar elem_to_f32 path that
-// silently returns 0 for Q4_0 (rmsnorm -> scale=0 -> all-zero hidden state).
-TEST(ModelTest, CreateRejectsUnsupportedMatMulDtype) {
-    auto cfg = make_tiny_config();
+// Q4_0 is an end-to-end supported matmul dtype: a checkpoint whose matmul
+// weights are Q4_0-quantized must load, forward, and produce finite logits.
+TEST(ModelTest, CreateAcceptsQ4MatmulWeights) {
+    // 32-wide hidden so every matmul in-dim is Q4_0 block aligned.
+    ModelConfig cfg{
+        .architecture = "llama",
+        .vocab_size = 32,
+        .hidden_size = 32,
+        .intermediate_size = 64,
+        .num_layers = 2,
+        .num_attention_heads = 4,
+        .num_kv_heads = 2,
+        .head_dim = 8,
+        .context_length = 64,
+        .rms_norm_eps = 1e-5f,
+        .rope_freq_base = 10000.0f,
+    };
     auto store = make_all_weights(cfg);
 
-    // 16x16 = 256 elements -> 8 Q4_0 blocks of 18 bytes.
-    std::vector<uint8_t> q4_storage(dtype_nbytes(DType::kQ4_0, 16 * 16), 0);
-    TensorView q4_view(q4_storage.data(), DType::kQ4_0, {16, 16});
-    bool replaced = false;
+    // Quantize every 2D (matmul) weight to Q4_0, ggml block layout.
+    struct Q4Block {
+        uint16_t scale;
+        uint8_t qs[16];
+    };
+    std::vector<std::vector<uint8_t>> q4_storage;
     for (auto& e : store.entries) {
-        if (e.name == "blk.0.attn_q.weight") {
-            e.view = q4_view;
-            replaced = true;
+        if (e.view.shape().rank() != 2 || e.view.shape().dim(1) % kQ4_0BlockSize != 0) {
+            continue;
         }
+        const int64_t numel = e.view.shape().numel();
+        const int64_t in_dim = e.view.shape().dim(1);
+        const int64_t blocks_per_row = in_dim / kQ4_0BlockSize;
+        auto& bytes = q4_storage.emplace_back(dtype_nbytes(DType::kQ4_0, numel), uint8_t{0});
+        auto* blocks = reinterpret_cast<Q4Block*>(bytes.data());
+        const float* src = e.view.data_as<float>();
+        for (int64_t blk = 0; blk < numel / kQ4_0BlockSize; ++blk) {
+            const float* row =
+                src + (blk / blocks_per_row) * in_dim + (blk % blocks_per_row) * kQ4_0BlockSize;
+            float max_abs = 0.0f;
+            for (int j = 0; j < 32; ++j) {
+                max_abs = std::max(max_abs, std::abs(row[j]));
+            }
+            const float scale = max_abs >= 1e-8f ? max_abs / -8.0f : 1.0f;
+            blocks[blk].scale = fp32_to_fp16(scale);
+            for (int j = 0; j < 16; ++j) {
+                const int q0 =
+                    std::max(-8, std::min(7, static_cast<int>(std::round(row[j] / scale))));
+                const int q1 =
+                    std::max(-8, std::min(7, static_cast<int>(std::round(row[j + 16] / scale))));
+                blocks[blk].qs[j] = static_cast<uint8_t>((q0 + 8) | ((q1 + 8) << 4));
+            }
+        }
+        e.view = TensorView(bytes.data(), DType::kQ4_0, e.view.shape());
     }
-    ASSERT_TRUE(replaced);
 
     auto model_result = CreateModel(cfg, store.entries);
-    ASSERT_FALSE(model_result.ok());
-    EXPECT_EQ(model_result.status().code, ErrorCode::kUnsupported);
+    ASSERT_TRUE(model_result.ok()) << model_result.status().message;
+    auto model = std::move(model_result).value();
+
+    CpuBackend backend;
+    ASSERT_TRUE(import_weights(backend, store));
+
+    auto cache = KVCache::Create(cfg, 64, DType::kF32).value();
+    auto arena = ScratchArena::Create(1024 * 1024).value();
+
+    std::vector<float> hidden_vec(static_cast<size_t>(cfg.hidden_size), 0.1f);
+    TensorView hidden(hidden_vec.data(), DType::kF32, {1, cfg.hidden_size});
+    ASSERT_TRUE(model->Forward(hidden, 0, cache, backend, arena).ok());
+
+    arena.Reset();
+    auto logits_buf = OwnedBuffer::AllocateCpu(cfg.vocab_size * 4, 64);
+    ASSERT_TRUE(logits_buf.ok());
+    auto logits_owned = std::move(logits_buf).value();
+    TensorView logits(logits_owned.data(), DType::kF32, {1, cfg.vocab_size});
+    ASSERT_TRUE(model->ComputeLogits(hidden, logits, backend, arena).ok());
+    const auto* lp = logits.data_as<float>();
+    for (int i = 0; i < cfg.vocab_size; ++i) {
+        EXPECT_TRUE(std::isfinite(lp[i]));
+    }
 }
 
 TEST(ModelTest, CreateRejectsUnsupportedNormDtype) {
