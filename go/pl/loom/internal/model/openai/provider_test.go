@@ -1392,3 +1392,240 @@ func TestProviderStreamReportsCachedInputTokens(t *testing.T) {
 		t.Fatalf("ContextTokens = %d, want 100 (prompt_tokens)", usage.ContextTokens)
 	}
 }
+
+func TestIsTransientProviderError(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		code    string
+		message string
+		want    bool
+	}{
+		{"scheduler unavailable message", "", "Scheduler unavailable", true},
+		{"internal code", "internal", "Scheduler unavailable", true},
+		{"server error code", "server_error", "the server had an error", true},
+		{"overloaded message", "", "The model is overloaded right now", true},
+		{"rate limit message", "", "Rate limit reached, please try again later", true},
+		{"timeout message", "", "upstream request timed out", true},
+		{"case-insensitive code", "INTERNAL_ERROR", "boom", true},
+		{"quota exhaustion wins over transient hint", "", "quota exhausted, try again after topping up", false},
+		{"invalid request", "invalid_request_error", "messages: unexpected role", false},
+		{"auth failure", "", "invalid api key provided", false},
+		{"context overflow stays non-retryable", "", "maximum context length exceeded", false},
+		{"unknown code and message", "weird_code", "something strange happened", false},
+		{"empty frame", "", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isTransientProviderError(tc.code, tc.message); got != tc.want {
+				t.Fatalf("isTransientProviderError(%q, %q) = %v, want %v", tc.code, tc.message, got, tc.want)
+			}
+		})
+	}
+}
+
+// Regression: a response.failed frame carrying a transient server-side
+// failure ("Scheduler unavailable") used to surface as a non-retryable
+// stream error, killing the whole run on a recoverable capacity hiccup.
+func TestStreamResponsesTransientFailureFrameIsRetryable(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "event: response.failed\ndata: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\",\"error\":{\"code\":\"internal\",\"message\":\"Scheduler unavailable\"}}}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	provider := newTestProviderWithWireAPI(t, server.URL+"/v1", server.Client(), 0, WireAPIResponses)
+	stream, err := provider.Stream(context.Background(), domain.ModelRequest{
+		ModelName: "gpt-test",
+		Messages:  []domain.Message{textMessage(domain.RoleUser, "hi")},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	defer stream.Close()
+
+	events := collectEvents(t, stream)
+	assertEventKinds(t, events, domain.ModelEventStreamError, domain.ModelEventResponseEnd)
+	if got := events[0].Error; got != "Scheduler unavailable" {
+		t.Fatalf("stream error = %q, want the provider message", got)
+	}
+	if !events[0].Retryable {
+		t.Fatalf("transient failure frame must be retryable: %+v", events[0])
+	}
+	if got := events[1].StopReason; got != domain.StopProviderError {
+		t.Fatalf("stop = %q, want provider_error", got)
+	}
+}
+
+// A request-shaped failure frame (auth, invalid input, quota) must stay
+// non-retryable so the loop surfaces it instead of burning retry budget.
+func TestStreamResponsesNonTransientFailureFrameStaysTerminal(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "event: error\ndata: {\"type\":\"error\",\"error\":{\"code\":\"invalid_api_key\",\"message\":\"invalid api key provided\"}}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	provider := newTestProviderWithWireAPI(t, server.URL+"/v1", server.Client(), 0, WireAPIResponses)
+	stream, err := provider.Stream(context.Background(), domain.ModelRequest{
+		ModelName: "gpt-test",
+		Messages:  []domain.Message{textMessage(domain.RoleUser, "hi")},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	defer stream.Close()
+
+	events := collectEvents(t, stream)
+	assertEventKinds(t, events, domain.ModelEventStreamError, domain.ModelEventResponseEnd)
+	if got := events[0].Error; got != "invalid api key provided" {
+		t.Fatalf("stream error = %q, want the provider message", got)
+	}
+	if events[0].Retryable {
+		t.Fatalf("invalid api key must stay non-retryable: %+v", events[0])
+	}
+}
+
+// Some compatible gateways report failures as an in-band error frame on the
+// chat-completions wire (HTTP 200, then {"error": {...}}): it must surface as
+// a classified stream error — not be silently dropped until EOF.
+func TestStreamChatCompletionsInBandErrorFrame(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name          string
+		frame         string
+		wantMessage   string
+		wantRetryable bool
+	}{
+		{
+			name:          "transient scheduler capacity",
+			frame:         "{\"error\":{\"code\":\"scheduler_unavailable\",\"message\":\"Scheduler unavailable\"}}",
+			wantMessage:   "Scheduler unavailable",
+			wantRetryable: true,
+		},
+		{
+			name:          "non-transient invalid request",
+			frame:         "{\"error\":{\"code\":\"invalid_request_error\",\"message\":\"invalid model name\"}}",
+			wantMessage:   "invalid model name",
+			wantRetryable: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				fmt.Fprintf(w, "data: %s\n\n", tc.frame)
+				fmt.Fprint(w, "data: [DONE]\n\n")
+			}))
+			defer server.Close()
+
+			provider := newTestProvider(t, server, server.Client(), 0)
+			stream, err := provider.Stream(context.Background(), domain.ModelRequest{
+				ModelName: "gpt-test",
+				Messages:  []domain.Message{textMessage(domain.RoleUser, "hi")},
+			})
+			if err != nil {
+				t.Fatalf("Stream: %v", err)
+			}
+			defer stream.Close()
+
+			events := collectEvents(t, stream)
+			assertEventKinds(t, events,
+				domain.ModelEventResponseStart,
+				domain.ModelEventStreamError,
+				domain.ModelEventResponseEnd,
+			)
+			if got := events[1].Error; got != tc.wantMessage {
+				t.Fatalf("stream error = %q, want %q", got, tc.wantMessage)
+			}
+			if events[1].Retryable != tc.wantRetryable {
+				t.Fatalf("retryable = %v, want %v", events[1].Retryable, tc.wantRetryable)
+			}
+			if got := events[2].StopReason; got != domain.StopProviderError {
+				t.Fatalf("stop = %q, want provider_error", got)
+			}
+		})
+	}
+}
+
+// A trailing error frame after finish_reason must not poison an already
+// completed (and paid-for) generation — the reply finishes gracefully.
+func TestStreamChatCompletionsIgnoresErrorFrameAfterFinishReason(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"done\"}}]}\n\n")
+		fmt.Fprint(w, "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+		fmt.Fprint(w, "data: {\"error\":{\"code\":\"internal\",\"message\":\"Scheduler unavailable\"}}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	provider := newTestProvider(t, server, server.Client(), 0)
+	stream, err := provider.Stream(context.Background(), domain.ModelRequest{
+		ModelName: "gpt-test",
+		Messages:  []domain.Message{textMessage(domain.RoleUser, "hi")},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	defer stream.Close()
+
+	events := collectEvents(t, stream)
+	for _, evt := range events {
+		if evt.Kind == domain.ModelEventStreamError {
+			t.Fatalf("trailing error frame poisoned a completed generation: %+v", evt)
+		}
+	}
+	assertEventKinds(t, events,
+		domain.ModelEventResponseStart,
+		domain.ModelEventTextStart,
+		domain.ModelEventTextDelta,
+		domain.ModelEventTextEnd,
+		domain.ModelEventResponseEnd,
+	)
+	if got := events[4].StopReason; got != domain.StopEndTurn {
+		t.Fatalf("stop = %q, want end_turn", got)
+	}
+}
+
+// The responses "error" event carries code/message at the envelope top level
+// (no nested error object); classification must still see them.
+func TestStreamResponsesTopLevelErrorEventIsClassified(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "event: error\ndata: {\"type\":\"error\",\"code\":\"server_error\",\"message\":\"backend capacity full\"}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	provider := newTestProviderWithWireAPI(t, server.URL+"/v1", server.Client(), 0, WireAPIResponses)
+	stream, err := provider.Stream(context.Background(), domain.ModelRequest{
+		ModelName: "gpt-test",
+		Messages:  []domain.Message{textMessage(domain.RoleUser, "hi")},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	defer stream.Close()
+
+	events := collectEvents(t, stream)
+	assertEventKinds(t, events, domain.ModelEventStreamError, domain.ModelEventResponseEnd)
+	if got := events[0].Error; got != "backend capacity full" {
+		t.Fatalf("stream error = %q, want the top-level message", got)
+	}
+	if !events[0].Retryable {
+		t.Fatalf("server_error capacity failure must be retryable: %+v", events[0])
+	}
+}

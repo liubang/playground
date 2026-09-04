@@ -813,6 +813,20 @@ func runChatCompletions(ctx context.Context, parser *sse.Parser, state *canonica
 			return
 		}
 
+		// Some compatible gateways report failures as an in-band error frame
+		// (HTTP 200, then {"error": {...}}) instead of a status code. Once a
+		// finish_reason chunk landed the generation is complete and paid for:
+		// a trailing error frame must not turn it into a failure.
+		if chunk.Error != nil && !state.finishSeen {
+			code, message := chunk.Error.Code, strings.TrimSpace(chunk.Error.Message)
+			if message == "" {
+				message = "openai provider: stream error frame"
+			}
+			finishStreamError(state, errors.New(message), domain.StopProviderError,
+				isTransientProviderError(code, message), emit)
+			return
+		}
+
 		if err := state.applyChatChunk(chunk, emit); err != nil {
 			finishWithError(state, err, domain.StopProviderError, emit)
 			return
@@ -927,7 +941,7 @@ func runResponses(ctx context.Context, parser *sse.Parser, state *canonicalState
 				finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError, emit)
 				return
 			}
-			if err := state.prepareBufferedTerminal(state.responsesCompletedStop(), responseUsage(envelope.Response), "", emit); err != nil {
+			if err := state.prepareBufferedTerminal(state.responsesCompletedStop(), responseUsage(envelope.Response), "", false, emit); err != nil {
 				finishWithError(state, err, domain.StopProviderError, emit)
 				return
 			}
@@ -945,17 +959,20 @@ func runResponses(ctx context.Context, parser *sse.Parser, state *canonicalState
 				// the run after the full generation cost was already paid — the
 				// failure mode that wiped out whole sub-agent explorations
 				// (docs/SUBAGENT_DESIGN.md §12).
-				if err := state.prepareBufferedTerminal(stop, responseUsage(envelope.Response), "", emit); err != nil {
+				if err := state.prepareBufferedTerminal(stop, responseUsage(envelope.Response), "", false, emit); err != nil {
 					finishWithError(state, err, domain.StopProviderError, emit)
 					return
 				}
-			} else if err := state.prepareBufferedTerminal(stop, nil, incompleteMessage(reason), emit); err != nil {
+			} else if err := state.prepareBufferedTerminal(stop, nil, incompleteMessage(reason), isTransientProviderError("", reason), emit); err != nil {
 				finishWithError(state, err, domain.StopProviderError, emit)
 				return
 			}
 		case "response.failed", "error":
-			message := responseFailureMessage(eventName, envelope)
-			if err := state.prepareBufferedTerminal(domain.StopProviderError, nil, message, emit); err != nil {
+			code, message := responseFailureError(eventName, envelope)
+			// A server-side failure frame (overload, scheduler capacity, internal
+			// hiccup) is as transient as a dropped connection: classify it so the
+			// agent loop waits and retries instead of killing the run.
+			if err := state.prepareBufferedTerminal(domain.StopProviderError, nil, message, isTransientProviderError(code, message), emit); err != nil {
 				finishWithError(state, err, domain.StopProviderError, emit)
 				return
 			}
@@ -1034,15 +1051,16 @@ func finishStreamError(state *canonicalState, err error, stop domain.StopReason,
 }
 
 type canonicalState struct {
-	textOpen        bool
-	reasoningOpen   bool
-	responseStarted bool
-	finishSeen      bool
-	finalStop       domain.StopReason
-	bufferedUsage   *usageInfo
-	bufferedError   string
-	toolUse         bool
-	tools           map[int]*toolState
+	textOpen               bool
+	reasoningOpen          bool
+	responseStarted        bool
+	finishSeen             bool
+	finalStop              domain.StopReason
+	bufferedUsage          *usageInfo
+	bufferedError          string
+	bufferedErrorRetryable bool
+	toolUse                bool
+	tools                  map[int]*toolState
 }
 
 func newCanonicalState() *canonicalState {
@@ -1211,7 +1229,7 @@ func (s *canonicalState) applyResponseToolArgsDone(index int, arguments string, 
 	return s.emitToolArgumentSnapshot(tool, arguments, emit)
 }
 
-func (s *canonicalState) prepareBufferedTerminal(stop domain.StopReason, usage *usageInfo, streamErr string, emit func(domain.ModelEvent) bool) error {
+func (s *canonicalState) prepareBufferedTerminal(stop domain.StopReason, usage *usageInfo, streamErr string, retryable bool, emit func(domain.ModelEvent) bool) error {
 	if s.finishSeen {
 		return fmt.Errorf("openai provider: duplicate terminal event")
 	}
@@ -1221,6 +1239,7 @@ func (s *canonicalState) prepareBufferedTerminal(stop domain.StopReason, usage *
 	s.finishSeen = true
 	s.finalStop = stop
 	s.bufferedError = streamErr
+	s.bufferedErrorRetryable = retryable
 	s.bufferedUsage = usage
 	if streamErr != "" {
 		s.bufferedUsage = nil
@@ -1231,8 +1250,9 @@ func (s *canonicalState) prepareBufferedTerminal(stop domain.StopReason, usage *
 func (s *canonicalState) flushBufferedTerminal(emit func(domain.ModelEvent) bool) {
 	if s.bufferedError != "" {
 		emit(domain.ModelEvent{
-			Kind:  domain.ModelEventStreamError,
-			Error: s.bufferedError,
+			Kind:      domain.ModelEventStreamError,
+			Error:     s.bufferedError,
+			Retryable: s.bufferedErrorRetryable,
 		})
 	}
 	if s.bufferedUsage != nil {
@@ -1391,6 +1411,9 @@ type toolState struct {
 type chatCompletionChunk struct {
 	Choices []chatChoice `json:"choices"`
 	Usage   *usageInfo   `json:"usage,omitempty"`
+	// Error carries in-band failure frames ({"error": {...}}) some
+	// compatible gateways emit mid-stream instead of an HTTP error status.
+	Error *openAIError `json:"error,omitempty"`
 }
 
 type chatChoice struct {
@@ -1477,7 +1500,11 @@ type responsesEventEnvelope struct {
 	OutputIndex *int                 `json:"output_index,omitempty"`
 	Delta       string               `json:"delta,omitempty"`
 	Arguments   string               `json:"arguments,omitempty"`
-	Error       *responsesError      `json:"error,omitempty"`
+	Error       *openAIError         `json:"error,omitempty"`
+	// The responses "error" event carries code/message at the top level
+	// instead of nested under an error object.
+	Code    string `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 func (e responsesEventEnvelope) outputIndex() int {
@@ -1491,7 +1518,7 @@ type responsesResponse struct {
 	ID                string                      `json:"id,omitempty"`
 	Status            string                      `json:"status,omitempty"`
 	Usage             *usageInfo                  `json:"usage,omitempty"`
-	Error             *responsesError             `json:"error,omitempty"`
+	Error             *openAIError                `json:"error,omitempty"`
 	IncompleteDetails *responsesIncompleteDetails `json:"incomplete_details,omitempty"`
 }
 
@@ -1499,7 +1526,7 @@ type responsesIncompleteDetails struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-type responsesError struct {
+type openAIError struct {
 	Code    string `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`
 }
@@ -1549,14 +1576,87 @@ func incompleteMessage(reason string) string {
 	return fmt.Sprintf("openai provider: response incomplete: %s", reason)
 }
 
-func responseFailureMessage(eventName string, envelope responsesEventEnvelope) string {
-	if envelope.Error != nil && strings.TrimSpace(envelope.Error.Message) != "" {
-		return envelope.Error.Message
+// responseFailureError extracts the machine-readable code and the human
+// message from a response.failed / error frame; either may be empty when the
+// gateway omits them.
+func responseFailureError(eventName string, envelope responsesEventEnvelope) (code, message string) {
+	err := envelope.Error
+	if err == nil && envelope.Response != nil {
+		err = envelope.Response.Error
 	}
-	if envelope.Response != nil && envelope.Response.Error != nil && strings.TrimSpace(envelope.Response.Error.Message) != "" {
-		return envelope.Response.Error.Message
+	if err != nil {
+		code = err.Code
+		if strings.TrimSpace(err.Message) != "" {
+			message = err.Message
+		}
 	}
-	return fmt.Sprintf("openai provider: %s", eventName)
+	if code == "" {
+		code = envelope.Code
+	}
+	if message == "" {
+		message = strings.TrimSpace(envelope.Message)
+	}
+	if message == "" {
+		message = fmt.Sprintf("openai provider: %s", eventName)
+	}
+	return code, message
+}
+
+// transientProviderErrorCodes are wire error codes that signal a server-side
+// transient condition (capacity, overload, internal hiccups) rather than a
+// problem with the request itself — safe to retry after a backoff.
+var transientProviderErrorCodes = map[string]bool{
+	"internal":                true,
+	"internal_error":          true,
+	"server_error":            true,
+	"overloaded":              true,
+	"overloaded_error":        true,
+	"unavailable":             true,
+	"service_unavailable":     true,
+	"temporarily_unavailable": true,
+	"scheduler_unavailable":   true,
+	"rate_limit":              true,
+	"rate_limit_exceeded":     true,
+	"timeout":                 true,
+	"request_timeout":         true,
+}
+
+// nonRetryableErrorMarkers identify request/account problems that retrying
+// can never fix (bad input, quota, auth); they win over any transient hint.
+var nonRetryableErrorMarkers = []string{
+	"quota", "billing", "invalid", "malformed", "context length", "context window",
+	"maximum context", "authentication", "api key", "permission", "not found",
+}
+
+// transientErrorMarkers match capacity/availability phrases in free-text
+// messages when the wire code is missing or unrecognized.
+var transientErrorMarkers = []string{
+	"scheduler unavailable", "overloaded", "temporarily", "service unavailable",
+	"internal error", "internal server", "capacity", "timed out", "timeout",
+	"rate limit", "too many requests", "try again", "unavailable",
+}
+
+// isTransientProviderError classifies an in-band provider error frame. The
+// classification only matters while the stream delivered no content — the
+// agent loop never retries once partial output reached the transcript — and
+// context-overflow messages are routed before the retry check, so a false
+// positive here degrades to a bounded backoff, not a silent re-issue.
+func isTransientProviderError(code, message string) bool {
+	lowerMessage := strings.ToLower(message)
+	for _, marker := range nonRetryableErrorMarkers {
+		if strings.Contains(lowerMessage, marker) {
+			return false
+		}
+	}
+	if transientProviderErrorCodes[strings.ToLower(strings.TrimSpace(code))] {
+		return true
+	}
+	for _, marker := range transientErrorMarkers {
+		if strings.Contains(lowerMessage, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func mapIncompleteStopReason(reason string) domain.StopReason {

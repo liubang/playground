@@ -438,9 +438,41 @@ func TestStreamErrorEvent(t *testing.T) {
 	if !ok || !strings.Contains(streamErr.Error, "Overloaded") {
 		t.Fatalf("events = %+v", events)
 	}
+	if !streamErr.Retryable {
+		t.Fatalf("overloaded_error must be retryable so the agent loop can wait and retry: %+v", streamErr)
+	}
 	end, _ := findEvent(events, domain.ModelEventResponseEnd)
 	if end.StopReason != domain.StopProviderError {
 		t.Fatalf("stop = %q", end.StopReason)
+	}
+}
+
+// A request-shaped protocol error (invalid request, auth, ...) is never
+// retryable: the agent loop must surface it as a terminal failure.
+func TestStreamErrorEventNonTransient(t *testing.T) {
+	t.Parallel()
+
+	server := sseServer(t,
+		"event: message_start\ndata: {\"message\":{\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n"+
+			"event: error\ndata: {\"error\":{\"type\":\"invalid_request_error\",\"message\":\"messages: unexpected role\"}}\n\n")
+	defer server.Close()
+
+	provider, _ := New(Config{BaseURL: server.URL})
+	stream, err := provider.Stream(context.Background(), domain.ModelRequest{
+		ModelName: "claude-test",
+		Messages:  []domain.Message{{Role: domain.RoleUser, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "go"}}}},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+
+	events := collectEvents(t, stream)
+	streamErr, ok := findEvent(events, domain.ModelEventStreamError)
+	if !ok || !strings.Contains(streamErr.Error, "invalid_request_error") {
+		t.Fatalf("events = %+v", events)
+	}
+	if streamErr.Retryable {
+		t.Fatalf("invalid_request_error must stay non-retryable: %+v", streamErr)
 	}
 }
 

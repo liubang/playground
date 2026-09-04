@@ -934,8 +934,22 @@ func (s *streamState) onStreamError(data string, emit stream.Emitter) {
 		message = fmt.Sprintf("anthropic provider: %s: %s", evt.Error.Type, evt.Error.Message)
 	}
 	s.closeOpenBlocks(emit)
-	emit(domain.ModelEvent{Kind: domain.ModelEventStreamError, Error: message})
+	emit(domain.ModelEvent{Kind: domain.ModelEventStreamError, Error: message, Retryable: isTransientErrorType(evt.Error.Type)})
 	emit(domain.ModelEvent{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopProviderError})
+}
+
+// isTransientErrorType reports whether a protocol-level error type signals a
+// server-side transient condition worth retrying (overload, internal error,
+// rate limit) instead of killing the run. Request-shaped problems
+// (invalid_request_error, authentication_error, request_too_large, ...) stay
+// non-retryable.
+func isTransientErrorType(errorType string) bool {
+	switch errorType {
+	case "overloaded_error", "api_error", "rate_limit_error":
+		return true
+	default:
+		return false
+	}
 }
 
 // closeOpenBlocks ends any blocks left open by a truncated stream so the
