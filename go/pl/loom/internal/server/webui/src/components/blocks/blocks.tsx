@@ -259,19 +259,13 @@ export const ReasoningBlock = memo(function ReasoningBlock({
     >
       <summary>
         <Icon name="lightbulb" />
-        {/* key=text.length: each delta remounts the element, refilling the bounded
-            pulse; once deltas stop the animation drains naturally and can never
-            flash forever */}
-        <span className="r-head" key={text.length}>
-          {head}
-        </span>
+        {/* The header breath is gated purely on the .is-live class (continuous CSS
+            animation), so no key remount here — remounting per delta both churned
+            the DOM each token and made the animation restart-strobe. */}
+        <span className="r-head">{head}</span>
         {summary && <span className="r-summary">{summary}</span>}
       </summary>
-      {tail && (
-        <div className="reasoning-tail" key={text.length}>
-          {tail}
-        </div>
-      )}
+      {tail && <div className="reasoning-tail">{tail}</div>}
       <div className="body" ref={bodyRef} onScroll={onBodyScroll}>
         {text}
       </div>

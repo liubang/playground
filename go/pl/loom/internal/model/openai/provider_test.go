@@ -1538,7 +1538,8 @@ func TestStreamChatCompletionsInBandErrorFrame(t *testing.T) {
 			defer stream.Close()
 
 			events := collectEvents(t, stream)
-			assertEventKinds(t, events,
+			assertEventKinds(
+				t, events,
 				domain.ModelEventResponseStart,
 				domain.ModelEventStreamError,
 				domain.ModelEventResponseEnd,
@@ -1586,7 +1587,8 @@ func TestStreamChatCompletionsIgnoresErrorFrameAfterFinishReason(t *testing.T) {
 			t.Fatalf("trailing error frame poisoned a completed generation: %+v", evt)
 		}
 	}
-	assertEventKinds(t, events,
+	assertEventKinds(
+		t, events,
 		domain.ModelEventResponseStart,
 		domain.ModelEventTextStart,
 		domain.ModelEventTextDelta,

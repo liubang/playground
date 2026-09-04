@@ -122,13 +122,10 @@ pre,
   vertical-align: -0.125em;
   flex: none;
 }
-/* Per-context tweaks: star overlay mark, plan status icons, etc. need tighter size/spacing than 1em */
+/* Per-context tweaks: star overlay mark, picker chevrons, etc. need tighter size/spacing than 1em */
 .picker-label .icon {
   font-size: 10px;
   margin-left: 4px;
-}
-.plan-panel .plan-icon .icon {
-  font-size: 11px;
 }
 .tool-status .icon {
   font-size: 11px;
@@ -207,7 +204,7 @@ button {
 }
 
 /* ============================== Disclosure blocks (generic details) ============================== */
-/* Shared by reasoning / tool-output / plan-panel; components only add incremental styles like font size. */
+/* Shared by reasoning / user-ctx / tool-output; components only add incremental styles like font size. */
 .disclosure summary {
   display: flex;
   align-items: center;
@@ -995,23 +992,19 @@ button {
   margin: 14px 0;
 }
 
-/* Stream draft cursor (draft is live-rendered markdown; cursor follows the end of rendered content) */
+/* Stream draft cursor (draft is live-rendered markdown; cursor follows the end of
+   rendered content). Soft oscillation instead of steps(1) hard cut: the hard on/off
+   blink was harsh enough to be mistaken for leftover thinking-state flicker. */
 .stream-cursor {
   display: inline-block;
   color: var(--primary);
-  animation: blink 1s steps(1) infinite;
+  animation: breathe 1.2s ease-in-out infinite;
 }
 /* 断连时停止光标动画并置灰，给出"流已停"的静态视觉信号（连接恢复后自动复位） */
 .transcript.is-offline .stream-cursor {
   animation: none;
   opacity: 0.35;
 }
-@keyframes blink {
-  50% {
-    opacity: 0;
-  }
-}
-
 /* lazy-loaded 重页面（maze/trace/compare）chunk 加载期间的占位 */
 .lazy-pane {
   flex: 1;
@@ -1109,25 +1102,26 @@ button {
   height: 7px;
   border-radius: 50%;
   background: var(--muted);
-  animation: think-bounce 1.2s ease-in-out infinite;
+  animation: think-wave 1.4s ease-in-out infinite;
 }
 .block-thinking .t-dot:nth-child(2) {
-  animation-delay: 0.15s;
+  animation-delay: 0.2s;
 }
 .block-thinking .t-dot:nth-child(3) {
-  animation-delay: 0.3s;
+  animation-delay: 0.4s;
 }
-@keyframes think-bounce {
+/* Symmetric rise/fall (peak at the midpoint) reads as a calm traveling wave. The
+   previous version snapped up -4px and flashed --primary at the 30% instant, then
+   sat still for 40% of the cycle — a strobe-like blip rather than a wave. */
+@keyframes think-wave {
   0%,
-  60%,
   100% {
-    opacity: 0.35;
+    opacity: 0.3;
     transform: none;
   }
-  30% {
+  50% {
     opacity: 1;
-    transform: translateY(-4px);
-    background: var(--primary);
+    transform: translateY(-2px);
   }
 }
 
@@ -1148,15 +1142,33 @@ button {
   font-size: 12px;
   color: var(--muted);
 }
-/* While streaming: bulb lights up + header breathes, reinforcing the "thinking" semantics.
-   The pulse is bounded (3 iterations ≈5s): the animation means "delta activity just happened",
-   not "live forever" — even if the live state gets stuck via any leak path, the pulse stops on its own;
-   the component re-mounts the element with key=text.length after each delta to retrigger it. */
+/* While streaming: bulb lights up + header breathes slowly, reinforcing the "thinking"
+   semantics. The breath is a continuous, shallow oscillation gated on .is-live: the
+   class is dropped the moment streaming finalizes, so no leak path (dropped events /
+   reconnects) can leave it blinking forever — no per-delta remount needed. The old
+   bounded pulse retriggered via key=text.length restarted on every streaming delta,
+   which read as constant flicker. */
+/* The bulb and the head breathe in phase (same keyframes + duration → same
+   animation clock): the whole header acts as one "working" indicator. On muted
+   13px text a shallow 0.55 floor was barely perceptible — deepen it to 0.4 and
+   tighten the period so the activity signal actually reads. */
 .block-reasoning.is-live summary .icon {
   color: var(--primary);
+  animation: breathe 1.6s ease-in-out infinite;
 }
 .block-reasoning.is-live .r-head {
-  animation: pulse 1.6s ease-in-out 3;
+  animation: breathe 1.6s ease-in-out infinite;
+}
+/* Calmer, shallower oscillation than `pulse` — signals "work in progress" without
+   the attention-grabbing blink. */
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 .block-reasoning .r-head {
   flex: none;
@@ -1170,7 +1182,9 @@ button {
   white-space: nowrap;
   font-style: italic;
 }
-/* Streaming tail preview: shows the last line while collapsed, hidden when expanded */
+/* Streaming tail preview: shows the last line while collapsed, hidden when expanded.
+   No animation on purpose — the text itself changes with each delta, which already
+   signals activity; layering a blink on top of churning text just flickers. */
 .block-reasoning .reasoning-tail {
   margin-top: 4px;
   margin-left: 24px;
@@ -1179,7 +1193,6 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  animation: pulse 1.6s ease-in-out 3;
 }
 .block-reasoning[open] .reasoning-tail {
   display: none;
@@ -1593,67 +1606,333 @@ body.lightbox-open {
 }
 
 /* ============================== Plan panel ============================== */
+/* V2 甲版：裸行 —— 常态无卡片 chrome（一行文字即状态），hover 浮现底色，
+   点开时 summary 与清单缝合“出卡”（一整张卡，chrome 只在主动查看时出现）；
+   ▸ 固定 18px 列宽，与清单步骤圆圈列对齐 → 展开后 goal 文本与标题同一垂直线；
+   完成过渡动画：行打勾弹入 + goal 尺规划线从左划出 + dot pop；
+   折叠态用行底微光（rowglow）提示“有新进展”；
+   全部完成后停留片刻展示“✓ 全部完成”，随后自动退场（is-retiring 渐出）。 */
 .plan-panel {
   max-width: var(--content-width);
-  margin: 0 auto 10px;
-  background: var(--bg1);
-  border: 1px solid var(--bg2);
-  border-radius: 10px;
-  padding: 7px 14px;
+  margin: 0 auto 8px;
+  border-radius: 6px;
   font-size: var(--text-sm);
+  max-height: 480px;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease,
+    max-height 0.3s ease,
+    margin 0.3s ease;
+}
+.plan-panel.is-retiring {
+  opacity: 0;
+  transform: translateY(3px);
+  max-height: 0;
+  margin-bottom: 0;
 }
 .plan-panel summary {
-  font-size: var(--text-sm);
+  /* 折叠态 inline-flex：hover 底色只包住内容（标题+dots+计数+正在做），
+     不做通栏横幅；展开态转整行 flex，与下方卡体等宽缝合。
+     max-width 兜住超长内容（内部各自 ellipsis 截断）；
+     border 常驻透明占位：展开时边框接管，消除开合瞬间的 1px 抖动。 */
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 9px;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  color: var(--muted);
+  padding: 3px 8px 3px 14px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  transition: background 0.15s ease;
 }
-.plan-panel .plan-title {
+.plan-panel summary:hover {
+  background: color-mix(in srgb, var(--bg1) 65%, transparent);
+  color: var(--fg);
+}
+.plan-panel.flash > summary {
+  animation: rowglow 0.55s ease;
+}
+.plan-panel summary::-webkit-details-marker {
+  display: none;
+}
+/* 展开缝合：summary 转为整行宽并接管卡片上半 chrome，与下方卡体拼成一整张卡 */
+.plan-panel[open] summary {
+  display: flex;
+  background: var(--bg1);
+  border-color: var(--bg2);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+}
+.plan-panel[open] summary:hover {
+  background: var(--bg1);
+}
+.plan-panel summary::before {
+  /* ▸ 固定 18px 列宽：与展开清单的 pp-num 圆圈列（18px）垂直对齐，
+     使展开后 goal 文本与标题落在同一 x 位置 */
+  content: '\25B8';
+  flex: none;
+  width: 18px;
+  display: inline-flex;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1;
+  transition: transform 0.16s ease;
+}
+.plan-panel[open] summary::before {
+  transform: rotate(90deg);
+}
+
+/* —— summary 行 —— */
+.pp-title {
   font-weight: 600;
   color: var(--fg);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 320px;
 }
-.plan-panel .plan-progress {
-  margin-left: auto;
+.pp-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  padding: 0 1px;
+}
+.pp-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: color-mix(in srgb, var(--muted) 28%, transparent);
+  transition: background 0.3s ease;
+}
+.pp-dot.is-done {
+  background: var(--success);
+}
+.pp-dot.is-cur {
+  background: var(--primary);
+  animation: breathe 1.6s ease-in-out infinite;
+}
+.pp-dot.just {
+  animation: dotpop 0.35s ease;
+}
+.pp-count {
   flex: none;
   font-size: var(--text-xs);
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  transition: color 0.25s ease;
 }
-.plan-panel .plan-items {
-  list-style: none;
-  margin-top: 6px;
-  border-top: 1px solid var(--bg2);
-  padding-top: 6px;
-  max-height: 220px;
-  overflow-y: auto;
+.pp-count.is-done-all {
+  color: var(--success);
+  font-weight: 700;
 }
-.plan-panel .plan-item {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  padding: 2px 0;
-  line-height: 1.5;
-}
-.plan-panel .plan-icon {
-  flex: none;
-  width: 14px;
-  text-align: center;
-}
-.plan-panel .plan-item.is-todo {
+.pp-now {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--muted);
 }
-.plan-panel .plan-item.is-in_progress {
+.pp-now b {
   color: var(--fg);
   font-weight: 500;
 }
-.plan-panel .plan-item.is-in_progress .plan-icon {
+.pp-now.is-live b {
   color: var(--primary);
-  animation: pulse 1.6s ease-in-out infinite;
+  animation: flipin 0.18s ease;
 }
-.plan-panel .plan-item.is-done {
+.pp-now.is-done-all b {
+  color: var(--success);
+}
+
+/* —— 展开区：max-height 过渡实现平滑展开/收起；清单内部 220px 封顶内滚 —— */
+.pp-body {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.22s ease;
+}
+/* 展开态出卡：卡体与 summary 缝合成一整张卡（上沿无边框、直角衔接），
+   收起时 chrome 随 open 属性一并消失 */
+.plan-panel[open] .pp-body {
+  max-height: 340px;
+  background: var(--bg1);
+  border: 1px solid var(--bg2);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  margin: 0;
+  box-shadow: var(--shadow-sm);
+}
+.pp-list {
+  list-style: none;
+  margin: 0;
+  padding: 5px 14px 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.pp-item {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  padding: 3px 0;
+  line-height: 1.5;
+  min-height: 26px;
+}
+
+/* —— 步骤号圆圈 —— */
+.pp-num {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.3s ease,
+    color 0.3s ease,
+    border-color 0.3s ease;
+}
+.pp-num .pp-num-txt {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+.pp-item.is-todo .pp-num {
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--muted) 50%, transparent);
+}
+.pp-item.is-in_progress .pp-num {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  border: 1px solid transparent;
+  animation: breathe 1.6s ease-in-out infinite;
+}
+.pp-item.is-done .pp-num {
+  color: var(--on-accent);
+  background: var(--success);
+  border: 1px solid transparent;
+}
+.pp-num .pp-check {
+  display: inline-flex;
+  font-size: 9px;
+}
+.pp-item.just-done .pp-num {
+  animation: numpop 0.34s ease;
+}
+.pp-item.just-done .pp-num .pp-check {
+  animation: checkin 0.3s ease 0.06s both;
+}
+
+/* —— goal 文本 —— */
+.pp-goal {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  position: relative;
+  transition: color 0.25s ease;
+}
+.pp-item.is-todo .pp-goal {
   color: var(--muted);
 }
-.plan-panel .plan-item.is-done .plan-icon {
-  color: var(--success);
+.pp-item.is-in_progress .pp-goal {
+  color: var(--fg);
+  font-weight: 500;
+}
+.pp-item.is-done .pp-goal {
+  color: var(--muted);
+}
+/* done 划线由 ::after 承担：text-decoration 无法动画，用尺规划线完成过渡 */
+.pp-item.is-done .pp-goal::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 55%;
+  height: 1px;
+  width: 100%;
+  background: currentColor;
+  opacity: 0.55;
+  transform: scaleX(1);
+  transform-origin: left center;
+}
+.pp-item.just-done .pp-goal::after {
+  animation: strikein 0.22s ease-out 0.03s both;
+}
+
+@keyframes strikein {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes checkin {
+  0% {
+    transform: scale(0.1) rotate(-20deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.25) rotate(5deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0);
+    opacity: 1;
+  }
+}
+@keyframes numpop {
+  0% {
+    transform: scale(0.5);
+  }
+  60% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes dotpop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.8);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes flipin {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes rowglow {
+  0% {
+    background: transparent;
+  }
+  30% {
+    background: color-mix(in srgb, var(--primary) 10%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
 }
 
 /* ============================== composer ============================== */
