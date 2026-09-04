@@ -59,9 +59,9 @@ const REASONING_OPTIONS = [
 const APPROVAL_OPTIONS = [
   { value: 'on-request', short: 'standard', hint: '默认：工作区内读写免审批，越界/危险才询问' },
   {
-    value: 'unless-dangerous',
-    short: 'relaxed',
-    hint: '黑名单：仅危险命令与出沙箱提权弹审批',
+    value: 'danger-only',
+    short: 'dev',
+    hint: '开发模式：仅危险命令/危险站点弹审批，开发命令与正常访问自动放行',
   },
   { value: 'never', short: 'auto', hint: '无人值守：危险直接拒绝，永不等待审批' },
 ]

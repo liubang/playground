@@ -40,7 +40,7 @@ import (
 )
 
 // permissionFixture wires the REAL process sandbox + run_cmd/write tools +
-// the unless-dangerous decider chain into an agent loop driven by a
+// the live decision pipeline into an agent loop driven by a
 // scripted FakeModel — the same shape as the skills e2e tests.
 type permissionFixture struct {
 	ws        string
@@ -127,10 +127,7 @@ func (f *permissionFixture) drive(t *testing.T, policy permission.Policy, mode p
 
 // TestEscalationNeverSilentlyDowngraded reproduces the sess_09538cef
 // failure mode end to end: a session memory carrying only a network grant
-// must NOT answer a require_escalated call. The call has to reach the
-// approver, and the approval must execute UNSANDBOXED — proven by writing
-// a file outside the workspace, which the seatbelt sandbox would have
-// denied with EPERM.
+// must NOT answer a require_escalated call: on-request keeps the ask.
 func TestEscalationNeverSilentlyDowngraded(t *testing.T) {
 	f := newPermissionFixture(t)
 	outside := filepath.Join(f.home, "escalation-proof")
@@ -145,7 +142,7 @@ func TestEscalationNeverSilentlyDowngraded(t *testing.T) {
 		MaxConsequence: permission.ConsequenceConfined,
 	})
 
-	run, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
+	run, approver := f.drive(t, policy, permission.ModeOnRequest, toolCall(t, "run_cmd", map[string]any{
 		"command":             "touch " + outside,
 		"sandbox_permissions": "require_escalated",
 		"justification":       "needs to write outside the workspace",
@@ -162,15 +159,15 @@ func TestEscalationNeverSilentlyDowngraded(t *testing.T) {
 	}
 }
 
-// TestUnlessDangerousBlacklistFlow proves the blacklist-mode baseline end
-// to end: everything the sandbox still confines runs without a prompt,
-// while the danger list and escalations keep asking.
-func TestUnlessDangerousBlacklistFlow(t *testing.T) {
+// TestDangerOnlyBaselineFlow proves the danger-only baseline end
+// to end: everything without a danger signal runs without a prompt,
+// while the danger list keeps asking.
+func TestDangerOnlyBaselineFlow(t *testing.T) {
 	policy := permission.DefaultPolicy()
 
 	t.Run("simple command needs no approval", func(t *testing.T) {
 		f := newPermissionFixture(t)
-		_, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
+		_, approver := f.drive(t, policy, permission.ModeDangerOnly, toolCall(t, "run_cmd", map[string]any{
 			"command": "mkdir -p .myapp_logs",
 		}))
 		if got := len(approver.Requests()); got != 0 {
@@ -183,7 +180,7 @@ func TestUnlessDangerousBlacklistFlow(t *testing.T) {
 
 	t.Run("compound command needs no approval", func(t *testing.T) {
 		f := newPermissionFixture(t)
-		_, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
+		_, approver := f.drive(t, policy, permission.ModeDangerOnly, toolCall(t, "run_cmd", map[string]any{
 			"command": "mkdir -p .myapp_logs && echo created",
 		}))
 		if got := len(approver.Requests()); got != 0 {
@@ -196,7 +193,7 @@ func TestUnlessDangerousBlacklistFlow(t *testing.T) {
 
 	t.Run("danger-listed compound command still asks", func(t *testing.T) {
 		f := newPermissionFixture(t)
-		_, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
+		_, approver := f.drive(t, policy, permission.ModeDangerOnly, toolCall(t, "run_cmd", map[string]any{
 			"command": "echo hi && sudo make install",
 		}))
 		if got := len(approver.Requests()); got != 1 {
@@ -206,7 +203,7 @@ func TestUnlessDangerousBlacklistFlow(t *testing.T) {
 
 	t.Run("declared network need is granted without a prompt", func(t *testing.T) {
 		f := newPermissionFixture(t)
-		run, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
+		run, approver := f.drive(t, policy, permission.ModeDangerOnly, toolCall(t, "run_cmd", map[string]any{
 			"command":       "ls",
 			"needs_network": true,
 		}))
@@ -220,7 +217,7 @@ func TestUnlessDangerousBlacklistFlow(t *testing.T) {
 
 	t.Run("workspace write tool needs no approval", func(t *testing.T) {
 		f := newPermissionFixture(t)
-		_, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "write", map[string]any{
+		_, approver := f.drive(t, policy, permission.ModeDangerOnly, toolCall(t, "write", map[string]any{
 			"path":    "note.txt",
 			"content": "hello",
 		}))
@@ -234,12 +231,12 @@ func TestUnlessDangerousBlacklistFlow(t *testing.T) {
 	})
 
 	// A write outside the workspace roots crosses the confinement
-	// boundary: it prompts even in unless-dangerous mode, and the
-	// approval executes the write.
+	// boundary: it prompts in the default on-request mode (danger-only
+	// auto-allows it), and the approval executes the write.
 	t.Run("external write asks and executes on approval", func(t *testing.T) {
 		f := newPermissionFixture(t)
 		outside := filepath.Join(f.home, "notes", "a.txt")
-		_, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "write", map[string]any{
+		_, approver := f.drive(t, policy, permission.ModeOnRequest, toolCall(t, "write", map[string]any{
 			"path":    outside,
 			"content": "external",
 		}))
@@ -268,7 +265,7 @@ func TestUnlessDangerousBlacklistFlow(t *testing.T) {
 		rulePolicy := permission.DefaultPolicy()
 		rulePolicy.Packages.Add(pkgs...)
 
-		_, approver := f.drive(t, rulePolicy, permission.ModeUnlessDangerous, toolCall(t, "write", map[string]any{
+		_, approver := f.drive(t, rulePolicy, permission.ModeDangerOnly, toolCall(t, "write", map[string]any{
 			"path":    outside,
 			"content": "ruled",
 		}))
@@ -284,7 +281,7 @@ func TestUnlessDangerousBlacklistFlow(t *testing.T) {
 	// at Prepare, before any policy evaluation.
 	t.Run("sensitive external write fails before approval", func(t *testing.T) {
 		f := newPermissionFixture(t)
-		run, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "write", map[string]any{
+		run, approver := f.drive(t, policy, permission.ModeDangerOnly, toolCall(t, "write", map[string]any{
 			"path":    filepath.Join(f.home, ".ssh", "config"),
 			"content": "Host evil",
 		}))
@@ -298,7 +295,7 @@ func TestUnlessDangerousBlacklistFlow(t *testing.T) {
 
 	t.Run("danger-listed commands still ask", func(t *testing.T) {
 		f := newPermissionFixture(t)
-		_, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
+		_, approver := f.drive(t, policy, permission.ModeDangerOnly, toolCall(t, "run_cmd", map[string]any{
 			"command": "git reset --hard",
 		}))
 		if got := len(approver.Requests()); got != 1 {
@@ -308,7 +305,7 @@ func TestUnlessDangerousBlacklistFlow(t *testing.T) {
 
 	t.Run("danger screen sees through the shell", func(t *testing.T) {
 		f := newPermissionFixture(t)
-		_, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
+		_, approver := f.drive(t, policy, permission.ModeDangerOnly, toolCall(t, "run_cmd", map[string]any{
 			"command": "sudo echo hi",
 		}))
 		if got := len(approver.Requests()); got != 1 {
@@ -318,7 +315,7 @@ func TestUnlessDangerousBlacklistFlow(t *testing.T) {
 
 	t.Run("skill env namespace survives the sandbox filter", func(t *testing.T) {
 		f := newPermissionFixture(t)
-		run, approver := f.drive(t, policy, permission.ModeUnlessDangerous, toolCall(t, "run_cmd", map[string]any{
+		run, approver := f.drive(t, policy, permission.ModeDangerOnly, toolCall(t, "run_cmd", map[string]any{
 			"command": "printenv SKILL_REGION",
 			"env":     map[string]string{"SKILL_REGION": "cn", "NODE_OPTIONS": "--no-warnings"},
 		}))

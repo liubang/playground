@@ -53,7 +53,7 @@ import (
 // Skipped unless LOOM_E2E_LLM=1 (real provider via the user's own config).
 func TestUserIntentRealModelE2E(t *testing.T) {
 	ctx := context.Background()
-	// Pin on-request mode: unless-dangerous deliberately allows every
+	// Pin on-request mode: danger-only deliberately allows every
 	// builtin web_fetch without asking (a credential-less GET is strictly
 	// weaker than the sandboxed needs_network egress that mode already
 	// grants any host), so the baseline approval gate this suite asserts

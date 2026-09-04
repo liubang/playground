@@ -50,9 +50,13 @@ const (
 	// and prompts only for what crosses the boundary or carries danger
 	// indicators.
 	ModeOnRequest ApprovalMode = "on-request"
-	// ModeUnlessDangerous additionally grants network needs silently;
-	// indicators, escalations, GUI, and extra writes still prompt.
-	ModeUnlessDangerous ApprovalMode = "unless-dangerous"
+	// ModeDangerOnly auto-allows anything without an explicitly
+	// dangerous signal: boundary crossings (network, extra writes,
+	// GUI, even full escalation) are granted as declared, and only
+	// deny rules, danger indicators, and destructive / shared-state
+	// consequences still prompt. The permissive end of the spectrum,
+	// for trusted development workflows.
+	ModeDangerOnly ApprovalMode = "danger-only"
 	// ModeNever allows sandbox-confined calls (granting network needs)
 	// and denies escalations, GUI, extra writes, indicated shapes, and
 	// forced-ask calls outright — for unattended runs.
@@ -64,13 +68,13 @@ func ParseApprovalMode(s string) (ApprovalMode, error) {
 	switch ApprovalMode(s) {
 	case "", ModeOnRequest:
 		return ModeOnRequest, nil
-	case ModeUnlessDangerous:
-		return ModeUnlessDangerous, nil
+	case ModeDangerOnly:
+		return ModeDangerOnly, nil
 	case ModeNever:
 		return ModeNever, nil
 	}
 	return "", fmt.Errorf("approval.mode must be %q, %q, or %q, got %q",
-		ModeOnRequest, ModeUnlessDangerous, ModeNever, s)
+		ModeOnRequest, ModeDangerOnly, ModeNever, s)
 }
 
 // Decide resolves the verdict for one derivation. It never returns an
@@ -119,8 +123,15 @@ func (s *PackageSet) Decide(d Derivation, mode ApprovalMode, intentHosts map[str
 
 	// 4. The indicator gate: an effect carrying danger signals is never
 	// covered by categorical packages or the default sandbox — only by
-	// an exact-binding approval of the same shape.
-	if len(e.Indicators) > 0 {
+	// an exact-binding approval of the same shape. danger-only first
+	// filters out the one benign indicator (driving the real user
+	// browser): normal browsing is legitimate work, while every other
+	// indicator names a genuinely dangerous shape.
+	indicators := e.Indicators
+	if mode == ModeDangerOnly {
+		indicators = withoutBenignIndicators(indicators)
+	}
+	if len(indicators) > 0 {
 		if pkg, ok := s.exactCover(d, workspace); ok {
 			return allowFromPackage(pkg, e)
 		}
@@ -128,7 +139,7 @@ func (s *PackageSet) Decide(d Derivation, mode ApprovalMode, intentHosts map[str
 			return domain.Verdict{
 				Decision: domain.DecisionDeny,
 				Source:   SourceIndicator,
-				Reason: strings.Join(e.Indicators, "; ") +
+				Reason: strings.Join(indicators, "; ") +
 					" — denied unattended; approve the exact command interactively or rework the approach",
 			}
 		}
@@ -136,7 +147,7 @@ func (s *PackageSet) Decide(d Derivation, mode ApprovalMode, intentHosts map[str
 			Decision: domain.DecisionAsk,
 			Grant:    e.GapGrant(),
 			Source:   SourceIndicator,
-			Reason:   strings.Join(e.Indicators, "; "),
+			Reason:   strings.Join(indicators, "; "),
 		}
 	}
 
@@ -153,6 +164,16 @@ func (s *PackageSet) Decide(d Derivation, mode ApprovalMode, intentHosts map[str
 				Source:   SourceBaseline,
 				Reason: d.ForcedAsk +
 					" — denied unattended; remember the tool with allow always in an interactive session",
+			}
+		}
+		if mode == ModeDangerOnly {
+			// Third-party tools and quota spenders carry no danger
+			// signal of their own — the mode's contract allows them.
+			return domain.Verdict{
+				Decision: domain.DecisionAllow,
+				Grant:    e.GapGrant(),
+				Source:   SourceBaseline,
+				Reason:   "danger-only: " + d.ForcedAsk + " — auto-allowed",
 			}
 		}
 		return domain.Verdict{
@@ -229,25 +250,38 @@ func residualVerdict(d Derivation, mode ApprovalMode) domain.Verdict {
 			Reason: "never mode: sandboxed calls run unattended",
 		}
 
-	case ModeUnlessDangerous:
-		// The silent network grant covers CONFINED effects only:
-		// anything with a destructive or shared-state consequence
-		// (force pushes, cluster deletions) still asks — the mode's
-		// name is the contract.
-		if e.Consequence == ConsequenceConfined && !e.Network.IsZero() &&
-			!e.Unsandboxed && !e.GUIOpen && e.Writes.IsZero() {
-			return domain.Verdict{
-				Decision: domain.DecisionAllow,
-				Grant:    domain.ExecGrant{NetworkFull: true},
-				Source:   SourceBaseline,
-				Reason:   "unless-dangerous: network need granted inside the sandbox",
-			}
+	case ModeDangerOnly:
+		// Only the operation's real-world blast radius still prompts:
+		// destructive or shared-state consequences. Every other
+		// boundary crossing (network, extra writes, GUI, escalation)
+		// is granted exactly as the effect declares.
+		if e.Consequence > ConsequenceConfined {
+			return askGapVerdict(e)
 		}
-		return askGapVerdict(e)
+		return domain.Verdict{
+			Decision: domain.DecisionAllow,
+			Grant:    e.GapGrant(),
+			Source:   SourceBaseline,
+			Reason:   "danger-only: no danger signal; capabilities granted as declared",
+		}
 
 	default: // ModeOnRequest
 		return askGapVerdict(e)
 	}
+}
+
+// withoutBenignIndicators drops the indicators that annotate
+// legitimate work rather than danger (currently only the real-identity
+// browser signal). It never mutates the input slice.
+func withoutBenignIndicators(indicators []string) []string {
+	var out []string
+	for _, ind := range indicators {
+		if ind == realIdentityIndicator {
+			continue
+		}
+		out = append(out, ind)
+	}
+	return out
 }
 
 // askGapVerdict is the interactive ask for an uncovered effect: the

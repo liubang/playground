@@ -155,7 +155,7 @@ export interface WorkspaceFileContent {
   content?: string
 }
 
-export type ApprovalMode = 'on-request' | 'unless-dangerous' | 'never'
+export type ApprovalMode = 'on-request' | 'danger-only' | 'never'
 
 export interface GitFileEntry {
   path: string

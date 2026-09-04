@@ -150,6 +150,15 @@ bazel_dep(name = "magic_enum", version = "0.9.7")
 bazel_dep(name = "jieba_cpp", version = "0.1.0")
 bazel_dep(name = "proxygen", version = "2025.02.10.00.bcr.1")
 bazel_dep(name = "folly", version = "2025.01.13.00.bcr.6")
+
+# folly's MODULE.bazel pins libaio@0.3.113.bcr.0 — every published folly
+# version (including 2026.05.18.00) still does. BCR yanked .bcr.0 (broken
+# tarball) and re-released the fix as .bcr.1; pin that here.
+single_version_override(
+    module_name = "libaio",
+    version = "0.3.113.bcr.1",
+)
+
 bazel_dep(name = "pybind11_bazel", version = "3.0.1")
 
 # boost

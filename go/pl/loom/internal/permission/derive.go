@@ -282,8 +282,7 @@ func (d *Derivation) deriveURL(req *domain.URLRequest) {
 		e.Network = HostSet{Hosts: []string{req.Host}}
 	}
 	if req.RealIdentity {
-		e.Indicators = append(e.Indicators,
-			"drives the real user browser with its real identity and cookies")
+		e.Indicators = append(e.Indicators, realIdentityIndicator)
 	}
 	d.Effect = e
 }

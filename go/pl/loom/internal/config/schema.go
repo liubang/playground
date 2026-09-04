@@ -246,8 +246,10 @@ type Rules struct {
 // package covers are decided: "on-request" (default: everything the
 // sandbox or path validator confines runs without prompting; escalation,
 // boundary crossings, and indicated shapes prompt),
-// "unless-dangerous" (additionally grants confined network needs
-// silently; indicators, escalations, and extra writes still prompt), or
+// "danger-only" (only explicitly dangerous shapes prompt: deny rules,
+// danger indicators, and above-confined consequences; every other
+// boundary crossing — network, extra writes, GUI, escalation — is
+// granted as declared), or
 // "never" (unattended: sandboxed calls run, escalations and
 // above-confined consequences are denied outright so a run can never
 // hang on a prompt).

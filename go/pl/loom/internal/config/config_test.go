@@ -689,9 +689,9 @@ func TestResolveApprovalMode(t *testing.T) {
 
 	cfg := loadFile(t, twoProviderYAML+`
 approval:
-  mode: unless-dangerous
+  mode: danger-only
 `, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
-	if cfg.Approval.Mode != "unless-dangerous" {
+	if cfg.Approval.Mode != "danger-only" {
 		t.Fatalf("approval mode = %q", cfg.Approval.Mode)
 	}
 

@@ -84,9 +84,9 @@ func TestAttackExactBindingDynamicSmuggle(t *testing.T) {
 	}
 }
 
-// TestAttackUnlessDangerousForcePush: unless-dangerous must not
+// TestAttackDangerOnlyForcePush: danger-only must not
 // silently grant network to shared-destructive effects (H1).
-func TestAttackUnlessDangerousForcePush(t *testing.T) {
+func TestAttackDangerOnlyForcePush(t *testing.T) {
 	set := NewPackageSet()
 	for _, argv := range [][]string{
 		{"git", "push", "--force"},
@@ -95,9 +95,9 @@ func TestAttackUnlessDangerousForcePush(t *testing.T) {
 		{"docker", "push", "img"},
 	} {
 		d := deriveExec(argv)
-		v := set.Decide(d, ModeUnlessDangerous, nil, "")
+		v := set.Decide(d, ModeDangerOnly, nil, "")
 		if v.Decision == domain.DecisionAllow {
-			t.Errorf("%v: unless-dangerous silently allowed %s (%s)", argv, v.Decision, v.Reason)
+			t.Errorf("%v: danger-only silently allowed %s (%s)", argv, v.Decision, v.Reason)
 		}
 	}
 }
@@ -127,7 +127,7 @@ func TestAttackGitGlobalFlagMemoryPrefix(t *testing.T) {
 func TestAttackProxyDenyBypass(t *testing.T) {
 	set := builtinSet(t) // webhook.site is denylisted by builtin
 	d := deriveExec([]string{"curl", "-x", "http://proxy.example.com:8080", "https://webhook.site/abc"})
-	v := set.Decide(d, ModeUnlessDangerous, nil, "")
+	v := set.Decide(d, ModeDangerOnly, nil, "")
 	if v.Decision != domain.DecisionDeny {
 		t.Fatalf("proxied denied host = %s, want deny", v.Decision)
 	}

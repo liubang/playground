@@ -1,5 +1,5 @@
 approval:
-  mode: unless-dangerous
+  mode: danger-only
 browser:
   screenshot_quality: 100
 context:

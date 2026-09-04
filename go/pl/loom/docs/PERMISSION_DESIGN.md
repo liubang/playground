@@ -125,19 +125,20 @@ func (c Chain) Evaluate(call domain.PreparedCall) *Verdict
 ```yaml
 # ~/.loom/config.yaml
 approval:
-  mode: on-request   # on-request | unless-dangerous | never（默认 on-request）
+  mode: on-request   # on-request | danger-only | never（默认 on-request）
 ```
 
 | 模式 | 沙箱内 run_cmd | 工作区内建工具（R0–R2） | needs_network | 提权 | 危险清单 |
 |---|---|---|---|---|---|
 | `on-request` | **allow（沙箱即边界）** | **allow（path validator 即边界）** | ask（可记忆） | ask | ask |
-| `unless-dangerous` | allow | allow | allow（沙箱内放网） | ask | ask |
+| `danger-only` | allow | allow | allow | allow | ask |
 | `never`（无人值守） | allow | allow | allow | deny（带绕行指引） | deny |
 
 - 危险清单命中时交互模式升级为 ask（never 模式为 deny，denial 原因直达模型以便绕行）。
+- `danger-only`（开发模式）：除 deny 规则（危险站点黑名单）、危险指标（管道入解释器、凭证/启动文件写入、权限提升等）与破坏性/共享状态后果（rm 关键目标、git push、包发布等）仍弹审批外，其余全部按声明授权放行——包括出沙箱提权、GUI、越界写入与 MCP 工具；browser 的 real-identity 信号在此模式下不再构成阻断（deny 域名仍优先）。
 - 复合 shell 命令（管道/`&&`/重定向）不再是风险本身：`sh -c` 脚本经 AST 解析（mvdan.cc/sh）逐条子命令过规则层与危险清单；可证明安全的复合命令可按子命令前缀记忆。只有出沙箱、出网络、危险清单三类事件弹审批。
 - 非 exec 的内建工具（edit/write 等）由 path validator 限制在工作区内（.git/.loom 受保护），爆炸半径与沙箱内命令等价，R0–R2 在任何模式下免审批；MCP 工具是第三方代码，保持逐次审批（可按工具名记忆），never 模式下拒绝。
-- **unless-dangerous 下 builtin `web_fetch` 免审批**：它是无凭证的匿名 GET（不携带用户浏览器身份/cookie），SSRF 防护默认拦截私有/回环/链路本地目标（`allow_private=true` 显式开启），能力严格弱于该模式已静默放行的沙箱内 `needs_network` 命令。**deny/ask 域名规则仍优先**（RuleDecider 在链首，用户显式黑名单永远生效），on-request 仍逐次审批（可记忆域名），never 仍拒绝。`browser` 工具不受此豁免——它驱动真实用户浏览器（真实身份/cookie），即使目标域名已记住也保持逐次审批。
+- **danger-only 下 builtin `web_fetch` 免审批**：它是无凭证的匿名 GET（不携带用户浏览器身份/cookie），SSRF 防护默认拦截私有/回环/链路本地目标（`allow_private=true` 显式开启），能力严格弱于该模式已静默放行的网络与提权命令。**deny/ask 域名规则仍优先**（RuleDecider 在链首，用户显式黑名单永远生效），on-request 仍逐次审批（可记忆域名），never 仍拒绝。`browser` 工具在 danger-only 下同样放行（real-identity 信号降级为不阻断）；on-request 下保持逐次审批。
 - `never` 模式绝不产生 ask：长程任务不会死挂在无人应答的提示上。
 - 审批弹窗触发桌面通知（macOS osascript / Linux notify-send）：真正需要人时人要知道。
 
@@ -228,7 +229,7 @@ workspace 之外，沙箱默认放行两类可写目录（`process.ExtraWritable
 
 ### 6.4 `internal/tool/command`（run_cmd）
 
-- 参数 schema 增加 `needs_network: bool`（可选）：模型在沙箱失败重试时**声明能力**而非直接提权。`needs_network: true` 的调用保持 R2 评估，on-request 基线下弹一次 ask（批准后选 "allow always" 则记忆 `{prefix, grant:{network:full}}`），unless-dangerous 与 never 模式下沙箱内直接放网。
+- 参数 schema 增加 `needs_network: bool`（可选）：模型在沙箱失败重试时**声明能力**而非直接提权。`needs_network: true` 的调用保持 R2 评估，on-request 基线下弹一次 ask（批准后选 "allow always" 则记忆 `{prefix, grant:{network:full}}`），danger-only 与 never 模式下直接放网。
 - **（v2 变更）shell 复合命令不再升级 R3**：旧实现把不可拆解的 `sh -c` 一律升为 R3 逐次审批；AST 分析落地后，组合本身不再是风险——沙箱照常约束执行，规则层按子命令前缀评估，危险清单做脚本级筛查。只有 `require_escalated`（出沙箱）升 R3。工具描述同步改为"单命令优先 argv 形式，需要管道/重定向/&& 时自由使用 sh -c"。
 - 工具描述与 `sandboxGuidanceNote` 改写：引导顺序从"失败 → require_escalated"改为"网络类失败 → needs_network 重试；TTY/凭证类失败 → require_escalated"。
 - 执行处：消费 `ExecGrant`——`Unsandboxed` → `DirectSandbox{}`（现提权路径）；否则 Seatbelt + `AllowNetwork=grant.NetworkFull` + `WritablePaths+=grant.WritablePaths`；输出 `isolation` 字段如实标注（`seatbelt+net`、`seatbelt`、`direct`）。
@@ -289,7 +290,9 @@ workspace 之外，沙箱默认放行两类可写目录（`process.ExtraWritable
 ### M1（已落地）
 三层信任梯度全链路：Decider 抽象 + 四种内置实现、规则 schema v2 + grant、on-request 基线、危险清单 v1、P0 写保护（.git/.loom + unlink）、run_cmd `needs_network`、审批三选项 + grant 记忆/持久化、`loom rules check` 输出 Verdict。
 
-**v2 增量（2026-08 已落地）**：复合 shell AST 静态分析（§6.4.1）——规则层按子命令前缀评估、危险清单脚本级筛查（管道入解释器、重定向入敏感路径、嵌套危险字面量）、会话记忆按子命令前缀；shell 复合命令不再升 R3；`unless-dangerous` / `never` 审批模式（never 绝不产生 ask，危险命令与提权带绕行指引直接 deny，denial 原因直达模型）；web_fetch 域名规则（精确 + `*.` 通配，builtin 集含包管理源白名单与外泄渠道黑名单，`loom rules check --url` 干跑）；审批桌面通知（含无人值守自动拒绝通知）；沙箱 `/dev/null`、`/dev/(u)random` 放行补漏。
+**v2 增量（2026-08 已落地）**：复合 shell AST 静态分析（§6.4.1）——规则层按子命令前缀评估、危险清单脚本级筛查（管道入解释器、重定向入敏感路径、嵌套危险字面量）、会话记忆按子命令前缀；shell 复合命令不再升 R3；审批模式基线（never 绝不产生 ask，危险命令与提权带绕行指引直接 deny，denial 原因直达模型）；web_fetch 域名规则（精确 + `*.` 通配，builtin 集含包管理源白名单与外泄渠道黑名单，`loom rules check --url` 干跑）；审批桌面通知（含无人值守自动拒绝通知）；沙箱 `/dev/null`、`/dev/(u)random` 放行补漏。
+
+**v2.1 增量（2026-09 已落地）**：新增 `danger-only` 审批模式并移除 `unless-dangerous`（后者能力被前者严格覆盖）——danger-only 下仅 deny 规则、危险指标与破坏性/共享状态后果弹审批，出沙箱提权、GUI、越界写入、网络与 MCP 工具全部按声明授权放行；browser 的 real-identity 指标在该模式下不再阻断。
 
 ### M2
 危险清单细化（git 写操作、环境窃取模式）；脚本内容哈希绑定评估；`grant.write` 的自动路径推断（从沙箱拒绝日志反推）。

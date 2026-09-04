@@ -114,7 +114,7 @@ func TestApplyConfigHotSwap(t *testing.T) {
 	t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
 
 	next := *b.Resolved()
-	next.Approval.Mode = permission.ModeUnlessDangerous
+	next.Approval.Mode = permission.ModeDangerOnly
 	next.Limits.MaxTokens = 4242
 	report := svc.ApplyConfig(ctx, &next)
 
@@ -127,8 +127,8 @@ func TestApplyConfigHotSwap(t *testing.T) {
 	if got := svc.proc.Resolved().Limits.MaxTokens; got != 4242 {
 		t.Fatalf("Limits.MaxTokens = %d, want 4242", got)
 	}
-	if b.approvalMode != permission.ModeUnlessDangerous {
-		t.Fatalf("approvalMode = %q, want unless-dangerous", b.approvalMode)
+	if b.approvalMode != permission.ModeDangerOnly {
+		t.Fatalf("approvalMode = %q, want danger-only", b.approvalMode)
 	}
 }
 
@@ -154,7 +154,7 @@ func TestRulePackHotReload(t *testing.T) {
 	base := testResolvedConfig(fakes.NewFakeModel())
 	base.Rules = config.ResolvedRules{Enabled: true, Builtin: true}
 	base.Storage = config.ResolvedStorage{BaseDir: baseDir}
-	base.Approval = config.ResolvedApproval{Mode: permission.ModeUnlessDangerous, TrustUserURLs: true}
+	base.Approval = config.ResolvedApproval{Mode: permission.ModeDangerOnly, TrustUserURLs: true}
 
 	proc := &ProcessRuntime{Current: base.Default, Store: store, Logger: slog.Default()}
 	proc.SwapResolved(base)
@@ -166,7 +166,7 @@ func TestRulePackHotReload(t *testing.T) {
 	permission.AttachPackages(ctx, packages, t.TempDir(), rulesDir, permission.PackageLoadOptions{Enabled: true, Builtin: true}, slog.Default())
 	policy := permission.Policy{
 		Packages:   packages,
-		Mode:       permission.ModeUnlessDangerous,
+		Mode:       permission.ModeDangerOnly,
 		UserIntent: true,
 	}
 	b := &Bootstrap{
@@ -176,7 +176,7 @@ func TestRulePackHotReload(t *testing.T) {
 		WorkspaceRoot:    t.TempDir(),
 		Policy:           wirePolicy(policy),
 		permissionPolicy: &policy,
-		approvalMode:     permission.ModeUnlessDangerous,
+		approvalMode:     permission.ModeDangerOnly,
 	}
 	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(64))
 	t.Cleanup(broker.Close)

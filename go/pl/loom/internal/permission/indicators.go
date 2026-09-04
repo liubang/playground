@@ -36,6 +36,15 @@ var networkProducers = map[string]struct{}{
 	"ssh": {}, "scp": {}, "rsync": {},
 }
 
+// realIdentityIndicator annotates a call that drives the user's real
+// browser (real cookies, logged-in sessions). Unlike every other
+// indicator — each naming a shape with a high base rate of malice
+// (remote-code execution, persistence, exfiltration, privilege
+// escape) — this one is informational: normal browsing is legitimate
+// work. danger-only mode filters it out of the indicator gate; deny
+// rules for known-bad hosts still win first.
+const realIdentityIndicator = "drives the real user browser with its real identity and cookies"
+
 // planIndicators computes the cross-command indicators of a normalized
 // plan: network content piped into an interpreter (the classic
 // remote-code-execution shape).

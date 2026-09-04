@@ -71,7 +71,7 @@
 - **`ExecGrant` 扩展**：domain 层 `ExecGrant` 新增 `GUIOpen bool`；permission 层 `RuleGrant`（`rules.go`）新增 `gui_open`。**（v2 修正命名，审查 M12：permission 层实际类型名是 `RuleGrant`，代码库中无 `CapabilityGrant`。）**
 - **规则 schema**：`grant` 新增 `"gui_open": true`，校验/层级约束与 `network`/`write` 完全一致（仅用户层可携带；项目层剥离；builtin 层视为构建期 bug）。
 - **run_cmd 参数**：新增 `needs_gui_open: bool`（可选）。模型在沙箱内 `open` 失败重试时**声明能力**而非直接提权；模型主动给用户展示页面时同样走此通道（`run_cmd` + `open` + `needs_gui_open`）。
-- **审批模式语义（关键差异）**：`needs_network` 在 unless-dangerous/never 模式下静默放网，其理由是"凭证路径仍不可读、无 exfiltration 增量"；该论证对 `appleevent-send` **不成立**（§6.1 的 TCC 归因分析）。因此 `gui_open` 声明在**所有模式下都产生 ask**（never 模式 deny 并附绕行指引——用户层规则文件是唯一免审批途径）。模型声明本身绝不直接换到能力，§6.3 的"模型无法自授"不变量由此在所有模式下成立。
+- **审批模式语义（关键差异）**：`needs_network` 在 danger-only/never 模式下静默放网，其理由是"凭证路径仍不可读、无 exfiltration 增量"；该论证对 `appleevent-send` **不成立**（§6.1 的 TCC 归因分析）。因此 `gui_open` 声明在 **on-request 下产生 ask**（never 模式 deny 并附绕行指引；danger-only 按声明放行——该模式只拦明确危险操作），用户层规则文件是其余模式的免审批途径。模型声明本身绝不直接换到能力，§6.3 的"模型无法自授"不变量由此在所有模式下成立。
 - **exec_session 同步覆盖（v2 新增，审查 M7）**：dev server（vite/webpack/react-scripts 启动时自动 `open`）是 M1 最有价值的场景，而它跑在 `exec_session` 里——`exec_session` 的 schema 目前连 `needs_network` 都没有。M1 范围显式包含给 exec_session 增加 `needs_gui_open` 参数（其 grant 映射点已有先例，改动小），否则长驻进程场景只能靠用户手写规则文件。
 - **执行层**：`SeatbeltSandbox` 新增 `allowGUIOpen` 选项，`widenSandbox` 克隆时并入；`grant.GUIOpen` 为真时 profile 追加 §4.1 五条规则。Linux：`widenSandbox` 对非 Seatbelt 沙箱本就走"加宽为空操作"路径，fail-closed 保持。
 - **失败引导**：`run_cmd` 的沙箱失败 Note 增加 GUI 签名识别——stderr 含 `_LS`/`NSOSStatusErrorDomain`/`AppleEvent` 字样时提示"GUI 打开类失败 → `needs_gui_open` 重试"。**（v2 注意，审查 N14）**新签名必须排在既有 `"operation not permitted"` 网络签名**之前**，否则 AE 发送被拒的 `errAEEventNotPermitted` 会被误分类为 network 引导。

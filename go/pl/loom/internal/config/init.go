@@ -194,7 +194,7 @@ rules:
 
 # 审批基线。无规则/记忆命中时的决策策略。
 approval:
-  mode: on-request              # on-request（默认）| unless-dangerous | never
+  mode: on-request              # on-request（默认）| danger-only | never
 
 # Langfuse 追踪。host 与两个 key 都填写才启用。
 tracing:

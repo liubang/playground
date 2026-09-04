@@ -240,7 +240,7 @@ func TestWorkspaceApprovalModeRoundtrip(t *testing.T) {
 		t.Fatalf("default mode = %q, want on-request", got)
 	}
 	req, err := http.NewRequest(http.MethodPost, ts.URL+"/v1/workspaces/"+wsID+"/approval-mode",
-		strings.NewReader(`{"mode":"unless-dangerous"}`))
+		strings.NewReader(`{"mode":"danger-only"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +255,7 @@ func TestWorkspaceApprovalModeRoundtrip(t *testing.T) {
 		t.Fatalf("post status = %d", resp.StatusCode)
 	}
 	// The live override must be readable back (the reload-consistency fix).
-	if got := get(); got != "unless-dangerous" {
-		t.Fatalf("mode after switch = %q, want unless-dangerous", got)
+	if got := get(); got != "danger-only" {
+		t.Fatalf("mode after switch = %q, want danger-only", got)
 	}
 }
