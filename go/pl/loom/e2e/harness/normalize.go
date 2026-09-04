@@ -155,6 +155,12 @@ func isPathBoundary(s string, start, end int) bool {
 	return true
 }
 
+// minVolatileMatchLen is the shortest string any volatile-value matcher
+// below can accept: ctxm_+24 hex = 29. Shorter strings (the vast
+// majority — numbers, short labels, fixed enums) skip the regex work
+// entirely.
+const minVolatileMatchLen = len("ctxm_") + 24
+
 func (n *normalizer) scrubString(s string) string {
 	for _, p := range n.paths {
 		cursor := 0
@@ -174,17 +180,26 @@ func (n *normalizer) scrubString(s string) string {
 			cursor = idx + len(p.token)
 		}
 	}
-	if loomIDRe.MatchString(s) {
-		return n.idToken(s)
+	if len(s) >= minVolatileMatchLen {
+		if loomIDRe.MatchString(s) {
+			return n.idToken(s)
+		}
+		if hexVolatileRe.MatchString(s) {
+			return n.hashToken(s)
+		}
+		// IDs embedded inside larger text (tool previews, conclusions)
+		// get the same ordinal tokens as their field-valued occurrences.
+		// Every ID form carries an underscore, so the full-string scan
+		// is skipped for plaintext without one.
+		if strings.Contains(s, "_") {
+			s = loomIDEmbeddedRe.ReplaceAllStringFunc(s, n.idToken)
+		}
 	}
-	if hexVolatileRe.MatchString(s) {
-		return n.hashToken(s)
-	}
-	// IDs embedded inside larger text (tool previews, conclusions) get
-	// the same ordinal tokens as their field-valued occurrences.
-	s = loomIDEmbeddedRe.ReplaceAllStringFunc(s, n.idToken)
 	// Run-volatile text shared with the request fingerprint: the system
-	// prompt's current-date line (legitimate day-to-day drift).
+	// prompt's current-date / platform-shell lines and the skills
+	// catalog. UNCONDITIONAL — its date line alone ("Current date:
+	// 2026-08-15 UTC", 28 chars, no underscore) is shorter than
+	// minVolatileMatchLen, so the ID/hash fast paths must not skip it.
 	return replay.ScrubVolatileText(s)
 }
 
@@ -248,21 +263,32 @@ func (n *normalizer) normalize(v any, zeroSequence bool) any {
 
 // normalizeJSON round-trips one JSON-marshalable value through the
 // normalizer and returns the canonical compact encoding (map keys are
-// sorted by encoding/json, so the output is deterministic).
+// sorted by encoding/json, so the output is deterministic). A coding
+// failure is reported as a visible sentinel line, not an empty string —
+// an empty golden line would send a diff hunt in entirely the wrong
+// direction.
 func (n *normalizer) normalizeJSON(v any, zeroSequence bool) string {
 	data, err := json.Marshal(v)
 	if err != nil {
-		return ""
+		return normalizeErrorSentinel("marshal input", err)
 	}
 	var decoded any
 	if err := json.Unmarshal(data, &decoded); err != nil {
-		return ""
+		return normalizeErrorSentinel("unmarshal input", err)
 	}
 	out, err := json.Marshal(n.normalize(decoded, zeroSequence))
 	if err != nil {
-		return ""
+		return normalizeErrorSentinel("marshal normalized", err)
 	}
 	return string(out)
+}
+
+// normalizeErrorSentinel is the in-band failure marker embedded in a
+// golden when a value cannot be round-tripped. It keeps the golden
+// diffable while making the failure unmistakable.
+func normalizeErrorSentinel(stage string, err error) string {
+	msg := strings.ReplaceAll(err.Error(), `"`, `'`)
+	return `{"normalize_error":"` + stage + `: ` + msg + `"}`
 }
 
 // NormalizeEvents renders the broker's DURABLE event stream as
@@ -292,13 +318,21 @@ func NormalizeEvents(ctx NormalizeContext, events []runtimeevent.RuntimeEvent) s
 func NormalizeTranscripts(ctx NormalizeContext, inspections []domain.SessionInspection) string {
 	n := newNormalizer(ctx)
 	views := make([]map[string]any, 0, len(inspections))
-	for _, insp := range inspections {
+	for i, insp := range inspections {
 		var decoded map[string]any
 		data, err := json.Marshal(insp)
 		if err != nil {
+			// A session that cannot round-trip must not silently vanish
+			// from the golden — emit an in-band sentinel in its place.
+			views = append(views, map[string]any{
+				"normalize_error": "marshal inspection " + strconv.Itoa(i) + ": " + err.Error(),
+			})
 			continue
 		}
 		if err := json.Unmarshal(data, &decoded); err != nil {
+			views = append(views, map[string]any{
+				"normalize_error": "unmarshal inspection " + strconv.Itoa(i) + ": " + err.Error(),
+			})
 			continue
 		}
 		views = append(views, map[string]any{
@@ -309,7 +343,7 @@ func NormalizeTranscripts(ctx NormalizeContext, inspections []domain.SessionInsp
 	}
 	out, err := json.MarshalIndent(views, "", "  ")
 	if err != nil {
-		return ""
+		return normalizeErrorSentinel("marshal views", err) + "\n"
 	}
 	return string(out) + "\n"
 }

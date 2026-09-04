@@ -104,6 +104,19 @@ func TestNormalizeLongestPathWins(t *testing.T) {
 	}
 }
 
+// Regression: the scrubString ID/hash fast paths must never skip
+// replay.ScrubVolatileText — its date line is 28 chars (below the ID
+// minimum) and carries no underscore (the embedded-ID gate).
+func TestScrubStringKeepsVolatileTextScrubBelowIDMinLen(t *testing.T) {
+	n := newNormalizer(NormalizeContext{})
+	if got := n.scrubString("Current date: 2026-08-15 UTC"); got != "Current date: {{date}}" {
+		t.Fatalf("volatile date line not scrubbed: %q", got)
+	}
+	if got := n.scrubString("Platform: darwin/arm64, Shell: /bin/zsh"); got != "Platform: {{platform}}, Shell: {{shell}}" {
+		t.Fatalf("platform/shell line not scrubbed: %q", got)
+	}
+}
+
 func TestNormalizeTranscriptsKeepsPerSessionSequence(t *testing.T) {
 	insp := domain.SessionInspection{
 		Session: domain.SessionSummary{ID: domain.NewSessionID()},

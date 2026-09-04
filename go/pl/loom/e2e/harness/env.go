@@ -35,6 +35,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -116,7 +117,12 @@ func NewEnv(t *testing.T, opts ...Option) *Env {
 	}
 
 	env := &Env{
-		Ctx:    context.Background(),
+		// Bound to the test's own context: a test timeout or cancellation
+		// propagates into the stack (agents, tools, services) instead of
+		// leaving orphaned work running past the test's lifetime.
+		// t.Context is cancelled before the registered cleanups run, and
+		// Shutdown uses its own timeout context, so teardown is unaffected.
+		Ctx:    t.Context(),
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 	if cfg.replayDir != "" || cfg.recordDir != "" {
@@ -249,8 +255,30 @@ func (e *Env) OpenStoreReadOnly(t *testing.T) *session.SQLiteStore {
 func (e *Env) ReplayModel() *replay.ReplayModel { return e.replayModel }
 
 // TapEvents returns every runtime event published so far, in publish
-// order — the raw material of the snapshot golden (§5.1).
+// order — the raw material of the snapshot golden (§5.1). Call SyncTap
+// first: the tap drains behind its own goroutine, and reading right
+// after a WaitTurn can race the tail of the stream.
 func (e *Env) TapEvents() []runtimeevent.RuntimeEvent { return e.tap.Events() }
+
+// SyncTap blocks until the tap has drained every event published up to
+// NOW (the broker's current sequence), closing the race between "the
+// collector observed the last turn.finished" and "the tap goroutine
+// appended the trailing events to its slice" — computing a golden in
+// that window silently drops the stream's tail.
+func (e *Env) SyncTap(t *testing.T) {
+	t.Helper()
+	target := e.Broker.Sequence()
+	if target == 0 {
+		return
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for e.tap.LastSequence() < target {
+		if time.Now().After(deadline) {
+			t.Fatalf("tap did not catch up to broker sequence %d (at %d)", target, e.tap.LastSequence())
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+}
 
 // --- config setup ---
 
@@ -267,7 +295,7 @@ func (e *Env) setupRealConfig(t *testing.T, cfg *envConfig) {
 		raw = ReadRealUserConfig(t)
 	}
 	e.rawConfig = raw
-	home, resolved := LoadIsolatedConfigAt(t, e.Home, raw)
+	home, resolved := LoadIsolatedConfigAt(t, e.Home, raw, e.Logger)
 	if cfg.adjust != nil {
 		cfg.adjust(resolved)
 	}
@@ -300,7 +328,7 @@ providers:
         context_window: 1048576
 `)
 	}
-	home, resolved := LoadIsolatedConfigAt(t, e.Home, raw)
+	home, resolved := LoadIsolatedConfigAt(t, e.Home, raw, e.Logger)
 	e.Home = home
 	e.Resolved = resolved
 }
@@ -442,8 +470,10 @@ func ReadRealUserConfig(t *testing.T) []byte {
 // explicit home, wiped first so no state leaks between runs) and loads
 // it from there, so every writable location derives from the temp home
 // and the user's stores stay untouched. Returns the temp home and the
-// resolved config.
-func LoadIsolatedConfigAt(t *testing.T, home string, raw []byte) (string, *config.ResolvedConfig) {
+// resolved config. A load failure is fatal (not a skip): the caller
+// already HAS config bytes in hand — a malformed one is a broken
+// fixture or a broken real config, and skipping would mask both.
+func LoadIsolatedConfigAt(t *testing.T, home string, raw []byte, logger *slog.Logger) (string, *config.ResolvedConfig) {
 	t.Helper()
 	if home == "" {
 		home = t.TempDir()
@@ -458,9 +488,9 @@ func LoadIsolatedConfigAt(t *testing.T, home string, raw []byte) (string, *confi
 	if err := os.WriteFile(config.ConfigPathForHome(home), raw, 0o600); err != nil {
 		t.Fatalf("write isolated config: %v", err)
 	}
-	resolved, err := config.Load(home, config.LoadOptions{RequireProviders: true, Logger: slog.Default()}, os.LookupEnv)
+	resolved, err := config.Load(home, config.LoadOptions{RequireProviders: true, Logger: logger}, os.LookupEnv)
 	if err != nil {
-		t.Skipf("load loom config: %v", err)
+		t.Fatalf("load loom config: %v", err)
 	}
 	return home, resolved
 }
@@ -469,12 +499,34 @@ func LoadIsolatedConfigAt(t *testing.T, home string, raw []byte) (string, *confi
 // (/tmp/loom-snapshot/<scenario>/home) and registers its cleanup. Fixed
 // across record and replay runs AND across test runners (go test vs the
 // bazel sandbox assign different $TMPDIRs; /tmp is the one root both
-// share) — see NewEnv. Concurrent runs of the SAME scenario in two
-// processes would collide; go test runs package scenarios serially.
+// share) — see NewEnv. Concurrent processes running the SAME scenario
+// would wipe each other's state mid-run, so the scenario root is
+// flock-guarded: the loser fails fast with a clear message instead of
+// corrupting both runs. The lock file lives at the root, NOT under
+// home, so LoadIsolatedConfigAt's home wipe never removes it.
 func stableScenarioHome(t *testing.T, scenarioDir string) string {
 	t.Helper()
 	scenario := filepath.Base(scenarioDir)
 	root := filepath.Join(string(os.PathSeparator)+"tmp", "loom-snapshot", scenario)
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatalf("mkdir scenario root %s: %v", root, err)
+	}
+	lockPath := filepath.Join(root, ".lock")
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		t.Fatalf("open scenario lock %s: %v", lockPath, err)
+	}
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = lockFile.Close()
+		t.Fatalf("scenario %q is already running in another process (lock %s held): %v",
+			scenario, lockPath, err)
+	}
+	// LIFO cleanup order: RemoveAll runs first, then the lock release —
+	// the descriptor stays valid after its path is unlinked.
+	t.Cleanup(func() {
+		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+		_ = lockFile.Close()
+	})
 	home := filepath.Join(root, "home")
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
 	return home
@@ -482,9 +534,10 @@ func stableScenarioHome(t *testing.T, scenarioDir string) string {
 
 // Tap collects every event published to the broker, in publish order.
 type Tap struct {
-	mu     sync.Mutex
-	events []runtimeevent.RuntimeEvent
-	done   func()
+	mu      sync.Mutex
+	events  []runtimeevent.RuntimeEvent
+	lastSeq uint64
+	done    func()
 }
 
 // NewTap subscribes to the broker and drains the subscription in the
@@ -496,6 +549,7 @@ func NewTap(broker *runtimeevent.Broker) *Tap {
 		for evt := range ch {
 			tap.mu.Lock()
 			tap.events = append(tap.events, evt)
+			tap.lastSeq = evt.Sequence
 			tap.mu.Unlock()
 		}
 	}()
@@ -509,6 +563,14 @@ func (t *Tap) Events() []runtimeevent.RuntimeEvent {
 	out := make([]runtimeevent.RuntimeEvent, len(t.events))
 	copy(out, t.events)
 	return out
+}
+
+// LastSequence returns the broker sequence of the newest event the tap
+// has drained so far (0 before the first event).
+func (t *Tap) LastSequence() uint64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.lastSeq
 }
 
 // Close unsubscribes from the broker.

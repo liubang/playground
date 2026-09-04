@@ -151,6 +151,12 @@ func runSnapshotScenario(t *testing.T, dir string, mode string) {
 		}
 	}
 
+	// The collector must have consumed the decision script exactly: no
+	// unpopped scripted approves, no approval answered by the default
+	// fallback, no internal resolve failure — each is a script/run
+	// divergence that would otherwise surface only as a golden diff.
+	collector.AssertClean(t)
+
 	// Replay must have consumed exactly the recorded calls — no more
 	// (script exhausted fails in-call), no less.
 	if mode != "record" {
@@ -158,6 +164,10 @@ func runSnapshotScenario(t *testing.T, dir string, mode string) {
 			t.Fatalf("replay consumption: %v", err)
 		}
 	}
+
+	// Barrier: the tap drains behind its own goroutine, so WaitTurn
+	// returning does NOT imply the stream's tail is in TapEvents() yet.
+	env.SyncTap(t)
 
 	normCtx := harness.NormalizeContext{
 		Workspace:   env.Workspace,

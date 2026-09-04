@@ -24,7 +24,10 @@ go_library(
 
 go_test(
     name = "harness_test",
-    srcs = ["normalize_test.go"],
+    srcs = [
+        "collector_test.go",
+        "normalize_test.go",
+    ],
     embed = [":harness"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
