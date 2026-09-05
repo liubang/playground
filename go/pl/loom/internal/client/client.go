@@ -73,7 +73,6 @@ const (
 	ControllerStateRunning          = app.ControllerStateRunning
 	ControllerStateAwaitingApproval = app.ControllerStateAwaitingApproval
 	ControllerStateCancelling       = app.ControllerStateCancelling
-	ControllerStateFatal            = app.ControllerStateFatal
 	ControllerStateClosed           = app.ControllerStateClosed
 )
 

@@ -36,6 +36,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/model/httpc"
 	"github.com/liubang/playground/go/pl/loom/internal/model/sse"
 	"github.com/liubang/playground/go/pl/loom/internal/model/stream"
+	"github.com/liubang/playground/go/pl/loom/internal/model/wireutil"
 )
 
 const (
@@ -113,14 +114,14 @@ func New(cfg Config) (*Provider, error) {
 		return nil, fmt.Errorf("anthropic provider: unsupported auth type %q", cfg.AuthType)
 	}
 
-	client, err := httpc.New(httpc.Config{
+	client, err := wireutil.NewHTTPClient("anthropic", httpc.Config{
 		HTTPClient:     cfg.HTTPClient,
 		MaxRetries:     cfg.MaxRetries,
 		InitialBackoff: cfg.InitialBackoff,
 		MaxBackoff:     cfg.MaxBackoff,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("anthropic provider: %w", err)
+		return nil, err
 	}
 
 	return &Provider{
@@ -139,12 +140,8 @@ func (p *Provider) Stream(ctx context.Context, req domain.ModelRequest) (domain.
 		return nil, err
 	}
 
-	headers := http.Header{
-		"Content-Type":      {"application/json"},
-		"Accept":            {"text/event-stream"},
-		"Cache-Control":     {"no-cache"},
-		"anthropic-version": {p.version},
-	}
+	headers := wireutil.StreamHeaders()
+	headers.Set("anthropic-version", p.version)
 	if p.apiKey != "" {
 		if p.authType == AuthTypeBearer {
 			headers.Set("Authorization", "Bearer "+p.apiKey)
@@ -153,21 +150,7 @@ func (p *Provider) Stream(ctx context.Context, req domain.ModelRequest) (domain.
 		}
 	}
 
-	resp, err := p.client.Post(ctx, p.endpointURL, body, headers)
-	if err != nil {
-		// Classify the failure (rate limit / permission / transient) so the
-		// agent loop can wait out retryable ones instead of killing the run.
-		return nil, httpc.ToDomainError("anthropic provider", err)
-	}
-
-	if err := httpc.RequireEventStream(resp); err != nil {
-		_ = resp.Body.Close()
-		return nil, fmt.Errorf("anthropic provider: %w", err)
-	}
-
-	return stream.Start(ctx, resp.Body, func(streamCtx context.Context, body io.Reader, emit stream.Emitter) {
-		pump(streamCtx, body, emit)
-	}), nil
+	return wireutil.StartStream(ctx, p.client, p.endpointURL, body, headers, "anthropic", pump)
 }
 
 // --- request assembly ---
@@ -278,7 +261,7 @@ func toAnthropicMessages(in []domain.Message) ([]map[string]any, []map[string]an
 	leading := true
 	for _, msg := range in {
 		if leading && msg.Role == domain.RoleSystem {
-			text, err := messageText(msg)
+			text, err := wireutil.MessageText("anthropic", msg)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -458,17 +441,6 @@ func toolResultBlocks(result domain.ToolResult) []map[string]any {
 	return blocks
 }
 
-func messageText(msg domain.Message) (string, error) {
-	var b strings.Builder
-	for _, part := range msg.Parts {
-		if part.Kind != domain.PartText {
-			return "", fmt.Errorf("anthropic provider: role %q only supports text parts", msg.Role)
-		}
-		b.WriteString(part.Text)
-	}
-	return b.String(), nil
-}
-
 // userMessageBlocks converts a user (or downgraded system) message into
 // content blocks: text parts coalesce into one text block, image parts
 // become base64 image blocks in order. Pure-text messages produce at most
@@ -515,11 +487,9 @@ func imageBlock(img domain.ImageContent) map[string]any {
 func toAnthropicTools(defs []domain.ToolDefinition) ([]map[string]any, error) {
 	out := make([]map[string]any, 0, len(defs))
 	for _, def := range defs {
-		var schema any
-		if len(def.InputSchema) == 0 {
-			schema = map[string]any{"type": "object"}
-		} else if err := json.Unmarshal(def.InputSchema, &schema); err != nil {
-			return nil, fmt.Errorf("anthropic provider: decode tool schema for %q: %w", def.Name, err)
+		schema, err := wireutil.ToolInputSchema("anthropic", def)
+		if err != nil {
+			return nil, err
 		}
 		out = append(out, map[string]any{
 			"name":         def.Name,
@@ -530,56 +500,16 @@ func toAnthropicTools(defs []domain.ToolDefinition) ([]map[string]any, error) {
 	return out, nil
 }
 
-// toolResultContent mirrors the openai provider: plain text when the result
-// is purely textual, otherwise a structured JSON envelope — the model reads
-// either form.
+// toolResultContent renders plain text when the result is purely textual
+// (shared with the openai provider via wireutil), image blocks when the
+// result carries images (the API accepts either a string or a block array
+// in tool_result content), otherwise a structured JSON envelope — the
+// model reads any of these forms.
 func toolResultContent(result domain.ToolResult) any {
-	if result.Error != nil {
-		payload, err := json.Marshal(map[string]any{
-			"status": result.Status,
-			"error":  result.Error,
-		})
-		if err == nil {
-			return string(payload)
-		}
-		return result.Error.Message
-	}
-
-	textAndArtifactRefs := true
-	hasImages := false
-	var text strings.Builder
-	for _, part := range result.Content {
-		switch part.Kind {
-		case domain.PartText:
-			text.WriteString(part.Text)
-		case domain.PartArtifact:
-			// Artifact references are persisted in the canonical ToolResult;
-			// tools include model-safe reference metadata in their bounded
-			// text payload, so refs are not duplicated here.
-		case domain.PartImage:
-			hasImages = true
-		default:
-			textAndArtifactRefs = false
-		}
-	}
-	if hasImages {
-		// Images must ride as content blocks; the API accepts either a
-		// string or a block array in tool_result content.
+	if result.Error == nil && wireutil.ToolResultHasImages(result) {
 		return toolResultBlocks(result)
 	}
-	if textAndArtifactRefs && text.Len() > 0 {
-		return text.String()
-	}
-
-	payload, err := json.Marshal(map[string]any{
-		"status":  result.Status,
-		"content": result.Content,
-		"meta":    result.Metadata,
-	})
-	if err == nil {
-		return string(payload)
-	}
-	return string(result.Status)
+	return wireutil.ToolResultText(result)
 }
 
 // --- stream mapping ---
@@ -933,9 +863,8 @@ func (s *streamState) onStreamError(data string, emit stream.Emitter) {
 	if err := json.Unmarshal([]byte(data), &evt); err == nil && evt.Error.Message != "" {
 		message = fmt.Sprintf("anthropic provider: %s: %s", evt.Error.Type, evt.Error.Message)
 	}
-	s.closeOpenBlocks(emit)
-	emit(domain.ModelEvent{Kind: domain.ModelEventStreamError, Error: message, Retryable: isTransientErrorType(evt.Error.Type)})
-	emit(domain.ModelEvent{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopProviderError})
+	wireutil.EmitStreamFailure(emit, errors.New(message), domain.StopProviderError,
+		isTransientErrorType(evt.Error.Type), func() { s.closeOpenBlocks(emit) })
 }
 
 // isTransientErrorType reports whether a protocol-level error type signals a
@@ -977,29 +906,14 @@ func (s *streamState) closeOpenBlocks(emit stream.Emitter) {
 }
 
 func finishReadError(ctx context.Context, state *streamState, err error, emit stream.Emitter) {
-	switch {
-	case ctx.Err() != nil:
-		state.closeOpenBlocks(emit)
-		emit(domain.ModelEvent{Kind: domain.ModelEventStreamError, Error: ctx.Err().Error()})
-		emit(domain.ModelEvent{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopCancelled})
-	case errors.Is(err, io.EOF):
-		finishStreamError(state, fmt.Errorf("anthropic provider: stream closed before message_stop"), true, emit)
-	default:
-		finishStreamError(state, fmt.Errorf("anthropic provider: stream read failed: %w", err), true, emit)
-	}
+	wireutil.FinishReadError(ctx, err, "anthropic", "message_stop", nil,
+		func(err error, stop domain.StopReason, retryable bool) {
+			wireutil.EmitStreamFailure(emit, err, stop, retryable, func() { state.closeOpenBlocks(emit) })
+		})
 }
 
 func finishWithError(state *streamState, err error, emit stream.Emitter) {
-	finishStreamError(state, err, false, emit)
-}
-
-// finishStreamError ends the stream on a failure; retryable marks the
-// transient read failures (truncated body, transport drop) so the agent
-// loop can re-issue the request while nothing was delivered yet.
-func finishStreamError(state *streamState, err error, retryable bool, emit stream.Emitter) {
-	state.closeOpenBlocks(emit)
-	emit(domain.ModelEvent{Kind: domain.ModelEventStreamError, Error: err.Error(), Retryable: retryable})
-	emit(domain.ModelEvent{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopProviderError})
+	wireutil.EmitStreamFailure(emit, err, domain.StopProviderError, false, func() { state.closeOpenBlocks(emit) })
 }
 
 func mapStopReason(reason string) domain.StopReason {

@@ -712,7 +712,7 @@ func (m Model) renderStatusBar() string {
 	}
 	phaseStyle := m.phaseStyle(phase)
 	switch m.controllerState {
-	case app.ControllerStateFatal, app.ControllerStateClosed, app.ControllerStateBooting:
+	case app.ControllerStateClosed, app.ControllerStateBooting:
 		phase = StatusLabel(m.controllerState)
 		phaseStyle = m.theme.StatusBarError
 	}

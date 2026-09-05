@@ -32,8 +32,6 @@ func StatusLabel(state app.ControllerState) string {
 		return "approval"
 	case app.ControllerStateCancelling:
 		return "cancelling"
-	case app.ControllerStateFatal:
-		return "fatal"
 	case app.ControllerStateBooting:
 		return "starting"
 	default:

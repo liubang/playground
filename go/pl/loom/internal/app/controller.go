@@ -51,7 +51,6 @@ const (
 	ControllerStateRunning          ControllerState = "running"
 	ControllerStateAwaitingApproval ControllerState = "awaiting_approval"
 	ControllerStateCancelling       ControllerState = "cancelling"
-	ControllerStateFatal            ControllerState = "fatal"
 	ControllerStateClosed           ControllerState = "closed"
 )
 
@@ -1651,7 +1650,7 @@ func (c *Controller) onTurnFinished(turnID uint64, turn int, err error) {
 	sessionID, runID := c.sessionID, c.runID
 	c.turnCtx = nil
 	c.cancelTurn = nil
-	if c.state != ControllerStateClosed && c.state != ControllerStateFatal {
+	if c.state != ControllerStateClosed {
 		c.state = ControllerStateIdle
 	}
 	// A finished turn has no resolvable requests left: a cancelled turn

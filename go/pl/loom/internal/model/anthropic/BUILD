@@ -27,6 +27,7 @@ go_library(
         "//go/pl/loom/internal/model/httpc:httpc_lib",
         "//go/pl/loom/internal/model/sse:sse_lib",
         "//go/pl/loom/internal/model/stream:stream_lib",
+        "//go/pl/loom/internal/model/wireutil:wireutil_lib",
     ],
 )
 

@@ -13,26 +13,29 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/07/22 21:10
+# Created: 2026/09/05
 
 load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "openai_lib",
-    srcs = ["provider.go"],
-    importpath = "github.com/liubang/playground/go/pl/loom/internal/model/openai",
+    name = "wireutil_lib",
+    srcs = ["wireutil.go"],
+    importpath = "github.com/liubang/playground/go/pl/loom/internal/model/wireutil",
     visibility = ["//visibility:public"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/model/httpc:httpc_lib",
-        "//go/pl/loom/internal/model/sse:sse_lib",
         "//go/pl/loom/internal/model/stream:stream_lib",
-        "//go/pl/loom/internal/model/wireutil:wireutil_lib",
     ],
 )
 
 go_test(
-    name = "openai_test",
-    srcs = ["provider_test.go"],
-    embed = [":openai_lib"],
+    name = "wireutil_test",
+    srcs = ["wireutil_test.go"],
+    embed = [":wireutil_lib"],
+    deps = [
+        "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/model/httpc:httpc_lib",
+        "//go/pl/loom/internal/model/stream:stream_lib",
+    ],
 )

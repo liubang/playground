@@ -33,21 +33,6 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
-func TestToolResultContentKeepsArtifactRefsOutOfModelPayload(t *testing.T) {
-	ref := domain.ArtifactRef{ID: domain.NewArtifactID(), Size: 1024}
-	result := domain.ToolResult{
-		CallID: domain.NewToolCallID(), Status: domain.ToolStatusSuccess,
-		Content: []domain.ContentPart{
-			{Kind: domain.PartText, Text: `{"stdout":"bounded"}`},
-			{Kind: domain.PartArtifact, Artifact: &ref},
-		},
-		Metadata: map[string]string{"stdout_artifact_id": ref.ID.String()},
-	}
-	if got := toolResultContent(result); got != `{"stdout":"bounded"}` {
-		t.Fatalf("toolResultContent = %q", got)
-	}
-}
-
 func TestProviderStreamRequestAdaptationAndAuthorization(t *testing.T) {
 	t.Parallel()
 

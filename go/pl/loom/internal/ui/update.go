@@ -1982,7 +1982,7 @@ func (m Model) handleCtrlC() (tea.Model, tea.Cmd) {
 		m.lastCancelTime = now
 		m.setStatus("Still cancelling... (Ctrl+C again to force quit)", false)
 	default:
-		// booting / fatal / closed: no turn to cancel and input may be locked,
+		// booting / closed: no turn to cancel and input may be locked,
 		// so the only sensible action is to leave.
 		return m, tea.Quit
 	}
@@ -1991,7 +1991,7 @@ func (m Model) handleCtrlC() (tea.Model, tea.Cmd) {
 
 func (m Model) handleCtrlD() (tea.Model, tea.Cmd) {
 	switch m.controller.State() {
-	case app.ControllerStateIdle, app.ControllerStateFatal, app.ControllerStateClosed:
+	case app.ControllerStateIdle, app.ControllerStateClosed:
 		return m, tea.Quit
 	}
 	m.setStatus("A turn is active; use Ctrl+C to cancel it", false)

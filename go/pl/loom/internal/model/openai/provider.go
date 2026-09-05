@@ -32,6 +32,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/model/httpc"
 	"github.com/liubang/playground/go/pl/loom/internal/model/sse"
 	"github.com/liubang/playground/go/pl/loom/internal/model/stream"
+	"github.com/liubang/playground/go/pl/loom/internal/model/wireutil"
 )
 
 const defaultBaseURL = "https://api.openai.com/v1"
@@ -80,14 +81,14 @@ func New(cfg Config) (*Provider, error) {
 		return nil, fmt.Errorf("openai provider: invalid base URL")
 	}
 
-	client, err := httpc.New(httpc.Config{
+	client, err := wireutil.NewHTTPClient("openai", httpc.Config{
 		HTTPClient:     cfg.HTTPClient,
 		MaxRetries:     cfg.MaxRetries,
 		InitialBackoff: cfg.InitialBackoff,
 		MaxBackoff:     cfg.MaxBackoff,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("openai provider: %w", err)
+		return nil, err
 	}
 
 	return &Provider{
@@ -105,30 +106,12 @@ func (p *Provider) Stream(ctx context.Context, req domain.ModelRequest) (domain.
 		return nil, err
 	}
 
-	headers := http.Header{
-		"Content-Type":  {"application/json"},
-		"Accept":        {"text/event-stream"},
-		"Cache-Control": {"no-cache"},
-	}
+	headers := wireutil.StreamHeaders()
 	if p.apiKey != "" {
 		headers.Set("Authorization", "Bearer "+p.apiKey)
 	}
 
-	resp, err := p.client.Post(ctx, p.endpointURL, body, headers)
-	if err != nil {
-		// Classify the failure (rate limit / permission / transient) so the
-		// agent loop can wait out retryable ones instead of killing the run.
-		return nil, httpc.ToDomainError("openai provider", err)
-	}
-
-	if err := httpc.RequireEventStream(resp); err != nil {
-		_ = resp.Body.Close()
-		return nil, fmt.Errorf("openai provider: %w", err)
-	}
-
-	return stream.Start(ctx, resp.Body, func(streamCtx context.Context, body io.Reader, emit stream.Emitter) {
-		p.pump(streamCtx, body, emit)
-	}), nil
+	return wireutil.StartStream(ctx, p.client, p.endpointURL, body, headers, "openai", p.pump)
 }
 
 func normalizeWireAPI(wireAPI WireAPI) (WireAPI, error) {
@@ -266,7 +249,7 @@ func marshalResponsesRequest(req domain.ModelRequest) ([]byte, error) {
 func toOpenAITools(defs []domain.ToolDefinition) ([]map[string]any, error) {
 	out := make([]map[string]any, 0, len(defs))
 	for _, def := range defs {
-		parameters, err := decodeToolParameters(def)
+		parameters, err := wireutil.ToolInputSchema("openai", def)
 		if err != nil {
 			return nil, err
 		}
@@ -286,7 +269,7 @@ func toOpenAITools(defs []domain.ToolDefinition) ([]map[string]any, error) {
 func toResponsesTools(defs []domain.ToolDefinition) ([]map[string]any, error) {
 	out := make([]map[string]any, 0, len(defs))
 	for _, def := range defs {
-		parameters, err := decodeToolParameters(def)
+		parameters, err := wireutil.ToolInputSchema("openai", def)
 		if err != nil {
 			return nil, err
 		}
@@ -311,16 +294,6 @@ func reasoningEffortParam(spec domain.ReasoningSpec) string {
 	default:
 		return ""
 	}
-}
-
-func decodeToolParameters(def domain.ToolDefinition) (any, error) {
-	var parameters any
-	if len(def.InputSchema) == 0 {
-		parameters = map[string]any{"type": "object"}
-	} else if err := json.Unmarshal(def.InputSchema, &parameters); err != nil {
-		return nil, fmt.Errorf("openai provider: decode tool schema for %q: %w", def.Name, err)
-	}
-	return parameters, nil
 }
 
 // apiRole normalizes a message role for OpenAI-compatible vendors: a system
@@ -405,7 +378,7 @@ func chatUserContent(msg domain.Message) (any, error) {
 		}
 	}
 	if !hasImages {
-		return messageText(msg)
+		return wireutil.MessageText("openai", msg)
 	}
 
 	parts := make([]map[string]any, 0, len(msg.Parts))
@@ -493,7 +466,7 @@ func toResponsesInput(messages []domain.Message) ([]map[string]any, error) {
 				out = append(out, item)
 				break
 			}
-			text, err := messageText(msg)
+			text, err := wireutil.MessageText("openai", msg)
 			if err != nil {
 				return nil, err
 			}
@@ -614,7 +587,7 @@ func responseFunctionCallOutput(result domain.ToolResult) any {
 		}
 	}
 	if !hasImages {
-		return toolResultContent(result)
+		return wireutil.ToolResultText(result)
 	}
 	parts := make([]map[string]any, 0, len(result.Content))
 	var text strings.Builder
@@ -642,17 +615,6 @@ func responseFunctionCallOutput(result domain.ToolResult) any {
 	}
 	flushText()
 	return parts
-}
-
-func messageText(msg domain.Message) (string, error) {
-	var b strings.Builder
-	for _, part := range msg.Parts {
-		if part.Kind != domain.PartText {
-			return "", fmt.Errorf("openai provider: role %q only supports text parts", msg.Role)
-		}
-		b.WriteString(part.Text)
-	}
-	return b.String(), nil
 }
 
 type assistantMessageParts struct {
@@ -703,49 +665,8 @@ func toolResultMessage(result domain.ToolResult) map[string]any {
 	return map[string]any{
 		"role":         "tool",
 		"tool_call_id": result.CallID.String(),
-		"content":      toolResultContent(result),
+		"content":      wireutil.ToolResultText(result),
 	}
-}
-
-func toolResultContent(result domain.ToolResult) string {
-	if result.Error != nil {
-		payload, err := json.Marshal(map[string]any{
-			"status": result.Status,
-			"error":  result.Error,
-		})
-		if err == nil {
-			return string(payload)
-		}
-		return result.Error.Message
-	}
-
-	textAndArtifactRefs := true
-	var text strings.Builder
-	for _, part := range result.Content {
-		switch part.Kind {
-		case domain.PartText:
-			text.WriteString(part.Text)
-		case domain.PartArtifact:
-			// Artifact references are persisted in the canonical ToolResult. Tools
-			// include model-safe reference metadata in their bounded text payload;
-			// do not duplicate refs here and accidentally exceed context budgets.
-		default:
-			textAndArtifactRefs = false
-		}
-	}
-	if textAndArtifactRefs && text.Len() > 0 {
-		return text.String()
-	}
-
-	payload, err := json.Marshal(map[string]any{
-		"status":  result.Status,
-		"content": result.Content,
-		"meta":    result.Metadata,
-	})
-	if err == nil {
-		return string(payload)
-	}
-	return string(result.Status)
 }
 
 func chatCompletionsURL(baseURL string) string {
@@ -822,8 +743,8 @@ func runChatCompletions(ctx context.Context, parser *sse.Parser, state *canonica
 			if message == "" {
 				message = "openai provider: stream error frame"
 			}
-			finishStreamError(state, errors.New(message), domain.StopProviderError,
-				isTransientProviderError(code, message), emit)
+			wireutil.EmitStreamFailure(emit, errors.New(message), domain.StopProviderError,
+				isTransientProviderError(code, message), func() { _ = state.closeOpen(emit) })
 			return
 		}
 
@@ -994,60 +915,46 @@ func finishChatDone(state *canonicalState, emit stream.Emitter) {
 	})
 }
 
-func finishChatReadError(ctx context.Context, state *canonicalState, err error, emit stream.Emitter) {
-	switch {
-	case ctx.Err() != nil:
-		finishWithError(state, ctx.Err(), domain.StopCancelled, emit)
-	case errors.Is(err, io.EOF) && state.finishSeen:
-		// Some compatible gateways close the connection right after the final
-		// finish_reason chunk instead of sending the [DONE] sentinel. The
-		// generation is already complete and paid for — finish gracefully the
-		// same way the responses path does instead of discarding the reply.
-		finishChatDone(state, emit)
-	case errors.Is(err, io.EOF):
-		finishTransientError(state, fmt.Errorf("openai provider: stream closed before [DONE]"), emit)
-	default:
-		finishTransientError(state, fmt.Errorf("openai provider: stream read failed: %w", err), emit)
+// finishReadFailure binds the provider's close-and-emit failure finisher;
+// retryable marks transient read failures (truncated body, transport drop)
+// so the agent loop can re-issue the request while nothing was delivered
+// yet.
+func finishReadFailure(state *canonicalState, emit stream.Emitter) func(error, domain.StopReason, bool) {
+	return func(err error, stop domain.StopReason, retryable bool) {
+		wireutil.EmitStreamFailure(emit, err, stop, retryable, func() { _ = state.closeOpen(emit) })
 	}
+}
+
+func finishChatReadError(ctx context.Context, state *canonicalState, err error, emit stream.Emitter) {
+	wireutil.FinishReadError(ctx, err, "openai", "[DONE]",
+		func() bool {
+			if !state.finishSeen {
+				return false
+			}
+			// Some compatible gateways close the connection right after the final
+			// finish_reason chunk instead of sending the [DONE] sentinel. The
+			// generation is already complete and paid for — finish gracefully the
+			// same way the responses path does instead of discarding the reply.
+			finishChatDone(state, emit)
+			return true
+		}, finishReadFailure(state, emit))
 }
 
 func finishResponsesReadError(ctx context.Context, state *canonicalState, err error, emit stream.Emitter) {
-	switch {
-	case ctx.Err() != nil:
-		finishWithError(state, ctx.Err(), domain.StopCancelled, emit)
-	case errors.Is(err, io.EOF) && state.finishSeen:
-		// Some compatible gateways close immediately after response.completed
-		// instead of sending the optional [DONE] sentinel.
-		state.flushBufferedTerminal(emit)
-	case errors.Is(err, io.EOF):
-		finishTransientError(state, fmt.Errorf("openai provider: responses stream closed before terminal event"), emit)
-	default:
-		finishTransientError(state, fmt.Errorf("openai provider: stream read failed: %w", err), emit)
-	}
+	wireutil.FinishReadError(ctx, err, "openai", "terminal event",
+		func() bool {
+			if !state.finishSeen {
+				return false
+			}
+			// Some compatible gateways close immediately after response.completed
+			// instead of sending the optional [DONE] sentinel.
+			state.flushBufferedTerminal(emit)
+			return true
+		}, finishReadFailure(state, emit))
 }
 
 func finishWithError(state *canonicalState, err error, stop domain.StopReason, emit stream.Emitter) {
-	finishStreamError(state, err, stop, false, emit)
-}
-
-// finishTransientError ends the stream on a transient read failure
-// (truncated body, transport drop): the error is marked retryable so the
-// agent loop can re-issue the request while nothing was delivered yet.
-func finishTransientError(state *canonicalState, err error, emit stream.Emitter) {
-	finishStreamError(state, err, domain.StopProviderError, true, emit)
-}
-
-func finishStreamError(state *canonicalState, err error, stop domain.StopReason, retryable bool, emit stream.Emitter) {
-	_ = state.closeOpen(emit)
-	emit(domain.ModelEvent{
-		Kind:      domain.ModelEventStreamError,
-		Error:     err.Error(),
-		Retryable: retryable,
-	})
-	emit(domain.ModelEvent{
-		Kind:       domain.ModelEventResponseEnd,
-		StopReason: stop,
-	})
+	wireutil.EmitStreamFailure(emit, err, stop, false, func() { _ = state.closeOpen(emit) })
 }
 
 type canonicalState struct {
