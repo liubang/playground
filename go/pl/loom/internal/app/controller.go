@@ -2499,18 +2499,18 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 			// Surface what "allow always" would remember so frontends can label
 			// (or hide) the option honestly instead of offering a no-op, the
 			// L2 trust option for escalated calls, and the derived consequence
-			// description — what the operation DOES, not its text.
-			env := s.controller.deriveEnv()
-			if preview, _, ok := ApprovalRulePreview(payload.Tool, payload.Source, card.Arguments, env); ok {
+			// description — what the operation DOES, not its text. One
+			// derivation feeds all three projections.
+			d := permission.DeriveRawArgs(payload.Tool, payload.Source, card.Arguments, s.controller.deriveEnv())
+			if preview, ok := ApprovalRulePreview(d); ok {
 				card.RulePreview = preview
 			}
-			if RunCmdTrustPreview(payload.Tool, payload.Source, card.Arguments, env) {
-				d := permission.DeriveRawArgs(payload.Tool, payload.Source, card.Arguments, env)
+			if RunCmdTrustPreview(d) {
 				if label, _, ok := permission.MemoryPreviewLabel(d, TrustUnsandboxed); ok {
 					card.TrustPreview = label
 				}
 			}
-			card.Consequence = approvalConsequence(payload.Tool, payload.Source, card.Arguments, env)
+			card.Consequence = approvalConsequence(d)
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindApprovalRequested, card)
 			// Project the card so reconnecting clients can rebuild it from
 			// the snapshot (the requested event itself is not replayed into

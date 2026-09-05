@@ -51,7 +51,6 @@ type DeriveEnv struct {
 // the derived effect plus the normalized shapes binding and memory
 // matching consume.
 type Derivation struct {
-	Call   domain.PreparedCall
 	Effect Effect
 	// Plan is the normalized execution shape (exec calls only).
 	Plan ExecPlan
@@ -72,11 +71,6 @@ type Derivation struct {
 	WritePath string
 	// ToolName is the call's tool name (tool bindings, MCP handling).
 	ToolName string
-	// Source is the tool's origin (builtin / MCP / subagent).
-	Source domain.ToolSource
-	// Risk is the Prepare-assigned risk tier (MCP read-only handling,
-	// the no-contract R3+ residual).
-	Risk domain.RiskLevel
 	// ForcedAsk is set for calls whose cost cannot be modeled as
 	// capabilities (third-party MCP tools beyond read-only, provider
 	// quota spenders): they always ask in interactive modes.
@@ -94,10 +88,7 @@ func DeriveEffect(call domain.PreparedCall, env DeriveEnv) Derivation {
 		fillRawContracts(&call)
 	}
 	d := Derivation{
-		Call:     call,
 		ToolName: call.Call.Name,
-		Source:   call.Definition.Source,
-		Risk:     call.Risk,
 	}
 	switch {
 	case call.ExecRequest != nil:
@@ -314,8 +305,9 @@ func (d *Derivation) deriveWrite(req *domain.WriteRequest, env DeriveEnv) {
 
 // deriveMCP lowers a third-party MCP call: its behavior is not
 // auditable, so it is unprovable by construction. Read-only-hinted tools
-// (Risk ≤ R1) still auto-allow — that residual lives in the decision
-// layer via d.Risk.
+// (Risk ≤ R1) keep no ForcedAsk: with a zero capability requirement they
+// resolve through the default sandbox package in the decision layer and
+// auto-allow.
 func (d *Derivation) deriveMCP(call domain.PreparedCall) {
 	d.Effect = Effect{
 		Proven: false,

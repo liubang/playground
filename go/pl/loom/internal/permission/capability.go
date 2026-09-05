@@ -139,7 +139,10 @@ type Package struct {
 	// danger screen's position in the chain.
 	MaxConsequence Consequence `json:"-"`
 	// Implicit marks the default-sandbox package: it is not user trust
-	// and must never cover effects carrying danger indicators.
+	// and must never cover effects carrying danger indicators. Only the
+	// defaultSandboxPackage variable carries it — it is consulted
+	// directly in Decide and never lives in a PackageSet, so set-level
+	// scans need no Implicit filter.
 	Implicit bool `json:"-"`
 	// Scope records the trust layer (loading rules depend on it).
 	Scope Scope `json:"-"`
@@ -308,16 +311,6 @@ func (s *PackageSet) Packages() []Package {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return append([]Package(nil), s.packages...)
-}
-
-// HasAny reports whether the set holds at least one package.
-func (s *PackageSet) HasAny() bool {
-	if s == nil {
-		return false
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return len(s.packages) > 0
 }
 
 // visibleTo reports whether the package participates in decisions for

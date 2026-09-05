@@ -59,8 +59,6 @@ type ExecPlan struct {
 	// DynamicWrites reports a file-writing redirect with a dynamic
 	// target.
 	DynamicWrites bool
-	// Raw is the original argv (exact bindings, display).
-	Raw []string
 }
 
 // maxHeredocDepth bounds recursive heredoc-body analysis so a
@@ -78,7 +76,7 @@ const maxHeredocDepth = 4
 //   - any other shell form (script file, bare stdin, --) degrades to a
 //     single unanalyzable step.
 func NormalizeExec(argv []string) ExecPlan {
-	plan := ExecPlan{Raw: append([]string(nil), argv...)}
+	var plan ExecPlan
 	if len(argv) == 0 {
 		plan.Unanalyzable = "empty argv"
 		return plan
@@ -97,10 +95,10 @@ func NormalizeExec(argv []string) ExecPlan {
 }
 
 // normalizeShellScript parses one script and flattens it into a plan.
-// raw is the outermost argv (kept for exact binding); depth bounds
-// heredoc recursion.
+// raw is the outermost argv (used for the fallback step when the
+// script cannot be analyzed); depth bounds heredoc recursion.
 func normalizeShellScript(script string, raw []string, depth int) ExecPlan {
-	plan := ExecPlan{Raw: raw}
+	var plan ExecPlan
 	analysis, ok := process.AnalyzeShellScript(script)
 	if !ok {
 		plan.Steps = []ExecStep{{Argv: append([]string(nil), raw...)}}

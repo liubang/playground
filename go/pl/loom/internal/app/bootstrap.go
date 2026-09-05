@@ -92,9 +92,10 @@ type Bootstrap struct {
 	WorkspaceID   domain.WorkspaceID
 	WorkspaceRoot string
 	Registry      *agent.ToolRegistry
-	// Policy is the assembled decider chain (docs/PERMISSION_DESIGN.md
-	// §4.4): rules → danger → session → mode-aware baseline. Read it via
-	// CurrentPolicy: ReloadPolicy swaps it when rules change at runtime.
+	// Policy is the agent-facing permission policy (the capability set
+	// evaluated by decide.go, docs/PERMISSION_DESIGN.md §4.3; wrapped in
+	// the transcript adapter when user-intent trust is enabled). Read it
+	// via CurrentPolicy: ReloadPolicy swaps it when rules change at runtime.
 	Policy           agent.Policy
 	permissionPolicy *permission.Policy
 	approvalMode     permission.ApprovalMode
@@ -561,8 +562,8 @@ func (b *Bootstrap) RebuildPrompt(ctx context.Context) {
 	b.promptMu.Unlock()
 }
 
-// CurrentPolicy returns the active decider chain; safe for concurrent
-// use with ReloadPolicy.
+// CurrentPolicy returns the active agent-facing policy; safe for
+// concurrent use with ReloadPolicy.
 func (b *Bootstrap) CurrentPolicy() agent.Policy {
 	b.policyMu.RLock()
 	defer b.policyMu.RUnlock()
@@ -641,7 +642,8 @@ func (b *Bootstrap) CurrentApprovalMode() permission.ApprovalMode {
 }
 
 // SetApprovalMode updates the baseline approval mode and rebuilds the
-// decider chain so subsequent evaluations use it (config hot-reload).
+// agent-facing policy so subsequent evaluations use it (config
+// hot-reload).
 func (b *Bootstrap) SetApprovalMode(ctx context.Context, mode permission.ApprovalMode) error {
 	b.policyMu.Lock()
 	b.approvalMode = mode

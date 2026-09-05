@@ -351,7 +351,7 @@ func (s *PackageSet) categoricalCover(d Derivation, workspace string) (Package, 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, p := range s.packages {
-		if p.Decision != domain.DecisionAllow || p.Implicit || !p.visibleTo(workspace) {
+		if p.Decision != domain.DecisionAllow || !p.visibleTo(workspace) {
 			continue
 		}
 		if p.Bind.Kind == BindHost {
@@ -399,7 +399,7 @@ func (s *PackageSet) stepCoverLocked(d Derivation, workspace string) (Package, b
 		}
 		stepOK := false
 		for _, p := range s.packages {
-			if p.Decision != domain.DecisionAllow || p.Implicit || p.Bind.Kind != BindArgv || !p.visibleTo(workspace) {
+			if p.Decision != domain.DecisionAllow || p.Bind.Kind != BindArgv || !p.visibleTo(workspace) {
 				continue
 			}
 			if !argvBindsPrefix(step.Argv, p.Bind.Argv) || !p.covers(d.StepEffects[i]) {
@@ -447,7 +447,7 @@ func (s *PackageSet) exactCover(d Derivation, workspace string) (Package, bool) 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, p := range s.packages {
-		if p.Decision != domain.DecisionAllow || p.Implicit || !p.visibleTo(workspace) {
+		if p.Decision != domain.DecisionAllow || !p.visibleTo(workspace) {
 			continue
 		}
 		if p.Bind.Kind != BindArgvExact {

@@ -70,17 +70,22 @@ func (g ExecGrant) Summary() string {
 	return out
 }
 
-// Verdict is the policy layer's judgment on a prepared call. Deciders that
-// have no opinion return nil inside a chain; a resolved verdict always
-// carries a valid Decision.
+// Verdict is the policy layer's judgment on a prepared call; a resolved
+// verdict always carries a valid Decision.
 type Verdict struct {
 	Decision Decision
-	// Grant is meaningful only when Decision == DecisionAllow.
+	// Grant is the execution capability contract the verdict carries: on
+	// allow it is the covering package's grant (or the sandbox baseline);
+	// on ask it is the gap grant the call declared, so an approved call
+	// runs with exactly the power the user was shown. It rides the
+	// prepared call into execution either way.
 	Grant ExecGrant
-	// Source identifies the producing layer for audits and UI:
-	// "rule", "session", "danger", or "baseline".
+	// Source identifies the deciding factor for audits and the UI:
+	// "rule" (a declarative deny/ask/exact package), "session" (a
+	// session-remembered package), "baseline" (the default sandbox or
+	// the approval-mode residual), "user_intent", or "indicator".
 	Source string
-	// Reason is the human-readable provenance (rule justification, danger
-	// explanation, baseline mode).
+	// Reason is the human-readable provenance (rule justification,
+	// indicator description, baseline mode).
 	Reason string
 }

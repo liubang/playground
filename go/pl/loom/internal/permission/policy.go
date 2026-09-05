@@ -29,9 +29,6 @@ import (
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
-// PolicyDecision represents allow/deny/ask.
-type PolicyDecision = domain.Decision
-
 // Policy is the assembled permission policy.
 type Policy struct {
 	// Packages is the evaluated capability set: builtin + user +

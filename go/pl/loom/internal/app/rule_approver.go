@@ -56,7 +56,11 @@ func (r *RuleApprover) RequestApproval(ctx context.Context, req domain.ApprovalR
 	if r.policy != nil {
 		policy := r.policy()
 		if policy.Packages != nil {
-			d := deriveForApproval(req.Call, policy.Env)
+			// The call arriving from the agent loop carries its real
+			// Definition (source, risk), so the single DeriveEffect entry
+			// classifies it exactly as the policy path did — including MCP
+			// identity, which a raw-arguments re-derivation would lose.
+			d := permission.DeriveEffect(req.Call, policy.Env)
 			if v := policy.Packages.Decide(d, policy.Mode, nil, policy.Workspace); v.Decision == domain.DecisionAllow {
 				return domain.DecisionAllow, nil
 			}
@@ -66,15 +70,6 @@ func (r *RuleApprover) RequestApproval(ctx context.Context, req domain.ApprovalR
 		return domain.DecisionDeny, nil
 	}
 	return r.inner.RequestApproval(ctx, req)
-}
-
-// deriveForApproval derives the call for the approver-layer second
-// line. The call arriving from the agent loop carries its real
-// Definition (source, risk), so the single DeriveEffect entry classifies
-// it exactly as the policy path did — including MCP identity, which a
-// raw-arguments re-derivation would lose.
-func deriveForApproval(call domain.PreparedCall, env permission.DeriveEnv) permission.Derivation {
-	return permission.DeriveEffect(call, env)
 }
 
 // ApprovalRuleHint carries the trust flavor the frontend chose with an
@@ -145,28 +140,27 @@ func (r *RuleApprover) RememberCall(toolName string, source domain.ToolSource, a
 }
 
 // ApprovalRulePreview renders the packages that "allow always" would
-// record for a call, for display in the approval overlay: categorical
-// argv prefixes ("go test"), an exact host, a writable directory, or a
-// bare tool name. ok=false means the call cannot be remembered — for
-// escalated calls the minimal flavor is hidden by design (only the
-// explicit unsandboxed trust option is offered).
-func ApprovalRulePreview(toolName string, source domain.ToolSource, arguments json.RawMessage, env permission.DeriveEnv) (preview string, grant domain.ExecGrant, ok bool) {
-	d := permission.DeriveRawArgs(toolName, source, arguments, env)
+// record for an already-derived call, for display in the approval
+// overlay: categorical argv prefixes ("go test"), an exact host, a
+// writable directory, or a bare tool name. ok=false means the call
+// cannot be remembered — for escalated calls the minimal flavor is
+// hidden by design (only the explicit unsandboxed trust option is
+// offered).
+func ApprovalRulePreview(d permission.Derivation) (preview string, ok bool) {
 	if d.Effect.Unsandboxed {
-		return "", domain.ExecGrant{}, false
+		return "", false
 	}
 	label, pkgs, ok := permission.MemoryPreviewLabel(d, "")
 	if !ok || len(pkgs) == 0 {
-		return "", domain.ExecGrant{}, false
+		return "", false
 	}
-	return label, pkgs[0].Grant.ExecGrant(), true
+	return label, true
 }
 
 // RunCmdTrustPreview reports whether the approval overlay should offer
-// the "always trust (unsandboxed)" option: escalated exec calls whose
-// memory shape is derivable.
-func RunCmdTrustPreview(toolName string, source domain.ToolSource, arguments json.RawMessage, env permission.DeriveEnv) bool {
-	d := permission.DeriveRawArgs(toolName, source, arguments, env)
+// the "always trust (unsandboxed)" option for an already-derived call:
+// escalated exec calls whose memory shape is derivable.
+func RunCmdTrustPreview(d permission.Derivation) bool {
 	if !d.Effect.Unsandboxed {
 		return false
 	}
@@ -174,11 +168,11 @@ func RunCmdTrustPreview(toolName string, source domain.ToolSource, arguments jso
 	return ok
 }
 
-// approvalConsequence renders the consequence-oriented summary of a
-// call's derived effect for the approval card: what the operation DOES
-// (plus any danger indicators), empty when the call is fully confined.
-func approvalConsequence(toolName string, source domain.ToolSource, arguments json.RawMessage, env permission.DeriveEnv) string {
-	d := permission.DeriveRawArgs(toolName, source, arguments, env)
+// approvalConsequence renders the consequence-oriented summary of an
+// already-derived call's effect for the approval card: what the
+// operation DOES (plus any danger indicators), empty when the call is
+// fully confined.
+func approvalConsequence(d permission.Derivation) string {
 	e := d.Effect
 	if !e.CrossesBoundary() && e.Consequence == permission.ConsequenceConfined && len(e.Indicators) == 0 && e.Proven {
 		return ""
