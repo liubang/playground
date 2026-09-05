@@ -10,7 +10,7 @@ import { Icon, type IconName } from '../../lib/icons'
 import { DiffView } from './DiffView'
 import { ArtifactBlock, InlineImage } from './images'
 
-// st → [icon, label]；className 用英文短码（err/error/canceled），文案统一中文
+// st → [icon, label]; className uses English short codes (err/error/canceled), labels are uniformly Chinese
 const TOOL_STATUS: Record<string, ['check' | 'xmark' | 'ban', string]> = {
   ok: ['check', '成功'],
   err: ['xmark', '失败'],
@@ -56,7 +56,7 @@ export interface ToolBlockProps {
   toolName: string
   target?: string
   diff?: string
-  // 快照重建块：diff 不在快照里，进入渲染窗口才从 edit/write 参数重算
+  // Snapshot-rebuilt block: the diff is not in the snapshot; it is recomputed from edit/write args only inside the render window
   diffArgs?: { name: string; args: unknown }
   diffSuppressed?: boolean // during approval the diff moves into the approval card
   completion?: ToolCompletion
@@ -75,8 +75,8 @@ export const ToolBlock = memo(function ToolBlock({
   fetchToolOutput,
 }: ToolBlockProps) {
   const [targetExpanded, setTargetExpanded] = useState(false)
-  // 惰性 diff：本组件只在虚拟化渲染窗口内才会被挂载，useMemo 按引用的
-  // diffArgs 缓存，滚动离开后 LCS 不会重复计算
+  // Lazy diff: this component is only mounted inside the virtualized render window; useMemo caches by
+  // diffArgs reference, so the LCS is not recomputed after scrolling away
   const diffText = useMemo(
     () =>
       diff ?? (diffArgs ? diffForToolCall(diffArgs.name, diffArgs.args) || undefined : undefined),

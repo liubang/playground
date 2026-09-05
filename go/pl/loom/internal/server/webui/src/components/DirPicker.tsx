@@ -1,5 +1,5 @@
-// DirPicker.tsx — 目录浏览弹窗（添加工作区）：从 $HOME 起逐级下钻，
-// 选择目录即注册。与旧 main.js 的 dirPicker 逻辑一一对应。
+// DirPicker.tsx — directory browsing modal (add workspace): drills down level by level starting from $HOME;
+// selecting a directory registers it. One-to-one with the dirPicker logic in the old main.js.
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { AppController } from '../app/controller'
@@ -19,11 +19,17 @@ interface BrowseState {
 export const DirPicker = memo(function DirPicker({ controller }: { controller: AppController }) {
   const open = useStore(controller.store, (s) => s.dirPickerOpen)
   const [state, setState] = useState<BrowseState>({ path: '', parent: '', home: '', entries: [] })
+  const [loading, setLoading] = useState(false)
+  // seq guard: on rapid consecutive clicks on directories/breadcrumbs, only the response of the latest browse is honored, and loading never falls back to an older request.
+  const browseSeq = useRef(0)
 
   const browseDir = useCallback(
     async (path: string) => {
+      const seq = ++browseSeq.current
+      setLoading(true)
       try {
         const r = await controller.api.browseDirectories(path)
+        if (seq !== browseSeq.current) return
         setState({
           path: r.path,
           parent: r.parent || '',
@@ -31,7 +37,10 @@ export const DirPicker = memo(function DirPicker({ controller }: { controller: A
           entries: r.entries || [],
         })
       } catch (e) {
+        if (seq !== browseSeq.current) return
         if ((e as ApiError).status !== 401) toast('浏览目录失败: ' + (e as Error).message)
+      } finally {
+        if (seq === browseSeq.current) setLoading(false)
       }
     },
     [controller],
@@ -41,7 +50,7 @@ export const DirPicker = memo(function DirPicker({ controller }: { controller: A
     if (open) void browseDir('')
   }, [open, browseDir])
 
-  // Esc 关闭 + 弹窗内焦点陷阱（Tab/Esc 不逃逸到背后的输入框）。
+  // Esc closes the modal + in-modal focus trap (Tab/Esc must not escape to the input behind it).
   const rootRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     if (!open) return
@@ -69,7 +78,7 @@ export const DirPicker = memo(function DirPicker({ controller }: { controller: A
       }
     }
     document.addEventListener('keydown', onKey, true)
-    // 初始焦点落到取消按钮（安全默认，与 Confirm 一致）
+    // Initial focus lands on the cancel button (safe default, consistent with Confirm)
     const t = setTimeout(() => {
       rootRef.current?.querySelector<HTMLElement>('#dir-cancel')?.focus()
     }, 0)
@@ -81,7 +90,7 @@ export const DirPicker = memo(function DirPicker({ controller }: { controller: A
 
   if (!open) return null
 
-  // 面包屑：把当前路径拆成可点段，根段在 $HOME 内显示为 ~，否则为 /。
+  // Breadcrumbs: split the current path into clickable segments; the root segment renders as ~ inside $HOME, otherwise as /.
   const crumbs: { label: string; path: string; current: boolean }[] = []
   {
     const inHome =
@@ -110,6 +119,12 @@ export const DirPicker = memo(function DirPicker({ controller }: { controller: A
       <div className="modal dir-modal" role="dialog" aria-modal="true" aria-labelledby="dir-title">
         <div className="modal-title" id="dir-title">
           选择工作区目录
+          {loading && (
+            // Visible feedback while a browse request is in flight (previously the old directory kept rendering while in flight, looking like the click had no effect)
+            <span className="dir-loading" aria-hidden="true">
+              <span className="spinner" />
+            </span>
+          )}
         </div>
         <div className="dir-current">
           <button
@@ -129,7 +144,7 @@ export const DirPicker = memo(function DirPicker({ controller }: { controller: A
             className="dir-crumbs"
             aria-label="当前目录"
             ref={(nav) => {
-              // 让最深一级（当前目录）滚入可视区
+              // Scroll the deepest level (the current directory) into view
               if (nav) nav.scrollLeft = nav.scrollWidth
             }}
           >

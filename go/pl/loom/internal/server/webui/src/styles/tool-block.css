@@ -1,0 +1,32 @@
+/* ============================== Tool-block kind icons / approval picker ============================== */
+.tool-kind {
+  color: var(--muted);
+  flex: none;
+  display: inline-flex;
+  font-size: 12px;
+}
+/* Non-default approval modes always show a warning color: prevents forgetting a
+switch to permissive/unattended. Soft tinted background + amber text instead of a
+hard outline — still the only colored capsule in the bar, but no longer the
+highest-contrast element (that rank belongs to the send button). */
+.picker-btn.is-warn {
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: var(--warning);
+}
+.picker-btn.is-warn.is-active {
+  border-color: var(--primary);
+}
+/* Approval-mode menu item: first line name + ✓, second line description */
+.menu .menu-item.menu-item-hint {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.menu .menu-item.menu-item-hint .check {
+  margin-left: auto;
+}
+.menu .menu-item .menu-item-desc {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}

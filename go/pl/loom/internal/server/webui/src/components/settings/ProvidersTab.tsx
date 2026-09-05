@@ -1,6 +1,6 @@
-// ProvidersTab.tsx — 模型 tab：启动模型 + provider 卡片（概览 → provider
-// 详情 → 模型明细 三级导航）。所有卡片 DOM 始终挂载在同一个列表容器里，
-// 层级切换只改 CSS 类（概览态折叠成一行摘要，详情态只显示当前卡片）。
+// ProvidersTab.tsx — Models tab: startup model + provider cards (overview → provider
+// detail → model detail three-level navigation). All card DOM stays mounted in the same
+// list container; level switching only changes CSS classes (overview collapses to a one-line summary, detail shows only the current card).
 
 import { useMemo } from 'react'
 import type { SettingsDraft, ProviderDraft, CardDraft, ControlState } from './SettingsPanel'
@@ -22,7 +22,7 @@ const PROVIDER_ALL_FIELDS: FieldSpec[] = [
   { key: 'name' },
 ]
 
-// 概览行摘要数据：与收集逻辑同源地读当前草稿。
+// Overview-row summary data: reads the current draft from the same source as the collect logic.
 function providerSummary(card: ProviderDraft): { name: string; meta: string } {
   const p: Record<string, unknown> = {}
   collectFields(PROVIDER_ALL_FIELDS, card.fields, p)
@@ -83,7 +83,7 @@ export function ProvidersTab({
     return text
   }, [openCard, openModel])
 
-  // 返回：第三级（模型明细）→ 第二级（provider 详情）→ 概览
+  // Back: third level (model detail) → second level (provider detail) → overview
   const back = () => {
     if (openModelId) {
       setOpenModelId(null)
@@ -179,7 +179,7 @@ export function ProvidersTab({
 
   return (
     <>
-      {/* 启动模型（全局 scope）；详情态由 CSS（.set-hier.is-detail）隐藏 */}
+      {/* Startup model (global scope); hidden in detail state via CSS (.set-hier.is-detail) */}
       <section className="set-sec set-sec-top">
         <h3 className="set-sec-title">启动模型</h3>
         <div data-field-id={DEFAULT_MODEL_FIELD.key}>

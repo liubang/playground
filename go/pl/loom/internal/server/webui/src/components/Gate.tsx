@@ -1,4 +1,4 @@
-// Gate.tsx — token 引导页（首次访问 / 401）。独立渲染，无应用外壳。
+// Gate.tsx — token onboarding page (first visit / 401). Rendered standalone, without the app shell.
 
 import { memo, useState } from 'react'
 import type { AppController } from '../app/controller'

@@ -1,5 +1,5 @@
-// RulePacks.tsx — 规则包（权限 tab 附加小节）：列出内置包与安装状态；
-// 安装/卸载写入用户规则目录并热重载。与旧 settings.js 的规则包部分对应。
+// RulePacks.tsx — Rule packs (extra section of the permissions tab): lists built-in packs and their install state;
+// install/uninstall writes to the user rules directory and hot-reloads. Mirrors the rule-packs section of legacy settings.js.
 
 import { useCallback, useEffect, useState } from 'react'
 import type { AppController } from '../../app/controller'
@@ -26,7 +26,7 @@ export function RulePacks({ controller, active }: { controller: AppController; a
       try {
         const r = await controller.api.listRulePacks()
         setPacks(r.packs || [])
-        setLoaded(true) // 成功才置位：失败后下次切入 tab 允许自动重试
+        setLoaded(true) // Set only on success so a failed load can auto-retry on the next tab entry
         if (force) toast(`共 ${(r.packs || []).length} 个规则包`, true)
       } catch (e) {
         const err = e as ApiError
@@ -68,7 +68,7 @@ export function RulePacks({ controller, active }: { controller: AppController; a
         await controller.api.installRulePack(p.id)
         toast(`已启用 ${p.name}（立即生效）`, true)
       }
-      // 就地更新这一张卡片（徽标 + 按钮切换），不整表重建
+      // Update only this card in place (badge + button toggle) without rebuilding the whole list
       setPacks((prev) =>
         (prev || []).map((x) => (x.id === p.id ? { ...x, installed: !p.installed } : x)),
       )

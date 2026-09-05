@@ -1,21 +1,21 @@
-// images.tsx — 内联图片 / artifact 图片 + 灯箱（与旧 blocks.js 同逻辑）。
-// - InlineImage：base64 data URI 缩略图，点击/回车放大（灯箱单例 overlay）
-// - ArtifactImage：用户附件图片（artifact 引用，鉴权加载）
-// - ArtifactBlock：artifact_ref part，按媒体类型分发（图片 / 文本预览+下载 / 仅下载）
+// images.tsx — inline images / artifact images + lightbox (same logic as the old blocks.js).
+// - InlineImage: base64 data URI thumbnail, click/Enter to zoom (singleton lightbox overlay)
+// - ArtifactImage: user attachment image (artifact reference, authenticated load)
+// - ArtifactBlock: artifact_ref part, dispatched by media type (image / text preview + download / download only)
 
 import { useEffect, useState, type KeyboardEvent } from 'react'
 import type { ArtifactRef } from '../../protocol/events'
 import { fmtBytes } from '../../lib/format'
 import { useBlocksIO } from './context'
 
-// --- 图片灯箱（点击放大）：单例 overlay，点击遮罩或按 ESC 关闭 ---
+// --- Image lightbox (click to zoom): singleton overlay, closed by clicking the backdrop or pressing ESC ---
 let lightboxEl: HTMLDivElement | null = null
 let lightboxPrevFocus: HTMLElement | null = null
 let lightboxKeyHandler: ((e: globalThis.KeyboardEvent) => void) | null = null
 
 function closeImageLightbox() {
   if (!lightboxEl) return
-  // 拆掉随灯箱而生的 keydown 监听（不再让一个模块级监听器永远挂在 document 上）
+  // Remove the keydown listener created with the lightbox (no more module-level listener left on document forever)
   if (lightboxKeyHandler) {
     document.removeEventListener('keydown', lightboxKeyHandler, true)
     lightboxKeyHandler = null
@@ -23,7 +23,7 @@ function closeImageLightbox() {
   lightboxEl.remove()
   lightboxEl = null
   document.body.classList.remove('lightbox-open')
-  // 焦点归还到打开灯箱的那个缩略图，供屏幕阅读器用户继续阅读
+  // Return focus to the thumbnail that opened the lightbox, so screen reader users can continue reading
   const prev = lightboxPrevFocus
   lightboxPrevFocus = null
   prev?.focus?.()
@@ -46,7 +46,7 @@ function openImageLightbox(src: string, alt?: string) {
   document.body.appendChild(overlay)
   document.body.classList.add('lightbox-open')
   lightboxEl = overlay
-  // 焦点进灯箱，使 Esc/Tab 不遇背景输入框
+  // Move focus into the lightbox so Esc/Tab don't reach background inputs
   lightboxPrevFocus = (document.activeElement as HTMLElement) || null
   overlay.focus()
   lightboxKeyHandler = (e: globalThis.KeyboardEvent) => {
@@ -70,7 +70,7 @@ const zoomableProps = {
   title: '点击放大',
 }
 
-// InlineImage 渲染一个内联图片元素（base64 data URI）。
+// InlineImage renders an inline image element (base64 data URI).
 export function InlineImage({ mediaType, data }: { mediaType?: string; data: string }) {
   const [failed, setFailed] = useState(false)
   if (failed) return <div className="notice is-warn">图片加载失败</div>
@@ -88,8 +88,8 @@ export function InlineImage({ mediaType, data }: { mediaType?: string; data: str
   )
 }
 
-// ArtifactImage 渲染用户附件图片（artifact 引用）：异步鉴权加载，
-// 加载完成前保持空缩略图占位，失败时原位替换为提示。
+// ArtifactImage renders a user attachment image (artifact reference): loads asynchronously with auth;
+// keeps an empty thumbnail placeholder until loaded, replaced in place by a notice on failure.
 export function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
   const { fetchArtifactURL } = useBlocksIO()
   const [src, setSrc] = useState('')
@@ -123,13 +123,13 @@ export function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
   )
 }
 
-// ArtifactBlock 渲染 artifact_ref part，按媒体类型分发：
-// - image/*：内联图片（generate_image 的大型图片）；
-// - 文本类（run_cmd 的 stdout/stderr artifact 等）：可展开的全文预览 + 下载；
-// - 其他二进制：仅下载。
-// 媒体类型优先取后端声明的 media_type；历史数据没有该字段时回退到 fetch
-// 响应的 Content-Type（服务端 DetectContentType 嗅探）。文本预览读
-// blob.text() 而非再 fetch blobURL：CSP connect-src 'self' 不覆盖 blob:。
+// ArtifactBlock renders an artifact_ref part, dispatched by media type:
+// - image/*: inline image (large images from generate_image);
+// - text-like (run_cmd's stdout/stderr artifacts, etc.): expandable full-text preview + download;
+// - other binaries: download only.
+// The media type prefers the backend-declared media_type; historical data without that field falls back to the fetch
+// response's Content-Type (server-side DetectContentType sniffing). The text preview reads
+// blob.text() instead of fetching the blobURL again: CSP connect-src 'self' does not cover blob:.
 export function ArtifactBlock({ artifact }: { artifact: ArtifactRef }) {
   const { fetchArtifactURL } = useBlocksIO()
   const [resolved, setResolved] = useState<{ url: string; mediaType: string; blob: Blob } | null>(
@@ -182,8 +182,8 @@ export function ArtifactBlock({ artifact }: { artifact: ArtifactRef }) {
   )
 }
 
-// ArtifactFile 非图片 artifact：summary 行（类型 + 大小 + 下载链接）；
-// 文本类展开后从 blob 懒加载全文。
+// ArtifactFile, non-image artifact: summary row (type + size + download link);
+// text-like content is lazily loaded from the blob once expanded.
 function ArtifactFile({
   url,
   mediaType,

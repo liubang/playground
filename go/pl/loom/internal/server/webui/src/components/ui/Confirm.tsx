@@ -1,9 +1,9 @@
-// Confirm.tsx — 确认弹窗（替代原生 confirm）。
+// Confirm.tsx — Confirmation dialog (replaces the native confirm).
 // confirmDialog({title, body, okLabel}) → Promise<boolean>
-// 所有调用点都是破坏性/有代价操作（删除会话/工作区/skill、撤销分享、
-// 写入规则包、放弃未保存修改），故默认焦点在「取消」上：Esc / 点遮罩 /
-// Enter（命中取消按钮）= 取消；确认必须主动点击或 Tab 过去——避免弹窗
-// 叠加在输入焦点上时一次 Enter 就执行不可恢复操作。<ConfirmHost /> 挂在 App 根部。
+// Every call site is a destructive or costly operation (delete session/workspace/skill, unshare,
+// install rule packs, discard unsaved changes), so focus defaults to Cancel: Esc / clicking the overlay /
+// Enter (while the cancel button is focused) = cancel; confirming requires an explicit click or Tab — so that a
+// single Enter does not run an irreversible action while the dialog overlays a focused input. <ConfirmHost /> lives at the App root.
 
 import { useEffect } from 'react'
 import { Store, useStore } from '../../store/store'
@@ -20,13 +20,46 @@ interface ConfirmState {
 
 const confirmStore = new Store<ConfirmState>({ req: null })
 
+// Concurrency queue: only one confirm dialog is open at a time; concurrent/nested confirmDialog calls queue
+// up, with the next one taking over once the current settles (previously the latter overwrote the former, whose
+// Promise never resolved, leaving the caller hanging on await).
+type Pending = ConfirmRequest & { resolve: (v: boolean) => void }
+const queue: Pending[] = []
+// Holder of the focus before the dialog opened: restored once the last one settles (see settle).
+let returnFocusTo: HTMLElement | null = null
+
 export function confirmDialog(req: ConfirmRequest): Promise<boolean> {
   return new Promise((resolve) => {
-    confirmStore.set({ req: { ...req, resolve } })
+    queue.push({ ...req, resolve })
+    if (!confirmStore.get().req) next()
   })
 }
 
-// isConfirmOpen 供其他 Esc 处理方（设置面板）避让：弹窗开着时 Esc 由它自己消费。
+function next() {
+  const req = queue.shift()
+  if (!req) return
+  // The dialog is about to take over focus (cancel button autoFocus): record the current one first
+  returnFocusTo = document.activeElement as HTMLElement | null
+  confirmStore.set({ req })
+}
+
+// Settle the current dialog: resolve the caller's Promise; if the queue is non-empty hand over to the next, else return the focus
+// to the triggering element (same semantics as the lightbox; skipped if the element is unmounted).
+function settle(v: boolean) {
+  const req = confirmStore.get().req
+  if (!req) return
+  confirmStore.set({ req: null })
+  req.resolve(v)
+  if (queue.length > 0) {
+    next()
+    return
+  }
+  const focusBack = returnFocusTo
+  returnFocusTo = null
+  if (focusBack?.isConnected) focusBack.focus()
+}
+
+// isConfirmOpen lets other Esc handlers (e.g. the settings panel) yield: while a dialog is open, Esc is consumed here.
 export function isConfirmOpen(): boolean {
   return confirmStore.get().req !== null
 }
@@ -39,11 +72,11 @@ export function ConfirmHost() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation()
-        done(false)
+        settle(false)
         return
       }
       if (e.key === 'Tab') {
-        // Focus trap：Tab/Shift+Tab 在弹窗内部循环，不泄入背后的页面
+        // Focus trap: Tab/Shift+Tab cycle within the dialog without leaking into the page behind
         const modal = document.querySelector<HTMLElement>('#confirm-modal .modal')
         if (!modal) return
         const focusables = [...modal.querySelectorAll<HTMLElement>('button:not([disabled])')]
@@ -59,14 +92,9 @@ export function ConfirmHost() {
           first.focus()
         }
       }
-      // 不在 document 捕获阶段消费 Enter：弹窗出现时用户焦点可能还停留在
-      // 背后的输入框里，全局 Enter=确认 会把一次普通的输入回车变成危险操作。
-      // Enter/Space 的确认留给聚焦按钮的浏览器原生行为。
-    }
-    const done = (v: boolean) => {
-      document.removeEventListener('keydown', onKey, true)
-      confirmStore.set({ req: null })
-      req.resolve(v)
+      // Do not consume Enter in the document capture phase: when the dialog appears the user's focus may still rest
+      // on an input behind it, where a global Enter=confirm would turn an ordinary input newline into a dangerous action.
+      // Enter/Space confirmation is left to the native browser behavior of the focused button.
     }
     document.addEventListener('keydown', onKey, true)
     return () => document.removeEventListener('keydown', onKey, true)
@@ -74,18 +102,13 @@ export function ConfirmHost() {
 
   if (!req) return <div id="confirm-modal" className="modal-wrap" hidden />
 
-  const done = (v: boolean) => {
-    confirmStore.set({ req: null })
-    req.resolve(v)
-  }
-
   return (
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <div
       id="confirm-modal"
       className="modal-wrap"
       onClick={(e) => {
-        if (e.target === e.currentTarget) done(false)
+        if (e.target === e.currentTarget) settle(false)
       }}
     >
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
@@ -101,7 +124,7 @@ export function ConfirmHost() {
             className="btn btn-secondary"
             type="button"
             autoFocus
-            onClick={() => done(false)}
+            onClick={() => settle(false)}
           >
             取消
           </button>
@@ -109,7 +132,7 @@ export function ConfirmHost() {
             id="confirm-ok"
             className="btn btn-danger"
             type="button"
-            onClick={() => done(true)}
+            onClick={() => settle(true)}
           >
             {req.okLabel || '确认'}
           </button>

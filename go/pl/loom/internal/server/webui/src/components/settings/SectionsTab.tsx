@@ -1,5 +1,5 @@
-// SectionsTab.tsx — 简单 tab（spec 驱动的小节渲染）+ 系统 tab 附加内容
-// （开发环境运行时报告 + 预注册工作区卡片）。
+// SectionsTab.tsx — simple tabs (spec-driven section rendering) + system tab extras
+// (dev-environment runtime report + pre-registered workspace cards).
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import type { AppController } from '../../app/controller'
@@ -13,7 +13,7 @@ import { useSettingsCtx } from './SettingsPanel'
 import { Icon } from '../../lib/icons'
 import { toast } from '../ui/Toast'
 
-// SectionsTab — 简单 tab：全部字段归属全局 scope。
+// SectionsTab — a simple tab: all fields belong to the global scope.
 export function SectionsTab({
   tab,
   draft,
@@ -51,7 +51,7 @@ export function SectionsTab({
   )
 }
 
-// --- 系统 tab 附加：开发环境卡片（运行时只读视图）+ 预注册工作区 ---
+// --- System tab extras: dev-environment card (read-only runtime view) + pre-registered workspaces ---
 
 export function SystemExtras({
   draft,
@@ -153,7 +153,7 @@ function WorkspaceCard({
   )
 }
 
-// --- 开发环境卡片（运行时只读报告） ---
+// --- Dev-environment card (read-only runtime report) ---
 
 function EnvironmentCard({
   controller,
@@ -179,7 +179,7 @@ function EnvironmentCard({
       try {
         const r = await controller.api.metaEnvironment()
         setReport(r)
-        setLoaded(true) // 成功才置位：失败后下次切入 tab 允许自动重试
+        setLoaded(true) // set only on success: after a failure, re-entering the tab allows auto-retry
       } catch (e) {
         const err = e as ApiError
         if (err.status !== 401) {
@@ -199,7 +199,7 @@ function EnvironmentCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active])
 
-  // path_extra 保存变更后按 key 精确失效（面板递增 reloadToken）
+  // Precisely invalidate by key after a saved path_extra change (the panel increments reloadToken)
   const lastToken = useState(() => reloadToken)[0]
   useEffect(() => {
     if (reloadToken !== lastToken) {

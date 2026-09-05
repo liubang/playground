@@ -1,0 +1,44 @@
+/* ============================== Session tabs (components/SessionTabs) ==============================
+   Switch between Chat / Trace / Maze views; an underline marks the active tab. */
+
+.sess-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--bg2);
+  flex: none;
+  background: var(--bg0);
+}
+.sess-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  padding: 7px 14px 6px;
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+.sess-tab:hover {
+  color: var(--fg);
+}
+.sess-tab.is-active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 600;
+}
+
+/* chat-pane: container of the Chat tab (transcript + composer); hidden as a whole when switched away but stays mounted */
+.chat-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.chat-pane[hidden] {
+  display: none;
+}
+.chat-pane .transcript {
+  flex: 1;
+  min-height: 0;
+}

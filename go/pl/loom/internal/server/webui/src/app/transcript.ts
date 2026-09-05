@@ -71,10 +71,10 @@ export type BlockModel = Base &
         toolName: string
         target?: string
         diff?: string
-        // 快照重建的惰性 diff 参数：edit/write 的历史 diff 不在快照里，需本地
-        // 重算（LCS 400×400 上限）；由 ToolBlock 在块进入渲染窗口时按需算出，
-        // 不在 buildFromSnapshot 里同步堆到主线程（1K 消息快照的批量 LCS
-        // 曾拖慢首次渲染）。审批卡摘抄 diff 时同步算一次（低频路径）。
+        // Lazy diff params for snapshot rebuilds: edit/write history diffs are not in the
+        // snapshot, so recompute them locally (LCS 400×400 cap); ToolBlock computes on demand
+        // when the block enters the render window instead of batching LCS for 1K-message snapshots
+        // synchronously in buildFromSnapshot (once slowed first render). Approval cards compute synchronously once when quoting the diff (low-frequency path).
         diffArgs?: { name: string; args: unknown }
         diffSuppressed?: boolean // during approval the diff moves into the approval card
         completion?: ToolCompletion
@@ -90,9 +90,9 @@ export type BlockModel = Base &
     | { kind: 'artifact'; artifact: ArtifactRef }
   )
 
-// 会话内全文搜索的状态：view 层（TranscriptSearch）持有输入文本的本地副本，
-// 每次变更经防抖写入这里；matches 是命中的块 id 列表，navSeq 在每次
-// 查询变更/翻页时递增——view 层据此滚动定位（与 followSeq 同机制）。
+// State of in-session full-text search: the view layer (TranscriptSearch) holds a
+// local copy of the input text and writes it here debounced on each change; matches
+// is the hit block id list, navSeq increments on every query change/page turn — the view layer scrolls to position on it (same mechanism as followSeq).
 export interface TranscriptSearchState {
   query: string
   matches: string[]
@@ -148,8 +148,8 @@ export class TranscriptController {
   private streamLastRender = 0
   private reasoningId: string | null = null
   private reasoningStartTs = '' // first delta's event time, for the thinking duration
-  // 与 streamBuf 对称的 reasoning 合并帧渲染：高频 reasoning_delta 不再逐条触发
-  // blocks 全量扫描 + store emit（此前是 find+map 双重 O(N)，链式开销与 stream 一致）。
+  // Merged-frame rendering for reasoning, symmetric to streamBuf: high-frequency reasoning_delta
+  // no longer triggers a full blocks scan + store emit per delta (previously find+map double O(N), same chained cost as stream).
   private reasoningBuf = ''
   private reasoningScheduled = false
   private reasoningLastRender = 0
@@ -165,8 +165,8 @@ export class TranscriptController {
   private turnAssistantTs = ''
   private turnRunID = '' // run id of this turn (feedback vote target)
   private turnErrorShown = false
-  // applySnapshot 重建期间的暂存：整个快照的块先堆在本地数组，最后一次
-  // store.update 提交（避免逐块 O(N) 数组拷贝和渲染 tick）。
+  // Staging during applySnapshot rebuild: the whole snapshot's blocks pile up in a
+  // local array, committed in a single store.update (avoids per-block O(N) array copies and render ticks).
   private batchedBlocks: BlockModel[] | null = null
 
   constructor(io: TranscriptIO) {
@@ -269,7 +269,7 @@ export class TranscriptController {
     this.store.update((s) => {
       s.blocks = []
       s.following = true
-      s.search = null // 会话切换/清空：搜索随会话关闭
+      s.search = null // session switch/clear: search closes with the session
     })
   }
 
@@ -352,9 +352,9 @@ export class TranscriptController {
   applySnapshot(snap: Snapshot, { preserveScroll = false } = {}): { preserved: boolean } {
     const wasFollowing = this.store.get().following
     this.clear()
-    // 暂存式重建：整个快照的块先堆在本地数组里，最后一次 store.update
-    // 提交（此前每个块一次 update+emit，1K 消息快照 = 数百次 O(N) 数组
-    // 全量拷贝和渲染 tick，且与逐块 requestFollow 叠加触发重复 snap-to-bottom）。
+    // Staged rebuild: the whole snapshot's blocks pile up in a local array and commit in
+    // one final store.update (previously one update+emit per block — a 1K-message snapshot
+    // meant hundreds of O(N) full array copies and render ticks, plus per-block requestFollow stacking into duplicate snap-to-bottom).
     this.batchedBlocks = []
     try {
       this.buildFromSnapshot(snap)
@@ -834,9 +834,9 @@ export class TranscriptController {
   // stay (steer.injected still fires within the turn).
   private drainSteerNotices(prompt: string) {
     if (this.steers.length === 0) return
-    // turn.started 的 prompt 是剩余 steering 文本按 "\n\n" 拼接的产物：
-    // 按整段匹配，避免短文本误中另一条 notice 的子串
-    // （例如 "fix" 会吃掉 "fix the bug" 的提示）。
+    // turn.started's prompt is the remaining steering texts joined by "\n\n":
+    // match whole segments so a short text can't substring-hit another notice
+    // (e.g. "fix" would consume the notice for "fix the bug").
     const segments = new Set(prompt.split('\n\n').map((t) => t.trim()))
     const kept: { id: string; text: string }[] = []
     for (const s of this.steers) {
@@ -921,8 +921,8 @@ export class TranscriptController {
       this.reasoningLastRender = 0
     }
     this.reasoningBuf += delta
-    // 与 streamAppend 对称的合并帧渲染：高频 reasoning_delta 不再逐条触发
-    // patchBlock（此前每帧 find+map 双重 O(N) 扫描）。
+    // Merged-frame rendering, symmetric to streamAppend: high-frequency reasoning_delta
+    // no longer triggers patchBlock per delta (previously a find+map double O(N) scan per frame).
     if (this.reasoningScheduled) return
     this.reasoningScheduled = true
     const id = this.reasoningId!
@@ -933,7 +933,7 @@ export class TranscriptController {
     setTimeout(() => {
       requestAnimationFrame(() => {
         this.reasoningScheduled = false
-        if (this.reasoningId !== id) return // 已被 finalize/clear 切走
+        if (this.reasoningId !== id) return // already switched away by finalize/clear
         this.reasoningLastRender = performance.now()
         this.patchBlock(id, { text: this.reasoningBuf })
       })
@@ -973,8 +973,8 @@ export class TranscriptController {
       this.reasoningBuf = ''
       return
     }
-    // 将尚未上屏的缓冲带入最后一帧：seal 后不再有后续 delta，定时器里的
-    // pending flush 会被 reasoningId !== id 守卫丢弃，必须在此补上。
+    // Fold the not-yet-rendered buffer into this final frame: no further deltas arrive after
+    // sealing, and the timer's pending flush is dropped by the reasoningId !== id guard, so it must be applied here.
     const patch: { live: boolean; text?: string; durationMs?: number } = {
       live: false,
       text: this.reasoningBuf,
@@ -1010,8 +1010,8 @@ export class TranscriptController {
     if (toolBlockId) {
       const tb = this.blocksNow().find((b) => b.id === toolBlockId)
       if (tb && tb.kind === 'tool') {
-        // 重连/快照路径下 diff 可能是惰性的（diffArgs）：审批卡低频，同步
-        // 算一次是可以接受的价格
+        // On the reconnect/snapshot path the diff may be lazy (diffArgs): approval
+        // cards are low-frequency, so computing once synchronously is an acceptable price
         const d =
           tb.diff ?? (tb.diffArgs ? diffForToolCall(tb.diffArgs.name, tb.diffArgs.args) : '')
         if (d) {
@@ -1129,9 +1129,9 @@ export class TranscriptController {
 
   // --- in-session full-text search ---
   //
-  // 虚拟滚动下浏览器 Cmd+F 搜不到视口外渲染窗口之外的块——必须用内置搜索
-  // 补偿（搜 BlockModel 文本并滚动定位）。搜索范围：消息文本 / reasoning /
-  // 通知 / 工具名+目标+输出预览 / 审批与问答卡片的描述。
+  // Under virtual scrolling the browser's Cmd+F can't reach blocks outside the render
+  // window — a built-in search must compensate (search BlockModel text and scroll to
+  // position). Scope: message text / reasoning / notices / tool name+target+output preview / approval & question card descriptions.
 
   openSearch() {
     if (this.store.get().search) return
@@ -1156,7 +1156,7 @@ export class TranscriptController {
       .map((b) => b.id)
   }
 
-  // 查询变更：重算命中并跳到第一条（navSeq 递增触发 view 层滚动）。
+  // Query change: recompute matches and jump to the first (navSeq bump triggers view-layer scrolling).
   setSearchQuery(query: string) {
     this.store.update((s) => {
       if (!s.search) return
@@ -1169,7 +1169,7 @@ export class TranscriptController {
     })
   }
 
-  // 翻页（循环）。跳转到远离底部的命中时脱离滚动跟随。
+  // Page through (wraps). Jumping to a match far from the bottom detaches scroll-follow.
   searchNav(delta: 1 | -1) {
     this.store.update((s) => {
       const sh = s.search
@@ -1179,8 +1179,8 @@ export class TranscriptController {
     })
   }
 
-  // 流式期间新块可能命中当前查询：安静刷新命中数（不触发滚动、不打断
-  // 用户正在查看的命中项——index 按 id 保持）。
+  // During streaming new blocks may match the current query: quietly refresh the hit
+  // count (no scrolling, don't interrupt the match being viewed — index is kept by id).
   refreshSearch() {
     const sh = this.store.get().search
     if (!sh || !sh.query.trim()) return
@@ -1208,7 +1208,7 @@ export class TranscriptController {
   }
 }
 
-// blockSearchText 提取块的可搜索文本（approval/question 卡片按描述+目标搜）。
+// blockSearchText extracts a block's searchable text (approval/question cards search by description+target).
 export function blockSearchText(b: BlockModel): string {
   switch (b.kind) {
     case 'user':
@@ -1220,7 +1220,7 @@ export function blockSearchText(b: BlockModel): string {
     case 'interrupted':
       return b.text
     case 'tool': {
-      // 搜索是显式用户动作：惰性 diff 在此按值算一次（编辑内容是重要语料）
+      // Search is an explicit user action: compute the lazy diff once here (edit content is important corpus)
       const d = b.diff ?? (b.diffArgs ? diffForToolCall(b.diffArgs.name, b.diffArgs.args) : '')
       return [b.toolName, b.target || '', d, b.completion?.preview || ''].join('\n')
     }

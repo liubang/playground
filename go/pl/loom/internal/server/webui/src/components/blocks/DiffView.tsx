@@ -1,7 +1,7 @@
-// DiffView.tsx — unified diff 渲染（解析见 lib/diff.ts）。
-// 行内代码按文件扩展名做语法高亮：hljs 输出经 markdown.ts 的 sanitizeHtml
-// 白名单过滤后才进 DOM；未知语言/高亮失败一律回退纯文本。
-// 超过 DIFF_COLLAPSE_LINES 折叠为 details，短 diff 平铺（与旧版一致）。
+// DiffView.tsx — unified diff rendering (parsing in lib/diff.ts).
+// Inline code is syntax-highlighted by file extension: hljs output enters the DOM only after
+// whitelist filtering by markdown.ts's sanitizeHtml; unknown languages/highlight failures always fall back to plain text.
+// Diffs longer than DIFF_COLLAPSE_LINES collapse into details; short diffs render flat (same as the old version).
 
 import { memo, useMemo } from 'react'
 import { DIFF_COLLAPSE_LINES, parseDiff, type DiffLine } from '../../lib/diff'
@@ -22,7 +22,7 @@ function DiffLineView({ line, lang }: { line: DiffLine; lang: string }) {
     <div className={cls}>
       <span className="d-sign">{line.sign}</span>
       {html ? (
-        // sanitizeHtml 已过滤（markdown.ts）
+        // already filtered by sanitizeHtml (markdown.ts)
         <code dangerouslySetInnerHTML={{ __html: html }} />
       ) : (
         <code>{line.text}</code>

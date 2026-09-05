@@ -1,0 +1,414 @@
+/* ============================== App shell ============================== */
+.shell {
+  height: 100vh;
+  height: 100dvh; /* Mobile dynamic viewport height; tracks the browser toolbar */
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  background: var(--bg0);
+}
+.app-body {
+  display: grid;
+  grid-template-columns: 288px minmax(0, 1fr);
+  min-height: 0;
+}
+.shell.sidebar-collapsed .app-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+.shell.sidebar-collapsed .sidebar {
+  display: none;
+}
+/* Narrow-screen drawer backdrop: hidden on desktop and takes no grid row (direct child of .shell) */
+.sidebar-backdrop {
+  display: none;
+}
+
+/* Sidebar */
+.sidebar {
+  background: var(--bg1);
+  border-right: 1px solid var(--bg2);
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.new-session {
+  width: 100%;
+  padding: 9px 12px;
+  flex: none;
+  margin-bottom: 12px;
+  background: var(--bg2);
+  color: var(--fg);
+  border: 1px solid var(--bg2);
+  border-radius: var(--radius-md);
+  font-size: var(--text-md);
+  font-weight: 500;
+  text-align: left;
+}
+/* Hover feedback uses background-color instead of filter (the latter triggers a whole-button repaint/recomposite) */
+.new-session {
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease;
+}
+.new-session:hover {
+  background: var(--bg3);
+  border-color: var(--muted);
+}
+.new-session:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+  /* Contain overscroll at the list edge so it never chains to a parent. */
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+/* Infinite-scroll loading indicator shown at the bottom of the session list
+   while loadMoreSessions is in flight. */
+.session-list-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--muted);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.sess-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  color: var(--fg);
+}
+.sess-item:hover {
+  background: var(--bg2);
+}
+.sess-item.is-active {
+  background: var(--bg2);
+}
+.sess-item .t {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-md);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sess-item .rt {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* Sub-agent sessions: indent + left hierarchy guide line */
+.sess-item .child-mark {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.sess-item.is-child {
+  margin-left: 12px;
+  width: calc(100% - 12px);
+  border-left: 1px solid var(--bg2);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+/* Session item status dot: solid for live; awaiting_approval pulses amber
+   (needs the most attention), running/cancelling green. Reuses the badge pulse animation. */
+.sess-item .st-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.sess-item .st-dot.is-run {
+  background: var(--success);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.sess-item .st-dot.is-attn {
+  background: var(--warning);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+/* Hover actions (archive/delete): hidden by default; on hover they replace the timestamp */
+.sess-item .acts {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+.sess-item:hover .acts,
+.sess-item:focus-within .acts {
+  display: flex;
+}
+.sess-item:hover .rt,
+.sess-item:focus-within .rt {
+  display: none;
+}
+.sess-item .act {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 0 4px;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+.sess-item .act:hover {
+  color: var(--fg);
+  background: var(--bg1);
+}
+.sess-item .act.act-del:hover {
+  color: var(--error);
+}
+.foot-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+.foot-btn:hover {
+  color: var(--fg);
+  background: var(--bg2);
+}
+.foot-btn.is-active {
+  color: var(--primary);
+}
+.sidebar-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px 2px;
+  border-top: 1px solid var(--bg2);
+  margin-top: 6px;
+}
+.sidebar-foot-brand {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/* Workspace tree sidebar: top level is workspace folder nodes; each group holds that workspace's sessions */
+.ws-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  flex: none;
+  padding: 0 4px;
+}
+.ws-bar-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ws-bar .icon-btn {
+  flex: none;
+}
+
+.ws-group {
+  margin-bottom: 2px;
+}
+.ws-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 6px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--fg);
+  font-size: var(--text-md);
+  font-weight: 600;
+  user-select: none;
+}
+.ws-node:hover {
+  background: var(--bg2);
+}
+/* Keyboard accessibility for role=button: visible indicator when the group header receives keyboard focus */
+.ws-node:focus-visible {
+  outline: 1px solid var(--primary);
+  outline-offset: -1px;
+}
+.ws-node .ws-caret {
+  flex: none;
+  width: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.ws-node .ws-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-node .ws-count {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  font-weight: 400;
+}
+.ws-node .ws-new,
+.ws-node .ws-del {
+  flex: none;
+  display: none;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 3px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.ws-node .ws-del {
+  font-size: 12px;
+}
+.ws-node:hover .ws-new,
+.ws-node:hover .ws-del {
+  display: block;
+}
+.ws-node .ws-new:hover {
+  color: var(--fg);
+  background: var(--bg1);
+}
+.ws-node .ws-del:hover {
+  color: var(--error);
+  background: var(--bg1);
+}
+/* Group containing the active session: name is colored so ownership stays locatable when collapsed */
+.ws-node.has-active .ws-name {
+  color: var(--primary);
+}
+/* Pending-approval badge: shown collapsed or expanded, amber count (the only distress signal when collapsed) */
+.ws-node .ws-attn {
+  flex: none;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--on-accent);
+  background: var(--warning);
+  border-radius: var(--radius-full);
+  padding: 3px 6px;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+/* Sessions in a group: hierarchy guide hidden by default, appears on group hover (VSCode tree
+   indent-guide interaction — always-on guides are pure visual noise); stacks with sub-agent indent */
+.ws-sessions {
+  margin: 0 0 4px 9px;
+  padding-left: 9px;
+  border-left: 1px solid transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.ws-group:hover .ws-sessions {
+  border-left-color: var(--bg2);
+}
+.ws-empty {
+  padding: 4px 10px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+/* Main area */
+.main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px;
+  min-height: 44px;
+  background: var(--bg0);
+  border-bottom: 1px solid var(--bg2);
+  font-size: var(--text-md);
+}
+.app-header .sess {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+/* Workspace breadcrumb for the current session (hdr-session prefix): click to locate its workspace in the sidebar;
+   truncates when too long, full path via title */
+.app-header .hdr-ws {
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 4px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+  flex: none;
+}
+.app-header .hdr-ws:hover {
+  color: var(--primary);
+  background: var(--bg2);
+}
+.app-header .sess:hover {
+  color: var(--primary);
+  background: var(--bg2);
+}
+.app-header .spacer {
+  flex: 1;
+}
+/* Ghost icon button: transparent background fades in on hover; usable globally (header/sidebar/modals) */
+.icon-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 15px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.icon-btn:hover {
+  color: var(--fg);
+  background: var(--bg2);
+}
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  background: none;
+}
+.icon-btn:focus-visible {
+  outline: 1px solid var(--primary);
+  outline-offset: 1px;
+}

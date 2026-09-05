@@ -1,19 +1,15 @@
 <!doctype html>
-<!-- Loom Web SPA。Vite + React 构建，产物由 embed.FS 内嵌（internal/server/web）。 -->
+<!-- Loom Web SPA. Built with Vite + React; the output is embedded via embed.FS (internal/server/web). -->
 <html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>loom</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <!-- 防主题闪变（FOUC）：首帧绘制前预置 data-theme。键名/取值与
-         src/app/controller.ts 的 THEME_KEY 保持一致。 -->
-    <script>
-      try {
-        var t = localStorage.getItem('loom_theme')
-        document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark'
-      } catch (e) {}
-    </script>
+    <!-- Prevents theme flash (FOUC): pre-sets data-theme before first paint. External script for CSP
+         script-src 'self' compatibility (inline scripts would be blocked); key name/values stay in sync with
+         THEME_KEY in src/app/controller.ts. -->
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,6 +1,6 @@
-// controls.tsx — spec 驱动的字段控件（受控组件）。
-// 密钥控件展示服务端的脱敏占位符，未修改时原样回传由服务端还原；点击眼睛
-// 按钮经 POST /v1/config/reveal 按需取回明文（明文不随整体配置下发）。
+// controls.tsx — spec-driven field controls (controlled components).
+// Secret controls display the server's masked placeholder; if unmodified it is sent back as-is for the
+// server to restore; the eye button fetches the plaintext on demand via POST /v1/config/reveal (the plaintext is not delivered with the whole config).
 
 import { useState } from 'react'
 import type { FieldSpec } from './spec'
@@ -14,10 +14,10 @@ export interface FieldRowProps {
   spec: FieldSpec
   value: ControlState
   onChange: (v: ControlState) => void
-  // onReveal: 可选，async () => 明文 | null（失败已自行提示）；仅 password
-  // 控件且当前值是掩码时参与——用户已输入新值时直接切换可见性即可。
+  // onReveal: optional, async () => plaintext | null (failures are already self-reported); only
+  // involved for a password control whose current value is the mask — if the user typed a new value, just toggle visibility.
   onReveal?: (() => Promise<string | null>) | null
-  // invalid: 校验失败标红（开始编辑后由面板摘除）
+  // invalid: validation-failure highlight (removed by the panel once editing starts)
   invalid?: boolean
 }
 
@@ -81,7 +81,7 @@ export function FieldRow({ spec, value, onChange, onReveal, invalid }: FieldRowP
     )
   }
 
-  // optionHints：随 select 当前值切换的解释文案
+  // optionHints: explanatory text that switches with the select's current value
   let hint: string | undefined
   if (spec.optionHints) {
     hint = spec.optionHints[String(value)] ?? spec.hint ?? ''
@@ -117,7 +117,7 @@ export function FieldRow({ spec, value, onChange, onReveal, invalid }: FieldRowP
   )
 }
 
-// SecretField — 密钥输入 + 眼睛按钮（掩码值先经 reveal 接口换回明文）。
+// SecretField — secret input + eye button (a masked value is first exchanged for plaintext via the reveal endpoint).
 function SecretField({
   value,
   onChange,
@@ -173,7 +173,7 @@ function SecretField({
   )
 }
 
-// SetSection — 卡片式小节容器（标题 + 字段行）。
+// SetSection — card-style section container (title + field rows).
 export function SetSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="set-sec set-sec-card">
@@ -183,7 +183,7 @@ export function SetSection({ title, children }: { title: string; children: React
   )
 }
 
-// SetTip — 长说明文本：默认一行截断，点击展开/收起（与 skill-desc 同一交互语言）。
+// SetTip — long explanatory text: truncated to one line by default, click to expand/collapse (same interaction language as skill-desc).
 export function SetTip({ text }: { text: string }) {
   const [clamp, setClamp] = useState(true)
   return (
@@ -197,7 +197,7 @@ export function SetTip({ text }: { text: string }) {
   )
 }
 
-// SetLoading — 居中加载/错误占位（面板打开与手动重新加载期间替代空白内容区）。
+// SetLoading — centered loading/error placeholder (replaces the empty content area while the panel opens and during manual reloads).
 export function SetLoading({ text, isError }: { text: string; isError?: boolean }) {
   return (
     <div className={'set-loading' + (isError ? ' is-error' : '')}>
@@ -207,7 +207,7 @@ export function SetLoading({ text, isError }: { text: string; isError?: boolean 
   )
 }
 
-// SetNavBar — 层级导航共享：面包屑条（返回按钮 + 路径文本），详情态显示。
+// SetNavBar — shared hierarchical navigation: breadcrumb bar (back button + path text), shown in detail state.
 export function SetNavBar({
   hidden,
   crumb,
@@ -228,7 +228,7 @@ export function SetNavBar({
   )
 }
 
-// SetCardSummary — 概览行摘要：名称 + 元信息 + 展开箭头；点击进入详情。
+// SetCardSummary — overview-row summary: name + meta + expand arrow; click to enter detail.
 export function SetCardSummary({
   name,
   nameEmpty,
@@ -249,7 +249,7 @@ export function SetCardSummary({
   )
 }
 
-// CardDelBtn — 卡片删除按钮（高危删除先做二次确认）。
+// CardDelBtn — card delete button (high-risk deletes require a confirmation first).
 export function CardDelBtn({
   title,
   getConfirm,

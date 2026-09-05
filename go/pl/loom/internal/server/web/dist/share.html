@@ -1,27 +1,23 @@
 <!doctype html>
-<!-- Loom 分享页：公开只读会话视图。链接中的 token 即凭证（无需 serve
-     token）；数据来自 /v1/shared/{token}，每次打开拉取最新内容。 -->
+<!-- Loom share page: public read-only session view. The token in the link is the credential (no serve
+     token needed); data comes from /v1/shared/{token}, fetched fresh on every open. -->
 <html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>loom · shared session</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <!-- 防主题闪变（FOUC）：首帧绘制前预置 data-theme（分享页无主题切换，
-         但读取主应用持久化的偏好，保持观感一致）。 -->
-    <script>
-      try {
-        var t = localStorage.getItem('loom_theme')
-        document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark'
-      } catch (e) {}
-    </script>
-    <script type="module" crossorigin src="/assets/share-BIVJdrZW.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/Toast-DYTKgJUG.js">
+    <!-- Prevents theme flash (FOUC): pre-sets data-theme before first paint (the share page has no theme toggle,
+         but reads the main app's persisted preference to stay visually consistent). External script for CSP
+         script-src 'self' compatibility. -->
+    <script src="/theme-init.js"></script>
+    <script type="module" crossorigin src="/assets/share-ByBqghrP.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/Toast-617boXO6.js">
     <link rel="modulepreload" crossorigin href="/assets/axis-ClXJGI-2.js">
-    <link rel="modulepreload" crossorigin href="/assets/MazeView-AFdqd6PB.js">
-    <link rel="modulepreload" crossorigin href="/assets/jump-BHCwP3Iu.js">
-    <link rel="modulepreload" crossorigin href="/assets/TraceView-D5XqlGZv.js">
-    <link rel="stylesheet" crossorigin href="/assets/Toast-B9XRDu-V.css">
+    <link rel="modulepreload" crossorigin href="/assets/MazeView-JuwelAOS.js">
+    <link rel="modulepreload" crossorigin href="/assets/jump-BR2ZTTQj.js">
+    <link rel="modulepreload" crossorigin href="/assets/TraceView-BIPgqn93.js">
+    <link rel="stylesheet" crossorigin href="/assets/Toast-PppkFLJ3.css">
   </head>
   <body class="share-body">
     <div id="root"></div>

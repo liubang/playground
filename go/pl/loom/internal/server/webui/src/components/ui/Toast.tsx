@@ -1,18 +1,16 @@
-// Toast.tsx — 全局 toast（右上角浮层，5s 自动消失，可手动关闭/复制）。
-// 用法：任意处调用 toast('...', info?)；<ToastHost /> 挂在 App 根部。
-// sticky=true 的错误 toast 不自动消失：错误信息需要足够的时间读完、
-// 复制、排查；上限 MAX_TOASTS 防止连续失败糊满屏幕。
+// Toast.tsx — Global toast (top-right overlay, auto-dismisses after 5s, manually closable).
+// Usage: call toast('...', info?) from anywhere; <ToastHost /> lives at the App root.
+// Error toasts with sticky=true never auto-dismiss, leaving enough time to read and investigate;
+// the MAX_TOASTS cap prevents a burst of failures from flooding the screen.
 
-import { useState } from 'react'
 import { Store, useStore } from '../../store/store'
 import { Icon } from '../../lib/icons'
-import { copyText } from '../../lib/format'
 
 export interface ToastItem {
   id: number
   msg: string
   info: boolean
-  sticky: boolean // 不自动消失（错误信息）
+  sticky: boolean // never auto-dismisses (error messages)
 }
 
 interface ToastState {
@@ -33,31 +31,16 @@ export function toast(msg: string, info = false, sticky = false) {
   const id = nextId++
   toastStore.update((s) => {
     const items = [...s.items, { id, msg, info, sticky }]
-    // 超上限丢最老的：连续报错/刷屏时只保留最近几条
+    // Over the cap, drop the oldest: keep only the most recent ones during error bursts / screen flooding
     s.items = items.length > MAX_TOASTS ? items.slice(items.length - MAX_TOASTS) : items
   })
   if (!sticky) setTimeout(() => dismiss(id), 5000)
 }
 
 function ToastRow({ t }: { t: ToastItem }) {
-  const [copied, setCopied] = useState(false)
   return (
     <div className={'toast' + (t.info ? ' is-info' : '')} role={t.info ? 'status' : 'alert'}>
       <span className="toast-msg">{t.msg}</span>
-      <button
-        type="button"
-        className="toast-close"
-        title={copied ? '已复制' : '复制内容'}
-        onClick={() => {
-          void copyText(t.msg).then((ok) => {
-            if (!ok) return
-            setCopied(true)
-            setTimeout(() => setCopied(false), 1200)
-          })
-        }}
-      >
-        <Icon name={copied ? 'check' : 'copy'} />
-      </button>
       <button
         type="button"
         className="toast-close"

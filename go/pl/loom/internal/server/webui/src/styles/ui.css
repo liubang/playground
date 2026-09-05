@@ -1,0 +1,198 @@
+/* ============================== Icon base class (js/icons.js, FA solid inline SVG) ============================== */
+/* fill=currentColor inherits text color; 1em inherits the surrounding font size for consistent cross-platform rendering. */
+.icon {
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+  display: inline-block;
+  vertical-align: -0.125em;
+  flex: none;
+}
+/* Per-context tweaks: star overlay mark, picker chevrons, etc. need tighter size/spacing than 1em */
+.picker-label .icon {
+  font-size: 10px;
+  margin-left: 4px;
+}
+.tool-status .icon {
+  font-size: 11px;
+}
+.banner .icon {
+  margin-right: 2px;
+}
+.follow-btn .icon {
+  margin-right: 2px;
+}
+.sess-item .act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ws-node .ws-caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+::selection {
+  background: color-mix(in srgb, var(--primary) 30%, transparent);
+}
+a {
+  color: var(--primary);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+button {
+  font: inherit;
+  cursor: pointer;
+}
+[hidden] {
+  display: none !important;
+}
+
+/* ============================== Buttons ============================== */
+.btn {
+  border-radius: var(--radius-sm);
+  padding: 7px 14px;
+  font-size: var(--text-md);
+  font-weight: 500;
+  border: 1px solid transparent;
+  /* transition stays on cheap properties: it previously transitioned filter, so every hover repainted
+     (and recomposited) the whole button — a hotspot in large overlays like confirm modals. Hover feedback is now per-variant background/border. */
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease;
+}
+.btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.btn-primary {
+  background: var(--primary);
+  color: var(--on-accent);
+}
+.btn-primary:hover {
+  background: color-mix(in srgb, var(--primary) 88%, var(--on-accent));
+}
+.btn-secondary {
+  background: transparent;
+  color: var(--fg);
+  border-color: var(--muted);
+}
+.btn-secondary:hover {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  border-color: var(--fg);
+}
+.btn-danger {
+  background: transparent;
+  color: var(--error);
+  border-color: var(--error);
+}
+.btn-danger:hover {
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+}
+.btn-sm {
+  padding: 4px 10px;
+  font-size: var(--text-sm);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ============================== Disclosure blocks (generic details) ============================== */
+/* Shared by reasoning / user-ctx / tool-output; components only add incremental styles like font size. */
+.disclosure summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  color: var(--muted);
+}
+.disclosure summary::-webkit-details-marker {
+  display: none;
+}
+/* Soft fade-in for content when details expands: a height animation would need JS measurement and cost layout frames — poor value;
+   a single opacity transition removes the 'hard flash' of content, and it is zeroed out globally under prefers-reduced-motion. */
+.disclosure[open] > *:not(summary) {
+  animation: fadein 0.15s ease;
+}
+.disclosure summary::before {
+  content: '\25B6';
+  flex: none;
+}
+.disclosure[open] summary::before {
+  content: '\25BC';
+}
+.disclosure summary:hover {
+  color: var(--fg);
+}
+
+/* ============================== Badges ============================== */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.badge .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+.badge.is-running {
+  color: var(--success);
+}
+.badge.is-running .dot {
+  background: var(--success);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.badge.is-awaiting {
+  color: var(--warning);
+}
+.badge.is-awaiting .dot {
+  background: var(--warning);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.badge.is-live {
+  color: var(--success);
+}
+.badge.is-live .dot {
+  background: var(--success);
+}
+.badge.is-reconnecting {
+  color: var(--warning);
+}
+.badge.is-reconnecting .dot {
+  background: var(--warning);
+  animation: pulse 1s ease-in-out infinite;
+}
+.badge.is-draining {
+  color: var(--highlight);
+}
+.badge.is-draining .dot {
+  background: var(--highlight);
+}
+.badge.is-dead {
+  color: var(--error);
+}
+.badge.is-dead .dot {
+  background: var(--error);
+}
+/* The only oscillation animation in the codebase (the four near-identical pulse/breathe/ctx-pulse/maze-pulse definitions have been merged;
+   the trough takes the union of the four at 0.4, and each call site keeps only its own period). */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}

@@ -111,6 +111,11 @@ const ChangesPane = memo(function ChangesPane({
   const [diffErrors, setDiffErrors] = useState<Record<string, string>>({})
 
   const reloadSeq = useRef(0)
+  // Current workspace: in-flight fetchDiff responses use it to detect staleness (same role as reload's seq guard).
+  const wsIdRef = useRef(wsId)
+  useEffect(() => {
+    wsIdRef.current = wsId
+  }, [wsId])
 
   // seq guard: a slow response from a superseded reload (e.g. previous
   // workspace) must never overwrite newer state.
@@ -131,8 +136,15 @@ const ChangesPane = memo(function ChangesPane({
     (path: string) => {
       controller.api
         .workspaceGitDiff(wsId, path)
-        .then((d) => setDiffs((m) => ({ ...m, [path]: d })))
-        .catch((e) => setDiffErrors((m) => ({ ...m, [path]: (e as Error).message })))
+        // A slow response returning after a workspace switch is dropped — a stale workspace's diff must not hit the cache
+        .then((d) => {
+          if (wsIdRef.current !== wsId) return
+          setDiffs((m) => ({ ...m, [path]: d }))
+        })
+        .catch((e) => {
+          if (wsIdRef.current !== wsId) return
+          setDiffErrors((m) => ({ ...m, [path]: (e as Error).message }))
+        })
     },
     [controller, wsId],
   )

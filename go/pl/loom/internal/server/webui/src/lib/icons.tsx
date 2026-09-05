@@ -7,7 +7,7 @@
 // codepoints), keeping the visual language consistent across both ends;
 // semantic slot names align with the Go-side Icons struct.
 //
-// Usage: <Icon name="check" />; pairs with the .icon base class (app.css):
+// Usage: <Icon name="check" />; pairs with the .icon base class (styles/ui.css):
 // fill=currentColor inherits text color, 1em inherits the surrounding font
 // size, rendering consistently across platforms.
 // PATHS data is identical to the old static/js/icons.js (mechanically

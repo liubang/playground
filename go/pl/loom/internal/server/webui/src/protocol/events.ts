@@ -1,5 +1,5 @@
-// events.ts — SSE 运行时事件的类型模型，与 Go 侧 internal/runtimeevent
-// 一一对应。dispatch 处用 kind 判別 + never 兜底获得编译期穷尽性检查。
+// events.ts — type model of SSE runtime events, one-to-one with the Go-side
+// internal/runtimeevent. Dispatch uses kind discrimination + a never fallback for compile-time exhaustiveness checking.
 
 export type SessionState =
   'idle' | 'running' | 'awaiting_approval' | 'cancelling' | 'booting' | 'fatal' | 'closed'
@@ -19,7 +19,7 @@ export interface ArtifactRef {
 
 export interface ImagePayload {
   media_type: string
-  data: string // base64（无 data: 前缀）
+  data: string // base64 (no data: prefix)
 }
 
 export interface ToolImage {
@@ -27,7 +27,7 @@ export interface ToolImage {
   data: string
 }
 
-// --- payload 类型（按事件 kind） ---
+// --- payload types (by event kind) ---
 
 export interface TurnStartedPayload {
   prompt?: string
@@ -168,7 +168,7 @@ export interface RuntimeMessagePayload {
   message?: string
 }
 
-// --- 事件信封 ---
+// --- event envelope ---
 
 interface Envelope<K extends string, P> {
   kind: K
@@ -208,5 +208,5 @@ export type RuntimeEvent =
   | Envelope<'runtime.fatal', RuntimeMessagePayload>
   | Envelope<'subagent.started', SubagentPayload>
   | Envelope<'subagent.finished', SubagentPayload>
-// 注：不加「未知 kind」兜底成员——它会破坏 switch 按 kind 的类型收窄。
-// wire 上的未知 kind 由运行时 default 分支忽略（契约第 2 条）。
+// Note: no "unknown kind" fallback member — it would break the switch's type
+// narrowing by kind. Unknown kinds on the wire are ignored by the runtime default branch (contract clause 2).

@@ -1,5 +1,5 @@
-// StatusBar.tsx — 状态栏：token usage / turn 数 / 版本。
-// 与旧 components/statusbar.js 对应。
+// StatusBar.tsx — status bar: token usage / turn count / version.
+// Corresponds to the old components/statusbar.js.
 
 import { memo } from 'react'
 import type { AppController } from '../app/controller'
@@ -11,9 +11,9 @@ export const StatusBar = memo(function StatusBar({ controller }: { controller: A
   const turnCount = useStore(controller.store, (s) => s.turnCount)
   const version = useStore(controller.store, (s) => s.version)
 
-  // snapshot.usage / budget.updated 事件驱动（均为会话累计口径）。
-  // cache 命中率 = cached_input_tokens / context_tokens，分子分母均为
-  // provider 实测，有实测调用后才显示。
+  // Driven by snapshot.usage / budget.updated events (both use per-session cumulative figures).
+  // cache hit rate = cached_input_tokens / context_tokens; both numerator and denominator are
+  // provider-measured, and it's shown only after a measured call happens.
   let usageText = ''
   if (usage) {
     usageText = `${fmtTokens(usage.input_tokens)} in / ${fmtTokens(usage.output_tokens)} out`

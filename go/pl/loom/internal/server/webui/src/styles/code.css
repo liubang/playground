@@ -1,0 +1,52 @@
+/* ============================== highlight.js token mapping ============================== */
+/* hljs output span classes → palette variables; adapts to dark/light themes automatically. */
+.hljs-comment,
+.hljs-quote {
+  color: var(--muted);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-meta {
+  color: var(--purple);
+}
+.hljs-string,
+.hljs-regexp {
+  color: var(--success);
+}
+.hljs-number,
+.hljs-literal {
+  color: var(--highlight);
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-section {
+  color: var(--primary);
+}
+.hljs-title.class_,
+.hljs-type {
+  color: var(--warning);
+}
+.hljs-built_in,
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-template-variable {
+  color: var(--info);
+}
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: var(--error);
+}
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link {
+  color: var(--info);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 700;
+}

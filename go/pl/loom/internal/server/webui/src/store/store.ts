@@ -1,6 +1,6 @@
-// store.ts — 微内核状态容器 + React 绑定。
-// Store 是框架无关的（get/set/subscribe），组件经 useSyncExternalStore
-// 订阅切片；与旧 static/js/store.js 同语义，增加 selector 能力。
+// store.ts — micro-kernel state container + React binding.
+// Store is framework-agnostic (get/set/subscribe); components subscribe to
+// slices via useSyncExternalStore; same semantics as the legacy static/js/store.js, with selector capability added.
 
 import { useSyncExternalStore } from 'react'
 
@@ -38,8 +38,8 @@ export class Store<T> {
   }
 }
 
-// useStore 订阅 store 的一个切片。selector 应返回原始值或稳定引用；
-// 需要对象切片时在组件内 useMemo，或在 selector 内返回浅比较友好结构。
+// useStore subscribes to one slice of the store. The selector should return a
+// primitive or a stable reference; for object slices, useMemo in the component or return a shallow-compare-friendly structure from the selector.
 export function useStore<T, S>(store: Store<T>, selector: (s: T) => S): S {
   return useSyncExternalStore(store.subscribe, () => selector(store.get()))
 }

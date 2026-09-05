@@ -1,5 +1,5 @@
-// main.tsx — SPA 入口：桌面壳识别（Wails webview）→ 全局 tooltip →
-// AppController 启动编排（token gate → meta 验活 → 会话列表 → SSE 直播）。
+// main.tsx — SPA entry: desktop-shell detection (Wails webview) → global tooltip →
+// AppController boot orchestration (token gate → meta health check → session list → live SSE).
 
 import { createRoot } from 'react-dom/client'
 import './app.css'
@@ -9,21 +9,21 @@ import { initTooltips } from './components/ui/Tooltip'
 
 const controller = new AppController()
 
-// 调试钩子：桌面壳无 DevTools 快捷键时也可经 WKWebView 控制台/脚本桥检查状态
+// Debug hook: even without a DevTools shortcut in the desktop shell, state can be inspected via the WKWebView console/script bridge
 ;(window as unknown as { __loom?: AppController }).__loom = controller
 
-initTooltips() // 全局接管 title 属性 → 主题化悬浮提示
+initTooltips() // globally take over title attributes → themed hover tooltips
 
-// 桌面端隐藏了原生标题栏（mac.TitleBarHidden），红绿灯悬浮在内容之上；
-// body.is-desktop 用于开启让位/拖动区样式（见 app.css 末尾）。
+// The desktop app hides the native title bar (mac.TitleBarHidden); the traffic lights float above the content;
+// body.is-desktop enables the yielding/drag-area styles (see styles/desktop.css).
 if (controller.isDesktopShell) {
   document.body.classList.add('is-desktop')
-  // 窗口拖动：Wails 的 --wails-draggable 在其前端 runtime（/wails/runtime.js）
-  // 里实现，但桌面端 SPA 跑在 loopback origin（SSE 需要真实 HTTP，见
-  // DESKTOP_DESIGN.md §2.3），加载不到该文件，这里自行实现等价逻辑。
-  // 原生链路：external message handler 注册在 WKUserContentController 上
-  // （与 origin 无关），收到 "drag" 即 performWindowDragWithEvent:，
-  // mouseEvent 由 NSEvent 本地监听器跟踪（WailsContext.m）。
+  // Window dragging: Wails' --wails-draggable is implemented in its frontend runtime (/wails/runtime.js),
+  // but the desktop SPA runs on a loopback origin (SSE needs real HTTP, see
+  // DESKTOP_DESIGN.md §2.3) and cannot load that file, so an equivalent logic is implemented here.
+  // Native chain: the external message handler is registered on WKUserContentController
+  // (origin-independent); receiving "drag" triggers performWindowDragWithEvent:, and
+  // the mouseEvent is tracked by an NSEvent local monitor (WailsContext.m).
   const wailsDrag = (
     window as unknown as {
       webkit?: { messageHandlers?: { external?: { postMessage: (m: string) => void } } }
@@ -32,7 +32,7 @@ if (controller.isDesktopShell) {
   if (wailsDrag) {
     let dragArmed = false
     window.addEventListener('mousedown', (e) => {
-      // 仅左键单击命中 drag 区域时武装；双击保留给系统（窗口缩放）
+      // Arm only when a left single-click hits a drag region; double clicks stay with the system (window zoom)
       dragArmed =
         e.buttons === 1 &&
         e.detail === 1 &&
@@ -50,9 +50,9 @@ if (controller.isDesktopShell) {
       dragArmed = false
     })
   }
-  // 失焦时 macOS 会把红绿灯绘成非激活态（透明标题栏下呈黑色，由 AppKit
-  // 绘制，web 层改不了按钮本身）；同步给顶行加淡化样式，呈现统一的原生
-  // 非激活观感。
+  // On blur, macOS draws the traffic lights in their inactive state (they appear dark under a transparent title bar,
+  // drawn by AppKit — the web layer can't change the buttons themselves); correspondingly add a fade to the top row
+  // for a consistent native inactive appearance.
   window.addEventListener('blur', () => document.body.classList.add('is-inactive'))
   window.addEventListener('focus', () => document.body.classList.remove('is-inactive'))
 }

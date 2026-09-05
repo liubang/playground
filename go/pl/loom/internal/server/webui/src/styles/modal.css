@@ -1,0 +1,162 @@
+/* ============================== Confirm modal ============================== */
+.modal-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: rgba(0, 0, 0, 0.45);
+  display: grid;
+  place-items: center;
+  animation: fadein 0.12s ease;
+}
+.modal {
+  width: min(400px, 90vw);
+  padding: 20px 22px;
+  background: var(--bg1);
+  border: 1px solid var(--bg2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  animation: menu-pop 0.12s ease;
+}
+.modal .modal-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.modal .modal-body {
+  color: var(--muted);
+  font-size: var(--text-md);
+  line-height: 1.6;
+  margin-bottom: 18px;
+  word-break: break-word;
+}
+.modal .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* Directory browser modal (add workspace) */
+.dir-modal {
+  width: min(520px, 92vw);
+}
+.dir-current {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+/* Breadcrumbs: path split into clickable segments jumping to any ancestor; current segment highlighted, not clickable */
+.dir-crumbs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+}
+.dir-crumbs::-webkit-scrollbar {
+  height: 0;
+}
+.dir-crumb {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex: none;
+}
+.dir-crumb:hover {
+  color: var(--fg);
+  background: var(--bg2);
+}
+.dir-crumb.is-current {
+  color: var(--fg);
+  font-weight: 600;
+  cursor: default;
+  background: none;
+}
+.dir-sep {
+  flex: none;
+  color: var(--muted);
+  opacity: 0.5;
+  user-select: none;
+}
+.dir-list {
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--bg2);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  margin-bottom: 16px;
+}
+.dir-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-size: var(--text-md);
+}
+.dir-item:hover {
+  background: var(--bg2);
+}
+.dir-empty {
+  padding: 18px;
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+/* Small spinner while a browse request is in flight (sits to the right of the modal title) */
+.dir-loading {
+  display: inline-flex;
+  margin-left: 10px;
+  color: var(--primary);
+  vertical-align: -2px;
+}
+
+/* toast */
+#toasts {
+  position: fixed;
+  top: 56px;
+  right: 16px;
+  z-index: var(--z-toasts);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--bg1);
+  border: 1px solid var(--error);
+  color: var(--fg);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  font-size: var(--text-sm);
+  max-width: 380px;
+  box-shadow: var(--shadow-lg);
+  animation: fadein 0.15s ease;
+}
+/* flex layout gives the message and close button breathing room */
+.toast-msg {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+.toast-close {
+  flex: none;
+}
+.toast.is-info {
+  border-color: var(--muted);
+}

@@ -1,0 +1,252 @@
+/* ============================== Right workspace panel (changes / file tree) ============================== */
+/* Three-column grid: opening the panel appends a 360px right column; when closed the aside isn't rendered, so no reset rules needed */
+.shell.panel-open .app-body {
+  grid-template-columns: 288px minmax(0, 1fr) 360px;
+}
+.shell.panel-open.sidebar-collapsed .app-body {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+.right-panel {
+  background: var(--bg1);
+  border-left: 1px solid var(--bg2);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.rp {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+.rp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--bg2);
+  flex: none;
+}
+.rp-tabs {
+  flex: 1;
+  display: flex;
+  gap: 2px;
+  background: var(--bg2);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+.rp-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.rp-tab.is-active {
+  background: var(--bg1);
+  color: var(--fg);
+}
+.rp-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 8px;
+}
+.rp-empty {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  padding: 18px 10px;
+  text-align: center;
+}
+.rp-subhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px 8px;
+  flex: none;
+}
+.rp-branch {
+  font-size: 12px;
+  color: var(--fg);
+  background: var(--bg2);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rp-subhead .gf-stats {
+  flex: 1;
+  text-align: right;
+}
+/* Git changed-file cards */
+.gf {
+  border: 1px solid var(--bg2);
+  border-radius: var(--radius-md);
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+.gf.is-open {
+  border-color: var(--muted);
+}
+.gf-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--fg);
+  padding: 7px 10px;
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--text-sm);
+}
+.gf-row:hover {
+  background: var(--bg2);
+}
+.gf-badge {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.gf-badge.st-m {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
+}
+.gf-badge.st-a,
+.gf-badge.st-u {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+}
+.gf-badge.st-d {
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 15%, transparent);
+}
+.gf-badge.st-r,
+.gf-badge.st-t {
+  color: var(--purple);
+  background: color-mix(in srgb, var(--purple) 15%, transparent);
+}
+.gf-path {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.gf-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gf-dir {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gf-stats {
+  flex: none;
+  font-size: 11px;
+  display: inline-flex;
+  gap: 6px;
+}
+.st-add {
+  color: var(--success);
+}
+.st-del {
+  color: var(--error);
+}
+.gf-diff {
+  border-top: 1px solid var(--bg2);
+}
+.gf-diff .diff .d-body {
+  max-height: 320px;
+  overflow-y: auto;
+}
+/* File tree */
+.ft-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--fg);
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  text-align: left;
+  border-radius: var(--radius-sm);
+}
+.ft-row:hover {
+  background: var(--bg2);
+}
+.ft-row .icon {
+  color: var(--muted);
+  flex: none;
+  font-size: 13px;
+}
+.ft-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ft-loading {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 4px 24px;
+}
+/* File preview */
+.rp-body.fp {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.fp-path {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fp-code {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  background: var(--bg2);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre;
+}
+/* Narrow screens: the panel degrades to a right drawer, taking no grid column */
+@media (max-width: 767px) {
+  .shell.panel-open .app-body,
+  .shell.panel-open.sidebar-collapsed .app-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .right-panel {
+    position: fixed;
+    inset: 0 0 0 auto;
+    width: min(360px, 92vw);
+    z-index: var(--z-drawer);
+    box-shadow: var(--shadow-md);
+  }
+}

@@ -1,18 +1,18 @@
-// Tooltip.ts — 主题化悬浮提示：全局接管 title 属性，渲染与主题一致的浮层。
-// 调用方零改动：mouseover 时发现带 title 的元素（closest 向上匹配，与原生
-// 提示的命中语义一致），把文本暂存到 data-tip 并移除 title——原生白底提示
-// 因此不再出现；短暂延迟后显示自绘浮层。之后代码重新 setAttribute("title")
-// 的（如 MCP 徽标的工具清单）在下次 hover 时会再被接管。
+// Tooltip.ts — Themed hover tooltip: takes over the title attribute globally and renders a theme-matched overlay.
+// No changes needed at call sites: on mouseover it finds elements carrying a title (closest matches upward,
+// same hit semantics as the native tooltip), stashes the text into data-tip and removes title — the native white tooltip
+// thus no longer appears; the custom overlay shows after a short delay. Code that later re-sets the title via setAttribute("title")
+// (e.g. the MCP badge's tool list) is taken over again on the next hover.
 //
-// 浮层为共享单例、pointer-events:none，默认在目标上方居中，空间不足翻转
-// 到下方；点击/滚动/按键/窗口失焦立即收起。
-// 与旧 static/js/components/tooltip.js 一一对应（框架无关，App 启动时 init 一次）。
+// The overlay is a shared singleton with pointer-events:none, centered above the target by default, flipping
+// below when space is tight; click/scroll/keypress/window blur dismiss it immediately.
+// Mirrors the legacy static/js/components/tooltip.js (framework-agnostic, initialized once at app startup).
 
 const DELAY_MS = 350
 
-let tipEl: HTMLDivElement | null = null // 共享浮层
+let tipEl: HTMLDivElement | null = null // shared overlay
 let timer: ReturnType<typeof setTimeout> | 0 = 0
-let current: Element | null = null // 当前悬停目标
+let current: Element | null = null // current hover target
 
 function ensureEl(): HTMLDivElement {
   if (!tipEl) {
@@ -43,7 +43,7 @@ function show(target: Element) {
   let left = r.left + r.width / 2 - w / 2
   left = Math.max(8, Math.min(left, innerWidth - w - 8))
   let top = r.top - h - 6
-  if (top < 8) top = r.bottom + 6 // 上方空间不足翻转到下方
+  if (top < 8) top = r.bottom + 6 // not enough room above; flip below
   tip.style.left = left + 'px'
   tip.style.top = top + 'px'
 }
@@ -53,8 +53,8 @@ export function initTooltips() {
     const t = e.target instanceof Element ? e.target.closest('[title], [data-tip]') : null
     if (!t) return
     if (t.hasAttribute('title')) {
-      // 接管：暂存文本并移除原生 title（系统提示只在 hover 静止后出现，
-      // mouseover 时移除即可彻底抑制）
+      // Take over: stash the text and remove the native title (the system tooltip only appears after hover
+      // settles, so removing it on mouseover fully suppresses it)
       ;(t as HTMLElement).dataset.tip = t.getAttribute('title') || ''
       t.removeAttribute('title')
     }
@@ -65,7 +65,7 @@ export function initTooltips() {
   })
   document.addEventListener('mouseout', (e) => {
     if (!current) return
-    // 目标内部子元素间的移动不收起
+    // Moving between child elements inside the target does not dismiss
     if (e.relatedTarget instanceof Node && current.contains(e.relatedTarget)) return
     hide()
   })

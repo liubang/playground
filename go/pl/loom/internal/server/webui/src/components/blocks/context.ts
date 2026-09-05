@@ -1,5 +1,5 @@
-// context.ts — 块渲染的 IO 依赖注入（artifact 鉴权加载 / 完整工具输出拉取）。
-// 主界面由 AppController 提供实现；分享页提供公开端点实现。
+// context.ts — IO dependency injection for block rendering (authenticated artifact loading / full tool output fetching).
+// The main UI gets its implementation from AppController; the share page provides a public-endpoint implementation.
 
 import { createContext, useContext } from 'react'
 
@@ -10,9 +10,9 @@ export interface ArtifactEntry {
 }
 
 export interface BlocksIO {
-  // artifact 加载：<img>/fetch 无法携带 Authorization 头，而 /v1/* 需要
-  // Bearer 鉴权，因此用 fetch 拉取后生成 blob URL（内容寻址 + 不可变，
-  // 按 id+size 缓存）。
+  // Artifact loading: <img>/fetch cannot carry an Authorization header, while /v1/* requires
+  // Bearer auth, so we fetch and then create a blob URL (content-addressed + immutable,
+  // cached by id+size).
   fetchArtifactURL: (id: string, size: number) => Promise<ArtifactEntry>
 }
 

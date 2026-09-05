@@ -1,12 +1,12 @@
-// draft.ts — 设置面板的草稿数据模型。
-// 旧版以 DOM 为草稿（fill/collect 双向搬运）；React 版以数据为草稿：
-// 加载时 fill 一次，编辑直接写草稿，保存时 collect —— 未打开的 tab 的
-// 字段天然不会丢失（旧版靠「渲染全部 tab 再整体收集」保证这一点）。
+// draft.ts — Draft data model for the settings panel.
+// The old version used the DOM as the draft (fill/collect shuttled both ways); the React version uses data as the draft:
+// fill once on load, edits write the draft directly, collect on save — fields of tabs not
+// opened are never lost by construction (the old version relied on "render all tabs, then collect").
 
 import type { ControlState } from './convert'
 
 export interface CardDraft {
-  id: string // React key / 定位用（非配置内容）
+  id: string // React key / lookup (not config content)
   fields: Record<string, ControlState>
 }
 
@@ -26,7 +26,7 @@ export interface McpDraft {
 }
 
 export interface SettingsDraft {
-  // 全局 scope 字段（简单 tab + skills 配置小节 + providers 顶部 default）
+  // Global-scope fields (simple tabs + skills config sections + providers top default)
   globals: Record<string, ControlState>
   providers: ProviderDraft[]
   mcpServers: McpDraft[]

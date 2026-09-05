@@ -10,6 +10,7 @@ import { useStore } from '../../store/store'
 import type { MazeData } from '../../protocol/types'
 import { shortId } from '../../lib/format'
 import { Icon } from '../../lib/icons'
+import { Select } from '../ui/Select'
 import { MazeView } from './MazeView'
 
 export function CompareView({ controller }: { controller: AppController }) {
@@ -71,14 +72,20 @@ export function CompareView({ controller }: { controller: AppController }) {
     }
   }, [id1, id2, controller])
 
+  // Codebase-wide custom dropdown (native select popovers are OS-rendered, clashing with the dark theme).
+  // The session already picked on the other side is excluded from the options (native option disabled).
   const options = useMemo(
     () =>
       sessions.map((s) => ({
-        id: s.id,
+        value: s.id,
         label: `${s.title || shortId(s.id)}${s.model_name ? ` · ${s.model_name}` : ''}`,
       })),
     [sessions],
   )
+  const toOptions = (placeholder: string, exclude: string) => [
+    { value: '', label: placeholder },
+    ...options.filter((o) => o.value !== exclude),
+  ]
 
   return (
     <div className="compare-page">
@@ -89,14 +96,12 @@ export function CompareView({ controller }: { controller: AppController }) {
         <div className="compare-pickers">
           <span className="compare-picker">
             <i className="lane-dot lane-1" />
-            <select value={id1} onChange={(e) => setId1(e.target.value)}>
-              <option value="">选择会话 1…</option>
-              {options.map((o) => (
-                <option key={o.id} value={o.id} disabled={o.id === id2}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+            <Select
+              className="compare-sel"
+              options={toOptions('选择会话 1…', id2)}
+              value={id1}
+              onChange={setId1}
+            />
           </span>
           <button
             type="button"
@@ -111,14 +116,12 @@ export function CompareView({ controller }: { controller: AppController }) {
           </button>
           <span className="compare-picker">
             <i className="lane-dot lane-2" />
-            <select value={id2} onChange={(e) => setId2(e.target.value)}>
-              <option value="">选择会话 2…</option>
-              {options.map((o) => (
-                <option key={o.id} value={o.id} disabled={o.id === id1}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+            <Select
+              className="compare-sel"
+              options={toOptions('选择会话 2…', id1)}
+              value={id2}
+              onChange={setId2}
+            />
           </span>
         </div>
         <button

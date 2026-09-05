@@ -12,7 +12,7 @@
 // time spans (both share the same time origin: seconds since the first
 // user message).
 
-import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { AppController } from '../../app/controller'
 import { useRafScroll } from '../../lib/rafScroll'
 import type { BlockModel, ToolCompletion } from '../../app/transcript'
@@ -201,13 +201,13 @@ export function TraceView({
     }
   }, [scrollerOut])
 
-  // 结构签名：只在块「结构」变化（增/删/类型/完成状态/stream 文本长度档）
-  // 时重算 buildGroups，高频文本增量不会整组重建（流式时本 tab 不当前
-  // 也算，但挂载下仍会被 lit 为 memo key）。
-  // text.length 按 256 字符分桶而非精确值：流式期间每个 delta 都会让
-  // length 增长，直接入签名等于逐字符重建 buildGroups；分桶后每攒
-  // 256 字符才换一次档，与 streamBuf 的节流节奏匹配，end-of-turn
-  // 的 kind/completion 变化仍是最后一帧真值。
+  // Structural signature: buildGroups recomputes only on structural change (added/removed,
+  // kind, completion state, stream-text length bucket), so high-frequency text deltas never
+  // rebuild the whole groups (during streaming this tab may not be the active view, yet while
+  // mounted it is still hit as the memo key). text.length is bucketed at 256 chars rather
+  // than exact: every streamed delta grows length, so an exact signature would rebuild
+  // buildGroups per character; bucketing only re-signs every 256 chars, matching streamBuf's
+  // throttle cadence — end-of-turn kind/completion changes stay the last frame's ground truth.
   const structureSig = useMemo(() => {
     let s = ''
     for (const b of blocks) {
@@ -227,7 +227,7 @@ export function TraceView({
   }, [blocks])
 
   const groups = useMemo(() => buildGroups(blocks), [structureSig])
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- 结构签名驱动
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- driven by the structural signature
   const live = useMemo(
     () =>
       blocks.some(
@@ -260,19 +260,34 @@ export function TraceView({
 
   const inputs = useMemo(() => groups.filter((g) => g.inputTs >= 0).map((g) => g.inputTs), [groups])
 
-  const q = query.trim().toLowerCase()
+  // Search debounce: input echoes immediately while filtering lags 150ms — previously every
+  // keystroke ran a full haystack scan (a tool row's haystack holds full output text), stalling a frame per char on long sessions.
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 150)
+    return () => clearTimeout(t)
+  }, [query])
+
+  // Haystack is rebuilt once per groups change (structure-signature-driven), never per query keystroke.
+  const haystacks = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const g of groups) for (const r of g.rows) m.set(r.id, rowHaystack(r))
+    return m
+  }, [groups])
+
+  const q = debouncedQuery.trim().toLowerCase()
   const visible = useMemo(() => {
     if (!q) return { groups, hits: -1 }
     let hits = 0
     const filtered = groups
       .map((g) => {
-        const rows = g.rows.filter((r) => rowHaystack(r).includes(q))
+        const rows = g.rows.filter((r) => (haystacks.get(r.id) ?? '').includes(q))
         hits += rows.length
         return { ...g, rows }
       })
       .filter((g) => g.rows.length > 0)
     return { groups: filtered, hits }
-  }, [groups, q])
+  }, [groups, haystacks, q])
 
   const searching = q !== ''
   // Snap to the newest event on list growth — but only while live and
@@ -541,7 +556,16 @@ const TraceRowView = memo(function TraceRowView({
     <div className="trace-item" data-call-id={row.kind === 'tool' ? row.callId : undefined}>
       <div
         className={`trace-row${row.kind === 'error' ? ' is-error' : ''}${row.kind === 'notice' && row.warn ? ' is-warn' : ''}`}
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
         onClick={() => onToggle(row.id)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onToggle(row.id)
+          }
+        }}
       >
         <span className={`trace-dot ${badgeCls}`} />
         <span className={`trace-badge ${badgeCls}`}>{badge}</span>

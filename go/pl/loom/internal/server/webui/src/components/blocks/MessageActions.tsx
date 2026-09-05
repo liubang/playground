@@ -1,9 +1,9 @@
-// MessageActions.tsx — 消息操作行（复制 / 点赞 / 踩） + 时间。
-// 挂在 block 末尾、对话结束后常显：既是反馈/复制入口，也是本条消息
-// 已结束的标志。role: "user" 仅显示复制；"assistant" 显示复制 + 点赞/踩。
-// 逻辑与旧 blocks.js messageActions 一一对应。
+// MessageActions.tsx — message action row (copy / thumbs up / thumbs down) + time.
+// Attached at the end of a block, always visible after the turn ends: it is both the feedback/copy entry and
+// the marker that this message has finished. role: "user" shows copy only; "assistant" shows copy + thumbs up/down.
+// Logic corresponds one-to-one with the old blocks.js messageActions.
 
-import { memo, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { fmtMsgTime, fmtMsgTimeTitle, copyText } from '../../lib/format'
 import { Icon } from '../../lib/icons'
 
@@ -11,7 +11,7 @@ export interface MessageActionsProps {
   role: 'user' | 'assistant'
   createdAt?: string
   getText: () => string | Promise<string>
-  // fb（可选反馈上下文）：runId 空则不渲染赞/踩（旧消息无 trace 可投）
+  // fb (optional feedback context): if runId is empty, don't render up/down (old messages have no trace to vote on)
   fb?: {
     runId?: string
     feedback?: string // "up" | "down" | ""
@@ -27,6 +27,10 @@ export const MessageActions = memo(function MessageActions({
 }: MessageActionsProps) {
   const [copyState, setCopyState] = useState<'' | 'is-done' | 'is-fail'>('')
   const [vote, setVote] = useState(fb?.feedback || '')
+  // Copy-state reset timer: tracked and cleaned up on unmount/rapid clicks (a bare setTimeout would setState on an unmounted
+  // component; rapid clicks would leave multiple timers racing each other)
+  const copyTimer = useRef(0)
+  useEffect(() => () => window.clearTimeout(copyTimer.current), [])
 
   const tip = createdAt ? (
     <span className="msg-time-tip" title={fmtMsgTimeTitle(createdAt)}>
@@ -38,26 +42,27 @@ export const MessageActions = memo(function MessageActions({
     e.stopPropagation()
     try {
       const text = await getText()
-      // copyText 内置非安全上下文（内网 IP）降级；失败抛错走 is-fail
+      // copyText has a built-in fallback for non-secure contexts (intranet IPs); failures throw and go down the is-fail path
       if (!(await copyText(text))) throw new Error('clipboard unavailable')
       setCopyState('is-done')
     } catch {
       setCopyState('is-fail')
     }
-    setTimeout(() => setCopyState(''), 1500)
+    window.clearTimeout(copyTimer.current)
+    copyTimer.current = window.setTimeout(() => setCopyState(''), 1500)
   }
 
   const onVote = (value: 0 | 1) => async (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!fb?.runId || !fb.onFeedback) return
     const want = value === 1 ? 'up' : 'down'
-    if (vote === want) return // 已投该票：no-op
+    if (vote === want) return // already cast that vote: no-op
     const prev = vote
-    setVote(want) // 点另一个按钮覆盖上一票（后端按确定性 score id 幂等覆盖）
+    setVote(want) // clicking the other button overrides the previous vote (the backend idempotently overrides by deterministic score id)
     try {
       await fb.onFeedback(fb.runId, value)
     } catch {
-      setVote(prev) // 提交失败：回滚到点击前的选中态
+      setVote(prev) // submission failed: roll back to the pre-click selection
     }
   }
 

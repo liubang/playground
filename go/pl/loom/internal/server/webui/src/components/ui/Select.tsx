@@ -1,7 +1,7 @@
-// Select.tsx — 通用自绘下拉（替代原生 <select>），受控组件。
-// 原生 select 的选项浮层由操作系统渲染，与暗色主题割裂且不可定制；
-// 这里复用 picker 浮层的视觉语言（暗色底、check 槽位、锚定定位）。
-// 交互逻辑与旧 static/js/components/select.js 一一对应。
+// Select.tsx — Generic custom dropdown (replaces the native <select>), a controlled component.
+// The native select's option overlay is rendered by the OS, clashing with the dark theme and not customizable;
+// this reuses the picker overlay's visual language (dark background, check slot, anchored positioning).
+// Interaction logic mirrors the legacy static/js/components/select.js.
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -20,8 +20,8 @@ export interface SelectProps {
   disabled?: boolean
 }
 
-// 全局同时只开一个浮层：模块级注册 Esc/失焦/滚动收起（早于设置面板的
-// Esc 监听注册，stopImmediatePropagation 可挡住同节点后续监听器）。
+// Only one overlay is open globally at a time: module-level Esc/blur/scroll dismissal (registered before the
+// settings panel's Esc listener, so stopImmediatePropagation can block later listeners on the same node).
 let closeCurrentPop: (() => void) | null = null
 
 document.addEventListener(
@@ -36,7 +36,7 @@ document.addEventListener(
 )
 window.addEventListener('blur', () => closeCurrentPop?.())
 window.addEventListener('resize', () => closeCurrentPop?.())
-// 外部滚动会让 fixed 定位漂移，关闭浮层；浮层自身的滚动除外
+// External scroll would make the fixed-positioned overlay drift, so dismiss it; scrolling inside the overlay itself is exempt
 document.addEventListener(
   'scroll',
   (e) => {
@@ -54,11 +54,14 @@ export function Select({ className = '', options, value, onChange, disabled }: S
   const [popStyle, setPopStyle] = useState<React.CSSProperties>({})
 
   const close = () => {
+    // If focus was inside the overlay (keyboard/Esc/option click), return it to the trigger button so focus does not drop to body
+    const hadFocus = !!popRef.current?.contains(document.activeElement)
     setOpen(false)
     if (closeCurrentPop) closeCurrentPop = null
+    if (hadFocus) btnRef.current?.focus()
   }
 
-  // 外部点击关闭（捕获阶段，触发按钮自身除外——按钮 onClick 会 toggle）
+  // Outside click dismisses (capture phase; the trigger button itself is exempt — its onClick toggles)
   useEffect(() => {
     if (!open) return
     closeCurrentPop = close
@@ -74,7 +77,8 @@ export function Select({ className = '', options, value, onChange, disabled }: S
     }
   }, [open])
 
-  // 打开时锚定：按钮下方，空间不足翻转到上方；选中项滚入可视区
+  // Anchor on open: below the button, flipping above when space is tight; the selected item scrolls into view and takes focus,
+  // with ↑/↓ navigating between options (roving focus, same interaction language as PickerMenu).
   useEffect(() => {
     if (!open || !btnRef.current || !popRef.current) return
     const btn = btnRef.current
@@ -88,8 +92,28 @@ export function Select({ className = '', options, value, onChange, disabled }: S
       style.top = r.bottom + 6 + 'px'
     }
     setPopStyle(style)
-    pop.querySelector('.sel-item.is-active')?.scrollIntoView({ block: 'nearest' })
+    const active = pop.querySelector<HTMLElement>('.sel-item.is-active')
+    ;(active ?? pop.querySelector<HTMLElement>('.sel-item'))?.focus()
+    active?.scrollIntoView({ block: 'nearest' })
   }, [open])
+
+  // ↑/↓/Home/End navigate in a loop; Enter/Space fire through the focused option's native click;
+  // Esc is closed by the module-level capture listener.
+  const onPopKeyDown = (e: React.KeyboardEvent) => {
+    const items = [...(popRef.current?.querySelectorAll<HTMLElement>('.sel-item') ?? [])]
+    if (items.length === 0) return
+    const idx = items.indexOf(document.activeElement as HTMLElement)
+    const move = (i: number) => {
+      e.preventDefault()
+      items[i].focus()
+      items[i].scrollIntoView({ block: 'nearest' })
+    }
+    if (e.key === 'ArrowDown') move(idx < 0 ? 0 : (idx + 1) % items.length)
+    else if (e.key === 'ArrowUp')
+      move(idx < 0 ? items.length - 1 : (idx - 1 + items.length) % items.length)
+    else if (e.key === 'Home') move(0)
+    else if (e.key === 'End') move(items.length - 1)
+  }
 
   const hit = options.find((o) => o.value === value)
 
@@ -100,19 +124,36 @@ export function Select({ className = '', options, value, onChange, disabled }: S
         type="button"
         className={(className ? className + ' ' : '') + 'sel'}
         disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => (open ? close() : setOpen(true))}
+        onKeyDown={(e) => {
+          // While closed, ↓/↑ expand it directly (native select muscle memory)
+          if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+            e.preventDefault()
+            setOpen(true)
+          }
+        }}
       >
         <span className="sel-label">{hit ? hit.label : value}</span>
         <Icon name="caret-down" className="sel-caret" />
       </button>
       {open &&
-        // 浮层挂到 body（与旧版一致）：fixed 定位不受祖先 transform/overflow 影响
+        // The overlay is mounted to body (as in the legacy version) so fixed positioning is unaffected by ancestor transform/overflow
         createPortal(
-          <div ref={popRef} className="sel-pop" style={popStyle}>
+          <div
+            ref={popRef}
+            className="sel-pop"
+            style={popStyle}
+            role="listbox"
+            onKeyDown={onPopKeyDown}
+          >
             {options.map((o) => (
               <button
                 key={o.value}
                 type="button"
+                role="option"
+                aria-selected={o.value === value}
                 className={'sel-item' + (o.value === value ? ' is-active' : '')}
                 onClick={() => {
                   close()

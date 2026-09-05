@@ -1,0 +1,766 @@
+/* ============================== Blocks (§6.3) ============================== */
+.block {
+  animation: fadein 0.12s ease;
+}
+@keyframes fadein {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* User message: right-aligned bubble (container has no background; bubble styling lives on .user-bubble,
+   actions/time sit below the bubble and take no space inside it) */
+.block-user {
+  align-self: flex-end;
+  max-width: 72%;
+  display: flex;
+  flex-direction: column;
+}
+.user-bubble {
+  background: var(--bubble-user);
+  color: var(--fg);
+  border-radius: 14px 14px 4px 14px;
+  padding: 9px 14px;
+}
+.block-user .user-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Image attachments inside the bubble: stacked vertically above the text, click to zoom (lightbox) */
+.user-bubble .user-images {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.user-bubble .user-images + .user-text {
+  margin-top: 8px;
+}
+.user-bubble .user-images .inline-image {
+  display: block;
+  max-width: min(320px, 100%);
+  max-height: 320px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--bg2);
+  cursor: zoom-in;
+}
+.user-bubble .user-images .inline-image:hover {
+  border-color: var(--muted);
+}
+.user-bubble .user-images .inline-image:focus-visible {
+  outline: 2px solid var(--accent, var(--muted));
+  outline-offset: 1px;
+}
+
+/* Assistant: left-aligned plain text, no label */
+.block-assistant {
+  align-self: stretch;
+  min-width: 0; /* Allow shrink inside the flex column so long content doesn't break the content column */
+}
+.block-assistant .md {
+  font-size: var(--text-lg);
+  line-height: 1.7;
+}
+/* Break long URLs / spaceless tokens between words so they don't break the content column
+   (prevents page-level horizontal scroll on mobile). white-space: pre inside pre is unaffected;
+   wide code still scrolls within pre's own horizontal scroller. */
+.md {
+  overflow-wrap: break-word;
+}
+.md code {
+  overflow-wrap: anywhere;
+}
+
+/* Markdown render area */
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 14px 0 6px;
+  color: var(--fg);
+}
+.md p {
+  margin: 8px 0;
+}
+.md ul,
+.md ol {
+  margin: 6px 0 6px 20px;
+}
+.md li {
+  margin: 3px 0;
+}
+.md code {
+  background: var(--bg2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: var(--text-sm);
+  color: var(--highlight);
+}
+.md pre {
+  background: var(--bg1);
+  border: 1px solid var(--bg2);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin: 10px 0;
+  overflow-x: auto;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+.md pre code {
+  background: none;
+  padding: 0;
+  color: var(--fg);
+}
+/* Tables: display:block + max-width:100% makes wide tables scroll horizontally within the column,
+   aligned with the transcript content column instead of overflowing the whole session area. */
+.md table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 10px 0;
+  font-size: var(--text-md);
+}
+.md th,
+.md td {
+  border: 1px solid var(--bg2);
+  padding: 5px 12px;
+  text-align: left;
+}
+.md th {
+  background: var(--bg1);
+  font-weight: 600;
+}
+.md blockquote {
+  border-left: 3px solid var(--bg2);
+  padding-left: 12px;
+  color: var(--muted);
+  margin: 8px 0;
+}
+.md img {
+  max-width: 100%;
+}
+.md hr {
+  border: none;
+  border-top: 1px solid var(--bg2);
+  margin: 14px 0;
+}
+
+/* Stream draft cursor (draft is live-rendered markdown; cursor follows the end of
+   rendered content). Soft oscillation instead of steps(1) hard cut: the hard on/off
+   blink was harsh enough to be mistaken for leftover thinking-state flicker. */
+.stream-cursor {
+  display: inline-block;
+  /* Brand-gradient cursor: primary → info, hollow-filled via background-clip, the visual anchor of streaming output */
+  background: linear-gradient(180deg, var(--primary), var(--info));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+/* On disconnect, stop the cursor animation and gray it out — a static "stream stopped" signal (auto-resets when the connection recovers) */
+.transcript.is-offline .stream-cursor {
+  animation: none;
+  opacity: 0.35;
+}
+/* Placeholder while lazy-loaded heavy pages (maze/trace/compare) load their chunk */
+.lazy-pane {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Message action row: copy / thumbs up / thumbs down + time.
+   Always visible after the turn ends — both a feedback/copy entry and a marker that this message is finished. */
+.msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.msg-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  user-select: none;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+.msg-action svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+.msg-action:hover {
+  color: var(--fg);
+  background: var(--bg2);
+}
+.msg-action:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.msg-action.msg-copy.is-done {
+  color: var(--success);
+}
+.msg-action.msg-copy.is-fail {
+  color: var(--error);
+}
+.msg-action.msg-up.is-active {
+  color: var(--primary);
+}
+.msg-action.msg-up.is-active svg {
+  fill: var(--primary);
+}
+.msg-action.msg-down.is-active {
+  color: var(--error);
+}
+.msg-action.msg-down.is-active svg {
+  fill: var(--error);
+}
+
+/* User bubble: action row right-aligned below the bubble, time on the left, copy on the right */
+.block-user .msg-actions {
+  justify-content: flex-end;
+}
+.block-user .msg-time-tip {
+  margin-left: 0;
+  margin-right: 4px;
+}
+
+/* Message time: always shown in short format (Aug 6 14:34); native title tooltip gives the full time on hover */
+.msg-time-tip {
+  margin-left: auto;
+  padding-left: 6px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  cursor: default;
+  /* The stacked 0.7 opacity sat near the illegible threshold in both light and dark themes; raised to 0.85 (the secondary-text floor) */
+  opacity: 0.85;
+}
+
+/* Thinking: three-dot animation while waiting for model output */
+.block-thinking {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 2px;
+}
+.block-thinking .t-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: think-wave 1.4s ease-in-out infinite;
+}
+.block-thinking .t-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.block-thinking .t-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+/* Symmetric rise/fall (peak at the midpoint) reads as a calm traveling wave. The
+   previous version snapped up -4px and flashed --primary at the 30% instant, then
+   sat still for 40% of the cycle — a strobe-like blip rather than a wave. */
+@keyframes think-wave {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: none;
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+/* Reasoning disclosure block: de-carded (no background, no side bar); subdued typography inline with
+   the text flow conveys "supplementary info", avoiding the visual fatigue of templated card stacking */
+.block-reasoning {
+  border-radius: 0;
+  padding: 3px 2px;
+  color: var(--muted);
+  font-size: var(--text-md);
+}
+.block-reasoning summary {
+  font-size: var(--text-sm);
+  gap: 6px;
+}
+.block-reasoning summary .icon {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* While streaming: bulb lights up + header breathes slowly, reinforcing the "thinking"
+   semantics. The breath is a continuous, shallow oscillation gated on .is-live: the
+   class is dropped the moment streaming finalizes, so no leak path (dropped events /
+   reconnects) can leave it blinking forever — no per-delta remount needed. The old
+   bounded pulse retriggered via key=text.length restarted on every streaming delta,
+   which read as constant flicker. */
+/* The bulb and the head breathe in phase (same keyframes + duration → same
+   animation clock): the whole header acts as one "working" indicator. On muted
+   13px text a shallow 0.55 floor was barely perceptible — deepen it to 0.4 and
+   tighten the period so the activity signal actually reads. */
+.block-reasoning.is-live summary .icon {
+  color: var(--primary);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.block-reasoning.is-live .r-head {
+  animation: pulse 1.6s ease-in-out infinite;
+}
+/* The breathing comes from the shared pulse (0.4 trough): one notch softer than the old pulse with a 0.35 trough. */
+.block-reasoning .r-head {
+  flex: none;
+  font-weight: 500;
+}
+/* First-line summary in the done state: italic, ellipsized — instantly recognizable when scanning history */
+.block-reasoning .r-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: italic;
+}
+/* Streaming tail preview: shows the last line while collapsed, hidden when expanded.
+   No animation on purpose — the text itself changes with each delta, which already
+   signals activity; layering a blink on top of churning text just flickers. */
+.block-reasoning .reasoning-tail {
+  margin-top: 4px;
+  margin-left: 24px;
+  font-size: 12px;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.block-reasoning[open] .reasoning-tail {
+  display: none;
+}
+.block-reasoning .body {
+  margin-top: 6px;
+  margin-left: 5px;
+  padding-left: 12px;
+  border-left: 1px solid var(--bg2);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--text-sm);
+  /* Keep long reasoning from blowing up the transcript flow: height cap + internal scroll */
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* Tool block: card style */
+.block-tool {
+  background: var(--bg1);
+  border: 1px solid var(--bg2);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+.block-tool .tool-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--text-sm);
+  min-width: 0;
+}
+.block-tool .tool-name {
+  font-weight: 600;
+  color: var(--fg);
+  flex: none;
+}
+.block-tool .tool-target {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  cursor: pointer;
+}
+/* Click target to expand: wraps to show full content (long commands etc.); click again to collapse. */
+.block-tool .tool-target.expanded {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.block-tool .tool-dur {
+  margin-left: auto;
+  color: var(--muted);
+  flex: none;
+}
+.tool-status {
+  font-weight: 600;
+  flex: none;
+}
+.tool-status.ok {
+  color: var(--success);
+}
+.tool-status.err {
+  color: var(--error);
+}
+.tool-status.canceled {
+  color: var(--muted);
+}
+.tool-status.running {
+  color: var(--success);
+}
+.tool-status.running::before {
+  content: '●';
+  margin-right: 4px;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.block-tool .tool-output {
+  margin-top: 8px;
+}
+.block-tool .tool-output summary {
+  font-size: 12px;
+}
+.block-tool .tool-output .tool-copy {
+  margin-left: auto;
+  flex: none;
+  background: none;
+  border: 1px solid var(--bg2);
+  border-radius: 5px;
+  color: var(--muted);
+  padding: 1px 10px;
+  font-size: var(--text-xs);
+}
+.block-tool .tool-output .tool-copy:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+.block-tool .tool-preview {
+  margin-top: 6px;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  background: var(--bg0);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--fg);
+  max-height: 200px;
+  overflow-y: auto;
+}
+.block-tool .tool-error {
+  margin-top: 8px;
+  font-size: var(--text-sm);
+  color: var(--error);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* Image blocks (inline images / artifact-referenced images): thumbnail display, click to zoom (lightbox) */
+.block-image,
+.block-artifact {
+  margin: 4px 0;
+}
+/* Tool-result images (browser screenshots etc.) hang directly under .block-tool and need the same
+   constraint, otherwise they overflow the conversation column at native width */
+.block-image .inline-image,
+.block-artifact .inline-image,
+.block-tool .inline-image {
+  max-width: min(360px, 100%);
+  max-height: 360px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--bg2);
+  cursor: zoom-in;
+}
+.block-image .inline-image:hover,
+.block-artifact .inline-image:hover,
+.block-tool .inline-image:hover {
+  border-color: var(--muted);
+}
+.block-image .inline-image:focus-visible,
+.block-artifact .inline-image:focus-visible,
+.block-tool .inline-image:focus-visible {
+  outline: 2px solid var(--accent, var(--muted));
+  outline-offset: 1px;
+}
+
+/* Non-image artifacts (text output like run_cmd stdout): expandable preview + download */
+.artifact-file summary {
+  font-size: 12px;
+}
+.artifact-file .artifact-download {
+  margin-left: auto;
+  flex: none;
+  text-decoration: none;
+  background: none;
+  border: 1px solid var(--bg2);
+  border-radius: 5px;
+  color: var(--muted);
+  padding: 1px 10px;
+  font-size: var(--text-xs);
+}
+.artifact-file .artifact-download:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+.artifact-file .tool-preview {
+  margin-top: 6px;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  background: var(--bg0);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--fg);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Image lightbox: click backdrop or ESC to close; page scroll locked while open */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: rgba(0, 0, 0, 0.72);
+  display: grid;
+  place-items: center;
+  cursor: zoom-out;
+  animation: fadein 0.12s ease;
+}
+.lightbox img {
+  max-width: 92vw;
+  max-height: 92vh;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+body.lightbox-open {
+  overflow: hidden;
+}
+
+/* diff */
+.diff {
+  margin-top: 8px;
+  border: 1px solid var(--bg2);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+.diff .d-head {
+  background: var(--bg2);
+  color: var(--muted);
+  padding: 4px 12px;
+  font-size: 12px;
+}
+.diff summary.d-head .d-stat {
+  margin-left: auto;
+  flex: none;
+}
+.diff .d-body {
+  overflow-x: auto;
+}
+.diff .d-line {
+  display: flex;
+  padding: 0 12px 0 0;
+  white-space: pre;
+}
+.diff .d-sign {
+  width: 28px;
+  flex: none;
+  text-align: center;
+  user-select: none;
+}
+.diff .d-add {
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+.diff .d-add .d-sign {
+  color: var(--success);
+}
+.diff .d-del {
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+}
+.diff .d-del .d-sign {
+  color: var(--error);
+}
+.diff .d-ctx .d-sign {
+  color: var(--muted);
+}
+.diff .d-hunk {
+  color: var(--purple);
+  padding: 0 12px;
+  background: var(--bg1);
+}
+
+/* Approval card */
+.card-approval {
+  border: 2px solid var(--warning);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  background: var(--bg0);
+}
+.card-approval .card-title {
+  color: var(--warning);
+  font-weight: 700;
+  font-size: 13.5px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.card-approval .card-title .risk {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-full);
+  padding: 0 8px;
+}
+.card-approval .desc {
+  color: var(--fg);
+  margin-top: 6px;
+  font-size: var(--text-md);
+}
+.card-approval .cmd {
+  margin: 10px 0;
+}
+.card-approval .cmd code {
+  display: block;
+  background: var(--bg1);
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.card-approval .actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.card-approval .memo {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin-left: 4px;
+}
+.card-approval.is-resolved {
+  opacity: 0.75;
+}
+
+/* Question card */
+.card-question {
+  border: 2px solid var(--primary);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+}
+.card-question .card-title {
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 13.5px;
+}
+.card-question .card-title .multi {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--muted);
+}
+.card-question .q-text {
+  margin: 8px 0 10px;
+}
+.card-question .opt {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 6px 0;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.card-question .opt input {
+  accent-color: var(--primary);
+}
+.card-question .opt .desc {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.card-question input[type='text'] {
+  width: 100%;
+  padding: 8px 12px;
+  margin: 8px 0 4px;
+  background: var(--bg1);
+  color: var(--fg);
+  border: 1px solid var(--muted);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-md);
+}
+/* Same pattern as gate: outline:none is compensated by the uniform halo ring to restore visible focus */
+.card-question input[type='text']:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--ring-color);
+}
+.card-question .actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* notice / fatal / resolved */
+.notice {
+  color: var(--muted);
+  font-style: italic;
+  font-size: var(--text-md);
+  padding-left: 16px;
+}
+.notice b {
+  font-style: normal;
+}
+.notice.is-warn {
+  color: var(--warning);
+}
+.block-fatal {
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 9%, transparent);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  font-size: var(--text-md);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.block-interrupted {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 9%, transparent);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  font-size: var(--text-md);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.resolved {
+  color: var(--muted);
+  font-size: var(--text-md);
+  padding-left: 16px;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.resolved .ok {
+  color: var(--success);
+}
+.resolved .no {
+  color: var(--error);
+}

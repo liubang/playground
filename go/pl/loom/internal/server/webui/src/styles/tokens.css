@@ -1,0 +1,44 @@
+/* ============================== Design tokens (§6.1) ============================== */
+:root,
+[data-theme='dark'] {
+  /* Dark by default */
+  --bg0: #1e2326;
+  --bg1: #272e33;
+  --bg2: #2e383c;
+  --fg: #d3c6aa;
+  --muted: #859289;
+  --primary: #7fbbb3;
+  --success: #a7c080;
+  --info: #83c092;
+  --warning: #dbbc7f;
+  --error: #e67e80;
+  --highlight: #e69875;
+  --purple: #d699b6;
+  --on-accent: #1e2326;
+  --bubble-user: #3a4148;
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.3);
+  color-scheme: dark;
+}
+[data-theme='light'] {
+  /* Everforest Light Medium (muted uses grey1 for better secondary-text contrast) */
+  --bg0: #fdf6e3;
+  --bg1: #f4f0d9;
+  --bg2: #efebd4;
+  --fg: #5c6a72;
+  --muted: #939f91;
+  --primary: #3a94c5;
+  --success: #8da101;
+  --info: #35a77c;
+  --warning: #dfa000;
+  --error: #f85552;
+  --highlight: #f57d26;
+  --purple: #df69ba;
+  --on-accent: #fdf6e3;
+  --bubble-user: #e6e2cc;
+  --shadow-sm: 0 2px 8px rgba(95, 84, 60, 0.14);
+  --shadow-md: 0 8px 24px rgba(95, 84, 60, 0.22);
+  --shadow-lg: 0 4px 16px rgba(95, 84, 60, 0.18);
+  color-scheme: light;
+}

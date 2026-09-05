@@ -119,8 +119,8 @@ export function Composer({ controller }: { controller: AppController }) {
   }, [text, controller])
   useEffect(() => {
     controller.onComposerRestore = (t: string) => {
-      // 会话切换前，先把当前草稿带的附件预览 URL 全部 revoke（否则变成
-      // 孤儿 blob URL 直到页面卸载才回收）。
+      // Before switching sessions, revoke all preview URLs of attachments in the current draft first (otherwise they
+      // become orphan blob URLs that aren't reclaimed until the page unloads).
       for (const a of attachmentsRef.current) URL.revokeObjectURL(a.previewUrl)
       attachmentsRef.current = []
       setAttachments([])
@@ -130,7 +130,7 @@ export function Composer({ controller }: { controller: AppController }) {
       controller.onComposerRestore = null
     }
   }, [controller])
-  // 卸载时清掉挂起的 autocomplete 定时器，避免对已卸载组件 setState。
+  // Clear the pending autocomplete timer on unmount to avoid setState on an unmounted component.
   useEffect(() => {
     return () => {
       if (acTimer.current) clearTimeout(acTimer.current)
@@ -622,9 +622,9 @@ export function Composer({ controller }: { controller: AppController }) {
 // PickerMenu — shared popover for model/reasoning/approval: anchored above the
 // trigger button (the composer sits at the viewport bottom, so opening downward
 // would be clipped); closes on outside click / Esc / window blur.
-// navKeys（picker 菜单打开）：↑/↓ 在菜单项间循环移动焦点，Enter/Space 原生
-// 触发点击；选项超出一屏时滚动跟随。自动补全菜单（navKeys=false）的方向键
-// 由 textarea 自己的处理器消费（避免双重导航）。
+// navKeys (picker menu open): ↑/↓ cycle focus through menu items, Enter/Space natively
+// trigger a click; when the options exceed one screen, the scroll follows. In the autocomplete menu (navKeys=false),
+// arrow keys are consumed by the textarea's own handler (to avoid double navigation).
 function PickerMenu({
   anchorId,
   onClose,
@@ -670,7 +670,7 @@ function PickerMenu({
       if (items.length === 0) return
       e.preventDefault()
       const idx = items.indexOf(document.activeElement as HTMLElement)
-      // 未聚焦任何项时从“当前选中项”（或首项）出发，不会跳两步
+      // When no item is focused, start from the "currently selected" item (or the first one), so focus never jumps two steps
       const base =
         idx >= 0
           ? idx

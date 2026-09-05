@@ -1,6 +1,6 @@
-// share.tsx — 分享页入口（/share/{token}）：公开只读渲染，复用主界面的
-// Transcript 渲染管线；无 SSE、无 composer、无鉴权（token 即凭证）。
-// 与主应用一致的三页签：对话 / 轨迹 / 迷宫（#trace、#maze 锚点直达）。
+// share.tsx — share page entry (/share/{token}): public read-only rendering
+// reusing the main UI's Transcript pipeline; no SSE, no composer, no auth (the token is the credential).
+// Same three tabs as the main app: chat / trace / maze (direct access via #trace, #maze anchors).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -28,8 +28,8 @@ const SHARE_TABS: { key: ShareTab; label: string }[] = [
 const tabFromHash = (): ShareTab =>
   location.hash === '#maze' ? 'maze' : location.hash === '#trace' ? 'trace' : 'chat'
 
-// 分享页 artifact 走公开端点（/v1/shared/* 免 bearer）；内容寻址 + 不可变，
-// 按 id+size 缓存避免重复下载。
+// Share-page artifacts go through the public endpoint (/v1/shared/* needs no bearer);
+// content-addressed and immutable, cached by id+size to avoid duplicate downloads.
 function makeArtifactFetcher(token: string) {
   const cache = new Map<string, ArtifactEntry>()
   return async (id: string, size: number): Promise<ArtifactEntry> => {
@@ -57,7 +57,7 @@ function fmtTime(iso?: string): string {
   return d.toLocaleString()
 }
 
-// 回到顶部按钮：滚动离开顶部超过阈值时显示，点击平滑回到顶部。
+// Back-to-top button: shows once scrolled past a threshold from the top, smooth-scrolls to top on click.
 const TOP_BTN_SHOW_PX = 400
 
 function ShareApp() {
@@ -72,7 +72,7 @@ function ShareApp() {
   const scrollerRef = useRef<{ el: HTMLDivElement | null }>({ el: null })
   const traceScrollerRef = useRef<{ el: HTMLDivElement | null }>({ el: null })
 
-  // token 取自路径最后一段；格式非法（非 32 位 hex）直接算无效链接。
+  // token comes from the last path segment; malformed format (not 32 hex digits) counts as an invalid link.
   const token = location.pathname.split('/').filter(Boolean).pop() || ''
 
   const setTab = useCallback((t: ShareTab) => {
@@ -80,8 +80,8 @@ function ShareApp() {
     history.replaceState(null, '', t === 'chat' ? location.pathname : `#${t}`)
   }, [])
 
-  // 只读渲染：io 只提供 artifact 解析；无 sendFeedback → 不渲染投票按钮；
-  // state 固定 "closed"，applySnapshot 会为最后一轮补齐操作行（复制/时间）。
+  // Read-only rendering: io only provides artifact resolution; no sendFeedback → no
+  // vote buttons; state is fixed at "closed", and applySnapshot completes the action row (copy/time) for the last turn.
   const transcript = useMemo(
     () =>
       new TranscriptController({
@@ -95,8 +95,8 @@ function ShareApp() {
   const blocksIO = useMemo(() => ({ fetchArtifactURL: makeArtifactFetcher(token) }), [token])
 
   useEffect(() => {
-    // 主题与主应用一致：默认深色，仅显式存了 "light" 才用浅色。
-    // （share.html 头部已在首帧前预置 data-theme，这里只是兜底同步）
+    // Theme matches the main app: dark by default, light only when "light" is
+    // explicitly stored. (share.html's head already presets data-theme before the first frame; this is only a fallback sync)
     let saved = ''
     try {
       saved = localStorage.getItem(THEME_KEY) || ''
@@ -255,7 +255,7 @@ function ShareApp() {
       >
         <Icon name="arrow-up" />
       </button>
-      {/* 滚动监听：离开顶部超过阈值时显示回顶按钮 */}
+      {/* Scroll watcher: show the back-to-top button past the threshold */}
       <ScrollWatcher scrollerRef={scrollerRef.current} onChange={setShowTop} />
 
       <footer className="share-footer">shared session · read-only</footer>

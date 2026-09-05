@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// 产物输出到 ../web/dist，由 internal/server/web/web.go 经 embed.FS 内嵌进
-// loom 二进制（提交 dist 入库，Bazel 只 glob 产物，不纳管 JS 构建）。
+// Output goes to ../web/dist and is embedded into the loom binary by
+// internal/server/web/web.go via embed.FS (dist is committed; Bazel only globs the artifacts and does not manage the JS build).
 export default defineConfig({
   plugins: [react()],
   build: {
@@ -17,7 +17,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    // 开发期代理到 loom serve 默认监听（internal/server/server.go）
+    // Dev-time proxy to the loom serve default listener (internal/server/server.go)
     proxy: {
       '/v1': 'http://127.0.0.1:7680',
     },

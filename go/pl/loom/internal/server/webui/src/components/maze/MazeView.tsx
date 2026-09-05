@@ -3,8 +3,8 @@
 // share page) and two-lane (compare view) share this renderer; compare adds
 // turn-alignment lines and the per-turn detour audit.
 //
-// Visual language (isomorphic to dsh-trace-compare, styled via app.css
-// tokens):
+// Visual language (isomorphic to dsh-trace-compare, styled via styles/maze.css
+// + tokens.css):
 //   - solid main path: steps that advanced the task (duration capsules
 //     filled by verdict color) and answer nodes;
 //   - dashed detour arcs: error (red ✗) / dead-end (grey ·) / blind-retry
@@ -130,7 +130,7 @@ function useRafState<S>(initial: S): [S, (v: S) => void] {
   )
   const set = useCallback((v: S) => {
     pendingRef.current = { has: true, value: v }
-    if (rafRef.current !== null) return // 已有挂起帧：合并为最新值
+    if (rafRef.current !== null) return // frame already pending: coalesce into the latest value
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = null
       const p = pendingRef.current
@@ -257,7 +257,15 @@ export const MazeView = memo(function MazeView({
     return buildFoldedAxis(ranges, data.tmax)
   }, [data])
 
-  const q = query.trim().toLowerCase()
+  // Search debounce: input echoes immediately, while filtering/hit counts lag 150ms — nodeMatches'
+  // haystack joins full tool args and return text; per-keystroke recompute stalls a frame per char on long runs.
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 150)
+    return () => clearTimeout(t)
+  }, [query])
+
+  const q = debouncedQuery.trim().toLowerCase()
   const filtering = failOnly || q !== ''
 
   // Layout: each lane's height budget (header + main row + parallel
@@ -269,7 +277,11 @@ export const MazeView = memo(function MazeView({
       const detourRows = rows.length ? Math.max(...rows) + 1 : 0
       const parH = maxPar * PAR_BAR_H
       const h = LANE_HEADER_H + MAIN_H + parH + detourRows * DETOUR_H + 8
-      return { lane, rows, parH, h, detourRows }
+      // step → main-node index: O(1) lookup of a detour's attachNode anchor (previously each detour
+      // node linearly scanned lane.main.find on every render — recomputed wholesale per pan/zoom frame)
+      const byStep = new Map<number, MazeNode>()
+      for (const n of lane.main) byStep.set(n.step, n)
+      return { lane, rows, parH, h, detourRows, byStep }
     })
     // Dedicated caption row for folded-seam labels, between the lanes and
     // the tick strip — the only band guaranteed free of capsules and sub
@@ -390,7 +402,7 @@ export const MazeView = memo(function MazeView({
         return
       }
       const rect = e.currentTarget.getBoundingClientRect()
-      rectRef.current = rect // gesture 起点：刷新缓存，随后走 getRect
+      rectRef.current = rect // gesture start: refresh the cache, later reads go through getRect
       dragRef.current = {
         mode: 'brush',
         x0: e.clientX - rect.left,
@@ -534,15 +546,22 @@ export const MazeView = memo(function MazeView({
     return out.sort((x, y) => x.turn - y.turn)
   }, [compare, data.lanes])
 
-  // Hit count (shown while filtering).
-  const hitCount = useMemo(() => {
-    if (!filtering) return -1
-    let n = 0
+  // Precomputed matches: while a filter is active, decide every node's hit/miss in one pass
+  // (key: lane:step), leaving the render hot path a plain Set lookup; previously each node re-ran
+  // nodeMatches' haystack join on every render (each pan/zoom frame). hitCount derives from the same pass.
+  const { dimSet, hitCount } = useMemo(() => {
+    if (!filtering) return { dimSet: null, hitCount: -1 }
+    let hits = 0
+    const dim = new Set<string>()
     for (const lane of data.lanes) {
-      for (const node of [...lane.main, ...lane.detours]) if (nodeMatches(node, q, failOnly)) n++
+      for (const node of [...lane.main, ...lane.detours]) {
+        if (nodeMatches(node, q, failOnly)) hits++
+        else dim.add(lane.key + ':' + node.step)
+      }
     }
-    return n
+    return { dimSet: dim, hitCount: hits }
   }, [data, q, failOnly, filtering])
+  const isDim = (laneKey: string, step: number) => dimSet?.has(laneKey + ':' + step) ?? false
 
   const svgW = canvasW
 
@@ -672,7 +691,7 @@ export const MazeView = memo(function MazeView({
               </g>
             ))}
             {/* lanes */}
-            {layout.lanes.map(({ lane, rows, parH, h }, li) => {
+            {layout.lanes.map(({ lane, rows, parH, h, byStep }, li) => {
               const top = laneY
               laneY += h
               const mainY = top + LANE_HEADER_H + MAIN_H / 2
@@ -718,7 +737,7 @@ export const MazeView = memo(function MazeView({
                       axis={axis}
                       toX={toX}
                       svgW={svgW}
-                      dim={filtering && !nodeMatches(n, q, failOnly)}
+                      dim={isDim(lane.key, n.step)}
                       selected={selected?.laneKey === lane.key && selected.node.step === n.step}
                       onHover={setHover}
                       onSelect={setSelected}
@@ -733,11 +752,12 @@ export const MazeView = memo(function MazeView({
                       row={rows[di]}
                       mainY={mainY}
                       detourTop={detourTop}
-                      attachNode={lane.main.find((m) => m.step === d.attach)}
+                      // attach may be missing (no mount step found: same semantics as the previous find miss)
+                      attachNode={d.attach != null ? byStep.get(d.attach) : undefined}
                       axis={axis}
                       toX={toX}
                       svgW={svgW}
-                      dim={filtering && !nodeMatches(d, q, failOnly)}
+                      dim={isDim(lane.key, d.step)}
                       selected={selected?.laneKey === lane.key && selected.node.step === d.step}
                       onHover={setHover}
                       onSelect={setSelected}

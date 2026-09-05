@@ -1,5 +1,5 @@
-// McpTab.tsx — MCP tab：概览 → 详情两级导航 + 进程级实时状态徽标/重连。
-// 与旧 settings.js 的 MCP 部分一一对应。
+// McpTab.tsx — MCP tab: overview → detail two-level navigation + process-level live status badges/reconnect.
+// Corresponds one-to-one with the MCP section of the old settings.js.
 
 import { useCallback, useEffect, useState } from 'react'
 import type { AppController } from '../../app/controller'
@@ -15,7 +15,7 @@ import { Select } from '../ui/Select'
 import { Icon } from '../../lib/icons'
 import { toast } from '../ui/Toast'
 
-// 概览行元信息：传输方式 + 命令/URL 摘要（与收集逻辑同源地读当前传输组）。
+// Overview-row meta: transport + command/URL summary (reads the current transport group from the same source as the collect logic).
 function mcpMeta(card: McpDraft): string {
   const srv: Record<string, unknown> = {}
   collectFields(MCP_COMMON_FIELDS, card.common, srv)
@@ -42,19 +42,19 @@ export function McpTab({
   openMcpId: string | null
   setOpenMcpId: (id: string | null) => void
   controller: AppController
-  statusToken: number // 保存后递增：触发状态重拉
+  statusToken: number // incremented after save: triggers a status re-fetch
 }) {
   const { markDirty, invalid } = useSettingsCtx()
   const [statuses, setStatuses] = useState<Map<string, McpServerStatus>>(new Map())
   const [reconnecting, setReconnecting] = useState<string | null>(null)
 
-  // 拉取进程级 MCP 实时状态（打开面板与保存后调用）。
+  // Fetch process-level MCP live status (called when the panel opens and after save).
   const refresh = useCallback(async () => {
     try {
       const r = await controller.api.listMcpServers()
       setStatuses(new Map((r.servers || []).map((s) => [s.name, s])))
     } catch {
-      // 状态查询失败不影响编辑
+      // Status query failure does not affect editing
     }
   }, [controller])
 
@@ -165,8 +165,8 @@ export function McpTab({
         <div className="set-cards">
           {draft.mcpServers.map((card) => {
             const name = card.name.trim()
-            // badge 三态：未命名卡片 → 不显示；已命名但未连接 → 「保存后连接」；
-            // status → 已连接 N 工具 / 连接失败。
+            // Badge tri-state: unnamed card → not shown; named but not connected → "connects after save";
+            // status → connected with N tools / connection failed.
             const status = name ? statuses.get(name) || null : undefined
             const isOpen = openMcpId === card.id
             return (
@@ -202,12 +202,12 @@ export function McpTab({
                   <CardDelBtn title="删除该服务器" onDelete={() => deleteCard(card)} />
                 </div>
                 <div className="set-card-body">
-                  {/* 「已注册工具」只读小节（随徽标刷新） */}
+                  {/* Read-only "registered tools" section (refreshes with the badge) */}
                   <div className="set-group mcp-tools-sec">
                     <McpTools status={status} serverName={name} />
                   </div>
 
-                  {/* 传输形态切换：由 command/url 哪个有值推定；切换只影响展示哪组字段 */}
+                  {/* Transport switch: inferred from which of command/url has a value; switching only affects which field group is shown */}
                   <div className="set-row">
                     <label className="set-label">传输方式</label>
                     <div className="set-field">
@@ -259,8 +259,8 @@ function McpBadge({ status }: { status: McpServerStatus | null | undefined }) {
   )
 }
 
-// 「已注册工具」小节（详情表单上方，只读）：每行显示服务器本地名 +
-// 简介（两行截断，点击展开），hover 名称见完整限定名。
+// "Registered tools" section (above the detail form, read-only): each row shows the server's local name +
+// description (truncated to two lines, click to expand); hovering the name shows the full qualified name.
 function McpTools({
   status,
   serverName,
@@ -290,8 +290,8 @@ function McpTools({
     )
   }
   const prefix = `mcp__${serverName}__`
-  // 简介里的 [MCP server "…"] 前缀是适配层给模型看的归因（mcp/tool.go），
-  // UI 上服务器归属显而易见，剥掉更干净
+  // The [MCP server "…"] prefix in the description is attribution the adapter layer adds for the model
+  // (mcp/tool.go); server ownership is obvious in the UI, so stripping it is cleaner
   const descPrefix = `[MCP server "${serverName}"] `
   return (
     <>

@@ -2,7 +2,7 @@
 // composer + status bar) + global overlays (toast / confirm / settings /
 // directory browser / banner).
 
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import type { AppController } from './app/controller'
 import { useStore } from './store/store'
 import { Gate } from './components/Gate'
@@ -18,8 +18,9 @@ import { StatusBar } from './components/StatusBar'
 import { DirPicker } from './components/DirPicker'
 import { RightPanel } from './components/panel/RightPanel'
 import { SettingsPanel } from './components/settings/SettingsPanel'
-// 这些重页面（maze / trace / compare）都会拉入 SVG 渲染 / 迷宫数据 / 高亮 diff
-// 等大依赖：用 React.lazy 拆成独立 chunk，初始会话页只加载聊天流，不背这些。
+import { Palette } from './components/Palette'
+// These heavy pages (maze / trace / compare) pull in big dependencies such as SVG rendering / maze data / diff
+// highlighting: split them into separate chunks with React.lazy so the initial session page only loads the chat stream, not these.
 const MazePage = lazy(() =>
   import('./components/maze/MazePage').then((m) => ({ default: m.MazePage })),
 )
@@ -50,6 +51,19 @@ export function App({ controller }: { controller: AppController }) {
   const connState = useStore(controller.store, (s) => s.connState)
   const [revealWs, setRevealWs] = useState<{ wsId: string; seq: number } | null>(null)
 
+  // Cmd/Ctrl+K: open/close the command palette (global hotkey; the palette itself handles Esc and internal navigation)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   // TranscriptView interaction callbacks (stable references: controller methods
   // are all bound arrow functions)
   const transcriptIO = useMemo<TranscriptViewIO>(
@@ -66,13 +80,29 @@ export function App({ controller }: { controller: AppController }) {
 
   const blocksIO = useMemo(() => ({ fetchArtifactURL: controller.fetchArtifactURL }), [controller])
 
-  // 全局快捷键：
-  // - Cmd/Ctrl+F 打开会话内搜索（虚拟滚动下浏览器原生 Cmd+F 搜不到
-  //   视口外的块，必须接管）。仅在聊天视图接管，trace/maze 列表不虛拟化，
-  //   浏览器原生搜索可用。
-  // - Esc 取消当前 turn。避让顺序：确认弹窗（自带处理）→ 搜索条（关
-  //   闭自身）→ busy 取消；defaultPrevented 说明已被更内层消费
-  //   （如补全菜单 Esc、picker Esc），不再重复响应。
+  // Stable props: Header (memo)/TranscriptView must not re-render passively on unrelated App slice changes (conn
+  // badge, landing state, etc.) — the previous inline arrows/objects were new references on every render.
+  const onRevealWorkspace = useCallback(
+    (wsId: string) => setRevealWs((prev) => ({ wsId, seq: (prev?.seq || 0) + 1 })),
+    [],
+  )
+  const transcriptEmpty = useMemo(
+    () => ({
+      hidden: !landingVisible,
+      hint: landingHint,
+      showAddWs: landingShowAddWs,
+      onAddWs: () => controller.openDirPicker(),
+    }),
+    [landingVisible, landingHint, landingShowAddWs, controller],
+  )
+
+  // Global shortcuts:
+  // - Cmd/Ctrl+F opens in-session search (with virtual scrolling the browser's native Cmd+F can't find
+  //   blocks outside the viewport, so this must take over). Only take over in the chat view; trace/maze lists aren't
+  //   virtualized, so the browser's native search works there.
+  // - Esc cancels the current turn. Yield order: confirm modal (handles it itself) → search bar (closes
+  //   itself) → busy cancel; defaultPrevented means an inner layer already consumed it
+  //   (e.g. completion-menu Esc, picker Esc), so it's not handled again.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F')) {
@@ -84,7 +114,7 @@ export function App({ controller }: { controller: AppController }) {
       }
       if (e.key !== 'Escape' || e.defaultPrevented) return
       if (isConfirmOpen()) return
-      if (controller.store.get().settingsOpen) return // 设置面板自带 Esc（脏时确认）
+      if (controller.store.get().settingsOpen) return // the settings panel has its own Esc (confirms when dirty)
       if (controller.store.get().dirPickerOpen) return
       if (controller.transcript.store.get().search) {
         controller.transcript.closeSearch()
@@ -135,12 +165,7 @@ export function App({ controller }: { controller: AppController }) {
             <Sidebar controller={controller} revealWs={revealWs} />
           </aside>
           <main className="main">
-            <Header
-              controller={controller}
-              onRevealWorkspace={(wsId) =>
-                setRevealWs((prev) => ({ wsId, seq: (prev?.seq || 0) + 1 }))
-              }
-            />
+            <Header controller={controller} onRevealWorkspace={onRevealWorkspace} />
             {/* Zero-workspace onboarding state: fills the main area when no
                 workspace exists */}
             {noWorkspace ? (
@@ -184,12 +209,7 @@ export function App({ controller }: { controller: AppController }) {
                         className={
                           connState !== 'live' && connState !== '' ? 'is-offline' : undefined
                         }
-                        empty={{
-                          hidden: !landingVisible,
-                          hint: landingHint,
-                          showAddWs: landingShowAddWs,
-                          onAddWs: () => controller.openDirPicker(),
-                        }}
+                        empty={transcriptEmpty}
                       />
                       <Composer controller={controller} />
                     </div>
@@ -238,6 +258,7 @@ export function App({ controller }: { controller: AppController }) {
 
       <SettingsPanel controller={controller} />
       <DirPicker controller={controller} />
+      {paletteOpen && <Palette controller={controller} onClose={() => setPaletteOpen(false)} />}
       <ToastHost />
       <ConfirmHost />
     </BlocksIOContext.Provider>

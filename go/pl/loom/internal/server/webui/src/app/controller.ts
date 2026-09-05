@@ -23,9 +23,9 @@ import { toast } from '../components/ui/Toast'
 import { confirmDialog } from '../components/ui/Confirm'
 
 export const TOKEN_KEY = 'loom_token'
-// 主题持久化在 localStorage（跨标签页一致、重开浏览器保留）；早期版本
-// 用过 sessionStorage，initTheme 里带一次性迁移。index.html 头部的内联
-// 脚本在首帧前预置 data-theme，要与这里的键名/取值保持一致。
+// Theme is persisted in localStorage (consistent across tabs, retained across
+// browser relaunches); early versions used sessionStorage — initTheme carries a
+// one-shot migration. The inline script in the index.html head presets data-theme before the first frame; its key name/values must stay in sync here.
 const THEME_KEY = 'loom_theme'
 const SIDEBAR_KEY = 'loom_sidebar_collapsed'
 const RIGHT_PANEL_KEY = 'loom_right_panel'
@@ -68,11 +68,11 @@ export interface AppState {
   busy: boolean
   connState: ConnState | ''
   connDetail?: string
-  sessionsLoading: boolean // sidebar infinite-scroll 加载中指示
+  sessionsLoading: boolean // sidebar infinite-scroll loading indicator
   banner: BannerState | null
   sessions: SessionSummary[]
   showArchived: boolean
-  sessionLoading: boolean // openSession 的 snapshot fetch 进行中（驱动骨架屏/加载态）
+  sessionLoading: boolean // openSession's snapshot fetch in flight (drives the skeleton/loading state)
   workspaces: Workspace[]
   noWorkspace: boolean // zero-workspace onboarding state
   landingHint: string // landing page copy
@@ -266,7 +266,7 @@ export class AppController {
           return ''
         }
       },
-      // 审批/问答/反馈失败：错误类 toast 常驻（sticky），留够读和复制的时间
+      // Approval/question/feedback failures: error toasts stay sticky, leaving time to read and copy
       onError: (e) => toast(e.message, false, true),
     })
     this.stream = new EventStream({

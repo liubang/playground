@@ -1,6 +1,6 @@
-// spec.ts — 设置面板的声明式字段 spec（key 即 config.yaml 的键路径）。
-// 同一套 spec 驱动渲染与收集 —— 新增配置项只需加一行 spec。
-// 数据与旧 settings.js 的 TABS/字段定义一一对应。
+// spec.ts — Declarative field specs for the settings panel (key is the config.yaml key path).
+// The same set of specs drives rendering and collection — adding a config item is just one more spec line.
+// Data corresponds one-to-one with the TABS/field definitions of the old settings.js.
 
 import type { SecretRef } from '../../protocol/types'
 import type { IconName } from '../../lib/icons'
@@ -13,15 +13,15 @@ export type FieldType =
   | 'tristate'
   | 'select'
   | 'textarea'
-  | 'list-text' // 每行一项 → []string
-  | 'kv-text' // 每行 k=v → map
-  | 'pair-list' // 每行 "name: description" → [{name, description}]
-  | 'float-list' // 逗号分隔 → []number
-  | 'flag-list' // 勾选 → 写入固定 []string（spec.flagValue），不勾 = 省略
+  | 'list-text' // one item per line → []string
+  | 'kv-text' // one k=v per line → map
+  | 'pair-list' // one "name: description" per line → [{name, description}]
+  | 'float-list' // comma-separated → []number
+  | 'flag-list' // checked → write the fixed []string (spec.flagValue); unchecked = omitted
 
 export interface FieldSpec {
   key: string
-  label?: string // 合成 spec（如卡片头行内 name 输入）可不带 label
+  label?: string // synthetic specs (e.g. inline name input in card headers) may omit label
   hint?: string
   ph?: string
   type?: FieldType
@@ -42,10 +42,10 @@ export interface TabSpec {
   sections?: [string, FieldSpec[]][]
 }
 
-// 与 internal/config/edit.go 的 SecretMask 保持一致。
+// Keep in sync with SecretMask in internal/config/edit.go.
 export const SECRET_MASK = '••••••••••'
 
-// 未发现 skill 时的目录约定提示（扫描为空与删空后共用）
+// Directory-convention hint when no skills are found (shared by empty scan results and after deleting the last one)
 export const SKILLS_EMPTY_HINT =
   '未发现任何 skill。目录约定：工作区 .loom/skills/、.agents/skills/，用户级 ~/.loom/skills/、~/.agents/skills/。'
 
@@ -227,7 +227,7 @@ export const MCP_COMMON_FIELDS: FieldSpec[] = [
 ]
 
 export const TABS: TabSpec[] = [
-  { id: 'providers', label: '模型', icon: 'layer-group' }, // 自定义渲染（概览 → 详情两级）
+  { id: 'providers', label: '模型', icon: 'layer-group' }, // custom rendering (overview → detail, two levels)
   {
     id: 'limits',
     label: '限额与保护',
@@ -534,8 +534,8 @@ export const TABS: TabSpec[] = [
       ],
     ],
   },
-  { id: 'skills', label: 'Skills', icon: 'puzzle-piece' }, // 自定义渲染（配置 + 运行时发现视图）
-  { id: 'mcp', label: 'MCP', icon: 'plug' }, // 自定义渲染（概览 → 详情两级）
+  { id: 'skills', label: 'Skills', icon: 'puzzle-piece' }, // custom rendering (config + runtime discovery views)
+  { id: 'mcp', label: 'MCP', icon: 'plug' }, // custom rendering (overview → detail, two levels)
   {
     id: 'kb',
     label: '知识库',
@@ -781,11 +781,11 @@ export const TABS: TabSpec[] = [
           },
         ],
       ],
-    ], // workspaces 追加为自定义小节（SystemExtras）
+    ], // workspaces appended as a custom section (SystemExtras)
   },
 ]
 
-// skills tab 的配置小节（归属全局 scope）
+// Config sections of the skills tab (assigned to the global scope)
 export const SKILLS_CONFIG_FIELDS: FieldSpec[] = [
   { key: 'skills.enabled', label: '启用技能', type: 'tristate' },
   {
@@ -796,7 +796,7 @@ export const SKILLS_CONFIG_FIELDS: FieldSpec[] = [
   },
 ]
 
-// providers tab 顶部「启动模型」字段（归属全局 scope）
+// The "startup model" field at the top of the providers tab (assigned to the global scope)
 export const DEFAULT_MODEL_FIELD: FieldSpec = {
   key: 'default',
   label: '默认模型',
@@ -804,7 +804,7 @@ export const DEFAULT_MODEL_FIELD: FieldSpec = {
   hint: '留空取第一个 provider 的默认模型',
 }
 
-// 全部全局 scope 字段的注册表（保存时按 spec 收集）
+// Registry of all global-scope fields (collected by spec on save)
 export function globalFieldSpecs(): FieldSpec[] {
   const out: FieldSpec[] = [DEFAULT_MODEL_FIELD, ...SKILLS_CONFIG_FIELDS]
   for (const tab of TABS) {

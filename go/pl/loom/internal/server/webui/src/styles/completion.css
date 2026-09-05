@@ -1,0 +1,47 @@
+/* ============================== Composer input completion (@ files / / skills) ============================== */
+.menu .menu-item.ac-item {
+  gap: 8px;
+}
+.menu .menu-item .ac-icon {
+  flex: none;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 12px;
+}
+.menu .menu-item .ac-main {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menu .menu-item .ac-sub {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Injected-context chip inside the user bubble (server-resolved results of @file / /skill) */
+.user-ctx {
+  margin-top: 6px;
+  font-size: 12px;
+}
+.user-ctx summary {
+  gap: 6px;
+}
+.user-ctx summary .icon {
+  font-size: 11px;
+}
+.user-ctx-body {
+  margin-top: 6px;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 11px;
+  line-height: 1.5;
+}

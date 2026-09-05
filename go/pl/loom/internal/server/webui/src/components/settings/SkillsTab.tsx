@@ -1,6 +1,6 @@
-// SkillsTab.tsx — Skills tab：配置小节（全局 scope）+ 运行时发现视图
-// （禁用/启用按名称跨工作区生效并热应用；删除从磁盘移除目录）。
-// 与旧 settings.js 的 Skills 部分一一对应。
+// SkillsTab.tsx — Skills tab: config section (global scope) + runtime discovery view.
+// (Enable/disable applies by name across workspaces and hot-applies; deleting removes the directory from disk.)
+// Mirrors the Skills section of the legacy settings.js.
 
 import { useCallback, useEffect, useState } from 'react'
 import type { AppController } from '../../app/controller'
@@ -33,8 +33,8 @@ export function SkillsTab({
   setGlobal: (key: string, v: ControlState) => void
   controller: AppController
   active: boolean
-  // 禁用开关经专用端点直写 config：同步面板持有的 revision 与 disabled
-  // 列表，否则后续保存设置会 409 冲突，或把 skills.disabled 回滚成旧值
+  // The disable toggle writes config directly via a dedicated endpoint: keep the panel's revision and disabled
+  // list in sync, otherwise a later settings save hits a 409 conflict or rolls skills.disabled back to a stale value
   onDisabledChanged: (revision: string | undefined, disabled: string[]) => void
 }) {
   const { invalid } = useSettingsCtx()
@@ -60,7 +60,7 @@ export function SkillsTab({
       try {
         const r = await controller.api.listSkills()
         setState({
-          loaded: true, // 成功才置位：失败后下次切入 tab 允许自动重试
+          loaded: true, // Set only on success so a failed load can auto-retry on the next tab entry
           loading: false,
           enabled: r.enabled !== false,
           reason: r.reason || '',
@@ -92,8 +92,8 @@ export function SkillsTab({
       const resp = await controller.api.setSkillDisabled(sk.name, !sk.disabled)
       onDisabledChanged(resp.revision, resp.disabled || [])
       toast(sk.disabled ? `已启用 ${sk.name}` : `已禁用 ${sk.name}（立即生效）`, true)
-      // 就地同步行状态（禁用按名称生效，可能涉及多行），不整表重扫——
-      // 滚动位置与已展开的简介因此保留
+      // Sync row state in place (disable applies by name and may affect multiple rows) without rescanning —
+      // this preserves scroll position and any expanded descriptions
       const off = new Set(resp.disabled || [])
       setState((s) => ({
         ...s,
@@ -121,7 +121,7 @@ export function SkillsTab({
     try {
       await controller.api.deleteSkill(sk.path)
       toast(`已删除 ${sk.name}`, true)
-      // 删除后就地移除对应行；分组清空后整组移除
+      // After deleting, remove the row in place; once a group becomes empty, remove the whole group
       setState((s) => ({
         ...s,
         groups: s.groups
@@ -135,7 +135,7 @@ export function SkillsTab({
 
   return (
     <>
-      {/* 配置小节：控件归属全局 scope */}
+      {/* Config section: controls belong to the global scope */}
       <section className="set-sec set-sec-card">
         <h3 className="set-sec-title">技能配置</h3>
         {SKILLS_CONFIG_FIELDS.map((spec) => (
@@ -256,7 +256,7 @@ function SkillRow({
           </button>
         </div>
       </div>
-      {/* 简介默认截断为两行（CSS line-clamp），hover 见全文，点击展开/收起 */}
+      {/* Description is clamped to two lines by default (CSS line-clamp); hover shows full text, click to expand/collapse */}
       <div
         className={'skill-desc' + (expanded ? ' is-expanded' : '')}
         title={sk.description}

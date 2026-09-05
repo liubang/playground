@@ -1,0 +1,145 @@
+/* Desktop (loom-desktop, mac.TitleBarHidden, no toolbar): no native title bar; the traffic lights
+   float at the standard top-left spot (center line 14px from the window top, spanning ~12–66px).
+   Top rows are uniformly tightened to 28px: with the sidebar open the lights land inside the .ws-bar
+   row, collapsed they land inside the .app-header row; in both states the row content center line is
+   14px, exactly level with the lights. Top rows double as the window drag region
+   (Wails --wails-draggable); buttons and other interactive controls opt out of dragging. */
+.is-desktop .sidebar {
+  padding-top: 0;
+}
+/* The top row is pure window chrome (lights + action icons): the "Workspaces" section label is hidden
+   so it isn't misread as the window title, matching the collapsed top row (lights + ≡ ☾ ⚙ ·).
+   "+" right-aligns to the sidebar's right edge, hidden by default and revealed on sidebar hover
+   (or keyboard focus) — same interaction language as workspace rows showing "new/delete" only on
+   hover; normally the top row shows just the lights. */
+.is-desktop .ws-bar-title {
+  display: none;
+}
+.is-desktop .ws-bar {
+  min-height: 28px;
+  padding-left: 64px;
+  justify-content: flex-end;
+  --wails-draggable: drag;
+}
+.is-desktop .ws-bar .icon-btn {
+  --wails-draggable: no-drag;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.is-desktop .sidebar:hover .ws-bar .icon-btn,
+.is-desktop .ws-bar:focus-within .icon-btn {
+  visibility: visible;
+  opacity: 1;
+}
+.is-desktop .app-header {
+  min-height: 28px;
+  --wails-draggable: drag;
+}
+.is-desktop .app-header button {
+  --wails-draggable: no-drag;
+}
+/* With the sidebar collapsed the traffic lights land on the header's left; the whole header shifts right to make room */
+.is-desktop .shell.sidebar-collapsed .app-header {
+  padding-left: 76px;
+}
+/* When the window loses focus the system redraws the traffic lights as inactive (black dots under a
+   transparent title bar, drawn by AppKit — the web layer can't recolor them); both top rows fade in
+   sync for a consistent native "inactive window" look (main.js toggles is-inactive on blur/focus) */
+.is-desktop .app-header,
+.is-desktop .ws-bar {
+  transition: opacity 0.15s ease;
+}
+.is-desktop.is-inactive .app-header,
+.is-desktop.is-inactive .ws-bar {
+  opacity: 0.45;
+}
+
+/* Narrow screens: sidebar becomes a drawer overlay (☰ toggle; auto-collapses after picking a session) */
+@media (max-width: 767px) {
+  .app-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: var(--z-drawer);
+    width: min(320px, 85vw);
+    transform: translateX(-105%);
+    transition: transform 0.15s ease;
+    box-shadow: var(--shadow-md);
+    /* notch: keep sidebar content below the status bar / dynamic island */
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+  }
+  /* Override the desktop collapse rule's display:none; the drawer is hidden via transform instead */
+  .shell.sidebar-collapsed .sidebar {
+    display: flex;
+  }
+  .shell:not(.sidebar-collapsed) .sidebar {
+    transform: none;
+  }
+  /* Drawer backdrop: dims content while the narrow-screen drawer is open; click to dismiss */
+  .shell:not(.sidebar-collapsed) .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-drawer) - 1);
+    background: rgba(0, 0, 0, 0.45);
+  }
+  .transcript-inner,
+  .composer-box,
+  .plan-panel {
+    max-width: none;
+  }
+
+  /* Header: tightened spacing, workspace breadcrumb hidden (visible in the sidebar) */
+  .app-header {
+    padding: 0 8px;
+    gap: 6px;
+  }
+  .app-header .hdr-ws {
+    display: none;
+  }
+
+  /* Touch targets: icon buttons enlarged from ~28px to near 44pt */
+  .icon-btn {
+    padding: 8px 10px;
+  }
+
+  /* Composer / statusbar: tightened margins + bottom safe area (notch home indicator) */
+  .composer {
+    padding: 8px max(10px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
+  }
+  .statusbar {
+    padding: 0 max(10px, env(safe-area-inset-right));
+    padding-bottom: env(safe-area-inset-bottom);
+    gap: 8px;
+    overflow-x: auto;
+  }
+  /* Transcript: right/left safe-area insets so content clears the notch / rounded corners */
+  .transcript-inner {
+    padding-left: max(24px, env(safe-area-inset-left));
+    padding-right: max(24px, env(safe-area-inset-right));
+  }
+
+  /* Share page narrow-screen adaptation: tighter margins, wider bubbles, secondary meta hidden —
+     yield the limited width to conversation content */
+  .share-body .transcript-inner {
+    padding: 16px 12px 12px;
+    /* NOTE: no gap override here — inter-block spacing lives on
+       .block-wrap's margin and must stay equal to BLOCK_GAP_PX in
+       TranscriptView.tsx, otherwise the virtualizer's offset math drifts. */
+  }
+  .share-body .block-user {
+    max-width: 88%;
+  }
+  .share-header {
+    padding: 0 12px;
+    gap: 8px;
+  }
+  .share-meta {
+    display: none;
+  }
+}

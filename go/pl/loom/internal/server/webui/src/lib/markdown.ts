@@ -1,13 +1,13 @@
-// markdown.ts — marked + highlight.js + DOMPurify 管线（docs/WEB_DESIGN.md §8）。
-// 全 SPA 唯一危险 HTML 入口：marked/hljs 输出必须经 DOMPurify 白名单过滤；
-// diff 的行内语法高亮复用本模块的 sanitizeHtml，不私开 innerHTML 口子。
-// 逻辑与旧 static/js/markdown.js 一一对应。
+// markdown.ts — marked + highlight.js + DOMPurify pipeline (docs/WEB_DESIGN.md §8).
+// The SPA's only dangerous-HTML entry point: marked/hljs output must pass
+// DOMPurify's whitelist; the diff's inline syntax highlighting reuses this
+// module's sanitizeHtml — no private innerHTML openings. Logic mirrors the legacy static/js/markdown.js one-to-one.
 
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-// hljs 按需注册：只打包 diff 高亮白名单（lib/diff.ts EXT_TO_LANG）覆盖的
-// 语言——highlight.js/lib/common 全量约 40 种语言是共享 chunk 的最大单项
-// 之一，按子集注册可再减约四分之一体积。
+// hljs registered on demand: only bundle the languages covered by the diff
+// highlight whitelist (lib/diff.ts EXT_TO_LANG) — highlight.js/lib/common's
+// full ~40 languages are among the shared chunk's largest single items; registering a subset shaves off roughly another quarter of the size.
 import hljs from 'highlight.js/lib/core'
 import type { LanguageFn } from 'highlight.js'
 import bash from 'highlight.js/lib/languages/bash'
@@ -83,18 +83,18 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
 }
 
-// 代码块语法高亮：lang 已知时走 hljs（输出自带转义），否则纯转义原文。
-// 最终 HTML 仍会过 DOMPurify，双保险。
+// Code block syntax highlighting: hljs when lang is known (its output escapes
+// itself), otherwise plain-escape the raw text. The final HTML still passes DOMPurify — belt and braces.
 marked.use({
   tokenizer: {
-    // marked v15+ 的 GFM del 规则接受单个 ~（del:/^(~~?).../），会把
-    // "100ms~1s"、"31~33°C" 这类区间写法误判成删除线。这里拦截：孤立单 ~
-    // 一律按普通文本消费（返回 token 即阻止内置 del 再匹配），~~ 交回内置
-    // strikethrough 处理（false = 回落内置）。与 TUI 的 escapeLoneTildes
-    // （internal/ui/markdown.go）同语义。
+    // marked v15+'s GFM del rule accepts a single ~ (del:/^(~~?).../), which
+    // misreads range notations like "100ms~1s", "31~33°C" as strikethrough.
+    // Intercept here: a lone single ~ is always consumed as plain text (returning
+    // a token prevents the built-in del from matching again); ~~ goes back to the
+    // built-in strikethrough (false = fall back). Same semantics as the TUI's escapeLoneTildes (internal/ui/markdown.go).
     del(src: string) {
-      // marked 的 Del token 类型声明要求 tokens 字段；运行时 text token 无需
-      // （与旧版行为一致，官方 issue 同款绕过）
+      // marked's Del token type declaration requires a tokens field; a runtime
+      // text token doesn't need one (same behavior as the legacy version, same workaround as the official issue)
       if (src[0] === '~' && src[1] !== '~')
         return { type: 'text', raw: '~', text: '~' } as unknown as never
       return false
@@ -108,7 +108,7 @@ marked.use({
           const html = hljs.highlight(text, { language }).value
           return `<pre><code class="hljs language-${language}">${html}</code></pre>`
         } catch {
-          // hljs 对个别残缺片段可能抛错；落回纯文本
+          // hljs may throw on some incomplete fragments; fall back to plain text
         }
       }
       return `<pre><code>${escapeHtml(text)}</code></pre>`
@@ -116,7 +116,7 @@ marked.use({
   },
 })
 
-// 外链新窗口打开且不带 opener；DOMPurify 默认不过滤 target。
+// Open external links in a new window without an opener; DOMPurify doesn't filter target by default.
 DOMPurify.addHook('afterSanitizeAttributes', (node) => {
   if ((node as Element).tagName === 'A') {
     ;(node as Element).setAttribute('target', '_blank')
@@ -131,7 +131,7 @@ const PURIFY_OPTS = {
 }
 
 // sanitizeHtml sanitizes an HTML fragment through the shared whitelist.
-// 供 diff 的 hljs 行内高亮复用（hljs 输出只有 span[class]）。
+// Reused by the diff's hljs inline highlighting (hljs output is only span[class]).
 export function sanitizeHtml(html: string): string {
   return DOMPurify.sanitize(html, PURIFY_OPTS)
 }
@@ -147,8 +147,8 @@ export function highlightToHtml(text: string, language: string): string {
   }
 }
 
-// renderMarkdown renders markdown text to sanitized HTML。
-// React 侧经 dangerouslySetInnerHTML 挂载（全应用唯一入口，与旧版同约束）。
+// renderMarkdown renders markdown text to sanitized HTML.
+// The React side mounts it via dangerouslySetInnerHTML (the app's only entry point, same constraint as the legacy version).
 export function renderMarkdown(text: string): string {
   const html = marked.parse(text || '', { async: false })
   return DOMPurify.sanitize(html, PURIFY_OPTS)

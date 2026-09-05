@@ -1,7 +1,7 @@
-// MarkdownView.tsx — markdown 渲染组件。
-// dangerouslySetInnerHTML 全应用唯一入口：HTML 来自 lib/markdown.ts 的
-// marked → DOMPurify 白名单管线（与旧版同约束）。memo 按 text 比较，
-// 未变化的块不参与重渲染。
+// MarkdownView.tsx — markdown rendering component.
+// The sole dangerouslySetInnerHTML entry point in the app: HTML comes from lib/markdown.ts's
+// marked → DOMPurify whitelist pipeline (same constraints as the old version). memo compares by text,
+// so unchanged blocks skip re-rendering.
 
 import { memo, useMemo } from 'react'
 import { renderMarkdown } from '../../lib/markdown'

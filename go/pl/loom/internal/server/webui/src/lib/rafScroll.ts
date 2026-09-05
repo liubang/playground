@@ -1,15 +1,16 @@
-// rafScroll.ts — 轻量 onScroll rAF 节流 hook。
+// rafScroll.ts — lightweight onScroll rAF-throttling hook.
 //
-// 原始 onScroll 直接在事件回调里同步读 DOM + 调 controller：滚动事件在
-// 惯性滚动 / 触控板 / 鼠标滚轮高频触发，每个事件都做 layout 读取与 store
-// 写入，会把主线程拉满、掉帧。把实际工作搬到下一帧执行，期间多次 scroll
-// 事件合并为一次。
+// Raw onScroll reads the DOM synchronously and calls the controller right in
+// the event callback: scroll events fire at high frequency during inertial
+// scrolling / trackpad / mouse wheel; a layout read plus a store write per
+// event saturates the main thread and drops frames. Move the real work to the
+// next frame instead, coalescing multiple scroll events in between into one.
 //
-// 用法：
+// Usage:
 //   const onScroll = useRafScroll((el) => { ... })
 //   <div onScroll={onScroll} />
 //
-// 回调在 rAF 里执行；组件卸载时自动取消挂起的帧。
+// The callback runs in rAF; pending frames are auto-cancelled on unmount.
 
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 
@@ -18,18 +19,18 @@ export function useRafScroll<T extends HTMLElement>(
 ): (e: { currentTarget: T }) => void {
   const raf = useRef<number | null>(null)
   const elRef = useRef<T | null>(null)
-  // 用 ref 持有最新 handler：unstable handler（如在 JSX 中创建的箭头函数）
-  // 不会让 useCallback 缓存失效，onScroll / flush 在整个组件生命周期内
-  // 保持同一引用，因此挂在 DOM 上的监听器不需要每次渲染重建。
-  // 同步写在 layout effect 里而不是渲染期：React 18 并发模式下渲染可能被
-  // 中止/重放，渲染期变异 ref 会读到不可预测的值；layout effect 在 commit
-  // 阶段同步执行，始终指向最后一个已提交的 handler。
+  // Hold the latest handler in a ref: an unstable handler (e.g. an arrow function created
+  // in JSX) must not invalidate the useCallback cache — onScroll / flush keep the same
+  // reference for the component's whole lifetime, so the DOM listener needn't be rebuilt per render.
+  // Written synchronously in a layout effect, not during render: under React 18 concurrent
+  // mode renders can be aborted/replayed, and mutating a ref during render reads unpredictable
+  // values; layout effects run synchronously at commit, always pointing at the last committed handler.
   const handlerRef = useRef(handler)
   useLayoutEffect(() => {
     handlerRef.current = handler
   }, [handler])
 
-  // 组件卸载：取消挂起的 rAF，避免对已卸载组件触发 handler 里捕获的 setState
+  // Unmount: cancel the pending rAF, avoiding setState captured in the handler firing on an unmounted component
   useEffect(
     () => () => {
       if (raf.current !== null) {
@@ -51,7 +52,7 @@ export function useRafScroll<T extends HTMLElement>(
   const onScroll = useCallback(
     (e: { currentTarget: T }) => {
       elRef.current = e.currentTarget
-      if (raf.current !== null) return // 已有挂起帧：合并
+      if (raf.current !== null) return // a frame is already pending: coalesce
       raf.current = requestAnimationFrame(flush)
     },
     [flush],

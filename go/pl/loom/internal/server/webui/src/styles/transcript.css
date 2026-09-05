@@ -1,0 +1,212 @@
+/* transcript */
+.transcript {
+  overflow-y: auto;
+  /* Contain overscroll at the transcript edge so it never chains to a parent. */
+  overscroll-behavior: contain;
+  /* Backstop: clip any residual horizontal overflow from children so it never bubbles up
+into a page-level horizontal scrollbar; wide code/tables/diffs each have their own
+overflow-x scroll container and are unaffected. */
+  overflow-x: hidden;
+  position: relative;
+}
+/* Top/bottom scroll fade: sticky pseudo-elements pinned to the viewport edges fade content out as it scrolls past, so long reads no longer "hard-clip";
+   pointer-events pass through so interaction is unblocked; z-index stays below the follow button /--z-follow(10). */
+.transcript::before,
+.transcript::after {
+  content: '';
+  display: block;
+  position: sticky;
+  height: 28px;
+  pointer-events: none;
+  z-index: 3;
+}
+.transcript::before {
+  top: 0;
+  margin-bottom: -28px;
+  background: linear-gradient(to bottom, var(--bg0), transparent);
+}
+.transcript::after {
+  bottom: 0;
+  margin-top: -28px;
+  background: linear-gradient(to top, var(--bg0), transparent);
+}
+.transcript-inner {
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: 24px 24px 12px;
+  display: flex;
+  flex-direction: column;
+}
+/* Block wrapper used by virtualized rendering: keeps .block-user's
+   align-self:flex-end working (flex column) and carries the inter-block
+   spacing as margin (gap is 0 so the virtualizer can compute offsets from
+   heights + a constant). */
+.block-wrap {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 20px;
+}
+/* The .block fadein entrance is for genuinely new blocks: virtualization
+   remounts a block every time it re-enters the render window, which would
+   replay the animation on each scroll (visible as flickering, e.g. the
+   thinking dots strobing). Blocks already mounted once get .seen (tracked by
+   id in TranscriptView) and skip the replay. */
+.block-wrap.seen .block {
+  animation: none;
+}
+.empty-state {
+  text-align: center;
+  padding: 80px 20px;
+  color: var(--muted);
+}
+.empty-state .brand {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 8px;
+}
+/* Zero-workspace onboarding: centered in the main area, prompting the user to add their first workspace */
+.no-workspace {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+.no-workspace-card {
+  text-align: center;
+  max-width: 420px;
+}
+.no-workspace-card .brand {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 16px;
+}
+.no-workspace-card h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 8px;
+}
+.no-workspace-desc {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0 0 24px;
+}
+.follow-btn {
+  position: sticky;
+  bottom: 12px;
+  margin: 0 auto;
+  display: block;
+  z-index: var(--z-follow); /* Stays above the fadein transform stacking context of .block */
+  background: var(--bg1);
+  color: var(--fg);
+  border: 1px solid var(--bg2);
+  border-radius: var(--radius-full);
+  padding: 5px 14px;
+  font-size: var(--text-sm);
+  box-shadow: var(--shadow-sm);
+}
+
+/* In-session search bar (components/TranscriptView TranscriptSearch): pinned
+   overlay at the top-right of the chat pane (Cmd/Ctrl+F). */
+.chat-pane {
+  position: relative;
+}
+.transcript-search {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  z-index: var(--z-follow);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 10px;
+  background: var(--bg1);
+  border: 1px solid var(--bg2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  animation: menu-pop 0.12s ease;
+}
+/* The bare input's visible focus is carried by the container (a11y: the focus indicator is not lost to outline:none) */
+.transcript-search:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--ring-color);
+}
+.transcript-search .ts-input {
+  width: 200px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--fg);
+  font-size: var(--text-md);
+}
+.transcript-search .ts-input::placeholder {
+  color: var(--muted);
+}
+.transcript-search .ts-count {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  min-width: 34px;
+  text-align: center;
+  user-select: none;
+}
+/* Search hit flash: outline-color eases out so the located block is visible
+   without a persistent marker competing with the content. */
+.block-wrap.search-flash {
+  outline: 2px solid transparent;
+  outline-offset: 4px;
+  border-radius: var(--radius-md);
+  animation: search-flash 1.2s ease-out;
+}
+@keyframes search-flash {
+  0% {
+    outline-color: var(--primary);
+  }
+  100% {
+    outline-color: transparent;
+  }
+}
+
+/* Session loading: when a snapshot is being fetched, old content dims (it is
+   about to be replaced); empty transcripts get skeleton rows instead. */
+.transcript.is-loading .transcript-inner {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+.skeleton-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 6px 2px;
+}
+.sk-row {
+  height: 14px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, var(--bg1) 25%, var(--bg2) 50%, var(--bg1) 75%);
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.4s linear infinite;
+}
+@keyframes sk-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+.sk-w-40 {
+  width: 40%;
+}
+.sk-w-55 {
+  width: 55%;
+}
+.sk-w-70 {
+  width: 70%;
+}
+.sk-w-85 {
+  width: 85%;
+}

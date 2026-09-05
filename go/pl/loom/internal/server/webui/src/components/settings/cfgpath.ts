@@ -1,5 +1,5 @@
-// cfgpath.ts — config 键路径工具与「UI 未管理键」保留逻辑。
-// 与旧 settings.js 的路径工具一一对应。
+// cfgpath.ts — Config key-path utilities and preservation logic for UI-unmanaged keys.
+// Mirrors the path utilities of the old settings.js one-to-one.
 
 export function getPath(obj: unknown, path: string): unknown {
   return path
@@ -17,12 +17,12 @@ export function setPath(obj: Record<string, unknown>, path: string, value: unkno
   o[keys[keys.length - 1]] = value
 }
 
-// UI 未管理的配置路径：保存时从已加载的配置原样带回，避免静默丢失
-// （merge 的语义是「未提供的 key = 从文件删除」）。PRESERVE_PATHS 覆盖
-// 已知但 UI 未做编辑器的嵌套键；KNOWN_TOP_KEYS 之外的顶层键（未来新增
-// 的配置节）也一律保留 —— UI 完整性不该是正确性的前提。
-// skills.disabled 由技能 tab 的禁用开关经专用端点直写（不在表单里），
-// 保存时原样带回。
+// UI-unmanaged config paths: carried back verbatim from the loaded config on save to avoid silent loss
+// (merge semantics: "unprovided key = removed from the file"). PRESERVE_PATHS covers
+// nested keys that are known but have no UI editor; top-level keys outside KNOWN_TOP_KEYS (future
+// config sections) are likewise always preserved — UI completeness should not be a precondition of correctness.
+// skills.disabled is written directly via a dedicated endpoint by the skills tab's disable toggle (not in the form),
+// and carried back verbatim on save.
 export const PRESERVE_PATHS = ['ui.keymap', 'skills.disabled']
 export const KNOWN_TOP_KEYS = new Set([
   'default',

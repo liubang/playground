@@ -267,7 +267,7 @@ func run(ctx context.Context, args []string) error {
 		Mac: &mac.Options{
 			// TitleBarHidden: no native title bar — the webview extends to
 			// the window top and the traffic lights overlay the 28px top
-			// rows (see app.css .is-desktop rules). Note: HiddenInset is
+			// rows (see styles/desktop.css .is-desktop rules). Note: HiddenInset is
 			// NOT used on purpose — it sets UseToolbar=true, which attaches
 			// an empty NSToolbar and pushes the lights down into a ~52px
 			// unified toolbar band (center ~27px), misaligning them with

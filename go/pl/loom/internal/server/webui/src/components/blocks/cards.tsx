@@ -1,13 +1,13 @@
-// cards.tsx — 审批卡片与问答卡片（与旧 blocks.js approvalCard/questionCard 对应）。
+// cards.tsx — approval card and question card (correspond to the old blocks.js approvalCard/questionCard).
 
 import { memo, useState } from 'react'
 import type { ApprovalRequestedPayload, QuestionPayload } from '../../protocol/events'
 import { Icon } from '../../lib/icons'
 import { DiffView } from './DiffView'
 
-// --- approval 卡片 ---
-// diff（可选）：调用方从工具块移入的 diff 文本（去重：审批期间工具块不
-// 再重复展示，收编时恢复）。
+// --- approval card ---
+// diff (optional): the diff text moved in from the tool block by the caller (dedup: during approval the tool block no
+// longer shows it again; it is restored once the approval is resolved).
 
 export const ApprovalCard = memo(function ApprovalCard({
   payload,
@@ -20,8 +20,8 @@ export const ApprovalCard = memo(function ApprovalCard({
   resolving?: boolean
   onResolve: (decision: 'allow' | 'deny', always: boolean, trust?: string) => void
 }) {
-  // rule_preview 为空表示该调用不可记忆（后端 ApprovalRulePreview），
-  // 此时隐藏 Allow always，避免提供一个静默无效的选项。
+  // An empty rule_preview means this call cannot be remembered (backend ApprovalRulePreview);
+  // hide Allow always in that case to avoid offering a silently ineffective option.
   const preview = payload.rule_preview || ''
   const trustPreview = payload.trust_preview || ''
   return (
@@ -34,9 +34,9 @@ export const ApprovalCard = memo(function ApprovalCard({
         <span className="mono">{payload.tool_name || ''}</span>
       </div>
       {payload.description && <div className="desc">{payload.description}</div>}
-      {/* 后果行：这个操作「会做什么」（推导出的效果），而非命令文本本身 */}
+      {/* Consequence row: what this operation "will do" (the derived effect), not the command text itself */}
       {payload.consequence && <div className="consequence">{payload.consequence}</div>}
-      {/* cmd 仅在 target 与 description 不同时展示，避免同一段话渲染两遍 */}
+      {/* Show cmd only when target differs from description, avoiding rendering the same text twice */}
       {payload.target && payload.target !== payload.description && (
         <div className="cmd">
           <code>{payload.target}</code>
@@ -91,7 +91,7 @@ export const ApprovalCard = memo(function ApprovalCard({
   )
 })
 
-// --- question 卡片 ---
+// --- question card ---
 
 export const QuestionCard = memo(function QuestionCard({
   payload,
@@ -102,14 +102,14 @@ export const QuestionCard = memo(function QuestionCard({
   resolving?: boolean
   onAnswer: (answer: { selected: string[]; custom_text: string; skipped: boolean }) => void
 }) {
-  // snapshot 重建时 payload 为 PendingRequest.Question（包一层 question）
+  // On snapshot rebuild the payload is PendingRequest.Question (wrapped in a question field)
   const q = (payload as { question?: QuestionPayload }).question || payload
   const inputType = q.allow_multiple ? 'checkbox' : 'radio'
   const [name] = useState(() => 'q_' + Math.random().toString(36).slice(2, 8))
   const [custom, setCustom] = useState('')
-  // 受控选择状态：此前用 querySelectorAll(':checked') 直接读 DOM，组件被
-  // React 复用 / payload 变更 / resolving 切换重渲时，DOM 的 checked 与
-  // 组件意图可能脱节。统一收进 state。
+  // Controlled selection state: previously read the DOM directly via querySelectorAll(':checked'); when the component is
+  // reused by React / the payload changes / resolving toggles a re-render, the DOM's checked state can
+  // drift from the component's intent. Unified into state.
   const [selected, setSelected] = useState<string[]>([])
   const toggle = (label: string) =>
     q.allow_multiple

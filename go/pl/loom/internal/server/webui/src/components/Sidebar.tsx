@@ -4,7 +4,7 @@
 // and hover actions (archive/delete).
 // One-to-one with the old components/sidebar.js.
 
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppController } from '../app/controller'
 import type { SessionSummary, Workspace } from '../protocol/types'
 import { useStore } from '../store/store'
@@ -49,7 +49,17 @@ export const Sidebar = memo(function Sidebar({
   // (expand it, collapse the other groups)
   const focusedOnce = useRef(false)
 
-  const toggleCollapse = (wsId: string) => {
+  // Relative times ("3m ago") drift with real time: tick once every 30s and pass nowMs to list items,
+  // so timestamps on a long-lived page don't go stale. Memoized child components rely on this prop to sense refreshes.
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [])
+
+  // Stable reference: WorkspaceGroup's memo depends on onToggle staying unchanged (previously a new arrow function was
+  // created per render — together with the byWs/ids rebuilt below, the memo of the entire session tree was fully defeated).
+  const toggleCollapse = useCallback((wsId: string) => {
     setCollapsed((prev) => {
       const next = new Set(prev)
       if (next.has(wsId)) next.delete(wsId)
@@ -57,7 +67,7 @@ export const Sidebar = memo(function Sidebar({
       saveCollapsed(next)
       return next
     })
-  }
+  }, [])
 
   // Startup focus: desktop starts a fresh page session every launch, so the
   // collapsed state is not carried over.
@@ -119,20 +129,26 @@ export const Sidebar = memo(function Sidebar({
     })
   }, [revealWs])
 
-  // Grouping: workspace_id ("" = default/legacy) → [sessions]
-  const byWs = new Map<string, SessionSummary[]>()
-  for (const s of sessions) {
-    const k = s.workspace_id || ''
-    if (!byWs.has(k)) byWs.set(k, [])
-    byWs.get(k)!.push(s)
-  }
+  // Grouping: workspace_id ("" = default/legacy) → [sessions].
   // Workspace order: registered workspaces (newest first), then any that have
   // sessions but are not registered.
-  const ordered = workspaces.map((w) => w.id)
-  for (const k of byWs.keys()) {
-    if (!ordered.includes(k)) ordered.push(k)
-  }
-  const ids = new Set(sessions.map((s) => s.id))
+  // Memoized on the raw slices: any unrelated store emit (conn badge, polling,
+  // busy flips) used to rebuild these containers and defeat the memoized
+  // workspace/session subtrees below.
+  const { byWs, ordered, ids } = useMemo(() => {
+    const byWs = new Map<string, SessionSummary[]>()
+    for (const s of sessions) {
+      const k = s.workspace_id || ''
+      if (!byWs.has(k)) byWs.set(k, [])
+      byWs.get(k)!.push(s)
+    }
+    const ordered = workspaces.map((w) => w.id)
+    for (const k of byWs.keys()) {
+      if (!ordered.includes(k)) ordered.push(k)
+    }
+    const ids = new Set(sessions.map((s) => s.id))
+    return { byWs, ordered, ids }
+  }, [sessions, workspaces])
 
   // Hoisted out of JSX: an inline hook call inside the onScroll attribute
   // would be re-created per render (same hygiene issue fixed in ReasoningBlock).
@@ -173,7 +189,8 @@ export const Sidebar = memo(function Sidebar({
               collapsed={collapsed.has(wsId)}
               activeId={activeId}
               archivedView={showArchived}
-              onToggle={() => toggleCollapse(wsId)}
+              onToggle={toggleCollapse}
+              nowMs={nowMs}
               controller={controller}
             />
           )
@@ -222,6 +239,7 @@ const WorkspaceGroup = memo(function WorkspaceGroup({
   activeId,
   archivedView,
   onToggle,
+  nowMs,
   controller,
 }: {
   wsId: string
@@ -231,7 +249,8 @@ const WorkspaceGroup = memo(function WorkspaceGroup({
   collapsed: boolean
   activeId: string | null
   archivedView: boolean
-  onToggle: () => void
+  onToggle: (wsId: string) => void
+  nowMs: number
   controller: AppController
 }) {
   // A non-empty wsId with no matching entity = the owning workspace was deleted.
@@ -246,22 +265,25 @@ const WorkspaceGroup = memo(function WorkspaceGroup({
   // In-group session hierarchy: sub-agent sessions render indented under their
   // parent; a session whose parent is not in the group renders at top level
   // (fallback for pagination boundaries).
-  const childrenOf = new Map<string, SessionSummary[]>()
-  const tops: SessionSummary[] = []
-  for (const s of sessions) {
-    if (s.parent_session_id && allIds.has(s.parent_session_id)) {
-      let arr = childrenOf.get(s.parent_session_id)
-      if (!arr) childrenOf.set(s.parent_session_id, (arr = []))
-      arr.push(s)
-    } else {
-      tops.push(s)
+  const orderedItems = useMemo(() => {
+    const childrenOf = new Map<string, SessionSummary[]>()
+    const tops: SessionSummary[] = []
+    for (const s of sessions) {
+      if (s.parent_session_id && allIds.has(s.parent_session_id)) {
+        let arr = childrenOf.get(s.parent_session_id)
+        if (!arr) childrenOf.set(s.parent_session_id, (arr = []))
+        arr.push(s)
+      } else {
+        tops.push(s)
+      }
     }
-  }
-  const orderedItems: { s: SessionSummary; isChild: boolean }[] = []
-  for (const s of tops) {
-    orderedItems.push({ s, isChild: false })
-    for (const c of childrenOf.get(s.id) || []) orderedItems.push({ s: c, isChild: true })
-  }
+    const items: { s: SessionSummary; isChild: boolean }[] = []
+    for (const s of tops) {
+      items.push({ s, isChild: false })
+      for (const c of childrenOf.get(s.id) || []) items.push({ s: c, isChild: true })
+    }
+    return items
+  }, [sessions, allIds])
 
   return (
     <div className="ws-group">
@@ -270,7 +292,16 @@ const WorkspaceGroup = memo(function WorkspaceGroup({
           'ws-node' + (collapsed ? ' is-collapsed' : '') + (hasActive ? ' has-active' : '')
         }
         data-ws-id={wsId}
-        onClick={onToggle}
+        role="button"
+        tabIndex={0}
+        aria-expanded={!collapsed}
+        onClick={() => onToggle(wsId)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onToggle(wsId)
+          }
+        }}
       >
         <span className="ws-caret">
           <Icon name={collapsed ? 'caret-right' : 'caret-down'} />
@@ -330,6 +361,7 @@ const WorkspaceGroup = memo(function WorkspaceGroup({
                 isChild={isChild}
                 active={s.id === activeId}
                 archivedView={archivedView}
+                nowMs={nowMs}
                 controller={controller}
               />
             ))
@@ -345,12 +377,14 @@ const SessionItem = memo(function SessionItem({
   isChild,
   active,
   archivedView,
+  nowMs,
   controller,
 }: {
   s: SessionSummary
   isChild: boolean
   active: boolean
   archivedView: boolean
+  nowMs: number
   controller: AppController
 }) {
   const st = s.state || ''
@@ -378,7 +412,7 @@ const SessionItem = memo(function SessionItem({
         />
       )}
       <span className="t">{s.title || shortId(s.id)}</span>
-      <span className="rt">{relTime(s.created_at)}</span>
+      <span className="rt">{relTime(s.created_at, nowMs)}</span>
       {/* Hover actions: archive/unarchive + delete (take no resting width; they
           replace the timestamp on hover) */}
       <span className="acts">

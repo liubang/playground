@@ -1,0 +1,335 @@
+/* ============================== Plan panel ============================== */
+/* V2 variant A: bare rows — no card chrome in the steady state (one line of text is the status), hover reveals a background,
+   opening stitches the summary and the list into a single "card" (one card; chrome appears only on deliberate inspection);
+   ▸ fixed 18px column aligned with the list's step-circle column → the goal text and the title share one vertical line when expanded;
+   completion transitions: row checkmark pops in + a ruler-straight sweep strikes through the goal from the left + dot pop;
+   the collapsed state uses a row-bottom glow (rowglow) to signal "new progress";
+   once all done, "✓ All done" lingers briefly, then the panel retires automatically (is-retiring fade-out). */
+.plan-panel {
+  max-width: var(--content-width);
+  margin: 0 auto 8px;
+  border-radius: 6px;
+  font-size: var(--text-sm);
+  max-height: 480px;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease,
+    max-height 0.3s ease,
+    margin 0.3s ease;
+}
+.plan-panel.is-retiring {
+  opacity: 0;
+  transform: translateY(3px);
+  max-height: 0;
+  margin-bottom: 0;
+}
+.plan-panel summary {
+  /* Collapsed inline-flex: the hover background wraps only the content (title + dots + count + current),
+     not a full-width banner; expanded switches to a full-row flex, stitched flush with the card body below.
+     max-width caps overlong content (each child ellipsizes itself);
+     the border is a permanent transparent placeholder: on expand the border takes over, removing the 1px open/close jitter. */
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 9px;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  color: var(--muted);
+  padding: 3px 8px 3px 14px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+.plan-panel summary:hover {
+  background: color-mix(in srgb, var(--bg1) 65%, transparent);
+  color: var(--fg);
+}
+.plan-panel.flash > summary {
+  animation: rowglow 0.55s ease;
+}
+.plan-panel summary::-webkit-details-marker {
+  display: none;
+}
+/* Expand stitching: summary spans the full row and takes over the top half of the card chrome, joining the body below into one card */
+.plan-panel[open] summary {
+  display: flex;
+  background: var(--bg1);
+  border-color: var(--bg2);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+}
+.plan-panel[open] summary:hover {
+  background: var(--bg1);
+}
+.plan-panel summary::before {
+  /* ▸ fixed 18px column: vertically aligned with the expanded list's pp-num circle column (18px),
+     so the goal text and the title land at the same x position when expanded */
+  content: '\25B8';
+  flex: none;
+  width: 18px;
+  display: inline-flex;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1;
+  transition: transform 0.16s ease;
+}
+.plan-panel[open] summary::before {
+  transform: rotate(90deg);
+}
+
+/* —— summary row —— */
+.pp-title {
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 320px;
+}
+.pp-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  padding: 0 1px;
+}
+.pp-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: color-mix(in srgb, var(--muted) 28%, transparent);
+  transition: background 0.3s ease;
+}
+.pp-dot.is-done {
+  background: var(--success);
+}
+.pp-dot.is-cur {
+  background: var(--primary);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.pp-dot.just {
+  animation: dotpop 0.35s ease;
+}
+.pp-count {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  transition: color 0.25s ease;
+}
+.pp-count.is-done-all {
+  color: var(--success);
+  font-weight: 700;
+}
+.pp-now {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.pp-now b {
+  color: var(--fg);
+  font-weight: 500;
+}
+.pp-now.is-live b {
+  color: var(--primary);
+  animation: flipin 0.18s ease;
+}
+.pp-now.is-done-all b {
+  color: var(--success);
+}
+
+/* —— Expansion area: grid-template-rows transition for smooth expand/collapse (equivalent to the old max-height transition,
+   but without dragging adjacent layout through per-frame reflow); the list scrolls internally, capped at 220px —— */
+.pp-body {
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.22s ease;
+}
+/* The grid item must be allowed to shrink to 0 (its own overflow clips the content), otherwise the 0fr collapse has no effect */
+.pp-body > .pp-list {
+  min-height: 0;
+}
+/* Card on expand: the body stitches with the summary into one card (no top border, square-corner seam);
+   when collapsed the chrome disappears together with the open attribute */
+.plan-panel[open] .pp-body {
+  grid-template-rows: 1fr;
+  background: var(--bg1);
+  border: 1px solid var(--bg2);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  margin: 0;
+  box-shadow: var(--shadow-sm);
+}
+.pp-list {
+  list-style: none;
+  margin: 0;
+  padding: 5px 14px 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.pp-item {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  padding: 3px 0;
+  line-height: 1.5;
+  min-height: 26px;
+}
+
+/* —— step-number circles —— */
+.pp-num {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.3s ease,
+    color 0.3s ease,
+    border-color 0.3s ease;
+}
+.pp-num .pp-num-txt {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+.pp-item.is-todo .pp-num {
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--muted) 50%, transparent);
+}
+.pp-item.is-in_progress .pp-num {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  border: 1px solid transparent;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.pp-item.is-done .pp-num {
+  color: var(--on-accent);
+  background: var(--success);
+  border: 1px solid transparent;
+}
+.pp-num .pp-check {
+  display: inline-flex;
+  font-size: 9px;
+}
+.pp-item.just-done .pp-num {
+  animation: numpop 0.34s ease;
+}
+.pp-item.just-done .pp-num .pp-check {
+  animation: checkin 0.3s ease 0.06s both;
+}
+
+/* —— goal text —— */
+.pp-goal {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  position: relative;
+  transition: color 0.25s ease;
+}
+.pp-item.is-todo .pp-goal {
+  color: var(--muted);
+}
+.pp-item.is-in_progress .pp-goal {
+  color: var(--fg);
+  font-weight: 500;
+}
+.pp-item.is-done .pp-goal {
+  color: var(--muted);
+}
+/* The done strikethrough is handled by ::after: text-decoration cannot animate, so the transition uses a ruler-straight sweep */
+.pp-item.is-done .pp-goal::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 55%;
+  height: 1px;
+  width: 100%;
+  background: currentColor;
+  opacity: 0.55;
+  transform: scaleX(1);
+  transform-origin: left center;
+}
+.pp-item.just-done .pp-goal::after {
+  animation: strikein 0.22s ease-out 0.03s both;
+}
+
+@keyframes strikein {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes checkin {
+  0% {
+    transform: scale(0.1) rotate(-20deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.25) rotate(5deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0);
+    opacity: 1;
+  }
+}
+@keyframes numpop {
+  0% {
+    transform: scale(0.5);
+  }
+  60% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes dotpop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.8);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes flipin {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes rowglow {
+  0% {
+    background: transparent;
+  }
+  30% {
+    background: color-mix(in srgb, var(--primary) 10%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}

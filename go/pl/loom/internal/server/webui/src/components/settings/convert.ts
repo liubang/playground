@@ -1,16 +1,16 @@
-// convert.ts — 控件值 ↔ config 值的双向转换（spec 驱动）。
-// 与旧 settings.js 的 fillControl/collectControl 一一对应，但操作纯数据
-// 而非 DOM：draft 里存控件态（raw），保存时收集为 config 结构。
+// convert.ts — Bidirectional conversion of control values ↔ config values (spec-driven).
+// Mirrors fillControl/collectControl of the old settings.js one-to-one, but operates on pure data
+// instead of the DOM: drafts hold control state (raw) and are collected into the config structure on save.
 //
-// 空值语义与文件一致：留空 = 不写入该键（omitempty），默认值全部隐式。
+// Empty-value semantics match the file: blank = key not written (omitempty); all defaults are implicit.
 
 import type { FieldSpec } from './spec'
 import { setPath } from './cfgpath'
 
-// 控件态：文本类一律 string；bool/flag-list 为 boolean。
+// Control state: text-like types are always string; bool/flag-list are boolean.
 export type ControlState = string | boolean
 
-// fillValue 把 config 值转为控件态（加载时填充）。
+// fillValue converts a config value to control state (fills on load).
 export function fillValue(spec: FieldSpec, value: unknown): ControlState {
   const t = spec.type || 'text'
   if (value === undefined || value === null) value = t === 'bool' || t === 'flag-list' ? false : ''
@@ -47,13 +47,13 @@ export function fillValue(spec: FieldSpec, value: unknown): ControlState {
   }
 }
 
-// collectValue 把控件态收集进 obj[key]（保存时）；空值不写键。
+// collectValue collects control state into obj[key] (on save); empty values do not write the key.
 export function collectValue(spec: FieldSpec, state: ControlState, obj: Record<string, unknown>) {
   const key = spec.key
   const t = spec.type || 'text'
   switch (t) {
     case 'password': {
-      if (state !== '') setPath(obj, key, state) // 密钥不 trim
+      if (state !== '') setPath(obj, key, state) // secrets are not trimmed
       break
     }
     case 'number': {
@@ -61,11 +61,11 @@ export function collectValue(spec: FieldSpec, state: ControlState, obj: Record<s
       break
     }
     case 'bool': {
-      if (state === true) setPath(obj, key, true) // false = 默认，不写入
+      if (state === true) setPath(obj, key, true) // false = default, not written
       break
     }
     case 'flag-list': {
-      if (state === true) setPath(obj, key, [...(spec.flagValue || [])]) // 不勾 = 默认（省略键）
+      if (state === true) setPath(obj, key, [...(spec.flagValue || [])]) // unchecked = default (key omitted)
       break
     }
     case 'tristate': {
@@ -123,7 +123,7 @@ export function collectValue(spec: FieldSpec, state: ControlState, obj: Record<s
   }
 }
 
-// collectFields 收集一组同 scope 的字段（卡片/分组用）。
+// collectFields collects a group of fields in the same scope (for cards/groups).
 export function collectFields(
   specs: FieldSpec[],
   states: Record<string, ControlState>,

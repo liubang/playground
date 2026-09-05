@@ -1,15 +1,15 @@
-// sse.ts — fetch-based SSE 连接管理（docs/WEB_DESIGN.md §2.2/§3.4）。
-// EventSource 无法设置 Authorization header，故用 fetch + ReadableStream
-// 手写解析；与 Go 侧 client/http.go 的 pumpSSE 同构。
-// 逻辑与旧 static/js/sse.js 一一对应，仅补类型。
+// sse.ts — fetch-based SSE connection management (docs/WEB_DESIGN.md §2.2/§3.4).
+// EventSource cannot set the Authorization header, so parsing is hand-rolled
+// with fetch + ReadableStream; isomorphic to pumpSSE in the Go-side client/http.go.
+// Logic mirrors the legacy static/js/sse.js one-to-one, with types added.
 
 import type { RuntimeEvent } from './events'
 
-const WATCHDOG_MS = 45_000 // 服务端心跳 15s；45s 无帧判死
+const WATCHDOG_MS = 45_000 // server heartbeat is 15s; 45s without a frame is judged dead
 const WATCHDOG_TICK_MS = 5_000
 const BACKOFF_MIN_MS = 1_000
 const BACKOFF_MAX_MS = 15_000
-const RATE_LIMIT_RETRY_MS = 30_000 // 429 流数超限：慢速重试（对端标签页关闭即自愈）
+const RATE_LIMIT_RETRY_MS = 30_000 // 429 stream limit exceeded: slow retry (self-heals once the peer tab closes)
 
 export type ConnState = 'connecting' | 'live' | 'reconnecting' | 'draining' | 'dead'
 
@@ -40,7 +40,7 @@ export class EventStream {
   private lastFrameAt = 0
   private watchdog: ReturnType<typeof setInterval> | null = null
   private retryTimer: ReturnType<typeof setTimeout> | null = null
-  private gen = 0 // 连接代次：作废旧连接的异步后续（防双连接/误杀新看门狗）
+  private gen = 0 // connection generation: invalidates old connections' async continuations (prevents double connections / killing the new watchdog)
 
   constructor(cb: EventStreamCallbacks) {
     this.getToken = cb.getToken
@@ -75,22 +75,23 @@ export class EventStream {
     this._stopWatchdog()
   }
 
-  // ensureLive 在页面生命周期事件（visibilitychange/pageshow/online/focus）
-  // 时调用：看门狗的 setInterval 会随页面一起被系统挂起（App Nap / 窗口
-  // 遮挡 / BFCache），冻结期间 TCP 半开、连接悄死，恢复后没有任何定时器
-  // 会发现它——必须由页面事件主动戳一下。连接在且帧新鲜时是 no-op。
-  // 注意：这里只提前触发重连，不重置 retries——弱网下频繁唤起页面不应
-  // 把退避进度清零变成对服务端的重连风暴（成功后连接帧会自行归零）。
+  // ensureLive is called on page lifecycle events (visibilitychange/pageshow/
+  // online/focus): the watchdog's setInterval is suspended with the page by the
+  // system (App Nap / window occlusion / BFCache); while frozen TCP goes half-open
+  // and the connection dies silently, and after resume no timer ever notices — a
+  // page event must actively poke it. No-op when connected and frames are fresh.
+  // Note: only triggers reconnect early, does NOT reset retries — frequent page wakes on
+  // weak networks must not zero the backoff progress into a reconnect storm against the server (a successful connection frame self-resets).
   ensureLive() {
     if (this.stopped || this.drained || !this.sessionId) return
-    // 退避等待中（含 429 慢速重试）：不等了，立即重连。
+    // Waiting in backoff (incl. 429 slow retry): skip the wait, reconnect now.
     if (this.retryTimer) {
       clearTimeout(this.retryTimer)
       this.retryTimer = null
       void this._connect()
       return
     }
-    // 连接看似在途但已超心跳期限：判死杀掉，立即重连。
+    // Connection looks in-flight but exceeded the heartbeat deadline: judge dead, kill, reconnect now.
     const stale = this.lastFrameAt > 0 && Date.now() - this.lastFrameAt > WATCHDOG_MS
     if (stale || !this.abort) {
       if (this.abort) {
@@ -116,8 +117,8 @@ export class EventStream {
         signal: this.abort.signal,
       })
     } catch {
-      // detach（stopped）或 ensureLive/attach 起的新连接（gen 变化）引发的
-      // 中止直接丢弃；其余（网络失败）进入退避重连。
+      // Aborts caused by detach (stopped) or by a newer connection started by
+      // ensureLive/attach (gen changed) are dropped; the rest (network failure) go into backoff retry.
       if (this.stopped || this.gen !== gen) return
       return this._scheduleRetry()
     }
@@ -127,16 +128,16 @@ export class EventStream {
       return
     }
     if (res.status === 404) {
-      // 会话在本进程不 live（服务重启后会话需重新 resume）：events 端点
-      // 无帧可发（连 server.resync 都收不到），不能按普通失败退避——直接
-      // 走 resync：snapshot 404 → resume → 重挂流。会话已删除时 resync
-      // 内部报错收场，不会形成死循环。
+      // Session not live in this process (after a server restart sessions must be
+      // resumed again): the events endpoint has no frames to send (not even server.resync),
+      // so plain-failure backoff is wrong — go straight to resync: snapshot 404 → resume
+      // → re-attach the stream. A deleted session ends with a resync error; no infinite loop.
       this.onResync('session_not_live')
       return
     }
     if (res.status === 429) {
-      // 流数超限：升 dead 让 UI 提示（附手动重试），同时挂一个慢速自动
-      // 重试——别处的标签页关闭后无需用户干预即可自愈。
+      // Stream limit exceeded: raise dead for the UI to prompt (with manual retry),
+      // and also arm a slow auto-retry — self-heals with no user intervention once tabs elsewhere close.
       this.onConn('dead', 'too many tabs streaming this session')
       this.retryTimer = setTimeout(() => void this._connect(), RATE_LIMIT_RETRY_MS)
       return
@@ -149,9 +150,9 @@ export class EventStream {
     try {
       await this._parse(res.body!)
     } catch {
-      // 看门狗判死的 AbortError 也走到这里：不能静默 return，否则断流后
-      // 永无重连（历史 bug：徽标停在 live，界面僵死）。detach/ensureLive
-      // 的主动中止已被 gen/stopped 守卫拦截，不会误入。
+      // The watchdog's kill AbortError also lands here: must not return silently,
+      // otherwise a dropped stream never reconnects (historical bug: badge stuck at
+      // live, UI frozen). Deliberate aborts by detach/ensureLive are already intercepted by the gen/stopped guards.
       if (this.stopped || this.gen !== gen) return
     }
     this._stopWatchdog()
@@ -164,7 +165,7 @@ export class EventStream {
     const base = Math.min(BACKOFF_MAX_MS, BACKOFF_MIN_MS * 2 ** this.retries)
     const jitter = base * (0.75 + Math.random() * 0.5)
     this.retries++
-    // attempt 给 UI 判断「连续失败」用：达到阈值后升起横幅强提示。
+    // attempt lets the UI judge "consecutive failures": past the threshold, raise a banner alert.
     this.onConn('reconnecting', `retry in ${Math.round(jitter / 1000)}s`, this.retries)
     this.retryTimer = setTimeout(() => void this._connect(), jitter)
   }
@@ -173,7 +174,7 @@ export class EventStream {
     this._stopWatchdog()
     this.watchdog = setInterval(() => {
       if (Date.now() - this.lastFrameAt > WATCHDOG_MS && this.abort) {
-        this.abort.abort() // 判死：触发重连路径
+        this.abort.abort() // judged dead: triggers the reconnect path
       }
     }, WATCHDOG_TICK_MS)
   }
@@ -236,14 +237,14 @@ export class EventStream {
           continue
         }
         if (line.startsWith(':')) {
-          // 连接横幅 / 心跳注释帧
+          // connection banner / heartbeat comment frame
           const m = line.match(/^: connected, instance=(\w+)/)
           if (m) {
             if (this.instance && this.instance !== m[1]) {
-              // 实例切换意味着服务端换了进程（滚动部署/重启）：旧连接的
-              // 资源必须在走 resync 前亲手清理——cancel reader 收掉底层流、
-              // 停看门狗、bump gen 让 _connect 尾部不会给这条旧连接再排一次
-              // 重连定时器（否则与 resync 牵出的新 attach 构成双连接）。
+              // An instance switch means the server changed processes (rolling deploy/restart):
+              // the old connection's resources must be cleaned up by hand before resync —
+              // cancel the reader to pull the underlying stream down, stop the watchdog, bump
+              // gen so _connect's tail won't schedule another retry for this old connection (otherwise double connection with resync's new attach).
               void reader.cancel()
               this._stopWatchdog()
               this.gen++
