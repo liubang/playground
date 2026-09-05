@@ -322,19 +322,27 @@ func TestServeRealModelPrepareFailureE2E(t *testing.T) {
 }
 
 // TestServeRealModelWritablePathsE2E is the real-model acceptance for the
-// run_cmd writable_paths scoped grant: a command that drops a file OUTSIDE
-// the workspace must be completed WITHOUT leaving the sandbox — the model
-// is expected to declare writable_paths (the scoped in-sandbox widening)
-// instead of require_escalated — the behavior a real approval-storm
-// session motivated.
+// run_cmd scoped write widening: a command that drops a file OUTSIDE the
+// workspace must be completed WITHOUT leaving the sandbox — neither
+// require_escalated nor a blanket grant; the widening must be scoped to
+// the target (the behavior a real approval-storm session motivated).
+//
+// The widening has two entry points, both accepted here: the model may
+// declare writable_paths proactively (visible as a scoped writable=[...]
+// grant), or the effect analysis may DERIVE the cross-boundary write
+// target from the command semantics and answer the approval with exactly
+// that gap grant (permission.Effect.GapGrant — the ask's refs name the
+// target) so the first attempt succeeds after one scoped approval. The
+// latter is the primary path for statically provable redirects; the
+// declared form remains for dynamic targets the analysis cannot prove.
 //
 // Acceptance coverage:
 //  1. the file lands on disk with the expected content (real write through
-//     the seatbelt sandbox with a writable-path grant);
+//     the seatbelt sandbox with a scoped grant);
 //  2. no approval request ever carries ESCALATED(no-sandbox) — the run
 //     never leaves the sandbox;
-//  3. at least one approval request carries the scoped writable=[...]
-//     grant, proving the model reached for writable_paths.
+//  3. at least one approval request carries scoped write evidence for the
+//     target — declared writable=[...] or derived refs naming the dir.
 //
 // Skipped unless LOOM_E2E_LLM=1 (real provider via the user's own config).
 func TestServeRealModelWritablePathsE2E(t *testing.T) {
@@ -365,10 +373,10 @@ func TestServeRealModelWritablePathsE2E(t *testing.T) {
 	go collector.Run()
 
 	// The prompt pins the OUT-OF-WORKSPACE target and the in-sandbox
-	// preference, but deliberately does NOT name the writable_paths
-	// parameter: the model is expected to learn it from the tool
-	// description and the sandbox guidance note, which is exactly the
-	// behavior being accepted.
+	// preference: whether the model declares writable_paths up front or the
+	// effect derivation answers the approval with the scoped gap grant,
+	// the observable contract is identical — one scoped widening, zero
+	// sandbox escapes.
 	prompt := fmt.Sprintf("把文本 %q 写入文件 %s（该路径在工作区之外）。要求：\n"+
 		"1. 必须通过 run_cmd 执行命令完成写入（不要用 write/edit 工具）；\n"+
 		"2. 让命令留在沙箱内运行：如果默认沙箱拦截了这次写入，按工具描述和返回指引选择最小化的沙箱内授权方式重试，直到写入成功，不要放弃；\n"+
@@ -390,15 +398,18 @@ func TestServeRealModelWritablePathsE2E(t *testing.T) {
 	}
 	t.Logf("write landed via sandboxed grant: %q", strings.TrimSpace(string(data)))
 
-	// 2+3. Inspect the durable permission trail: no escalation, at least
-	// one scoped writable-path ask.
+	// 2+3. Inspect the durable permission trail: no escalation, and at
+	// least one ask shows the widening was SCOPED to the target — either
+	// declared by the model (writable=[...]) or derived by the effect
+	// analysis (the ask refs name the target dir that the gap grant then
+	// widens to, permission.Effect.GapGrant).
 	store := env.OpenStoreReadOnly(t)
 	persisted, err := store.LoadEvents(ctx, sessionID, 0)
 	if err != nil {
 		t.Fatalf("LoadEvents: %v", err)
 	}
 	var asks int
-	var writableAsk bool
+	var scopedAsk bool
 	for _, evt := range persisted {
 		if evt.Type != domain.EventPermissionRequested {
 			continue
@@ -407,16 +418,16 @@ func TestServeRealModelWritablePathsE2E(t *testing.T) {
 		payload := string(evt.Payload)
 		t.Logf("permission ask #%d: %s", asks, payload)
 		if strings.Contains(payload, "ESCALATED(no-sandbox)") {
-			t.Fatalf("the run escalated out of the sandbox; writable_paths should have sufficed:\n%s", payload)
+			t.Fatalf("the run escalated out of the sandbox; a scoped widening should have sufficed:\n%s", payload)
 		}
-		if strings.Contains(payload, "writable=[") {
-			writableAsk = true
+		if strings.Contains(payload, "writable=[") || strings.Contains(payload, outside) {
+			scopedAsk = true
 		}
 	}
-	if !writableAsk {
-		t.Fatalf("no permission request carried a scoped writable grant (%d asks); the model never used writable_paths", asks)
+	if !scopedAsk {
+		t.Fatalf("no permission request carried a scoped widening for %s (%d asks)", outside, asks)
 	}
-	t.Logf("permission trail: %d ask(s), all sandboxed, scoped writable grant present", asks)
+	t.Logf("permission trail: %d ask(s), all sandboxed, scoped widening present", asks)
 
 	snap, err := c.RequestSnapshot(ctx)
 	if err != nil {
@@ -426,7 +437,7 @@ func TestServeRealModelWritablePathsE2E(t *testing.T) {
 		t.Logf("note: final answer did not echo the code word (non-fatal; the file content is authoritative)")
 	}
 
-	t.Log("ACCEPTANCE PASS: out-of-workspace write completed via scoped writable_paths grant, zero sandbox escapes")
+	t.Log("ACCEPTANCE PASS: out-of-workspace write completed via scoped widening, zero sandbox escapes")
 }
 
 // TestServeRealModelPruneCompactionE2E is the real-model acceptance for
