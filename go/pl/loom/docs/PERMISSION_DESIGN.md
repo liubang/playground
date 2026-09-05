@@ -196,7 +196,7 @@ chain := permission.Chain{
 
 ### 6.1 `internal/permission`
 
-- 新增 `verdict.go`：`Verdict`、`ApprovalMode`（on-request / unless-dangerous / never）、`Decider`、`Chain`（含 contextDecider 单次解析快路径）。
+- 新增 `verdict.go`：`Verdict`、`ApprovalMode`（on-request / danger-only / never）、`Decider`、`Chain`（含 contextDecider 单次解析快路径）。
 - 内置 Decider 集中于 `decider.go`（Rule/Danger/Session/Baseline 四实现）。`Policy` 结构简化为装配参数包（Rules + Session），不再携带风险基线开关——基线行为完全由审批模式决定（§4.3）。
 - `rules.go`：Rule 增加 `Grant *RuleGrant`；`validateRule` 增加 §5 校验；`LoadRuleSets` 按层剥离非法 grant。
 - `danger.go`：argv 级危险命令清单（程序级：`dd`/`mkfs`/`shred`/`sudo`；子命令级：`git push --force`、`git reset --hard`、`git clean -f`；目标级：`rm -r` 指向 `/`、`~`、系统目录或 `..` 逃逸；凭证外泄：`curl -d @~/.ssh/...` 等网络工具 argv 含凭证路径；包装器剥离：env/nice/nohup/timeout/command 前缀后递归筛查）。
