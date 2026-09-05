@@ -67,7 +67,6 @@ func NewGitLogTool(validator *workspacepkg.PathValidator, runner *process.Runner
 		Name:         "git_log",
 		Description:  "Read recent commit history (hash, author, ISO date, subject) with a bounded limit. Optionally filter by file path.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string","minLength":1},"limit":{"type":"integer","minimum":1,"maximum":100},"path":{"type":"string","minLength":1}},"required":[]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string"},"limit":{"type":"integer"},"commits":{"type":"array"},"count":{"type":"integer"}},"required":["repo_root","limit","commits","count"]}`),
 		Capabilities: []domain.Capability{domain.CapGitRead},
 		Source:       domain.ToolSourceBuiltin,
 	}, validator, runner)
@@ -202,7 +201,7 @@ func buildLogArgs(repoRoot string, limit int, repoRelativePath string) []string 
 
 func parseLogOutput(stdout []byte) []gitLogCommit {
 	commits := []gitLogCommit{}
-	for _, line := range strings.Split(strings.TrimRight(sanitizeUTF8(stdout), "\n"), "\n") {
+	for _, line := range strings.Split(strings.TrimRight(toolkit.SanitizeUTF8(stdout), "\n"), "\n") {
 		if line == "" {
 			continue
 		}

@@ -23,12 +23,15 @@ go_library(
         "base.go",
         "binary.go",
         "cache.go",
+        "command.go",
         "signing.go",
+        "text.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/toolkit",
     visibility = ["//visibility:public"],
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/workspace:workspace_lib",
     ],
 )
 
@@ -38,6 +41,7 @@ go_test(
         "base_test.go",
         "binary_test.go",
         "cache_test.go",
+        "text_test.go",
     ],
     embed = [":toolkit_lib"],
 )

@@ -146,7 +146,7 @@ func resolveExistingPath(validator *workspacepkg.PathValidator, input string) (p
 
 	display := filepath.ToSlash(resolved)
 	if rel, err := filepath.Rel(validator.Root(), resolved); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		display = displayPath(rel)
+		display = workspacepkg.DisplayPath(rel)
 	}
 
 	info, err := os.Stat(resolved)
@@ -162,14 +162,6 @@ func resolveExistingPath(validator *workspacepkg.PathValidator, input string) (p
 		Display:  display,
 		Info:     info,
 	}, nil
-}
-
-func displayPath(rel string) string {
-	clean := filepath.Clean(rel)
-	if clean == "." || clean == string(filepath.Separator) {
-		return "."
-	}
-	return filepath.ToSlash(clean)
 }
 
 // containsSensitiveComponent delegates to the single canonical list in the

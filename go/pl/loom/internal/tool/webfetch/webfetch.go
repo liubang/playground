@@ -106,7 +106,6 @@ func NewWebFetchTool(artifacts domain.ArtifactStore) (*WebFetchTool, error) {
 			"Private/loopback/link-local destinations are blocked unless allow_private=true. " +
 			"Successful responses are cached for 15 minutes; large content is truncated with the full text stored as an artifact.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"url":{"type":"string","minLength":1,"maxLength":2048},"format":{"type":"string","enum":["markdown","text","raw"]},"max_bytes":{"type":"integer","minimum":1024,"maximum":1048576},"timeout_ms":{"type":"integer","minimum":1000,"maximum":60000},"allow_private":{"type":"boolean"}},"required":["url"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","properties":{"url":{"type":"string"},"final_url":{"type":"string"},"status":{"type":"integer"},"content_type":{"type":"string"},"format":{"type":"string"},"bytes":{"type":"integer"},"truncated":{"type":"boolean"},"cache":{"type":"string"},"fetched_at":{"type":"string"},"content":{"type":"string"},"artifact":{"type":"object"}},"required":["url","final_url","status","content_type","format","bytes","truncated","cache","fetched_at","content"]}`),
 		Capabilities: []domain.Capability{domain.CapNetworkConnect},
 		Source:       domain.ToolSourceBuiltin,
 	})

@@ -154,22 +154,26 @@ func shellProbeDirs() []string {
 // refreshShellProbe runs one probe and publishes the result to memory and
 // disk. Failures leave the previous state untouched.
 func refreshShellProbe() {
+	// Snapshot the config and the test seams under the lock: the refresh
+	// goroutine must never re-read package-level seams mid-flight (a test
+	// cleanup restoring them would race this read).
 	shellProbe.Lock()
 	cachePath, shell, home := shellProbe.cachePath, shellProbe.shell, shellProbe.home
+	run, now := shellProbeRun, shellProbeNow
 	shellProbe.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), shellProbeTimeout)
-	entries, err := shellProbeRun(ctx, shell, home)
+	entries, err := run(ctx, shell, home)
 	cancel()
 
 	shellProbe.Lock()
-	shellProbe.refreshing = false
 	if err != nil || len(entries) == 0 {
+		shellProbe.refreshing = false
 		shellProbe.Unlock()
 		return
 	}
 	shellProbe.entries = entries
-	shellProbe.probedAt = shellProbeNow()
+	shellProbe.probedAt = now()
 	probedAt := shellProbe.probedAt
 	shellProbe.Unlock()
 
@@ -178,6 +182,13 @@ func refreshShellProbe() {
 		ProbedAt: probedAt,
 		Entries:  entries,
 	})
+
+	// Clear refreshing only after the disk write lands, so
+	// "refreshing == false" means memory and disk are both published and
+	// waiters can rely on the persisted cache being fresh.
+	shellProbe.Lock()
+	shellProbe.refreshing = false
+	shellProbe.Unlock()
 }
 
 func readShellProbeCache(path string) (shellProbeCache, error) {

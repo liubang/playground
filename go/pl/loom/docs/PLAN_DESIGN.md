@@ -92,7 +92,7 @@ Codex（`gpt_5_codex_prompt.md`，原文照录）：
 - `PlanCell`：mailbox（与 `GoalCell` 同构，`Put`/`Take`，一批内多次调用取最后一次）；
 - `UpdatePlanTool`：`Name: "update_plan"`，`Risk: domain.R1`（纯簿记，无需审批，与 update_goal 一致）；
 - `Execute` 只做"接收并入箱"，回执 `{applied, items, note}`；真正生效在 loop drain 时（与 goal 的"tool batch 后生效"语义一致，保证工具结果可重放）；
-- 工具描述内联核心规则（skip 简单任务 / 禁止单步 / 至多一个 in_progress / 完成一步更新一次 / 不要在消息里复述计划）。
+- 工具描述走契约模式：只陈述 wire 语义（全量快照替换、字段含义、标题规则），行为规则（skip 简单任务 / 禁止单步 / 至多一个 in_progress / 完成一步更新一次 / 不要在消息里复述计划 / produce-before-marking）收敛到 `internal/prompt/prompt.go` 的 Task Planning 静态段（描述末尾指向该段），避免描述与静态段双份漂移。
 
 ### 4.3 Loop 集成（`internal/agent/run.go`）
 

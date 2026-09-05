@@ -382,16 +382,20 @@ func builtinSections() []promptSection {
 		{
 			source: "loom://builtin/runtime-environment",
 			title:  "Runtime Environment",
-			// Keep in sync with internal/process/sandbox_*.go and run_cmd's
-			// tool description; these facts must never be discoverable only
-			// through trial and error.
+			// The execution doctrine for run_cmd / exec_session: the tools'
+			// descriptions carry only the wire contract, and this section is
+			// the single home for when/how to use each sandbox permission.
+			// Keep in sync with internal/process/sandbox_*.go; these facts
+			// must never be discoverable only through trial and error.
 			body: `- Use web_fetch for network information: it accesses the internet directly (bypassing the sandbox) and can fetch web pages, documents, and public data (including public information like weather and exchange rates); it is not an exception to "the sandbox has no network".
-- run_cmd executes in an isolated sandbox: outbound network and DNS are unreachable, but loopback networking works — you may listen on localhost ports and access them locally (e.g. start a dev server to verify); writes are limited to the workspace and the system temp dir (credential paths are unreadable).
-- When a task-critical command fails (or hangs until the timeout) because the sandbox denied outbound network or DNS (SSO/OAuth, HTTP APIs, package downloads), PREFER retrying the same command with needs_network=true: after a lightweight approval it runs INSIDE the sandbox with outbound network granted (credentials stay unreadable), and the user can remember it as a scoped rule.
-- Reserve sandbox_permissions='require_escalated' (with a short justification question) for failures network cannot explain — writes outside the workspace, TTY needs, credential files — it runs OUTSIDE the sandbox with the full user environment after explicit approval (R3).
-- Do not give up or ask the user to run a sandbox-blocked command themselves before offering the matching approval. needs_network must NOT be combined with require_escalated (escalated runs already have full network).
-- Prefer verification methods that work offline (build, test, lint); escalate only when the verification command itself needs network or write access.
-- When you need shell syntax such as pipes, redirection, or &&, use program="sh" with args=["-c", "..."] (higher approval risk).`,
+- web_search locates web sources by keyword: use it for current or temporally unstable information (news, prices, library versions, current docs), then web_fetch the most relevant URLs to read them.
+- run_cmd and exec_session execute 'sh -c' command strings inside an isolated sandbox: outbound network and DNS are unreachable, but loopback networking works — you may listen on localhost ports and access them locally (e.g. start a dev server to verify); writes are limited to the workspace and the system temp dir (credential paths are unreadable).
+- When a task-critical command fails (or hangs until the timeout) because the sandbox denied OUTBOUND NETWORK or DNS (SSO/OAuth, HTTP APIs, package downloads), PREFER retrying the same command with needs_network=true: after a lightweight approval it runs INSIDE the sandbox with outbound network granted (credentials stay unreadable), and the user can remember it as a scoped rule.
+- When a command or session needs to open a GUI APPLICATION (macOS 'open' a URL/app, Apple Events — LaunchServices/NSOSStatusErrorDomain errors), retry with needs_gui_open=true: after a lightweight approval it runs INSIDE the sandbox with GUI-open granted. Use the same flag to proactively show the user a web page (open <url>).
+- A command that WRITES OUTSIDE THE WORKSPACE (a tool dropping logs/config/state in its own directory, e.g. ~/Library/Logs/<tool> or ~/.<tool>) stays INSIDE the sandbox whenever possible: when the target is stated literally in the command, loom proves it and answers the one scoped approval with exactly that target widened — just issue the command, no special flag, and never require_escalated for it. Reserve writable_paths=[that directory] for write targets loom cannot prove statically (shell variables, command substitution) that actually come back denied; writable_paths never names a credential location (.ssh, .aws, keychains, ...) or one of its ancestors.
+- Reserve sandbox_permissions='require_escalated' (with a short justification question) for failures the scoped flags cannot explain — TTY needs, credential files the sandbox hides, Security-framework TLS — it runs OUTSIDE the sandbox with the full user environment after explicit approval (R3).
+- Do not give up or ask the user to run a sandbox-blocked command yourself before offering the matching approval. needs_network, needs_gui_open and writable_paths must NOT be combined with require_escalated (escalated runs already have full network, GUI and write access).
+- Prefer verification methods that work offline (build, test, lint); escalate only when the verification command itself needs network or write access.`,
 		},
 		{
 			source: "loom://builtin/safety",

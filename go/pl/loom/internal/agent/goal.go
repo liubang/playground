@@ -19,8 +19,6 @@ package agent
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -28,6 +26,7 @@ import (
 	"sync"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
 // GoalUpdate is one update_goal tool mutation, drained by the loop after a
@@ -240,9 +239,8 @@ func NewUpdateGoalTool(cell *GoalCell) (*UpdateGoalTool, error) {
 			"evidence from the current state), or status='blocked' only when truly stuck without user input. " +
 			"When closing with status, you may also pass 'objective' as the final summary — it is recorded on the goal. " +
 			"Do not call this tool for trivial single-step tasks.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"objective":{"type":"string","minLength":1,"maxLength":8192},"token_budget":{"type":"integer","minimum":1},"status":{"type":"string","enum":["complete","blocked"]}}}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"applied":{"type":"boolean"},"objective":{"type":"string"},"token_budget":{"type":"integer"},"close":{"type":"string"},"note":{"type":"string"}},"required":["applied","note"]}`),
-		Source:       domain.ToolSourceBuiltin,
+		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"objective":{"type":"string","minLength":1,"maxLength":8192},"token_budget":{"type":"integer","minimum":1},"status":{"type":"string","enum":["complete","blocked"]}}}`),
+		Source:      domain.ToolSourceBuiltin,
 	}
 	if err := def.Validate(); err != nil {
 		return nil, domain.NewError(domain.ErrInternal, "invalid tool definition", domain.WithCause(err))
@@ -264,13 +262,12 @@ func (t *UpdateGoalTool) Prepare(_ context.Context, call domain.ToolCall) (domai
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	call.Arguments = canonical
-	sum := sha256.Sum256(canonical)
 	desc := "Set goal"
 	if args.Status != "" {
 		desc = fmt.Sprintf("Mark goal %s", args.Status)
 	} else if objective := args.Objective; len([]rune(objective)) > 60 {
 		// Rune-aware truncation: a byte cut can split a multi-byte rune.
-		desc = fmt.Sprintf("Set goal: %s", truncateRunes(objective, 60))
+		desc = fmt.Sprintf("Set goal: %s", toolkit.Ellipsize(objective, 60))
 	} else {
 		desc = fmt.Sprintf("Set goal: %s", objective)
 	}
@@ -279,7 +276,7 @@ func (t *UpdateGoalTool) Prepare(_ context.Context, call domain.ToolCall) (domai
 		Definition:   t.def,
 		Risk:         domain.R1,
 		ApprovalDesc: desc,
-		ArgsHash:     hex.EncodeToString(sum[:])[:16],
+		ArgsHash:     toolkit.ArgsFingerprint(canonical),
 	}, nil
 }
 

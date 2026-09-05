@@ -18,7 +18,6 @@
 package gittools
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -150,7 +149,7 @@ func resolveRepoRoot(validator *workspacepkg.PathValidator, input string) (repoR
 	if containsSensitiveComponent(rel) {
 		return repoRootResolution{}, domain.NewError(domain.ErrSecurity, "repo_root contains a sensitive component")
 	}
-	return repoRootResolution{Absolute: resolved, Display: displayPath(rel)}, nil
+	return repoRootResolution{Absolute: resolved, Display: workspacepkg.DisplayPath(rel)}, nil
 }
 
 func resolveRepoPath(
@@ -203,7 +202,7 @@ func confirmRepoRoot(ctx context.Context, b *baseTool, repoRoot repoRootResoluti
 		return domain.NewError(domain.ErrUnavailable, "git repository root output exceeded limit")
 	}
 
-	topLevel := strings.TrimSpace(sanitizeUTF8(result.stdout))
+	topLevel := strings.TrimSpace(toolkit.SanitizeUTF8(result.stdout))
 	if topLevel == "" {
 		return domain.NewError(domain.ErrUnavailable, "git repository root output was empty")
 	}
@@ -306,7 +305,7 @@ func resolveUpstream(ctx context.Context, b *baseTool, repoRoot, ref string) str
 	if err != nil {
 		return ""
 	}
-	upstream := strings.TrimSpace(sanitizeUTF8(result.stdout))
+	upstream := strings.TrimSpace(toolkit.SanitizeUTF8(result.stdout))
 	if validateGitRef(upstream) != nil {
 		return ""
 	}
@@ -319,7 +318,7 @@ func resolveUpstream(ctx context.Context, b *baseTool, repoRoot, ref string) str
 // Returns "" when nothing resolves (a detached, remote-less repository).
 func resolveDefaultBranch(ctx context.Context, b *baseTool, repoRoot string) string {
 	if result, err := runGit(ctx, b, repoRoot, buildRemoteHeadArgs(repoRoot, "origin"), maxGitRevParseStdoutBytes, maxGitStderrBytes); err == nil {
-		short := strings.TrimSpace(sanitizeUTF8(result.stdout))
+		short := strings.TrimSpace(toolkit.SanitizeUTF8(result.stdout))
 		if branch, ok := strings.CutPrefix(short, "origin/"); ok && branch != "" && validateGitRef(branch) == nil {
 			return branch
 		}
@@ -428,9 +427,9 @@ func resolveMergeBase(ctx context.Context, b *baseTool, repoRoot, branch string)
 
 	usedRef := branch
 	if upstreamResult, err := runGit(ctx, b, repoRoot, buildUpstreamArgs(repoRoot, branch), maxGitRevParseStdoutBytes, maxGitStderrBytes); err == nil {
-		if upstream := strings.TrimSpace(sanitizeUTF8(upstreamResult.stdout)); upstream != "" && upstream != branch && validateGitRef(upstream) == nil {
+		if upstream := strings.TrimSpace(toolkit.SanitizeUTF8(upstreamResult.stdout)); upstream != "" && upstream != branch && validateGitRef(upstream) == nil {
 			countResult, countErr := runGit(ctx, b, repoRoot, append(gitBaseArgs(repoRoot), "rev-list", "--count", branch+".."+upstream), maxGitRevParseStdoutBytes, maxGitStderrBytes)
-			if countErr == nil && strings.TrimSpace(sanitizeUTF8(countResult.stdout)) != "0" {
+			if countErr == nil && strings.TrimSpace(toolkit.SanitizeUTF8(countResult.stdout)) != "0" {
 				usedRef = upstream
 			}
 		}
@@ -440,7 +439,7 @@ func resolveMergeBase(ctx context.Context, b *baseTool, repoRoot, branch string)
 	if err != nil {
 		return "", "", classifyGitError(err, result.stderr, fmt.Sprintf("failed to compute merge-base of HEAD and %s", usedRef))
 	}
-	sha := strings.TrimSpace(sanitizeUTF8(result.stdout))
+	sha := strings.TrimSpace(toolkit.SanitizeUTF8(result.stdout))
 	if sha == "" {
 		return "", "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("no merge-base between HEAD and %s (unrelated histories?)", usedRef))
 	}
@@ -537,7 +536,7 @@ func classifyGitError(err error, stderr []byte, fallback string) error {
 		return err
 	}
 
-	stderrText := strings.TrimSpace(sanitizeUTF8(stderr))
+	stderrText := strings.TrimSpace(toolkit.SanitizeUTF8(stderr))
 	var gitErr *gitExitError
 	if errors.As(err, &gitErr) {
 		// git's own stderr is an external protocol, not our error text, so
@@ -583,14 +582,6 @@ func containsSensitiveComponent(path string) bool {
 	return workspacepkg.ContainsSensitiveComponent(path)
 }
 
-func displayPath(rel string) string {
-	clean := filepath.Clean(rel)
-	if clean == "." || clean == string(filepath.Separator) {
-		return "."
-	}
-	return filepath.ToSlash(clean)
-}
-
 func repoPathDisplay(repoRootDisplay, repoRelative string) string {
 	clean := filepath.Clean(filepath.FromSlash(repoRelative))
 	if clean == "." || clean == string(filepath.Separator) {
@@ -609,8 +600,4 @@ func isUnderRoot(path, root string) bool {
 		return true
 	}
 	return strings.HasPrefix(normalized, rootNorm+string(filepath.Separator))
-}
-
-func sanitizeUTF8(data []byte) string {
-	return string(bytes.ToValidUTF8(data, []byte("?")))
 }

@@ -65,7 +65,6 @@ func NewListDirTool(validator *workspacepkg.PathValidator) (*ListDirTool, error)
 			"outside the workspace work too (credential locations are always excluded). " +
 			"Not recursive: use glob to find files by name across the tree, or search to look inside file contents.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1}},"required":["path"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"entry_count":{"type":"integer"},"truncated":{"type":"boolean"},"entries":{"type":"array"}},"required":["path","entry_count","truncated","entries"]}`),
 		Capabilities: []domain.Capability{domain.CapFSRead},
 		Source:       domain.ToolSourceBuiltin,
 	}, validator)

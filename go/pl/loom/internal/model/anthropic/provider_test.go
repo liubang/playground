@@ -820,6 +820,145 @@ func TestMarshalLeadingSystemBlocksCarryCacheControl(t *testing.T) {
 	}
 }
 
+func TestMarshalToolCacheSentinelTrailsTools(t *testing.T) {
+	t.Parallel()
+
+	body, err := marshalRequest(domain.ModelRequest{
+		ModelName: "claude-test", MaxTokens: 16,
+		Messages: []domain.Message{
+			{
+				Role:     domain.RoleSystem,
+				Parts:    []domain.ContentPart{{Kind: domain.PartText, Text: "static part"}},
+				Metadata: map[string]string{domain.MetadataPromptCache: domain.PromptCacheEphemeral},
+			},
+			{Role: domain.RoleUser, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "hi"}}},
+		},
+		Tools: []domain.ToolDefinition{{
+			Name:        "read_file",
+			Description: "read a file",
+			InputSchema: json.RawMessage(`{"type":"object"}`),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshalRequest: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload["tools"] == nil {
+		t.Fatal("tools missing from payload")
+	}
+	first := payload["messages"].([]any)[0].(map[string]any)
+	if first["role"] != "user" {
+		t.Fatalf("first message role = %v, want user", first["role"])
+	}
+	block := first["content"].([]any)[0].(map[string]any)
+	cc, ok := block["cache_control"].(map[string]any)
+	if !ok || cc["type"] != "ephemeral" {
+		t.Fatalf("first user text block missing trailing sentinel: %+v", block)
+	}
+}
+
+func TestMarshalNoToolSentinelWithoutSystemCaching(t *testing.T) {
+	t.Parallel()
+
+	// Tools alone must not introduce a breakpoint: without a cacheable
+	// system prefix the sentinel would only fragment an unstable prompt.
+	body, err := marshalRequest(domain.ModelRequest{
+		ModelName: "claude-test", MaxTokens: 16,
+		Messages: []domain.Message{
+			{Role: domain.RoleSystem, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "prompt"}}},
+			{Role: domain.RoleUser, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "hi"}}},
+		},
+		Tools: []domain.ToolDefinition{{
+			Name:        "read_file",
+			Description: "read a file",
+			InputSchema: json.RawMessage(`{"type":"object"}`),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshalRequest: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	first := payload["messages"].([]any)[0].(map[string]any)
+	block := first["content"].([]any)[0].(map[string]any)
+	if block["cache_control"] != nil {
+		t.Fatalf("unexpected sentinel without system caching: %+v", block)
+	}
+}
+
+func TestMarshalNoToolSentinelWithoutTools(t *testing.T) {
+	t.Parallel()
+
+	// A cached system prefix with no tools must stay untouched.
+	body, err := marshalRequest(domain.ModelRequest{
+		ModelName: "claude-test", MaxTokens: 16,
+		Messages: []domain.Message{
+			{
+				Role:     domain.RoleSystem,
+				Parts:    []domain.ContentPart{{Kind: domain.PartText, Text: "static part"}},
+				Metadata: map[string]string{domain.MetadataPromptCache: domain.PromptCacheEphemeral},
+			},
+			{Role: domain.RoleUser, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "hi"}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshalRequest: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	first := payload["messages"].([]any)[0].(map[string]any)
+	block := first["content"].([]any)[0].(map[string]any)
+	if block["cache_control"] != nil {
+		t.Fatalf("unexpected sentinel without tools: %+v", block)
+	}
+}
+
+func TestMarshalToolSentinelSkipsIneligibleHead(t *testing.T) {
+	t.Parallel()
+
+	// An assistant-led opening (continuation without a fresh user turn) is
+	// not a safe breakpoint host; the sentinel must be skipped, not placed
+	// on a thinking/tool_use block the API would reject.
+	body, err := marshalRequest(domain.ModelRequest{
+		ModelName: "claude-test", MaxTokens: 16,
+		Messages: []domain.Message{
+			{
+				Role:     domain.RoleSystem,
+				Parts:    []domain.ContentPart{{Kind: domain.PartText, Text: "static part"}},
+				Metadata: map[string]string{domain.MetadataPromptCache: domain.PromptCacheEphemeral},
+			},
+			{Role: domain.RoleAssistant, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "on it"}}},
+		},
+		Tools: []domain.ToolDefinition{{
+			Name:        "read_file",
+			Description: "read a file",
+			InputSchema: json.RawMessage(`{"type":"object"}`),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshalRequest: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	first := payload["messages"].([]any)[0].(map[string]any)
+	if first["role"] != "assistant" {
+		t.Fatalf("first message role = %v, want assistant", first["role"])
+	}
+	block := first["content"].([]any)[0].(map[string]any)
+	if block["cache_control"] != nil {
+		t.Fatalf("sentinel placed on ineligible head: %+v", block)
+	}
+}
+
 func TestMarshalSingleUnmarkedSystemStaysString(t *testing.T) {
 	t.Parallel()
 

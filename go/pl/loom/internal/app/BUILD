@@ -69,6 +69,7 @@ go_library(
         "//go/pl/loom/internal/tool/lint:lint_lib",
         "//go/pl/loom/internal/tool/skillread:skillread_lib",
         "//go/pl/loom/internal/tool/subagent:subagent_lib",
+        "//go/pl/loom/internal/tool/toolkit:toolkit_lib",
         "//go/pl/loom/internal/tool/webfetch:webfetch_lib",
         "//go/pl/loom/internal/tool/websearch:websearch_lib",
         "//go/pl/loom/internal/trace",
@@ -107,6 +108,7 @@ go_test(
         "//go/pl/loom/internal/session:session_lib",
         "//go/pl/loom/internal/skill:skill_lib",
         "//go/pl/loom/internal/tool/subagent:subagent_lib",
+        "//go/pl/loom/internal/tool/toolkit:toolkit_lib",
         "//go/pl/loom/internal/workspace:workspace_lib",
     ],
 )

@@ -84,17 +84,9 @@ func resolveExistingPath(validator *workspacepkg.PathValidator, input string) (p
 
 	return pathResolution{
 		Absolute: resolved,
-		Display:  displayPath(rel),
+		Display:  workspacepkg.DisplayPath(rel),
 		Info:     info,
 	}, nil
-}
-
-func displayPath(rel string) string {
-	clean := filepath.Clean(rel)
-	if clean == "." || clean == string(filepath.Separator) {
-		return "."
-	}
-	return filepath.ToSlash(clean)
 }
 
 func lexicalWorkspaceRelativePath(validator *workspacepkg.PathValidator, input string) (string, bool) {

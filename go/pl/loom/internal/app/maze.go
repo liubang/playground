@@ -42,6 +42,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
 // --- wire types (mirrored by protocol/types.ts Maze* interfaces) ---
@@ -260,23 +261,23 @@ func argSummary(raw json.RawMessage) string {
 	}
 	var m map[string]any
 	if err := json.Unmarshal(raw, &m); err != nil {
-		return truncateRunes(string(raw), mazeArgsLabelChars)
+		return toolkit.Ellipsize(string(raw), mazeArgsLabelChars)
 	}
 	for _, k := range []string{"command", "path", "file_path", "pattern", "query", "url", "task"} {
 		if v, ok := m[k].(string); ok && v != "" {
 			if k == "pattern" {
 				if p, _ := m["path"].(string); p != "" {
-					return truncateRunes("pattern="+v+" path="+p, mazeArgsLabelChars)
+					return toolkit.Ellipsize("pattern="+v+" path="+p, mazeArgsLabelChars)
 				}
 			}
-			return truncateRunes(v, mazeArgsLabelChars)
+			return toolkit.Ellipsize(v, mazeArgsLabelChars)
 		}
 	}
 	compact, err := json.Marshal(m)
 	if err != nil {
-		return truncateRunes(string(raw), mazeArgsLabelChars)
+		return toolkit.Ellipsize(string(raw), mazeArgsLabelChars)
 	}
-	return truncateRunes(string(compact), mazeArgsLabelChars)
+	return toolkit.Ellipsize(string(compact), mazeArgsLabelChars)
 }
 
 // scanSteps folds one session's events into verdict-settled steps on the
@@ -354,14 +355,14 @@ func scanSteps(events []domain.Event, clk mazeClock) []*mazeStep {
 						V:      "pending",
 					}
 					if len(call.Arguments) > 0 {
-						tool.ArgsFull = truncateRunes(flattenWs(string(call.Arguments)), mazeArgsDetailChars)
+						tool.ArgsFull = toolkit.Ellipsize(flattenWs(string(call.Arguments)), mazeArgsDetailChars)
 					}
 					st.tools[call.ID] = tool
 					st.toolOrder = append(st.toolOrder, call.ID)
 					byCall[call.ID] = tool
 				}
 			}
-			st.node.RzTxt = truncateRunes(flattenWs(rzTxt), mazeReasoningExcerpt)
+			st.node.RzTxt = toolkit.Ellipsize(flattenWs(rzTxt), mazeReasoningExcerpt)
 			if u := p.Usage; u != nil {
 				st.node.InTok = &u.InputTokens
 				st.node.OutTok = &u.OutputTokens
@@ -432,8 +433,8 @@ func scanSteps(events []domain.Event, clk mazeClock) []*mazeStep {
 					continue
 				}
 				full := flattenWs(contentText(res.Content))
-				t.ResFull = truncateRunes(full, mazeDetailResChars)
-				t.Res = truncateRunes(full, mazeTooltipResChars)
+				t.ResFull = toolkit.Ellipsize(full, mazeDetailResChars)
+				t.Res = toolkit.Ellipsize(full, mazeTooltipResChars)
 				t.Status = string(res.Status)
 				if !res.StartedAt.IsZero() {
 					t.S = clk.rel(res.StartedAt)
@@ -592,7 +593,7 @@ func toolVerdict(t *MazeTool) (string, string) {
 	if head == "" {
 		head = t.Res
 	}
-	head = truncateRunes(head, mazeNoResultScanChars)
+	head = toolkit.Ellipsize(head, mazeNoResultScanChars)
 	if mazeWriteTools[t.Name] {
 		return "ok", ""
 	}
@@ -814,7 +815,7 @@ func childDetourNode(child mazeChild, index int, clk mazeClock) *MazeNode {
 			settledErr = true
 		}
 	}
-	node.RzTxt = truncateRunes(flattenWs(rzTxt), mazeReasoningExcerpt)
+	node.RzTxt = toolkit.Ellipsize(flattenWs(rzTxt), mazeReasoningExcerpt)
 	if hasTok {
 		node.InTok = &inTokSum
 		node.OutTok = &outTokSum

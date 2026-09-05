@@ -19,13 +19,12 @@ package agent
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
 type askUserArgsOption struct {
@@ -63,7 +62,6 @@ func NewAskUserTool(questioner domain.Questioner) (*AskUserTool, error) {
 			"The user may pick from your options, answer in free text, or skip the question entirely — a skip means " +
 			"'proceed with your best judgment', never treat it as an error or ask the same question again.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"question":{"type":"string","minLength":1,"maxLength":1024},"options":{"type":"array","minItems":1,"maxItems":8,"items":{"type":"object","additionalProperties":false,"properties":{"label":{"type":"string","minLength":1,"maxLength":120},"description":{"type":"string","maxLength":512}},"required":["label"]}},"allow_multiple":{"type":"boolean"}},"required":["question","options"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"answered":{"type":"boolean"},"selected":{"type":"array","items":{"type":"string"}},"custom_text":{"type":"string"},"note":{"type":"string"}},"required":["answered","note"]}`),
 		Capabilities: []domain.Capability{domain.CapUserInteract},
 		Source:       domain.ToolSourceBuiltin,
 	}
@@ -83,13 +81,12 @@ func (t *AskUserTool) Prepare(_ context.Context, call domain.ToolCall) (domain.P
 		return domain.PreparedCall{}, err
 	}
 	call.Arguments = canonical
-	sum := sha256.Sum256(canonical)
 	return domain.PreparedCall{
 		Call:         call,
 		Definition:   t.def,
 		Risk:         domain.R0,
-		ApprovalDesc: fmt.Sprintf("Ask user: %s", truncateRunes(question.Text, 60)),
-		ArgsHash:     hex.EncodeToString(sum[:])[:16],
+		ApprovalDesc: fmt.Sprintf("Ask user: %s", toolkit.Ellipsize(question.Text, 60)),
+		ArgsHash:     toolkit.ArgsFingerprint(canonical),
 	}, nil
 }
 

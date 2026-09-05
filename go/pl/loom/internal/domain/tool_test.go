@@ -54,15 +54,6 @@ func TestToolDefinitionValidation(t *testing.T) {
 			},
 			true,
 		},
-		{
-			"invalid output schema",
-			ToolDefinition{
-				Name:         "test",
-				InputSchema:  json.RawMessage(`{}`),
-				OutputSchema: json.RawMessage(`not json`),
-			},
-			true,
-		},
 	}
 
 	for _, tt := range tests {

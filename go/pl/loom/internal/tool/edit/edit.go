@@ -57,7 +57,6 @@ func NewEditTool(validator *workspacepkg.PathValidator, book *workspacepkg.FileS
 			"You MUST read_file the target first: edits are rejected if the file " +
 			"changed since your last read. expected_hash is optional and rarely needed.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1},"old_string":{"type":"string"},"new_string":{"type":"string"},"replace_all":{"type":"boolean"},"expected_hash":{"type":"string","minLength":64,"maxLength":64}},"required":["path","old_string","new_string"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"old_hash":{"type":"string"},"new_hash":{"type":"string"},"size":{"type":"integer"}},"required":["path","old_hash","new_hash","size"]}`),
 		Capabilities: []domain.Capability{domain.CapFSWrite},
 		Source:       domain.ToolSourceBuiltin,
 	}, validator)

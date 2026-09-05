@@ -202,6 +202,11 @@ func TestSearch_ServiceDown(t *testing.T) {
 	if out.Count != 0 || len(out.Results) != 0 {
 		t.Fatalf("expected empty results, got count=%d", out.Count)
 	}
+	// Degradation must be explicit: an un-note'd empty array would read as
+	// "nothing relevant exists" even though the query was never answered.
+	if out.Note == "" || !strings.Contains(out.Note, "NOT answered") {
+		t.Fatalf("expected an explicit unavailability note, got %q", out.Note)
+	}
 }
 
 // TestSearch_500Status also degrades to empty results.
@@ -223,6 +228,9 @@ func TestSearch_500Status(t *testing.T) {
 	decodeResult(t, res, &out)
 	if out.Count != 0 {
 		t.Fatalf("expected empty results")
+	}
+	if out.Note == "" {
+		t.Fatalf("expected an explicit unavailability note on 5xx")
 	}
 }
 
@@ -324,6 +332,11 @@ func TestRead_NotFound(t *testing.T) {
 	if out.Found {
 		t.Fatalf("expected found=false on 404")
 	}
+	// A genuine 404 is a verified negative: it must NOT carry the
+	// unavailability note, or the model could not tell missing from down.
+	if out.Note != "" {
+		t.Fatalf("genuine 404 must not carry a degradation note, got %q", out.Note)
+	}
 }
 
 // TestRead_FoundFalseBody covers the 200-with-found:false variant.
@@ -360,6 +373,9 @@ func TestRead_ServiceDown(t *testing.T) {
 	decodeResult(t, res, &out)
 	if out.Found {
 		t.Fatalf("expected found=false on outage")
+	}
+	if out.Note == "" || !strings.Contains(out.Note, "not verified") {
+		t.Fatalf("expected an explicit unavailability note, got %q", out.Note)
 	}
 }
 

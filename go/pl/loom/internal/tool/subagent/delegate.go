@@ -179,6 +179,12 @@ type DelegateTaskTool struct {
 }
 
 // NewDelegateTaskTool creates the tool bound to the given factory.
+//
+// Usage doctrine (developer-facing; the description stays a contract): use
+// delegation for large-codebase exploration, multi-file fact gathering,
+// independent review, or a focused implementation task — work whose
+// intermediate output would flood the parent conversation. Act on the
+// sub-agent's structured conclusion yourself rather than asking it to.
 func NewDelegateTaskTool(f *Factory) (*DelegateTaskTool, error) {
 	if f == nil || f.Store == nil || f.Registry == nil || f.Models == nil {
 		return nil, domain.NewError(domain.ErrInvalidInput, "subagent factory requires a store, a registry, and a model source")
@@ -186,19 +192,16 @@ func NewDelegateTaskTool(f *Factory) (*DelegateTaskTool, error) {
 	def := domain.ToolDefinition{
 		Name: "delegate_task",
 		Description: "Delegate a self-contained task to a sub-agent that works in its own isolated context and " +
-			"returns a structured conclusion. Roles: \"researcher\" (default, read-only: explores, reviews, gathers " +
-			"facts — it cannot modify files or run commands) and \"coder\" (read-write: edits files and runs " +
-			"sandboxed commands in the workspace; spawning one is an R3 approval because its writes are real). " +
-			"Use it for large-codebase exploration, multi-file fact gathering, independent review, or a focused " +
-			"implementation task — work that would flood this conversation with intermediate output. The sub-agent " +
-			"sees NO conversation history, so the task must be fully self-contained — images attached to this " +
-			"conversation are invisible to it too: transcribe the relevant content into the task, or point it " +
-			"to an on-disk path it can open with its own view_image. It cannot ask questions or " +
-			"delegate further, and its token consumption counts against this run's budget. With async=true the " +
-			"call returns a child_session_id immediately: collect the result with wait_subagent, refine it with " +
-			"resume_subagent. Act on the conclusion yourself rather than asking the sub-agent to.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"task":{"type":"string","minLength":1,"maxLength":16384,"description":"Complete, self-contained task description with all necessary context."},"focus":{"type":"array","items":{"type":"string","maxLength":512},"maxItems":16,"description":"Optional paths or symbols to prioritize."},"role":{"type":"string","enum":["researcher","coder"],"description":"Sub-agent role: researcher (read-only, R1) or coder (read-write, R3). Default: researcher."},"async":{"type":"boolean","description":"If true, spawn the sub-agent asynchronously and return its session reference immediately. Use wait_subagent to collect the result later. Default: false (synchronous, V1 behavior)."}},"required":["task"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"conclusion":{"type":"string"},"outcome":{"type":"string"},"child_session_id":{"type":"string"},"role":{"type":"string"},"usage":{"type":"object"},"status":{"type":"string","enum":["completed","spawned"]}},"required":["child_session_id","status"]}`),
+			"returns a structured conclusion. Role 'researcher' (default) is read-only: it explores, reviews, and " +
+			"gathers facts, but cannot modify files or run commands. Role 'coder' edits files and runs sandboxed " +
+			"commands in the workspace — spawning one is an R3 approval because its writes are real. " +
+			"The sub-agent sees NO conversation history, so the task must be fully self-contained: images attached " +
+			"to this conversation are invisible to it too — transcribe the relevant content into the task, or point " +
+			"it to an on-disk path it can open with its own view_image. " +
+			"It cannot ask questions or delegate further, and its token consumption counts against this run's budget. " +
+			"With async=true the call returns a child_session_id immediately: collect the result with wait_subagent, " +
+			"refine it with resume_subagent.",
+		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"task":{"type":"string","minLength":1,"maxLength":16384,"description":"Complete, self-contained task description with all necessary context."},"focus":{"type":"array","items":{"type":"string","maxLength":512},"maxItems":16,"description":"Optional paths or symbols to prioritize."},"role":{"type":"string","enum":["researcher","coder"],"description":"Sub-agent role: researcher (read-only, R1) or coder (read-write, R3). Default: researcher."},"async":{"type":"boolean","description":"If true, spawn the sub-agent asynchronously and return its session reference immediately. Use wait_subagent to collect the result later. Default: false (synchronous, V1 behavior)."}},"required":["task"]}`),
 		// No agent.delegate capability: it maps to R4, while this tool's
 		// calls are R1 by construction (see Prepare) — and the loop's
 		// execution-time drift guard rejects a prepared risk BELOW the
@@ -257,7 +260,7 @@ func (t *DelegateTaskTool) Prepare(_ context.Context, call domain.ToolCall) (dom
 	risk := riskOf(role)
 	desc := "Delegate task"
 	if task := args.Task; len([]rune(task)) > 60 {
-		desc = fmt.Sprintf("Delegate task (%s): %s", role, truncateRunes(task, 60))
+		desc = fmt.Sprintf("Delegate task (%s): %s", role, toolkit.Ellipsize(task, 60))
 	} else {
 		desc = fmt.Sprintf("Delegate task (%s): %s", role, task)
 	}
@@ -594,15 +597,6 @@ func delegateError(callID domain.ToolCallID, startedAt time.Time, err error, met
 		FinishedAt: time.Now(),
 		Metadata:   metadata,
 	}
-}
-
-// truncateRunes bounds a string to n runes with an ellipsis suffix.
-func truncateRunes(s string, n int) string {
-	runes := []rune(s)
-	if len(runes) <= n {
-		return s
-	}
-	return string(runes[:n]) + "…"
 }
 
 // childPolicy is the child loop's second line of defense after registry

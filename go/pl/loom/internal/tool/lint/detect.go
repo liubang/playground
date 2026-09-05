@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
 // Linter names accepted by the tool (args.Linter == "auto" runs detection).
@@ -329,7 +330,7 @@ func (t *LintTool) displayRoot(abs string) string {
 	if err != nil {
 		return abs
 	}
-	return displayPath(rel)
+	return workspacepkg.DisplayPath(rel)
 }
 
 func eslintConfigAt(dir string) bool {

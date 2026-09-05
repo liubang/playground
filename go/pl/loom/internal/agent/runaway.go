@@ -18,13 +18,12 @@
 package agent
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
 // Behavior-based runaway detection (docs/CONTEXT_DESIGN.md §4.4.3). These
@@ -79,8 +78,7 @@ func (l *Loop) runawayConfig() domain.RunawayConfig {
 // would never collide (found via E2E: the repeated-call detector never
 // fired with real tools).
 func rawArgsHash(raw json.RawMessage) string {
-	sum := sha256.Sum256(raw)
-	return hex.EncodeToString(sum[:])[:16]
+	return toolkit.ArgsFingerprint(raw)
 }
 
 // callSignature identifies one logical tool action for repeat detection.

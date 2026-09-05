@@ -83,7 +83,6 @@ func NewLintTool(validator *workspacepkg.PathValidator, runner cmdRunner) (*Lint
 			"clang-tidy for C/C++ files with a compile_commands.json. Pass an explicit linter to override detection. " +
 			"Run this after editing code to catch problems early.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1},"linter":{"type":"string","enum":["auto","golangci-lint","go-vet","eslint","ruff","clang-tidy"]},"severity":{"type":"string","enum":["all","error","warning"]},"max_diagnostics":{"type":"integer","minimum":1,"maximum":500}}}`),
-		OutputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"project_root":{"type":"string"},"linter":{"type":"string"},"command":{"type":"string"},"diagnostic_count":{"type":"integer"},"truncated":{"type":"boolean"},"duration_ms":{"type":"integer"},"diagnostics":{"type":"array"},"note":{"type":"string"}},"required":["path","project_root","linter","command","diagnostic_count","truncated","duration_ms","diagnostics"]}`),
 		Capabilities: []domain.Capability{domain.CapProcessExec, domain.CapFSRead},
 		Source:       domain.ToolSourceBuiltin,
 	}, validator)

@@ -18,7 +18,6 @@
 package command
 
 import (
-	"bytes"
 	"context"
 	"crypto/hmac"
 	"encoding/json"
@@ -39,17 +38,14 @@ import (
 )
 
 const (
-	maxCommandBytes                   = 32 * 1024
-	maxWorkingDirBytes                = 4096
-	maxEnvVars                        = 64
-	maxEnvKeyBytes                    = 256
-	maxEnvValueBytes                  = 8192
 	maxApprovalDescBytes              = 512
 	approvalDescHashPrefixBytes       = 12
 	minTimeoutMs                int64 = 1
 	maxTimeoutMs                int64 = 10 * 60 * 1000
 	maxOutputBytes              int64 = 1 << 20
 	defaultModelOutputBytes           = 64 * 1024
+	maxJustificationBytes             = 240
+	maxWritablePaths                  = 8
 )
 
 type rawRunCmdArgs struct {
@@ -77,15 +73,6 @@ type runCmdArgs struct {
 	WritablePaths      []string          `json:"writable_paths,omitempty"`
 	Justification      string            `json:"justification,omitempty"`
 }
-
-// sandbox_permissions values: the default sandboxed execution, or an
-// escalated run outside the sandbox after explicit user approval.
-const (
-	sandboxUseDefault       = "use_default"
-	sandboxRequireEscalated = "require_escalated"
-	maxJustificationBytes   = 240
-	maxWritablePaths        = 8
-)
 
 type runCmdOutput struct {
 	Stdout                  string              `json:"stdout"`
@@ -167,28 +154,17 @@ func NewRunCmdToolWithArtifacts(
 	}
 	def := domain.ToolDefinition{
 		Name: "run_cmd",
-		Description: "Execute a shell command in a sandbox and return its stdout, stderr, exit code and timing. " +
+		Description: "Execute a shell command inside a sandbox and return its stdout, stderr, exit code and timing. " +
 			"The command runs via 'sh -c' — write it exactly as you would type it in a terminal: pipes, redirection, '&&' chaining, globs and quoting all work. " +
 			"Examples: {\"command\":\"go test ./...\"} · {\"command\":\"python3 plot.py\",\"working_dir\":\"scripts\",\"timeout_ms\":300000} · {\"command\":\"curl -sI https://example.com\",\"needs_network\":true}. " +
 			"Set working_dir explicitly instead of wrapping the command in 'cd ... &&' — it keeps the audit trail accurate. " +
-			"Commands run sandboxed WITHOUT user approval; only danger-listed patterns (destructive commands, pipes into a shell, writes to sensitive paths) or sandbox escapes ever prompt. " +
 			"Only 'command' is required: working_dir defaults to '.', env to empty, timeout_ms to 120000, max_output_bytes to 65536. " +
 			"Output beyond the limit is stored as an artifact with a head/tail preview. " +
-			"Inside the sandbox, env entries are filtered by a security allowlist; keys that do not survive the filter are reported back in the output's 'note' field (escalated runs inherit the full user environment). " +
-			"The sandbox denies outbound network and DNS but allows loopback networking (bind/listen/connect on localhost), " +
-			"and denies writes outside the workspace and temp dir. " +
-			"When a task-critical command fails (or hangs until the timeout) because the sandbox denied OUTBOUND NETWORK or DNS (SSO/OAuth, HTTP APIs, package downloads), " +
-			"PREFER retrying the same command with needs_network=true: after a lightweight approval it runs INSIDE the sandbox with outbound network granted (credentials stay unreadable), and the user can remember it as a scoped rule. " +
-			"When a command fails because the sandbox denied a WRITE OUTSIDE THE WORKSPACE (a tool dropping logs/config/state in its own directory, e.g. ~/Library/Logs/<tool> or ~/.<tool>), " +
-			"PREFER retrying the same command with writable_paths=[that directory]: after a lightweight approval it runs INSIDE the sandbox with exactly those directories additionally writable, and the user can remember it as a scoped rule. " +
-			"writable_paths accepts absolute paths ('~/' is expanded), never names a credential location (.ssh, .aws, keychains, ...) or one of its ancestors, and combines freely with needs_network/needs_gui_open. " +
-			"When a command fails because it tried to OPEN A GUI APPLICATION (macOS 'open' a URL/app, Apple Events — LaunchServices/NSOSStatusErrorDomain errors), retry with needs_gui_open=true: after approval it runs INSIDE the sandbox with GUI-open granted. Use the same flag to proactively show the user a web page (open <url>). " +
-			"Reserve sandbox_permissions='require_escalated' (with a short justification question) for failures the scoped flags cannot explain — TTY needs, credential files the sandbox hides, Security-framework TLS — it runs OUTSIDE the sandbox with the full user environment after explicit approval (R3). " +
-			"Do not give up or ask the user to run it themselves before offering the matching approval. " +
-			"needs_network, needs_gui_open and writable_paths must NOT be combined with require_escalated (escalated runs already have full network, GUI and write access). " +
-			"'justification' is an optional short note shown to the user at approval time; it is REQUIRED with sandbox_permissions='require_escalated' and simply informational otherwise.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string","minLength":1,"maxLength":32768,"description":"The shell command to execute, exactly as you would type it in a terminal (e.g. \"go test ./...\" or \"ls -la | head -20\"). Runs via 'sh -c', so pipes, redirection, '&&' chaining, globs and quoting all work."},"working_dir":{"type":"string","minLength":1,"maxLength":4096,"description":"Directory to run the command in, relative to the workspace root (default '.'). Set this instead of prefixing the command with 'cd ... &&'."},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192},"description":"Extra environment variables. Inside the sandbox they are filtered by a security allowlist; dropped keys are reported in the output's note field."},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000,"description":"Kill the command after this many milliseconds (default 120000)."},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576,"description":"Maximum bytes of stdout/stderr returned inline (default 65536); output beyond the limit is stored as an artifact with a head/tail preview."},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"],"description":"'require_escalated' runs OUTSIDE the sandbox with the full user environment after explicit approval and requires a justification; prefer needs_network/writable_paths/needs_gui_open for sandboxed alternatives."},"needs_network":{"type":"boolean","description":"Grant outbound network and DNS inside the sandbox after a lightweight approval."},"needs_gui_open":{"type":"boolean","description":"Allow opening URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval."},"writable_paths":{"type":"array","maxItems":8,"items":{"type":"string","minLength":1,"maxLength":4096},"description":"Extra absolute directories ('~/' expands) the command may write after a lightweight approval; never credential locations."},"justification":{"type":"string","minLength":1,"maxLength":240,"description":"Short note shown to the user at approval time; required with sandbox_permissions='require_escalated', informational otherwise."}},"required":["command"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"stdout":{"type":"string"},"stderr":{"type":"string"},"stdout_bytes":{"type":"integer"},"stderr_bytes":{"type":"integer"},"stdout_preview_truncated":{"type":"boolean"},"stderr_preview_truncated":{"type":"boolean"},"stdout_artifact_truncated":{"type":"boolean"},"stderr_artifact_truncated":{"type":"boolean"},"stdout_artifact":{"type":"object"},"stderr_artifact":{"type":"object"},"stdout_artifact_path":{"type":"string"},"stderr_artifact_path":{"type":"string"},"exit_code":{"type":"integer"},"signal":{"type":"string"},"duration_ms":{"type":"integer"},"timed_out":{"type":"boolean"},"cancelled":{"type":"boolean"},"truncated":{"type":"boolean"},"isolation":{"type":"string"},"executable_path":{"type":"string"},"hash":{"type":"string"},"note":{"type":"string"}},"required":["stdout","stderr","stdout_bytes","stderr_bytes","stdout_preview_truncated","stderr_preview_truncated","stdout_artifact_truncated","stderr_artifact_truncated","exit_code","signal","duration_ms","timed_out","cancelled","truncated","isolation","executable_path","hash"]}`),
+			"Inside the sandbox, env entries are filtered by a security allowlist; dropped keys are reported in the output's 'note' field (escalated runs inherit the full user environment). " +
+			"Commands run sandboxed without user approval; only danger-listed patterns and sandbox-escape grants ever prompt. " +
+			"The sandbox denies outbound network/DNS, GUI opens, and writes outside the workspace and temp dir: grant the matching capability when a command needs it — needs_network, needs_gui_open or writable_paths (each a lightweight, rememberable approval) — and reserve sandbox_permissions='require_escalated' (with a justification) for failures none of those explain. " +
+			"Never hand a sandbox-blocked command to the user before offering the matching approval.",
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string","minLength":1,"maxLength":32768,"description":"The shell command to execute, exactly as you would type it in a terminal (e.g. \"go test ./...\" or \"ls -la | head -20\"). Runs via 'sh -c', so pipes, redirection, '&&' chaining, globs and quoting all work."},"working_dir":{"type":"string","minLength":1,"maxLength":4096,"description":"Directory to run the command in, relative to the workspace root (default '.'). Set this instead of prefixing the command with 'cd ... &&'."},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192},"description":"Extra environment variables. Inside the sandbox they are filtered by a security allowlist; dropped keys are reported in the output's note field."},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000,"description":"Kill the command after this many milliseconds (default 120000)."},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576,"description":"Maximum bytes of stdout/stderr returned inline (default 65536); output beyond the limit is stored as an artifact with a head/tail preview."},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"],"description":"'require_escalated' runs OUTSIDE the sandbox with the full user environment after explicit approval and requires a justification; use it only when needs_network/needs_gui_open/writable_paths cannot explain the failure (TTY needs, credential files the sandbox hides, Security-framework TLS); never combine it with the scoped fields."},"needs_network":{"type":"boolean","description":"Grant outbound network and DNS inside the sandbox after a lightweight approval (credentials stay unreadable); do not combine with require_escalated."},"needs_gui_open":{"type":"boolean","description":"Allow opening URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval; do not combine with require_escalated."},"writable_paths":{"type":"array","maxItems":8,"items":{"type":"string","minLength":1,"maxLength":4096},"description":"Extra absolute directories ('~/' expands) the command may write after a lightweight approval; use it for outside-workspace write targets that cannot be stated literally in the command (shell variables, command substitution) and come back denied — literal targets already get a scoped one-shot approval; never credential locations or their ancestors; do not combine with require_escalated."},"justification":{"type":"string","minLength":1,"maxLength":240,"description":"Short note shown to the user at approval time; required with sandbox_permissions='require_escalated', informational otherwise."}},"required":["command"]}`),
 		Capabilities: []domain.Capability{domain.CapProcessExec},
 		Source:       domain.ToolSourceBuiltin,
 	}
@@ -253,7 +229,7 @@ func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 		// (REVIEW M17/A2); covered by the signature below.
 		ExecRequest: &domain.ExecRequest{
 			Argv:          []string{"sh", "-c", args.Command},
-			Escalated:     args.SandboxPermissions == sandboxRequireEscalated,
+			Escalated:     args.SandboxPermissions == toolkit.SandboxRequireEscalated,
 			NeedsNetwork:  args.NeedsNetwork,
 			NeedsGUIOpen:  args.NeedsGUIOpen,
 			WritablePaths: append([]string(nil), args.WritablePaths...),
@@ -276,7 +252,7 @@ func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 // screening, pipe-into-shell and sensitive-redirect detection) —
 // composition alone is not a risk.
 func riskForArgs(args runCmdArgs, base domain.RiskLevel) domain.RiskLevel {
-	if args.SandboxPermissions == sandboxRequireEscalated || len(args.WritablePaths) > 0 {
+	if args.SandboxPermissions == toolkit.SandboxRequireEscalated || len(args.WritablePaths) > 0 {
 		return domain.R3
 	}
 	return base
@@ -371,8 +347,8 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 		))
 	}
 	payload := runCmdOutput{
-		Stdout:                  sanitizeUTF8(runnerResult.Stdout),
-		Stderr:                  sanitizeUTF8(runnerResult.Stderr),
+		Stdout:                  toolkit.SanitizeUTF8(runnerResult.Stdout),
+		Stderr:                  toolkit.SanitizeUTF8(runnerResult.Stderr),
 		StdoutBytes:             runnerResult.StdoutBytes,
 		StderrBytes:             runnerResult.StderrBytes,
 		StdoutPreviewTruncated:  runnerResult.StdoutTruncated,
@@ -393,17 +369,17 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 		ExecutablePath:          runnerResult.ExecutablePath,
 		Hash:                    runnerResult.ExecutableHash,
 		Note: combineNotes(
-			escalationDowngradeNote(args.SandboxPermissions == sandboxRequireEscalated, prepared.Grant.Unsandboxed),
+			escalationDowngradeNote(args.SandboxPermissions == toolkit.SandboxRequireEscalated, prepared.Grant.Unsandboxed),
 			commandNotFoundNote(
 				string(runnerResult.Stderr),
 				runnerResult.ExitCode,
-				args.SandboxPermissions == sandboxRequireEscalated,
+				args.SandboxPermissions == toolkit.SandboxRequireEscalated,
 				args.Env,
 			),
 			sandboxGuidanceNote(
 				string(runnerResult.Stderr),
 				runnerResult.TimedOut,
-				args.SandboxPermissions == sandboxRequireEscalated,
+				args.SandboxPermissions == toolkit.SandboxRequireEscalated,
 			),
 			droppedEnvNote(runnerResult.DroppedEnvKeys),
 		),
@@ -476,7 +452,7 @@ func validateArgs(
 		Env:                map[string]string{},
 		TimeoutMs:          defaultTimeoutMs,
 		MaxOutputBytes:     defaultMaxOutputBytes,
-		SandboxPermissions: sandboxUseDefault,
+		SandboxPermissions: toolkit.SandboxUseDefault,
 	}
 	if raw.SandboxPermissions != nil {
 		args.SandboxPermissions = strings.TrimSpace(*raw.SandboxPermissions)
@@ -503,15 +479,9 @@ func validateArgs(
 		args.MaxOutputBytes = *raw.MaxOutputBytes
 	}
 
-	workingDir := "."
 	if raw.WorkingDir != nil {
-		workingDir = *raw.WorkingDir
+		args.WorkingDir = *raw.WorkingDir
 	}
-	resolvedDir, err := resolveWorkingDir(validator, workingDir)
-	if err != nil {
-		return runCmdArgs{}, resolvedWorkingDir{}, err
-	}
-	args.WorkingDir = resolvedDir.Display
 	return validateCanonicalArgs(validator, args)
 }
 
@@ -519,22 +489,16 @@ func validateCanonicalArgs(
 	validator *workspacepkg.PathValidator,
 	args runCmdArgs,
 ) (runCmdArgs, resolvedWorkingDir, error) {
-	if validator == nil {
-		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "path validator is required")
-	}
-	if args.Command == "" {
-		return runCmdArgs{}, resolvedWorkingDir{}, toolkit.MissingCommandError("run_cmd")
-	}
-	if len(args.Command) > maxCommandBytes {
-		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("command exceeds %d bytes", maxCommandBytes))
-	}
-	if strings.ContainsRune(args.Command, 0) {
-		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "command contains null byte")
-	}
-	resolvedDir, err := resolveWorkingDir(validator, args.WorkingDir)
+	command, err := toolkit.ValidateCommandText("run_cmd", args.Command)
 	if err != nil {
 		return runCmdArgs{}, resolvedWorkingDir{}, err
 	}
+	args.Command = command
+	absoluteDir, displayDir, err := toolkit.ResolveWorkingDir(validator, args.WorkingDir)
+	if err != nil {
+		return runCmdArgs{}, resolvedWorkingDir{}, err
+	}
+	resolvedDir := resolvedWorkingDir{Absolute: absoluteDir, Display: displayDir}
 	args.WorkingDir = resolvedDir.Display
 	if args.TimeoutMs < minTimeoutMs || args.TimeoutMs > maxTimeoutMs {
 		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("timeout_ms must be between %d and %d", minTimeoutMs, maxTimeoutMs))
@@ -542,29 +506,10 @@ func validateCanonicalArgs(
 	if args.MaxOutputBytes < 1 || args.MaxOutputBytes > maxOutputBytes {
 		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("max_output_bytes must be between 1 and %d", maxOutputBytes))
 	}
-	if len(args.Env) > maxEnvVars {
-		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env exceeds %d entries", maxEnvVars))
+	if err := toolkit.ValidateEnv(args.Env); err != nil {
+		return runCmdArgs{}, resolvedWorkingDir{}, err
 	}
-	canonicalEnv := make(map[string]string, len(args.Env))
-	for key, value := range args.Env {
-		if len(key) == 0 {
-			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "env contains an empty key")
-		}
-		if len(key) > maxEnvKeyBytes {
-			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env key %q exceeds %d bytes", key, maxEnvKeyBytes))
-		}
-		if strings.ContainsAny(key, "=\x00") {
-			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env key %q is invalid", key))
-		}
-		if len(value) > maxEnvValueBytes {
-			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env value for %q exceeds %d bytes", key, maxEnvValueBytes))
-		}
-		if strings.ContainsRune(value, 0) {
-			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env value for %q contains null byte", key))
-		}
-		canonicalEnv[key] = value
-	}
-	args.Env = canonicalEnv
+	args.Env = cloneStringMap(args.Env)
 
 	writable, err := validateWritablePaths(args.WritablePaths)
 	if err != nil {
@@ -573,7 +518,7 @@ func validateCanonicalArgs(
 	args.WritablePaths = writable
 
 	switch args.SandboxPermissions {
-	case sandboxUseDefault:
+	case toolkit.SandboxUseDefault:
 		// A justification is accepted on any call: it is only an
 		// informational note shown to the approver, with no effect on
 		// privileges. Rejecting it for sandboxed calls taught models to
@@ -582,7 +527,7 @@ func validateCanonicalArgs(
 		if len(args.Justification) > maxJustificationBytes {
 			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("justification exceeds %d bytes", maxJustificationBytes))
 		}
-	case sandboxRequireEscalated:
+	case toolkit.SandboxRequireEscalated:
 		if args.NeedsNetwork || args.NeedsGUIOpen || len(args.WritablePaths) > 0 {
 			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "needs_network/needs_gui_open/writable_paths cannot be combined with sandbox_permissions=require_escalated (escalated runs already have full network, GUI and write access; use the scoped flags for the sandboxed path)")
 		}
@@ -593,7 +538,7 @@ func validateCanonicalArgs(
 			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("justification exceeds %d bytes", maxJustificationBytes))
 		}
 	default:
-		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("sandbox_permissions must be %q or %q", sandboxUseDefault, sandboxRequireEscalated))
+		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("sandbox_permissions must be %q or %q", toolkit.SandboxUseDefault, toolkit.SandboxRequireEscalated))
 	}
 	return args, resolvedDir, nil
 }
@@ -616,8 +561,8 @@ func validateWritablePaths(raw []string) ([]string, error) {
 	seen := make(map[string]struct{}, len(raw))
 	out := make([]string, 0, len(raw))
 	for _, p := range raw {
-		if len(p) == 0 || len(p) > maxWorkingDirBytes {
-			return nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("writable_paths entry is empty or exceeds %d bytes", maxWorkingDirBytes))
+		if len(p) == 0 || len(p) > toolkit.MaxWorkingDirBytes {
+			return nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("writable_paths entry is empty or exceeds %d bytes", toolkit.MaxWorkingDirBytes))
 		}
 		if strings.ContainsRune(p, 0) {
 			return nil, domain.NewError(domain.ErrInvalidInput, "writable_paths entry contains null byte")
@@ -649,42 +594,6 @@ func validateWritablePaths(raw []string) ([]string, error) {
 	}
 	sort.Strings(out)
 	return out, nil
-}
-
-func resolveWorkingDir(
-	validator *workspacepkg.PathValidator,
-	input string,
-) (resolvedWorkingDir, error) {
-	if validator == nil {
-		return resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "path validator is required")
-	}
-	if strings.TrimSpace(input) == "" {
-		return resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "working_dir is required")
-	}
-	if len(input) > maxWorkingDirBytes {
-		return resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("working_dir exceeds %d bytes", maxWorkingDirBytes))
-	}
-	absolute, err := validator.Validate(input)
-	if err != nil {
-		return resolvedWorkingDir{}, domain.NewError(domain.ErrSecurity, "working_dir escapes workspace or is invalid", domain.WithCause(err))
-	}
-	info, err := os.Stat(absolute)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// Echo the offending path so the model can correct course
-			// without guessing which working_dir was rejected.
-			return resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("working_dir does not exist: %q", domain.TruncateForErrorEcho(input)), domain.WithCause(err))
-		}
-		return resolvedWorkingDir{}, domain.NewError(domain.ErrUnavailable, "failed to stat working_dir", domain.WithCause(err))
-	}
-	if !info.IsDir() {
-		return resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "working_dir must be a directory")
-	}
-	rel, err := filepath.Rel(validator.Root(), absolute)
-	if err != nil {
-		return resolvedWorkingDir{}, domain.NewError(domain.ErrInternal, "failed to normalize working_dir", domain.WithCause(err))
-	}
-	return resolvedWorkingDir{Absolute: absolute, Display: displayPath(rel)}, nil
 }
 
 // sandboxGuidanceNote detects the fingerprints of sandbox denials — network
@@ -1057,7 +966,7 @@ func sameDefinition(left, right domain.ToolDefinition) bool {
 	if left.Name != right.Name || left.Description != right.Description || left.Source != right.Source {
 		return false
 	}
-	if string(left.InputSchema) != string(right.InputSchema) || string(left.OutputSchema) != string(right.OutputSchema) {
+	if string(left.InputSchema) != string(right.InputSchema) {
 		return false
 	}
 	if len(left.Capabilities) != len(right.Capabilities) {
@@ -1089,23 +998,11 @@ func hasOnlyWorkspaceRoot(paths []string, root string) bool {
 	return filepath.Clean(paths[0]) == filepath.Clean(root)
 }
 
-func sanitizeUTF8(data []byte) string {
-	return string(bytes.ToValidUTF8(data, []byte("?")))
-}
-
 func durationMilliseconds(d time.Duration) int64 {
 	if d <= 0 {
 		return 0
 	}
 	return d.Milliseconds()
-}
-
-func displayPath(rel string) string {
-	clean := filepath.Clean(rel)
-	if clean == "." || clean == string(filepath.Separator) {
-		return "."
-	}
-	return filepath.ToSlash(clean)
 }
 
 func buildApprovalDesc(args runCmdArgs, prepared domain.PreparedCall, root string) string {
@@ -1123,7 +1020,7 @@ func buildApprovalDesc(args runCmdArgs, prepared domain.PreparedCall, root strin
 	// Every call is a shell invocation now; the permission layer's danger
 	// screen AST-parses the script, so the summary always carries the marker.
 	parts = append(parts, "shell=parsed")
-	if args.SandboxPermissions == sandboxRequireEscalated {
+	if args.SandboxPermissions == toolkit.SandboxRequireEscalated {
 		parts = append(parts, "network=full")
 		parts = append(parts, "ESCALATED(no-sandbox)["+args.Justification+"]")
 	} else if args.NeedsNetwork {

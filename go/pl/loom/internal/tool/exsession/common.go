@@ -18,11 +18,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
@@ -30,12 +27,6 @@ import (
 )
 
 const (
-	maxCommandBytes    = 32 * 1024
-	maxWorkingDirBytes = 4096
-	maxEnvVars         = 64
-	maxEnvKeyBytes     = 256
-	maxEnvValueBytes   = 8192
-
 	maxYieldMs          int64 = 300000
 	defaultStartYieldMs int64 = 1000
 	defaultWriteYieldMs int64 = 250
@@ -45,13 +36,6 @@ const (
 	maxMaxOutputBytes     int64 = 65536
 
 	maxJustificationBytes = 240
-)
-
-// sandbox_permissions values, aligned with run_cmd: sandboxed execution by
-// default, or an escalated session outside the sandbox after approval.
-const (
-	sandboxUseDefault       = "use_default"
-	sandboxRequireEscalated = "require_escalated"
 )
 
 // signer is the exsession-local HMAC signer, wrapping the toolkit Signer
@@ -89,66 +73,29 @@ type commandArgs struct {
 	Justification      string            `json:"justification,omitempty"`
 }
 
-// validateCommandArgs normalizes and bounds the command-line fields,
-// resolving working_dir against the workspace. It is the session
-// counterpart of run_cmd's validation, minus the timeout field.
+// validateCommandArgs normalizes and bounds the command-line fields; the
+// command/env/working_dir checks come from the toolkit helpers shared with
+// run_cmd, so both shell tools enforce one protocol.
 func validateCommandArgs(validator *workspacepkg.PathValidator, args *commandArgs) (absoluteDir string, err error) {
-	args.Command = strings.TrimSpace(args.Command)
-	if args.Command == "" {
-		return "", toolkit.MissingCommandError("exec_session")
-	}
-	if len(args.Command) > maxCommandBytes {
-		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("command exceeds %d bytes", maxCommandBytes))
-	}
-	if strings.ContainsRune(args.Command, 0) {
-		return "", domain.NewError(domain.ErrInvalidInput, "command contains null byte")
-	}
-	if len(args.Env) > maxEnvVars {
-		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env exceeds %d entries", maxEnvVars))
-	}
-	for key, value := range args.Env {
-		if key == "" || len(key) > maxEnvKeyBytes || strings.ContainsAny(key, "=\x00") {
-			return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env key %q is invalid", key))
-		}
-		if len(value) > maxEnvValueBytes || strings.ContainsRune(value, 0) {
-			return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("env value for %q is invalid", key))
-		}
-	}
-
-	workingDir := args.WorkingDir
-	if strings.TrimSpace(workingDir) == "" {
-		workingDir = "."
-	}
-	if len(workingDir) > maxWorkingDirBytes {
-		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("working_dir exceeds %d bytes", maxWorkingDirBytes))
-	}
-	absolute, err := validator.Validate(workingDir)
+	command, err := toolkit.ValidateCommandText("exec_session", args.Command)
 	if err != nil {
-		return "", domain.NewError(domain.ErrSecurity, "working_dir escapes workspace or is invalid", domain.WithCause(err))
+		return "", err
 	}
-	info, err := os.Stat(absolute)
+	args.Command = command
+	if err := toolkit.ValidateEnv(args.Env); err != nil {
+		return "", err
+	}
+	absoluteDir, displayDir, err := toolkit.ResolveWorkingDir(validator, args.WorkingDir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			// Echo the offending path so the model can correct course
-			// without guessing which working_dir was rejected.
-			return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("working_dir does not exist: %q", domain.TruncateForErrorEcho(workingDir)), domain.WithCause(err))
-		}
-		return "", domain.NewError(domain.ErrUnavailable, "failed to stat working_dir", domain.WithCause(err))
+		return "", err
 	}
-	if !info.IsDir() {
-		return "", domain.NewError(domain.ErrInvalidInput, "working_dir must be a directory")
-	}
-	rel, err := filepath.Rel(validator.Root(), absolute)
-	if err != nil {
-		return "", domain.NewError(domain.ErrInternal, "failed to normalize working_dir", domain.WithCause(err))
-	}
-	args.WorkingDir = displayPath(rel)
+	args.WorkingDir = displayDir
 
 	switch args.SandboxPermissions {
 	case "":
-		args.SandboxPermissions = sandboxUseDefault
-	case sandboxUseDefault:
-	case sandboxRequireEscalated:
+		args.SandboxPermissions = toolkit.SandboxUseDefault
+	case toolkit.SandboxUseDefault:
+	case toolkit.SandboxRequireEscalated:
 		if args.NeedsGUIOpen {
 			return "", domain.NewError(domain.ErrInvalidInput, "needs_gui_open cannot be combined with sandbox_permissions=require_escalated (escalated runs already have GUI access; use needs_gui_open for the sandboxed path)")
 		}
@@ -156,7 +103,7 @@ func validateCommandArgs(validator *workspacepkg.PathValidator, args *commandArg
 			return "", domain.NewError(domain.ErrInvalidInput, "justification is required with sandbox_permissions=require_escalated (ask the user a short yes/no question)")
 		}
 	default:
-		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("sandbox_permissions must be %q or %q", sandboxUseDefault, sandboxRequireEscalated))
+		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("sandbox_permissions must be %q or %q", toolkit.SandboxUseDefault, toolkit.SandboxRequireEscalated))
 	}
 	if len(args.Justification) > maxJustificationBytes {
 		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("justification exceeds %d bytes", maxJustificationBytes))
@@ -167,7 +114,7 @@ func validateCommandArgs(validator *workspacepkg.PathValidator, args *commandArg
 	if args.MaxOutputBytes < 0 || args.MaxOutputBytes > maxMaxOutputBytes {
 		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("max_output_bytes must be between 0 and %d", maxMaxOutputBytes))
 	}
-	return absolute, nil
+	return absoluteDir, nil
 }
 
 // riskForCommand mirrors run_cmd's risk tiers: only an escalated
@@ -175,7 +122,7 @@ func validateCommandArgs(validator *workspacepkg.PathValidator, args *commandArg
 // base risk — the sandbox confines them and the permission layer's
 // danger screen (shell AST analysis) catches the dangerous shapes.
 func riskForCommand(args commandArgs, base domain.RiskLevel) domain.RiskLevel {
-	if args.SandboxPermissions == sandboxRequireEscalated {
+	if args.SandboxPermissions == toolkit.SandboxRequireEscalated {
 		return domain.R3
 	}
 	return base
@@ -240,7 +187,7 @@ func drainSession(ctx context.Context, m *Manager, entry *sessionEntry, maxBytes
 		Status:             status,
 		ExitCode:           read.ExitCode,
 		Signal:             read.Signal,
-		Output:             sanitizeUTF8(read.Data),
+		Output:             toolkit.SanitizeUTF8([]byte(read.Data)),
 		OutputDroppedBytes: read.DroppedBytes,
 		StdoutBytes:        read.StdoutBytes,
 		StderrBytes:        read.StderrBytes,
@@ -280,19 +227,4 @@ func drainSession(ctx context.Context, m *Manager, entry *sessionEntry, maxBytes
 // model a directly readable path instead of an opaque blob ID.
 type artifactPathResolver interface {
 	PathForRef(ref domain.ArtifactRef) (string, bool)
-}
-
-func displayPath(rel string) string {
-	clean := filepath.Clean(rel)
-	if clean == "." || clean == string(filepath.Separator) {
-		return "."
-	}
-	return filepath.ToSlash(clean)
-}
-
-func sanitizeUTF8(data string) string {
-	if utf8.ValidString(data) {
-		return data
-	}
-	return strings.ToValidUTF8(data, "?")
 }

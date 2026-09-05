@@ -141,7 +141,6 @@ func NewSearchTool(validator *workspacepkg.PathValidator, runner rgRunner) (*Sea
 			"Uses the ripgrep engine when available and falls back to a built-in literal search otherwise (the " +
 			"fallback treats 'pattern' as literal text; unapplied filters are disclosed in the output's note).",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"pattern":{"type":"string","minLength":1,"maxLength":4096},"path":{"type":"string","minLength":1},"glob":{"type":"array","maxItems":16,"items":{"type":"string","minLength":1,"maxLength":256}},"type":{"type":"string","minLength":1,"maxLength":64},"context":{"type":"integer","minimum":0,"maximum":5},"head_limit":{"type":"integer","minimum":1,"maximum":200},"case_sensitive":{"type":"boolean"},"fixed_strings":{"type":"boolean"},"no_ignore":{"type":"boolean"}},"required":["pattern"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"pattern":{"type":"string"},"engine":{"type":"string"},"case_sensitive":{"type":"boolean"},"match_count":{"type":"integer"},"truncated":{"type":"boolean"},"scanned_files":{"type":"integer"},"skipped_binary":{"type":"integer"},"skipped_too_large":{"type":"integer"},"matches":{"type":"array"}},"required":["path","pattern","engine","case_sensitive","match_count","truncated","matches"]}`),
 		Capabilities: []domain.Capability{domain.CapFSRead},
 		Source:       domain.ToolSourceBuiltin,
 	}, validator)
@@ -410,49 +409,33 @@ func displayUnderRoot(root pathResolution, name string) string {
 // --- Go fallback engine (literal substring search, no ignore rules) ---
 
 func (t *SearchTool) executeGoFallback(ctx context.Context, prepared domain.PreparedCall, root pathResolution, args searchArgs, startedAt time.Time) domain.ToolResult {
-	legacy := searchTextArgs{
+	out := &searchOutput{
 		Path:          args.Path,
-		Query:         args.Pattern,
+		Pattern:       args.Pattern,
+		Engine:        string(engineGoFallback),
 		CaseSensitive: args.CaseSensitive,
-		Before:        args.Context,
-		After:         args.Context,
+		Matches:       []searchMatch{},
 	}
-	var output searchTextOutput
 	var err error
 	if root.Info.IsDir() {
-		output, err = searchDirectory(ctx, t.base.validator, root, legacy)
+		err = searchDirectory(ctx, t.base.validator, root, args, out)
 	} else {
-		output, err = searchSingleFile(ctx, root, legacy)
+		err = searchSingleFile(ctx, root, args, out)
 	}
 	if err != nil {
 		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
-
-	matches := make([]searchMatch, 0, len(output.Matches))
-	for _, m := range output.Matches {
-		matches = append(matches, searchMatch(m))
-	}
 	// Apply the glob filters the rg engine would have applied; the other
 	// filters have no fallback equivalent and must be disclosed in the note
 	// instead of silently ignored.
-	matches = filterMatchesByGlobs(matches, args.Glob)
-	if len(matches) > args.HeadLimit {
-		matches = matches[:args.HeadLimit]
-		output.Truncated = true
+	out.Matches = filterMatchesByGlobs(out.Matches, args.Glob)
+	if len(out.Matches) > args.HeadLimit {
+		out.Matches = out.Matches[:args.HeadLimit]
+		out.Truncated = true
 	}
-	return toolkit.SuccessResult(prepared.Call.ID, startedAt, searchOutput{
-		Path:            args.Path,
-		Pattern:         args.Pattern,
-		Engine:          string(engineGoFallback),
-		CaseSensitive:   args.CaseSensitive,
-		MatchCount:      len(matches),
-		Truncated:       output.Truncated,
-		ScannedFiles:    output.ScannedFiles,
-		SkippedBinary:   output.SkippedBinary,
-		SkippedTooLarge: output.SkippedTooLarge,
-		Matches:         matches,
-		Note:            fallbackFilterNote(args),
-	})
+	out.MatchCount = len(out.Matches)
+	out.Note = fallbackFilterNote(args)
+	return toolkit.SuccessResult(prepared.Call.ID, startedAt, *out)
 }
 
 // matchSearchGlob mirrors rg --glob semantics closely enough for the

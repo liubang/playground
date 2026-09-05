@@ -509,13 +509,18 @@ func TestModelFamilyNormalization(t *testing.T) {
 
 // mutableEnvProvider returns a different workspace overview on every call,
 // simulating a workspace whose tree changes between model requests (the
-// agent's own writes are the most common trigger).
+// agent's own writes are the most common trigger). Concurrent builds must
+// be safe: the provider mutates shared state, so it carries its own lock
+// (the builder may call Build from concurrent read-only projections).
 type mutableEnvProvider struct {
+	mu    sync.Mutex
 	calls int
 	env   Environment
 }
 
 func (p *mutableEnvProvider) Collect(context.Context) (Environment, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.calls++
 	p.env.WorkspaceOverview = fmt.Sprintf("overview-render-%d", p.calls)
 	return p.env, nil

@@ -3473,8 +3473,43 @@ func newTestToolDefinition(name string, capabilities []domain.Capability) domain
 func cloneToolDefinition(def domain.ToolDefinition) domain.ToolDefinition {
 	def.Capabilities = append([]domain.Capability(nil), def.Capabilities...)
 	def.InputSchema = append(json.RawMessage(nil), def.InputSchema...)
-	def.OutputSchema = append(json.RawMessage(nil), def.OutputSchema...)
 	return def
+}
+
+// A text-only model must not be offered view_image: its only effect is an
+// image artifact for the model to look at, which the model cannot consume.
+// present_image (user display) survives the gate.
+func TestWireToolsGatesViewImageOnVisionSupport(t *testing.T) {
+	registry := NewToolRegistry()
+	for _, name := range []string{"read_file", "view_image", "present_image", "grep"} {
+		if err := registry.Register(fakes.NewFakeTool(domain.ToolDefinition{
+			Name:        name,
+			Description: name,
+			InputSchema: json.RawMessage(`{"type":"object"}`),
+		}, domain.ToolResult{})); err != nil {
+			t.Fatalf("Register(%s): %v", name, err)
+		}
+	}
+
+	names := func(defs []domain.ToolDefinition) []string {
+		out := make([]string, 0, len(defs))
+		for _, def := range defs {
+			out = append(out, def.Name)
+		}
+		return out
+	}
+
+	textOnly := &Loop{Registry: registry}
+	defs := textOnly.wireTools()
+	if got := strings.Join(names(defs), ","); got != "grep,present_image,read_file" {
+		t.Fatalf("wireTools() (text-only) = %v, want view_image filtered out", got)
+	}
+
+	vision := &Loop{Registry: registry, SupportsImages: true}
+	defs = vision.wireTools()
+	if got := strings.Join(names(defs), ","); got != "grep,present_image,read_file,view_image" {
+		t.Fatalf("wireTools() (vision) = %v, want all four tools including view_image", got)
+	}
 }
 
 func cloneStringMap(values map[string]string) map[string]string {

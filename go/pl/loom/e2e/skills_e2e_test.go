@@ -82,6 +82,11 @@ func transcriptText(run *agent.Run) string {
 				for _, c := range p.ToolResult.Content {
 					sb.WriteString(c.Text)
 				}
+				// Denials and prepare failures ride Error, not Content — the
+				// model sees this text, so the transcript oracle must too.
+				if p.ToolResult.Error != nil {
+					sb.WriteString(p.ToolResult.Error.Message)
+				}
 			}
 		}
 	}

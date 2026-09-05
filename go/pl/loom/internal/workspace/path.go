@@ -271,7 +271,7 @@ func (v *PathValidator) ResolveLexical(path string) (ResolvedPath, error) {
 	return ResolvedPath{
 		Absolute: abs,
 		Relative: rel,
-		Display:  displayPath(rel),
+		Display:  DisplayPath(rel),
 	}, nil
 }
 
@@ -480,7 +480,9 @@ func resolveNonExistent(path string) (string, error) {
 	return filepath.Join(resolved, base), nil
 }
 
-func displayPath(rel string) string {
+// DisplayPath renders a workspace-relative path for display: cleaned and
+// slash-normalized, with the workspace root itself shown as ".".
+func DisplayPath(rel string) string {
 	clean := filepath.Clean(rel)
 	if clean == "." || clean == string(filepath.Separator) {
 		return "."

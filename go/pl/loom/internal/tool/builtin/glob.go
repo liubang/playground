@@ -71,7 +71,6 @@ func NewGlobTool(validator *workspacepkg.PathValidator, runner rgRunner) (*GlobT
 			"Files matched by .gitignore and hidden (dot-prefixed) paths are skipped when the ripgrep " +
 			"engine is available; the fallback engine includes them (the engine is reported in the output).",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"pattern":{"type":"string","minLength":1,"maxLength":512},"path":{"type":"string","minLength":1}},"required":["pattern"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"pattern":{"type":"string"},"engine":{"type":"string"},"files":{"type":"array","items":{"type":"string"}},"count":{"type":"integer"},"truncated":{"type":"boolean"}},"required":["path","pattern","engine","files","count","truncated"]}`),
 		Capabilities: []domain.Capability{domain.CapFSRead},
 		Source:       domain.ToolSourceBuiltin,
 	}, validator)

@@ -198,7 +198,6 @@ type ToolDefinition struct {
     Name         string
     Description  string
     InputSchema  json.RawMessage
-    OutputSchema json.RawMessage
     Capabilities []Capability
     Source       ToolSource
 }

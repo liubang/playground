@@ -39,6 +39,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/subagent"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	"github.com/liubang/playground/go/pl/loom/internal/trace"
 )
 
@@ -126,15 +127,6 @@ type SnapshotError struct {
 // snapshotErrorMaxRunes bounds a projected error message: provider error
 // bodies can embed multi-hundred-byte JSON blobs.
 const snapshotErrorMaxRunes = 300
-
-// truncateRunes bounds a projected error message for wire payloads.
-func truncateRunes(s string, max int) string {
-	r := []rune(s)
-	if len(r) <= max {
-		return s
-	}
-	return string(r[:max]) + "…"
-}
 
 // WindowInfo is the wire projection of agent.WindowModel: every threshold a
 // frontend needs to render context occupancy against the compaction trigger.
@@ -1640,7 +1632,7 @@ func (c *Controller) onTurnFinished(turnID uint64, turn int, err error) {
 		// richer structured reason and wins; cancellation is a user action,
 		// never an error.
 		if c.lastError == nil && !errors.Is(err, context.Canceled) {
-			c.lastError = &SnapshotError{Message: truncateRunes(err.Error(), snapshotErrorMaxRunes)}
+			c.lastError = &SnapshotError{Message: toolkit.Ellipsize(err.Error(), snapshotErrorMaxRunes)}
 		}
 	}
 	if c.activeTurn != turnID {
@@ -2456,7 +2448,7 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 			s.controller.setLastError(&SnapshotError{
 				Stage:   payload.Stage,
 				Code:    payload.Code,
-				Message: truncateRunes(payload.Message, snapshotErrorMaxRunes),
+				Message: toolkit.Ellipsize(payload.Message, snapshotErrorMaxRunes),
 			})
 			s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindModelRequestFailed, runtimeevent.ModelRequestFailedPayload{
 				RequestID: payload.RequestID,
@@ -2748,7 +2740,7 @@ func lastErrorFromEvents(events []domain.Event) *SnapshotError {
 				last = &SnapshotError{
 					Stage:   payload.Stage,
 					Code:    payload.Code,
-					Message: truncateRunes(payload.Message, snapshotErrorMaxRunes),
+					Message: toolkit.Ellipsize(payload.Message, snapshotErrorMaxRunes),
 				}
 			}
 		case domain.EventModelResponseCompleted, domain.EventRunCreated:

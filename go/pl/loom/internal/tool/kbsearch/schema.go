@@ -87,45 +87,13 @@ func readInputSchema(sh *shared) string {
 	return string(b)
 }
 
-const searchOutputSchema = `{
-  "type": "object",
-  "properties": {
-    "query": {"type": "string"},
-    "collection": {"type": "string"},
-    "count": {"type": "integer"},
-    "results": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": {"type": "string"},
-          "score": {"type": "number"},
-          "fields": {"type": "object"}
-        },
-        "required": ["id", "score", "fields"]
-      }
-    }
-  },
-  "required": ["query", "collection", "count", "results"]
-}`
-
-const readOutputSchema = `{
-  "type": "object",
-  "properties": {
-    "id": {"type": "string"},
-    "collection": {"type": "string"},
-    "found": {"type": "boolean"},
-    "fields": {"type": "object"}
-  },
-  "required": ["id", "collection", "found"]
-}`
-
 func searchDescription(sh *shared) string {
 	var b strings.Builder
 	b.WriteString("Search the knowledge base (hybrid BM25 + vector retrieval with rerank) and return ranked excerpts — each as {id, score, fields}, where id identifies a chunk-level document. ")
 	b.WriteString("Use it when the task may benefit from domain documentation beyond the local workspace, then call kb_read with a result's exact id to read that chunk untruncated. ")
 	b.WriteString("Long field values are truncated in results; kb_read returns them in full. ")
-	b.WriteString("An empty results array means the knowledge base has nothing relevant — answer from your own knowledge rather than retrying.")
+	b.WriteString("An empty results array means the knowledge base has nothing relevant — answer from your own knowledge rather than retrying. ")
+	b.WriteString("A 'note' field instead means the knowledge base was unreachable and the query was NOT answered: do not conclude 'nothing relevant' — say the knowledge base is down.")
 	if sh.multi {
 		b.WriteString(" Collections: " + collectionEnumDescription(sh))
 	} else {
@@ -139,7 +107,8 @@ func readDescription(sh *shared) string {
 	b.WriteString("Read one knowledge base document in full by its id, copied verbatim from the `id` field of a kb_search result. ")
 	b.WriteString("Ids are chunk-level: a markdown document is stored as chunks named `<doc>#chunk_N`, and there is no document-level entry — reading `<doc>` without the `#chunk_N` suffix returns found=false. ")
 	b.WriteString("Use it after kb_search when an excerpt looks relevant but was truncated. ")
-	b.WriteString("found=false means the document does not exist (wrong id or deleted) — pick another result instead of retrying the same id.")
+	b.WriteString("found=false means the document does not exist (wrong id or deleted) — pick another result instead of retrying the same id. ")
+	b.WriteString("A 'note' field instead means the knowledge base was unreachable and the document's existence was not verified — not the same as found=false.")
 	if sh.multi {
 		b.WriteString(" Collections: " + collectionEnumDescription(sh))
 	} else {

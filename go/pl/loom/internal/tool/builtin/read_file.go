@@ -56,7 +56,6 @@ func NewReadFileTool(validator *workspacepkg.PathValidator, book *workspacepkg.F
 			"marker, keep reading with offset until it disappears. Binary files are rejected. " +
 			"You MUST read a file before editing it.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1},"offset":{"type":"integer","minimum":1},"limit":{"type":"integer","minimum":1,"maximum":500}},"required":["path"]}`),
-		OutputSchema: json.RawMessage(`{"type":"string","description":"cat -n style numbered lines with a metadata header line and an optional trailing truncation marker"}`),
 		Capabilities: []domain.Capability{domain.CapFSRead},
 		Source:       domain.ToolSourceBuiltin,
 	}, validator)

@@ -51,9 +51,24 @@ type permissionFixture struct {
 
 func newPermissionFixture(t *testing.T) *permissionFixture {
 	t.Helper()
-	home := t.TempDir()
+	// The sandbox treats the system scratch dirs ($TMPDIR, /tmp) as
+	// writable and the policy roots mirror that (ExtraWritableDirs), so a
+	// plain t.TempDir()-based HOME would land INSIDE the writable roots and
+	// every "external" write asserted below would silently count as
+	// confined. Redirect $TMPDIR into a private scratch and make HOME a
+	// SIBLING of that scratch: HOME then lies genuinely outside the
+	// writable roots while the workspace still sits under scratch.
+	base := t.TempDir()
+	scratch := filepath.Join(base, "tmp")
+	home := filepath.Join(base, "home")
+	ws := filepath.Join(base, "ws")
+	for _, dir := range []string{scratch, home, ws} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("TMPDIR", scratch)
 	t.Setenv("HOME", home)
-	ws := t.TempDir()
 	validator, err := workspacepkg.NewPathValidator(ws)
 	if err != nil {
 		t.Fatal(err)

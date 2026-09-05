@@ -34,9 +34,12 @@ func resetShellProbe(t *testing.T) {
 	t.Helper()
 	origRun, origNow := shellProbeRun, shellProbeNow
 	t.Cleanup(func() {
-		shellProbeRun, shellProbeNow = origRun, origNow
+		// Restore the seams under the lock too: refreshShellProbe snapshots
+		// them under the same lock, so an in-flight refresh can never race
+		// this restore.
 		shellProbe.Lock()
 		defer shellProbe.Unlock()
+		shellProbeRun, shellProbeNow = origRun, origNow
 		shellProbe.cachePath = ""
 		shellProbe.shell = ""
 		shellProbe.home = ""
@@ -236,10 +239,19 @@ func TestShellProbeIgnoresCacheFromForeignShell(t *testing.T) {
 		<-release
 		return []string{"/shell/fresh"}, nil
 	}
-	t.Cleanup(func() { close(release) })
 
 	ConfigureShellPathProbe(cacheDir)
 	if got := shellProbeDirs(); got != nil {
 		t.Fatalf("shellProbeDirs() = %v, want nil for foreign-shell cache", got)
 	}
+
+	// Drain the async refresh the call above kicked: unblock it and wait
+	// for refreshing to clear, so no goroutine outlives the test and
+	// resetShellProbe's cleanup cannot race (or be polluted by) it.
+	close(release)
+	eventually(t, 2*time.Second, func() bool {
+		shellProbe.Lock()
+		defer shellProbe.Unlock()
+		return !shellProbe.refreshing
+	}, "background refresh drains before test end")
 }

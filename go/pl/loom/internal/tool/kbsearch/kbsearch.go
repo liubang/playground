@@ -148,7 +148,6 @@ func newSearchTool(sh *shared) (*SearchTool, error) {
 		Name:         toolSearchName,
 		Description:  searchDescription(sh),
 		InputSchema:  json.RawMessage(searchInputSchema(sh)),
-		OutputSchema: json.RawMessage(searchOutputSchema),
 		Capabilities: []domain.Capability{domain.CapNetworkConnect},
 		Source:       domain.ToolSourceBuiltin,
 	})
@@ -181,6 +180,10 @@ type searchOutput struct {
 	Collection string             `json:"collection"`
 	Count      int                `json:"count"`
 	Results    []searchResultItem `json:"results"`
+	// Note distinguishes a genuine zero-result answer from a degraded one:
+	// when the knowledge base was unreachable the query was NOT answered,
+	// and the model must not read the empty array as "nothing relevant".
+	Note string `json:"note,omitempty"`
 }
 
 func (t *SearchTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
@@ -228,12 +231,19 @@ func (t *SearchTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 	hits, err := t.sh.client.Search(ctx, args.Collection, args.Query, args.TopK)
 	if err != nil {
 		// A minisearch outage must not block the coding agent: render an
-		// empty result so the model answers from its own knowledge, and
-		// surface the real cause to the operator log only.
+		// empty result so the model can still answer from its own
+		// knowledge — but degrade EXPLICITLY. An un-note'd empty array
+		// would read as "nothing relevant exists", a silent lie when the
+		// query was never answered; the note tells the model the answer
+		// may be incomplete and to say so. The raw cause stays in the
+		// operator log only.
 		slog.Default().Warn("kb_search: minisearch unavailable, answering without knowledge base",
 			"collection", args.Collection, "error", err)
 		return toolkit.SuccessResult(prepared.Call.ID, startedAt, searchOutput{
 			Query: args.Query, Collection: args.Collection, Count: 0, Results: []searchResultItem{},
+			Note: "knowledge base unreachable (minisearch unavailable) — this query was NOT answered; " +
+				"do not treat the empty result as 'no relevant content'. Answer from general knowledge " +
+				"and note to the user that the knowledge base is down.",
 		})
 	}
 
@@ -261,7 +271,6 @@ func newReadTool(sh *shared) (*ReadTool, error) {
 		Name:         toolReadName,
 		Description:  readDescription(sh),
 		InputSchema:  json.RawMessage(readInputSchema(sh)),
-		OutputSchema: json.RawMessage(readOutputSchema),
 		Capabilities: []domain.Capability{domain.CapNetworkConnect},
 		Source:       domain.ToolSourceBuiltin,
 	})
@@ -285,6 +294,11 @@ type readOutput struct {
 	Collection string         `json:"collection"`
 	Found      bool           `json:"found"`
 	Fields     map[string]any `json:"fields,omitempty"`
+	// Note distinguishes a genuine found=false (wrong/deleted id) from a
+	// degraded one: when the knowledge base was unreachable the document's
+	// existence was never verified, so the model must not conclude "does
+	// not exist" from the outage path.
+	Note string `json:"note,omitempty"`
 }
 
 func (t *ReadTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
@@ -325,13 +339,16 @@ func (t *ReadTool) Execute(ctx context.Context, prepared domain.PreparedCall) do
 
 	fields, found, err := t.sh.client.GetDocument(ctx, args.Collection, args.ID)
 	if err != nil {
-		// Same graceful-degradation contract as kb_search: a service
-		// failure renders as "not found" (the honest signal when the
-		// model cannot read a truncated excerpt), with the cause logged.
+		// Same graceful-degradation contract as kb_search, made explicit:
+		// an outage renders as found=false plus a note — never a bare
+		// found=false, which would claim the document is verifiably
+		// missing. The raw cause stays in the operator log only.
 		slog.Default().Warn("kb_read: minisearch unavailable, document unavailable",
 			"collection", args.Collection, "id", args.ID, "error", err)
 		return toolkit.SuccessResult(prepared.Call.ID, startedAt, readOutput{
 			ID: args.ID, Collection: args.Collection, Found: false,
+			Note: "knowledge base unreachable (minisearch unavailable) — the document's existence was " +
+				"not verified (not the same as found=false). Retry later or proceed without it.",
 		})
 	}
 	if !found {

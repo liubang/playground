@@ -110,7 +110,6 @@ func NewGenerateImageTool(gen images.Generator, artifacts domain.ArtifactStore, 
 			"to the user, and returned inline so you can review it; to iterate, call again with an adjusted prompt. " +
 			"size and quality default to the configured values and rarely need overriding.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"prompt":{"type":"string","minLength":1,"maxLength":4096},"size":{"type":"string","enum":["auto","1024x1024","1536x1024","1024x1536"]},"quality":{"type":"string","enum":["auto","low","medium","high"]}},"required":["prompt"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","description":"JSON header (media type, byte size, artifact reference, revised prompt) followed by an artifact reference to the image"}`),
 		Capabilities: []domain.Capability{domain.CapNetworkConnect},
 		Source:       domain.ToolSourceBuiltin,
 	})
@@ -142,7 +141,7 @@ func (t *GenerateImageTool) Prepare(ctx context.Context, call domain.ToolCall) (
 	if err != nil {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
-	approvalDesc := fmt.Sprintf("Generate image (%s): %s", t.opts.Model, truncateRunes(strings.TrimSpace(args.Prompt), approvalPromptRunes))
+	approvalDesc := fmt.Sprintf("Generate image (%s): %s", t.opts.Model, toolkit.Ellipsize(strings.TrimSpace(args.Prompt), approvalPromptRunes))
 	return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{ApprovalDesc: approvalDesc})
 }
 
@@ -232,12 +231,4 @@ func orDefault(value, fallback string) string {
 		return value
 	}
 	return fallback
-}
-
-func truncateRunes(s string, max int) string {
-	runes := []rune(s)
-	if len(runes) <= max {
-		return s
-	}
-	return string(runes[:max]) + "…"
 }

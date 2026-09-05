@@ -19,14 +19,13 @@ package agent
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
 // PlanCell is the mailbox between the update_plan tool (which cannot see the
@@ -129,7 +128,7 @@ func planStatusNote(plan domain.Plan) string {
 	for i, item := range plan.Items {
 		fmt.Fprintf(&sb, "%d. [%s] %s", i+1, item.Status, item.Goal)
 		if item.Status == domain.PlanItemDone && len(item.Evidence) > 0 && (i == lastDone || (planNoteEvidenceItems > 1 && i == prevDone)) {
-			fmt.Fprintf(&sb, " — evidence: %s", truncateRunes(strings.Join(item.Evidence, "; "), planNoteEvidenceMaxLen))
+			fmt.Fprintf(&sb, " — evidence: %s", toolkit.Ellipsize(strings.Join(item.Evidence, "; "), planNoteEvidenceMaxLen))
 		}
 		sb.WriteString("\n")
 	}
@@ -138,15 +137,6 @@ func planStatusNote(plan domain.Plan) string {
 	// transcript, so updates belong at step transitions, not mid-step.
 	sb.WriteString("Rule: update the plan at step boundaries (mark the finished step done, start the next); avoid mid-step or back-to-back revisions.")
 	return sb.String()
-}
-
-// truncateRunes bounds s to max runes, marking truncation.
-func truncateRunes(s string, max int) string {
-	r := []rune(s)
-	if len(r) <= max {
-		return s
-	}
-	return string(r[:max]) + "…"
 }
 
 // --- update_plan tool ---
@@ -216,21 +206,15 @@ func NewUpdatePlanTool(cell *PlanCell) (*UpdatePlanTool, error) {
 	}
 	def := domain.ToolDefinition{
 		Name: "update_plan",
-		Description: "Update the task plan: a checklist you maintain to track progress on multi-step work. " +
-			"Submit the COMPLETE plan snapshot on every call (full replacement, not a diff). " +
-			"Rules: skip this tool for straightforward tasks (roughly the easiest 25%); never create single-step plans; " +
-			"keep at most one step in_progress — mark the current step done (with brief evidence) before starting the next; " +
-			"update at step boundaries: each call is a full snapshot that stays in the transcript, so revise when a step completes or the plan changes — not mid-step. " +
-			"Give the plan a short 'title' (a few words naming the overall objective) when creating it; " +
-			"later revisions may omit it to keep the existing title. " +
-			"Only mark a step done after its deliverable actually exists (edits applied, commands verified, conclusions " +
-			"written); for final summary/report steps, write the visible answer FIRST, then call update_plan in the same " +
-			"turn — never pre-mark a step as done. " +
-			"The plan persists across turns, context compactions, and crash recovery, and its latest state is " +
-			"automatically shown to you before every model call, so never repeat it in your messages.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"title":{"type":"string","maxLength":120},"plan":{"type":"array","minItems":2,"items":{"type":"object","additionalProperties":false,"properties":{"goal":{"type":"string","minLength":1,"maxLength":1024},"status":{"type":"string","enum":["todo","in_progress","done"]},"evidence":{"type":"array","items":{"type":"string","maxLength":1024}}},"required":["goal","status"]}}},"required":["plan"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"applied":{"type":"boolean"},"items":{"type":"integer"},"note":{"type":"string"}},"required":["applied","note"]}`),
-		Source:       domain.ToolSourceBuiltin,
+		Description: "Update the task plan: the checklist you maintain for the current multi-step task. " +
+			"Submit the COMPLETE plan snapshot on every call — each call fully replaces the previous plan (not a diff). " +
+			"'plan' lists the steps (at least 2); each step carries a goal, a status ('todo' | 'in_progress' | 'done'), " +
+			"and an optional evidence note (a one-line verification) for a completed step. " +
+			"'title' is a few words naming the overall objective — required when you first create the plan, omittable on later revisions. " +
+			"The plan's latest state is automatically shown to you before every model call and persists across turns and compaction; " +
+			"when to plan, step granularity, and in_progress discipline follow the Task Planning guidance.",
+		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"title":{"type":"string","maxLength":120},"plan":{"type":"array","minItems":2,"items":{"type":"object","additionalProperties":false,"properties":{"goal":{"type":"string","minLength":1,"maxLength":1024},"status":{"type":"string","enum":["todo","in_progress","done"]},"evidence":{"type":"array","items":{"type":"string","maxLength":1024}}},"required":["goal","status"]}}},"required":["plan"]}`),
+		Source:      domain.ToolSourceBuiltin,
 	}
 	if err := def.Validate(); err != nil {
 		return nil, domain.NewError(domain.ErrInternal, "invalid tool definition", domain.WithCause(err))
@@ -248,7 +232,6 @@ func (t *UpdatePlanTool) Prepare(_ context.Context, call domain.ToolCall) (domai
 		return domain.PreparedCall{}, err
 	}
 	call.Arguments = canonical
-	sum := sha256.Sum256(canonical)
 	desc := fmt.Sprintf("Update plan (%d steps)", len(plan.Items))
 	if current := plan.CurrentInProgress(); current != nil {
 		desc = fmt.Sprintf("Update plan (%d steps): %s", len(plan.Items), current.Goal)
@@ -258,7 +241,7 @@ func (t *UpdatePlanTool) Prepare(_ context.Context, call domain.ToolCall) (domai
 		Definition:   t.def,
 		Risk:         domain.R1,
 		ApprovalDesc: desc,
-		ArgsHash:     hex.EncodeToString(sum[:])[:16],
+		ArgsHash:     toolkit.ArgsFingerprint(canonical),
 	}, nil
 }
 

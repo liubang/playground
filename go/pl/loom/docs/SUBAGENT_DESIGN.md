@@ -128,8 +128,8 @@ codex 的 multi-agent 仍在快速演进：V1/V2 并存、`multiAgentMode` 已�
 
 ### 4.2 子 Agent 工具集（只读子集）
 
-`read_file`、`list_dir`、`grep`、`glob`、`view_image`、`present_image`、`git_status`、`git_diff`、`git_log`、`git_merge_base`、`git_blame`、`web_fetch`、`web_search`。
-明确排除：`edit`/`write`（写）、`run_cmd`（进程执行）、`lint`（进程执行）、`update_goal`/`update_plan`（父 run 状态）、`ask_user`（无交互对象）、`delegate_task`（递归）。
+`read_file`、`list_dir`、`grep`、`glob`、`view_image`、`git_status`、`git_diff`、`git_log`、`git_merge_base`、`git_blame`、`web_fetch`、`web_search`。
+明确排除：`edit`/`write`（写）、`run_cmd`（进程执行）、`lint`（进程执行）、`update_goal`/`update_plan`（父 run 状态）、`ask_user`（无交互对象）、`delegate_task`（递归）、`present_image`（把图片渲染进**用户** transcript 的展示工具——子 run 不拥有该展示通道，主 Agent 专属）。`view_image`（模型自己看图）保留，由主/子 run 在请求时按模型是否支持图片（`SupportsImages`）过滤。
 
 ### 4.3 子 Agent 系统提示
 

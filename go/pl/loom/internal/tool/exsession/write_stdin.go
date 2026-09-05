@@ -60,8 +60,7 @@ func NewWriteStdinTool(manager *Manager) (*WriteStdinTool, error) {
 			"The result reports status ('running', 'exited', or 'killed'), the exit code once finished, and the merged " +
 			"stdout/stderr produced since the previous call. Keep polling a session you started until it exits or is no " +
 			"longer needed — it stays alive otherwise.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"session_id":{"type":"string","minLength":1,"maxLength":64},"chars":{"type":"string","maxLength":8192},"yield_time_ms":{"type":"integer","minimum":0,"maximum":300000},"max_output_bytes":{"type":"integer","minimum":0,"maximum":65536}},"required":["session_id"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","properties":{"session_id":{"type":"string"},"command":{"type":"string"},"status":{"type":"string","enum":["running","exited","killed"]},"exit_code":{"type":"integer"},"signal":{"type":"string"},"output":{"type":"string"},"output_dropped_bytes":{"type":"integer"},"stdout_bytes":{"type":"integer"},"stderr_bytes":{"type":"integer"},"duration_ms":{"type":"integer"},"isolation":{"type":"string"},"stdout_artifact_path":{"type":"string"},"stderr_artifact_path":{"type":"string"},"note":{"type":"string"}},"required":["session_id","command","status","exit_code","output","stdout_bytes","stderr_bytes","duration_ms","isolation"]}`),
+		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"session_id":{"type":"string","minLength":1,"maxLength":64},"chars":{"type":"string","maxLength":8192},"yield_time_ms":{"type":"integer","minimum":0,"maximum":300000},"max_output_bytes":{"type":"integer","minimum":0,"maximum":65536}},"required":["session_id"]}`),
 		// Deliberately capability-free (static R0): Prepare pins the
 		// per-call risk at R1, which is then an elevation above the
 		// definition default. The agent loop's prepared-call drift check

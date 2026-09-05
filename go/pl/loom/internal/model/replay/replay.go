@@ -145,6 +145,11 @@ type replayStream struct {
 	outcome CallOutcome
 	errText string
 
+	// mu guards the mutable stream state: Recv (the consuming goroutine)
+	// and Close (typically the caller's defer, possibly another goroutine)
+	// race on hung/settled/pos otherwise. Recv never holds mu while
+	// blocked on ctx.Done — Close must always be able to acquire it.
+	mu            sync.Mutex
 	pos           int
 	hung          bool // the hang position was reached
 	settled       bool // terminal outcome was delivered
@@ -152,20 +157,27 @@ type replayStream struct {
 }
 
 func (s *replayStream) Recv() (domain.ModelEvent, error) {
+	s.mu.Lock()
 	if s.pos < len(s.events) {
 		evt := s.events[s.pos]
 		s.pos++
+		s.mu.Unlock()
 		return evt, nil
 	}
 	if s.outcome == OutcomeHang {
 		s.hung = true
+		s.mu.Unlock()
 		// Block like the live stream did; the consumer's cancellation is
-		// the only way out.
+		// the only way out. The lock is released so Close never deadlocks
+		// on a stream whose context is never cancelled.
 		<-s.ctx.Done()
+		s.mu.Lock()
 		s.settled = true
+		s.mu.Unlock()
 		return domain.ModelEvent{}, s.ctx.Err()
 	}
 	s.settled = true
+	s.mu.Unlock()
 	if s.outcome == OutcomeError {
 		return domain.ModelEvent{}, errors.New(s.errText)
 	}
@@ -173,8 +185,12 @@ func (s *replayStream) Recv() (domain.ModelEvent, error) {
 }
 
 func (s *replayStream) Close() error {
-	if s.hung && !s.settled && s.onHangSettled != nil {
-		s.onHangSettled(s.ctx.Err() != nil)
+	s.mu.Lock()
+	hung, settled := s.hung, s.settled
+	cb := s.onHangSettled
+	s.mu.Unlock()
+	if hung && !settled && cb != nil {
+		cb(s.ctx.Err() != nil)
 	}
 	return nil
 }

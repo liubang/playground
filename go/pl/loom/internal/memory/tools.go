@@ -20,8 +20,6 @@ package memory
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,6 +28,7 @@ import (
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
 // Tool names.
@@ -70,9 +69,8 @@ func NewListTool(store *Store) (*ListTool, error) {
 		Name: ToolList,
 		Description: "List files and directories under a path in the memory store. " +
 			"Use this to explore the memory hierarchy before reading specific files.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","description":"Relative path within the memory store. Default: root."},"max_results":{"type":"integer","minimum":1,"maximum":2000,"description":"Maximum entries to return. Default: 200."}}}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"entries":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"is_dir":{"type":"boolean"}}}}},"required":["entries"]}`),
-		Source:       domain.ToolSourceBuiltin,
+		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","description":"Relative path within the memory store. Default: root."},"max_results":{"type":"integer","minimum":1,"maximum":2000,"description":"Maximum entries to return. Default: 200."}}}`),
+		Source:      domain.ToolSourceBuiltin,
 	}
 	if err := def.Validate(); err != nil {
 		return nil, domain.NewError(domain.ErrInternal, "invalid tool definition", domain.WithCause(err))
@@ -99,13 +97,12 @@ func (t *ListTool) Prepare(_ context.Context, call domain.ToolCall) (domain.Prep
 		args.MaxResults = DefaultListMaxResults
 	}
 	canonical, _ := json.Marshal(args)
-	sum := sha256.Sum256(canonical)
 	return domain.PreparedCall{
 		Call:         call,
 		Definition:   t.def,
 		Risk:         domain.R1,
 		ApprovalDesc: fmt.Sprintf("List memory files under %s", args.Path),
-		ArgsHash:     hex.EncodeToString(sum[:])[:16],
+		ArgsHash:     toolkit.ArgsFingerprint(canonical),
 	}, nil
 }
 
@@ -152,9 +149,8 @@ func NewReadTool(store *Store) (*ReadTool, error) {
 		Name: ToolRead,
 		Description: "Read a memory file by relative path, optionally starting at a line offset " +
 			"and limiting the number of lines returned. Use this to read MEMORY.md, rollout summaries, or skill files.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","description":"Relative path within the memory store."},"line_offset":{"type":"integer","minimum":1,"description":"1-indexed line offset to start reading from."},"max_lines":{"type":"integer","minimum":1,"maximum":2000,"description":"Maximum lines to return. Default: all."}},"required":["path"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"content":{"type":"string"},"total_lines":{"type":"integer"}},"required":["content","total_lines"]}`),
-		Source:       domain.ToolSourceBuiltin,
+		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","description":"Relative path within the memory store."},"line_offset":{"type":"integer","minimum":1,"description":"1-indexed line offset to start reading from."},"max_lines":{"type":"integer","minimum":1,"maximum":2000,"description":"Maximum lines to return. Default: all."}},"required":["path"]}`),
+		Source:      domain.ToolSourceBuiltin,
 	}
 	if err := def.Validate(); err != nil {
 		return nil, domain.NewError(domain.ErrInternal, "invalid tool definition", domain.WithCause(err))
@@ -182,13 +178,12 @@ func (t *ReadTool) Prepare(_ context.Context, call domain.ToolCall) (domain.Prep
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "path is required")
 	}
 	canonical, _ := json.Marshal(args)
-	sum := sha256.Sum256(canonical)
 	return domain.PreparedCall{
 		Call:         call,
 		Definition:   t.def,
 		Risk:         domain.R1,
 		ApprovalDesc: fmt.Sprintf("Read memory file %s", args.Path),
-		ArgsHash:     hex.EncodeToString(sum[:])[:16],
+		ArgsHash:     toolkit.ArgsFingerprint(canonical),
 	}, nil
 }
 
@@ -231,9 +226,8 @@ func NewSearchTool(store *Store) (*SearchTool, error) {
 		Name: ToolSearch,
 		Description: "Search memory files for substring matches. Use this to find relevant memories " +
 			"before answering questions about prior work, user preferences, or project conventions.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"query":{"type":"string","minLength":1,"maxLength":512,"description":"Search substring."},"max_results":{"type":"integer","minimum":1,"maximum":2000,"description":"Maximum matches to return. Default: 200."}},"required":["query"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"matches":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"content":{"type":"string"}}}}},"required":["matches"]}`),
-		Source:       domain.ToolSourceBuiltin,
+		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"query":{"type":"string","minLength":1,"maxLength":512,"description":"Search substring."},"max_results":{"type":"integer","minimum":1,"maximum":2000,"description":"Maximum matches to return. Default: 200."}},"required":["query"]}`),
+		Source:      domain.ToolSourceBuiltin,
 	}
 	if err := def.Validate(); err != nil {
 		return nil, domain.NewError(domain.ErrInternal, "invalid tool definition", domain.WithCause(err))
@@ -263,13 +257,12 @@ func (t *SearchTool) Prepare(_ context.Context, call domain.ToolCall) (domain.Pr
 		args.MaxResults = DefaultSearchMaxResults
 	}
 	canonical, _ := json.Marshal(args)
-	sum := sha256.Sum256(canonical)
 	return domain.PreparedCall{
 		Call:         call,
 		Definition:   t.def,
 		Risk:         domain.R1,
-		ApprovalDesc: fmt.Sprintf("Search memory for %q", truncateStr(args.Query, 40)),
-		ArgsHash:     hex.EncodeToString(sum[:])[:16],
+		ApprovalDesc: fmt.Sprintf("Search memory for %q", toolkit.Ellipsize(args.Query, 40)),
+		ArgsHash:     toolkit.ArgsFingerprint(canonical),
 	}, nil
 }
 
@@ -318,9 +311,8 @@ func NewAddNoteTool(store *Store) (*AddNoteTool, error) {
 		Description: "Create an append-only ad-hoc memory note after the user explicitly asks to " +
 			"remember, forget, or update something. The note is stored as a timestamped markdown file " +
 			"and will be consolidated into the main memory during the next consolidation pass.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"filename":{"type":"string","pattern":"^\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}-[a-z0-9][a-z0-9-]{0,79}\\.md$","minLength":24,"maxLength":128,"description":"Timestamped slug filename: YYYY-MM-DDTHH-MM-SS-slug.md"},"note":{"type":"string","minLength":1,"maxLength":4096,"description":"The memory note content."}},"required":["filename","note"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string"},"status":{"type":"string","enum":["created"]}},"required":["path","status"]}`),
-		Source:       domain.ToolSourceBuiltin,
+		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"filename":{"type":"string","pattern":"^\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}-[a-z0-9][a-z0-9-]{0,79}\\.md$","minLength":24,"maxLength":128,"description":"Timestamped slug filename: YYYY-MM-DDTHH-MM-SS-slug.md"},"note":{"type":"string","minLength":1,"maxLength":4096,"description":"The memory note content."}},"required":["filename","note"]}`),
+		Source:      domain.ToolSourceBuiltin,
 	}
 	if err := def.Validate(); err != nil {
 		return nil, domain.NewError(domain.ErrInternal, "invalid tool definition", domain.WithCause(err))
@@ -352,13 +344,12 @@ func (t *AddNoteTool) Prepare(_ context.Context, call domain.ToolCall) (domain.P
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "note is required")
 	}
 	canonical, _ := json.Marshal(args)
-	sum := sha256.Sum256(canonical)
 	return domain.PreparedCall{
 		Call:         call,
 		Definition:   t.def,
 		Risk:         domain.R2,
 		ApprovalDesc: fmt.Sprintf("Add memory note %s", args.Filename),
-		ArgsHash:     hex.EncodeToString(sum[:])[:16],
+		ArgsHash:     toolkit.ArgsFingerprint(canonical),
 	}, nil
 }
 
@@ -407,12 +398,4 @@ func memoryToolError(callID domain.ToolCallID, startedAt time.Time, err error) d
 		StartedAt:  startedAt,
 		FinishedAt: time.Now(),
 	}
-}
-
-func truncateStr(s string, n int) string {
-	runes := []rune(s)
-	if len(runes) <= n {
-		return s
-	}
-	return string(runes[:n]) + "…"
 }

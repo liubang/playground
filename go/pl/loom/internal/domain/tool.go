@@ -76,12 +76,16 @@ const (
 	ToolStatusCancelled ToolStatus = "cancelled"
 )
 
-// ToolDefinition describes a tool's schema and metadata.
+// ToolDefinition describes a tool's schema and metadata. Output contracts
+// are deliberately NOT part of the definition (P1-9): no code validates
+// results against an output schema and no provider serializes one to the
+// model, so an OutputSchema field would be dead JSON. Result shapes live in
+// each tool's own Go types, and the Description carries anything the model
+// must know to parse a result.
 type ToolDefinition struct {
 	Name         string          `json:"name"`
 	Description  string          `json:"description"`
 	InputSchema  json.RawMessage `json:"input_schema"`
-	OutputSchema json.RawMessage `json:"output_schema,omitempty"`
 	Capabilities []Capability    `json:"capabilities"`
 	Source       ToolSource      `json:"source"`
 }
@@ -93,9 +97,6 @@ func (d ToolDefinition) Validate() error {
 	}
 	if !json.Valid(d.InputSchema) {
 		return fmt.Errorf("invalid input_schema JSON")
-	}
-	if len(d.OutputSchema) > 0 && !json.Valid(d.OutputSchema) {
-		return fmt.Errorf("invalid output_schema JSON")
 	}
 	// Fail loud on capabilities that have no risk mapping: a new
 	// Capability forgotten in capabilityRiskTable would otherwise default

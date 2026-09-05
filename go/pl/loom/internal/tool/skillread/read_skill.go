@@ -86,7 +86,6 @@ func NewReadSkillTool(catalog *skill.AtomicCatalog) (*ReadSkillTool, error) {
 			"inside the skill directory; offset/limit paginate long files (max 500 lines per call, read until the " +
 			"truncated marker disappears). The skills catalog in the system prompt lists the available names.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"name":{"type":"string","minLength":1,"maxLength":128},"path":{"type":"string","maxLength":4096},"offset":{"type":"integer","minimum":1},"limit":{"type":"integer","minimum":1,"maximum":500}},"required":["name"]}`),
-		OutputSchema: json.RawMessage(`{"type":"string","description":"cat -n style numbered lines with a metadata header line and an optional trailing truncation marker"}`),
 		Capabilities: []domain.Capability{domain.CapFSRead},
 		Source:       domain.ToolSourceBuiltin,
 	}

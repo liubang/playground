@@ -51,7 +51,6 @@ func NewGitMergeBaseTool(validator *workspacepkg.PathValidator, runner *process.
 			"a feature branch changed or for a three-way comparison. When the branch's upstream is ahead of the " +
 			"local ref, the upstream's fresher merge-base is used and reported in base_ref.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string","minLength":1},"branch":{"type":"string","minLength":1,"maxLength":256}},"required":["branch"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string"},"branch":{"type":"string"},"merge_base":{"type":"string"},"base_ref":{"type":"string"}},"required":["repo_root","branch","merge_base","base_ref"]}`),
 		Capabilities: []domain.Capability{domain.CapGitRead},
 		Source:       domain.ToolSourceBuiltin,
 	}, validator, runner)

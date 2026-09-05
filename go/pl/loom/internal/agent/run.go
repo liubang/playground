@@ -1500,7 +1500,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 		ID:              domain.NewEventID(),
 		ModelName:       modelName,
 		Messages:        wireMessages,
-		Tools:           l.Registry.List(),
+		Tools:           l.wireTools(),
 		MaxTokens:       l.Run.Limits.MaxOutputTokens,
 		Reasoning:       l.Reasoning,
 		ContextManifest: manifest,
@@ -2496,16 +2496,35 @@ func (l *Loop) contextOccupancy(ctx context.Context) int64 {
 // transcript and the tool schemas, all in the byte/4 estimate scale.
 func (l *Loop) requestEstimate(ctx context.Context) int {
 	prefix, _, _ := requestPrefix(ctx, l.SystemPrompt, l.ModelName, l.Run.Clock, l.Run.Plan, l.Logger)
-	return estTokens(prefix) + estTokens(l.Run.Messages) + schemaTokenEstimate(l.toolDefinitions())
+	return estTokens(prefix) + estTokens(l.Run.Messages) + schemaTokenEstimate(l.wireTools())
 }
 
-// toolDefinitions lists the registered tool schemas, nil-safe for bare
-// test loops.
-func (l *Loop) toolDefinitions() []domain.ToolDefinition {
+// viewImageToolName is the builtin tool that attaches an image artifact for
+// the MODEL to look at (builtin.NewViewImageTool). It is vision-gated: a
+// text-only model cannot consume its artifact and would see only a bare
+// header, so wireTools omits it unless SupportsImages is set.
+const viewImageToolName = "view_image"
+
+// wireTools resolves the tool schemas exposed to the model on this call,
+// nil-safe for bare test loops. view_image is filtered out for text-only
+// models (see viewImageToolName); present_image stays — it renders for the
+// USER, not the model, so vision support is irrelevant to it.
+func (l *Loop) wireTools() []domain.ToolDefinition {
 	if l.Registry == nil {
 		return nil
 	}
-	return l.Registry.List()
+	defs := l.Registry.List()
+	if l.SupportsImages {
+		return defs
+	}
+	out := make([]domain.ToolDefinition, 0, len(defs))
+	for _, def := range defs {
+		if def.Name == viewImageToolName {
+			continue
+		}
+		out = append(out, def)
+	}
+	return out
 }
 
 // contextOverflowNeedles fingerprints provider context-window rejections

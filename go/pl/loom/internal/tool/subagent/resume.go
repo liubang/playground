@@ -51,9 +51,8 @@ func NewResumeSubagentTool(m *Manager) (*ResumeSubagentTool, error) {
 			"The sub-agent retains its prior event history and workspace context; the new task is appended " +
 			"as a fresh user message. Use this to refine a sub-agent's work, continue an interrupted session, " +
 			"or iterate on a partially completed task.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"child_session_id":{"type":"string","description":"The session ID of the sub-agent to resume."},"task":{"type":"string","minLength":1,"maxLength":16384,"description":"Follow-up task description with all necessary context."},"focus":{"type":"array","items":{"type":"string","maxLength":512},"maxItems":16,"description":"Optional paths or symbols to prioritize."},"role":{"type":"string","enum":["researcher","coder"],"description":"Override the sub-agent's role for this resume. Default: reuse the original role."}},"required":["child_session_id","task"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"child_session_id":{"type":"string"},"role":{"type":"string"},"status":{"type":"string","enum":["resumed","error"]}},"required":["child_session_id","status"]}`),
-		Source:       domain.ToolSourceSubAgent,
+		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"child_session_id":{"type":"string","description":"The session ID of the sub-agent to resume."},"task":{"type":"string","minLength":1,"maxLength":16384,"description":"Follow-up task description with all necessary context."},"focus":{"type":"array","items":{"type":"string","maxLength":512},"maxItems":16,"description":"Optional paths or symbols to prioritize."},"role":{"type":"string","enum":["researcher","coder"],"description":"Override the sub-agent's role for this resume. Default: reuse the original role."}},"required":["child_session_id","task"]}`),
+		Source:      domain.ToolSourceSubAgent,
 	}
 	if err := def.Validate(); err != nil {
 		return nil, domain.NewError(domain.ErrInternal, "invalid tool definition", domain.WithCause(err))

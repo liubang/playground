@@ -758,7 +758,11 @@ func registerToolFactories(registry *agent.ToolRegistry, tools []toolFactory) er
 
 // readOnlyToolFactories is the shared read-only tool set: the main agent's
 // baseline and both sub-agent registries start from it, so a new read-only
-// tool is added in exactly one place (REVIEW R11).
+// tool is added in exactly one place (REVIEW R11). present_image is the one
+// deliberate exception: it renders an image into the USER's transcript — a
+// channel delegated runs (researcher/coder) do not own — so it is registered
+// only on the main agent (registerBuiltinTools). view_image stays in the
+// shared set and is filtered per model at request time (SupportsImages).
 func readOnlyToolFactories(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook) []toolFactory {
 	return []toolFactory{
 		{"read_file", func() (domain.Tool, error) { return builtin.NewReadFileTool(validator, book) }},
@@ -766,7 +770,6 @@ func readOnlyToolFactories(validator *workspace.PathValidator, runner *process.R
 		{"grep", func() (domain.Tool, error) { return builtin.NewSearchTool(validator, runner) }},
 		{"glob", func() (domain.Tool, error) { return builtin.NewGlobTool(validator, runner) }},
 		{"view_image", func() (domain.Tool, error) { return builtin.NewViewImageTool(validator, artStore) }},
-		{"present_image", func() (domain.Tool, error) { return builtin.NewPresentImageTool(validator, artStore) }},
 		{"git_status", func() (domain.Tool, error) { return gittools.NewGitStatusTool(validator, runner) }},
 		{"git_diff", func() (domain.Tool, error) { return gittools.NewGitDiffTool(validator, runner) }},
 		{"git_log", func() (domain.Tool, error) { return gittools.NewGitLogTool(validator, runner) }},
@@ -826,6 +829,16 @@ func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.Pat
 	)
 	if err := registerToolFactories(registry, tools); err != nil {
 		return err
+	}
+	// present_image is main-agent only: it renders an image into the user's
+	// transcript, a channel delegated runs (researcher/coder, both fed by
+	// readOnlyToolFactories) do not own.
+	presentImage, err := builtin.NewPresentImageTool(validator, artStore)
+	if err != nil {
+		return fmt.Errorf("present_image: %w", err)
+	}
+	if err := registry.Register(presentImage); err != nil {
+		return fmt.Errorf("register present_image: %w", err)
 	}
 	// run_cmd needs artifact store
 	runCmd, err := command.NewRunCmdToolWithArtifacts(validator, runner, artStore, int(maxOutputBytes))

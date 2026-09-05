@@ -179,8 +179,6 @@ func TestSeatbeltGitCommitStillWorks(t *testing.T) {
 		cmd := exec.Command("git", args...)
 		cmd.Dir = root
 		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
-			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t",
 			"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v (%s)", args, err, out)
@@ -188,6 +186,14 @@ func TestSeatbeltGitCommitStillWorks(t *testing.T) {
 	}
 	setup("init")
 	setup("config", "commit.gpgsign", "false")
+	// Identity comes from repo-local config, not the environment: the
+	// seatbelt sandbox runs git with the runner's minimal allowlisted env
+	// (GIT_AUTHOR_*/GIT_COMMITTER_* overrides are filtered out) and
+	// ambient ~/.gitconfig is disabled by GIT_CONFIG_GLOBAL=/dev/null, so
+	// the repo config is the only identity source that survives into the
+	// sandbox. Mirrors configureGitRepo in gittools_test.go.
+	setup("config", "user.name", "Loom Test")
+	setup("config", "user.email", "loom@example.com")
 	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("one"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -203,10 +209,15 @@ func TestSeatbeltGitCommitStillWorks(t *testing.T) {
 			Program: "git",
 			Cwd:     root,
 			Timeout: 15 * time.Second,
+			// Only allowlisted keys survive the sandbox's minimal env; the
+			// author/committer identity now comes from the repo-local config
+			// set during setup. Mirrors gitCommandEnv (gittools/common.go).
 			Env: map[string]string{
-				"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
-				"GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
-				"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null",
+				"LANG":                "C",
+				"LC_ALL":              "C",
+				"GIT_CONFIG_NOSYSTEM": "1",
+				"GIT_CONFIG_GLOBAL":   "/dev/null",
+				"GIT_TERMINAL_PROMPT": "0",
 			},
 		}
 		if r, err := runner.Run(context.Background(), withArgs(spec, "add", "a.txt")); err != nil || r.ExitCode != 0 {

@@ -31,52 +31,20 @@ import (
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
-type searchTextArgs struct {
-	Path          string `json:"path"`
-	Query         string `json:"query"`
-	CaseSensitive bool   `json:"case_sensitive,omitempty"`
-	Before        int    `json:"before,omitempty"`
-	After         int    `json:"after,omitempty"`
-}
+// This file hosts the Go fallback engine of the grep tool (see search.go for
+// the tool definition and ripgrep engine). The engine deliberately reuses the
+// tool's own types — searchArgs/searchMatch/searchOutput — instead of a
+// parallel set: it scans into the caller-provided output skeleton, and the
+// tool-level concerns (engine label, glob filtering, head-limit truncation,
+// the unapplied-filter note) stay in search.go.
 
-type searchTextMatch struct {
-	Path   string        `json:"path"`
-	Line   int           `json:"line"`
-	Text   string        `json:"text"`
-	Before []contextLine `json:"before,omitempty"`
-	After  []contextLine `json:"after,omitempty"`
-}
-
-type searchTextOutput struct {
-	Path            string            `json:"path"`
-	Query           string            `json:"query"`
-	CaseSensitive   bool              `json:"case_sensitive"`
-	Before          int               `json:"before"`
-	After           int               `json:"after"`
-	MatchCount      int               `json:"match_count"`
-	Truncated       bool              `json:"truncated"`
-	ScannedFiles    int               `json:"scanned_files"`
-	SkippedBinary   int               `json:"skipped_binary"`
-	SkippedTooLarge int               `json:"skipped_too_large"`
-	Matches         []searchTextMatch `json:"matches"`
-}
-
-// This file now hosts only the Go fallback search engine used by the search
-// tool when ripgrep is unavailable (see search.go for the tool definition).
-
-func searchDirectory(ctx context.Context, validator *workspacepkg.PathValidator, root pathResolution, args searchTextArgs) (searchTextOutput, error) {
-	output := searchTextOutput{
-		Path:          args.Path,
-		Query:         args.Query,
-		CaseSensitive: args.CaseSensitive,
-		Before:        args.Before,
-		After:         args.After,
-		Matches:       []searchTextMatch{},
-	}
-
-	needle := args.Query
+// searchDirectory walks root.Absolute and fills out.Matches with every hit,
+// sorted by path then line. Binary and oversized files are counted in the
+// skip counters; sensitive locations are skipped as in the rg engine.
+func searchDirectory(ctx context.Context, validator *workspacepkg.PathValidator, root pathResolution, args searchArgs, out *searchOutput) error {
+	needle := args.Pattern
 	if !args.CaseSensitive {
-		needle = strings.ToLower(args.Query)
+		needle = strings.ToLower(args.Pattern)
 	}
 
 	walkErr := filepath.WalkDir(root.Absolute, func(path string, d os.DirEntry, err error) error {
@@ -126,83 +94,75 @@ func searchDirectory(ctx context.Context, validator *workspacepkg.PathValidator,
 		}
 		switch status {
 		case fileSearchBinary:
-			output.SkippedBinary++
+			out.SkippedBinary++
 			return nil
 		case fileSearchTooLarge:
-			output.SkippedTooLarge++
+			out.SkippedTooLarge++
 			return nil
 		}
-		output.ScannedFiles++
+		out.ScannedFiles++
 		if len(matches) == 0 {
 			return nil
 		}
-		remaining := maxSearchMatches - len(output.Matches)
+		remaining := maxSearchMatches - len(out.Matches)
 		if remaining <= 0 {
-			output.Truncated = true
+			out.Truncated = true
 			return io.EOF
 		}
 		if len(matches) > remaining {
 			matches = matches[:remaining]
-			output.Truncated = true
-			output.Matches = append(output.Matches, matches...)
+			out.Truncated = true
+			out.Matches = append(out.Matches, matches...)
 			return io.EOF
 		}
-		output.Matches = append(output.Matches, matches...)
+		out.Matches = append(out.Matches, matches...)
 		return nil
 	})
 	if walkErr != nil && walkErr != io.EOF {
-		return searchTextOutput{}, walkErr
+		return walkErr
 	}
 
-	sort.Slice(output.Matches, func(i, j int) bool {
-		if output.Matches[i].Path != output.Matches[j].Path {
-			return output.Matches[i].Path < output.Matches[j].Path
+	sort.Slice(out.Matches, func(i, j int) bool {
+		if out.Matches[i].Path != out.Matches[j].Path {
+			return out.Matches[i].Path < out.Matches[j].Path
 		}
-		return output.Matches[i].Line < output.Matches[j].Line
+		return out.Matches[i].Line < out.Matches[j].Line
 	})
-	output.MatchCount = len(output.Matches)
-	return output, nil
+	out.MatchCount = len(out.Matches)
+	return nil
 }
 
 // searchSingleFile runs the fallback matcher over one regular file (the
 // search tool accepts single-file targets, matching rg semantics). Binary
 // and oversized files are reported through the skip counters, exactly as in
 // the directory walk; hard I/O failures propagate as errors.
-func searchSingleFile(ctx context.Context, file pathResolution, args searchTextArgs) (searchTextOutput, error) {
-	output := searchTextOutput{
-		Path:          args.Path,
-		Query:         args.Query,
-		CaseSensitive: args.CaseSensitive,
-		Before:        args.Before,
-		After:         args.After,
-		Matches:       []searchTextMatch{},
-	}
-	needle := args.Query
+func searchSingleFile(ctx context.Context, file pathResolution, args searchArgs, out *searchOutput) error {
+	needle := args.Pattern
 	if !args.CaseSensitive {
-		needle = strings.ToLower(args.Query)
+		needle = strings.ToLower(args.Pattern)
 	}
 	status, matches, err := searchFile(ctx, file, needle, args)
 	if err != nil {
-		return searchTextOutput{}, err
+		return err
 	}
 	switch status {
 	case fileSearchBinary:
-		output.SkippedBinary = 1
+		out.SkippedBinary = 1
 	case fileSearchTooLarge:
-		output.SkippedTooLarge = 1
+		out.SkippedTooLarge = 1
 	default:
-		output.ScannedFiles = 1
+		out.ScannedFiles = 1
 		if len(matches) > maxSearchMatches {
 			matches = matches[:maxSearchMatches]
-			output.Truncated = true
+			out.Truncated = true
 		}
-		output.Matches = append(output.Matches, matches...)
+		out.Matches = append(out.Matches, matches...)
 	}
-	output.MatchCount = len(output.Matches)
-	return output, nil
+	out.MatchCount = len(out.Matches)
+	return nil
 }
 
-func searchFile(ctx context.Context, file pathResolution, needle string, args searchTextArgs) (fileSearchStatus, []searchTextMatch, error) {
+func searchFile(ctx context.Context, file pathResolution, needle string, args searchArgs) (fileSearchStatus, []searchMatch, error) {
 	if !file.Info.Mode().IsRegular() {
 		return fileSearchScanned, nil, nil
 	}
@@ -233,7 +193,7 @@ func searchFile(ctx context.Context, file pathResolution, needle string, args se
 		return fileSearchScanned, nil, err
 	}
 
-	matches := make([]searchTextMatch, 0)
+	matches := make([]searchMatch, 0)
 	for idx, line := range lines {
 		if err := ctx.Err(); err != nil {
 			return fileSearchScanned, nil, err
@@ -245,20 +205,18 @@ func searchFile(ctx context.Context, file pathResolution, needle string, args se
 		if !strings.Contains(haystack, needle) {
 			continue
 		}
-		match := searchTextMatch{
+		match := searchMatch{
 			Path: file.Display,
 			Line: idx + 1,
 			Text: line,
 		}
-		if args.Before > 0 {
-			start := maxInt(0, idx-args.Before)
+		if args.Context > 0 {
+			start := max(0, idx-args.Context)
 			match.Before = make([]contextLine, 0, idx-start)
 			for i := start; i < idx; i++ {
 				match.Before = append(match.Before, contextLine{Line: i + 1, Text: lines[i]})
 			}
-		}
-		if args.After > 0 {
-			end := minInt(len(lines), idx+1+args.After)
+			end := min(len(lines), idx+1+args.Context)
 			match.After = make([]contextLine, 0, end-(idx+1))
 			for i := idx + 1; i < end; i++ {
 				match.After = append(match.After, contextLine{Line: i + 1, Text: lines[i]})
@@ -283,18 +241,4 @@ func readSearchLines(ctx context.Context, reader io.Reader) ([]string, error) {
 		return nil, domain.NewError(domain.ErrUnavailable, "failed to scan file", domain.WithCause(err))
 	}
 	return lines, nil
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

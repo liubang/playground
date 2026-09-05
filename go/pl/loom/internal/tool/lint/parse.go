@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
 // diagnostic is the normalized, linter-agnostic finding returned to the model.
@@ -278,7 +279,7 @@ func displayDiagnosticPath(wsRoot, cwd, p string) string {
 	}
 	abs = filepath.Clean(abs)
 	if rel, err := filepath.Rel(wsRoot, abs); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return displayPath(rel)
+		return workspacepkg.DisplayPath(rel)
 	}
 	return filepath.ToSlash(p)
 }

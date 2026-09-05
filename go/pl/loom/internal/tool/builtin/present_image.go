@@ -54,7 +54,6 @@ func NewPresentImageTool(validator *workspacepkg.PathValidator, artifacts domain
 			"resolve inside the workspace; absolute paths outside the workspace work too (credential " +
 			"locations are always denied).",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1,"maxLength":4096}},"required":["path"]}`),
-		OutputSchema: json.RawMessage(`{"type":"string","description":"text header (path, media type, dimensions, size) confirming the image was displayed"}`),
 		Capabilities: []domain.Capability{domain.CapFSRead},
 		Source:       domain.ToolSourceBuiltin,
 	}, validator)

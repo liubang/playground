@@ -77,7 +77,6 @@ func NewWriteTool(validator *workspacepkg.PathValidator) (*WriteTool, error) {
 			"risks destroying user work, and the approval binds the file state observed at prepare time. " +
 			"The approval shows the byte count and whether the call creates or overwrites.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1},"content":{"type":"string"}},"required":["path","content"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"size":{"type":"integer"},"created":{"type":"boolean"},"old_hash":{"type":"string"},"new_hash":{"type":"string"}},"required":["path","size","created","new_hash"]}`),
 		Capabilities: []domain.Capability{domain.CapFSWrite},
 		Source:       domain.ToolSourceBuiltin,
 	}, validator)

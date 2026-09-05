@@ -208,6 +208,11 @@ func marshalRequest(req domain.ModelRequest) ([]byte, error) {
 			return nil, err
 		}
 		payload["tools"] = tools
+		// Pull the tools into the cached prefix: on the wire the tools sit
+		// between the system blocks and the messages, so a breakpoint placed
+		// only inside system would leave them after the final breakpoint and
+		// never cached. The trailing sentinel must trail the tools.
+		markToolCacheSentinel(systemBlocks, messages)
 	}
 
 	body, err := json.Marshal(payload)
@@ -215,6 +220,46 @@ func marshalRequest(req domain.ModelRequest) ([]byte, error) {
 		return nil, fmt.Errorf("anthropic provider: marshal request: %w", err)
 	}
 	return body, nil
+}
+
+// markToolCacheSentinel adds the trailing-sentinel cache breakpoint that
+// brings the tools array into Anthropic's cached prefix. A cache segment
+// extends from the request start (or the previous breakpoint) to the next
+// cache_control; tools occupy the wire between the system blocks and the
+// messages, so a request whose breakpoints all live inside system never
+// caches its tools — the sentinel is the first breakpoint that trails them.
+//
+// It is applied only when the request actually opts into prompt caching (at
+// least one system block carries cache_control) and gated on the opening
+// message being a plain user text block: a breakpoint placed on a
+// tool_result, image-first, thinking, or assistant block would be rejected
+// by the API, so an ineligible head skips the sentinel rather than burn the
+// request. The sentinel occupies one of the provider's per-request cache
+// breakpoint slots; deployments that mark additional system blocks must stay
+// within the documented limit.
+func markToolCacheSentinel(systemBlocks, messages []map[string]any) {
+	if len(messages) == 0 {
+		return
+	}
+	caching := false
+	for _, block := range systemBlocks {
+		if block["cache_control"] != nil {
+			caching = true
+			break
+		}
+	}
+	if !caching {
+		return
+	}
+	first := messages[0]
+	if first["role"] != string(domain.RoleUser) {
+		return
+	}
+	content, ok := first["content"].([]map[string]any)
+	if !ok || len(content) == 0 || content[0]["type"] != "text" {
+		return
+	}
+	content[0]["cache_control"] = map[string]any{"type": "ephemeral"}
 }
 
 // thinkingBudgetFor resolves the wire budget from the vendor-neutral spec.

@@ -91,13 +91,9 @@ func newWebSearchTool(provider searchProvider, now func() time.Time) (*WebSearch
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "web_search",
 		Description: "Search the web and return ranked results (title, url, snippet). " +
-			"Use it to discover sources for current or temporally unstable information (news, prices, library " +
-			"versions, current docs) and then call web_fetch on the most relevant URLs to read them. " +
-			"The backend is selected by configuration: Brave when BRAVE_SEARCH_API_KEY is set, Tavily when " +
-			"TAVILY_API_KEY is set, otherwise a keyless DuckDuckGo endpoint; the active one is reported in " +
-			"the provider field. Results are cached for 5 minutes.",
+			"The active backend (Brave, Tavily, or keyless DuckDuckGo — selected by configuration) is reported " +
+			"in the provider field; results are cached for 5 minutes.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"query":{"type":"string","minLength":1,"maxLength":1024},"count":{"type":"integer","minimum":1,"maximum":10},"timeout_ms":{"type":"integer","minimum":1000,"maximum":30000}},"required":["query"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"},"provider":{"type":"string"},"count":{"type":"integer"},"results":{"type":"array","items":{"type":"object","properties":{"title":{"type":"string"},"url":{"type":"string"},"snippet":{"type":"string"}},"required":["title","url","snippet"]}},"cache":{"type":"string"},"fetched_at":{"type":"string"}},"required":["query","provider","count","results","cache","fetched_at"]}`),
 		Capabilities: []domain.Capability{domain.CapNetworkConnect},
 		Source:       domain.ToolSourceBuiltin,
 	})

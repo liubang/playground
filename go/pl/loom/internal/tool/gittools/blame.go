@@ -80,7 +80,6 @@ func NewGitBlameTool(validator *workspacepkg.PathValidator, runner *process.Runn
 			"(max 2000 lines): page with start_line/end_line. Set rev to a commit SHA, branch, or tag — optionally " +
 			"with ~N/^N ancestry suffixes (e.g. HEAD~3) — to blame a historical revision instead of the working tree.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string","minLength":1},"path":{"type":"string","minLength":1},"rev":{"type":"string","minLength":1,"maxLength":256},"start_line":{"type":"integer","minimum":1},"end_line":{"type":"integer","minimum":1}},"required":["path"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string"},"path":{"type":"string"},"rev":{"type":"string"},"start_line":{"type":"integer"},"end_line":{"type":"integer"},"entries":{"type":"array","items":{"type":"object","properties":{"line":{"type":"integer"},"commit":{"type":"string"},"author":{"type":"string"},"date":{"type":"string"},"uncommitted":{"type":"boolean"}},"required":["line","commit","author","date"]}},"truncated":{"type":"boolean"}},"required":["repo_root","path","start_line","end_line","entries","truncated"]}`),
 		Capabilities: []domain.Capability{domain.CapGitRead},
 		Source:       domain.ToolSourceBuiltin,
 	}, validator, runner)
@@ -236,7 +235,7 @@ type blameCommit struct {
 // a cache. Content lines are dropped (read_file owns content) and only
 // attribution is kept.
 func parseBlamePorcelain(data []byte) ([]gitBlameEntry, error) {
-	text := sanitizeUTF8(data)
+	text := toolkit.SanitizeUTF8(data)
 	entries := make([]gitBlameEntry, 0, 256)
 	commits := make(map[string]blameCommit)
 

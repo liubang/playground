@@ -32,6 +32,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/artifact"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -928,7 +929,7 @@ func TestRiskForArgsShellForms(t *testing.T) {
 		t.Errorf("riskForArgs(compound) = %v, want %v", got, base)
 	}
 	// Escalations always rate R3.
-	escalated := runCmdArgs{Command: "make", SandboxPermissions: sandboxRequireEscalated}
+	escalated := runCmdArgs{Command: "make", SandboxPermissions: toolkit.SandboxRequireEscalated}
 	if got := riskForArgs(escalated, base); got != domain.R3 {
 		t.Errorf("riskForArgs(escalated) = %v, want R3", got)
 	}
@@ -976,7 +977,7 @@ func newTool(t *testing.T, validator *workspacepkg.PathValidator, runner *proces
 // correct course without guessing.
 func TestResolveWorkingDirErrorNamesPath(t *testing.T) {
 	validator, _ := newValidator(t)
-	_, err := resolveWorkingDir(validator, "no/such/dir")
+	_, _, err := toolkit.ResolveWorkingDir(validator, "no/such/dir")
 	if err == nil || !strings.Contains(err.Error(), `working_dir does not exist: "no/such/dir"`) {
 		t.Fatalf("error = %v, want the offending path named", err)
 	}
@@ -1133,7 +1134,7 @@ func TestRunCmdToolPrepareWritablePathsRejectsEscalatedCombo(t *testing.T) {
 	validator, _ := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{Sandbox: process.ExplicitTestSandbox{}})
 	tool := newTool(t, validator, runner)
-	escalated := sandboxRequireEscalated
+	escalated := toolkit.SandboxRequireEscalated
 	_, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
 		Command:            stringPtr("myapp login"),
 		SandboxPermissions: &escalated,
@@ -1395,8 +1396,8 @@ func TestHasOnlyWorkspaceRoot(t *testing.T) {
 }
 
 func TestSanitizeUTF8(t *testing.T) {
-	if got := sanitizeUTF8([]byte{'a', 0xff, 'b'}); got != "a?b" {
-		t.Fatalf("sanitizeUTF8() = %q, want a?b", got)
+	if got := toolkit.SanitizeUTF8([]byte{'a', 0xff, 'b'}); got != "a?b" {
+		t.Fatalf("SanitizeUTF8() = %q, want a?b", got)
 	}
 }
 

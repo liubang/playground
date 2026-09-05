@@ -75,7 +75,6 @@ func NewGitDiffTool(validator *workspacepkg.PathValidator, runner *process.Runne
 			"unpushed. Set include_untracked=true to fold untracked files into the diff as new-file entries " +
 			"(binary/oversized files are skipped and reported in untracked_skipped). base cannot be combined with staged.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string","minLength":1},"staged":{"type":"boolean"},"base":{"type":"string","minLength":1,"maxLength":256},"path":{"type":"string","minLength":1},"unified":{"type":"integer","minimum":0,"maximum":20},"include_untracked":{"type":"boolean"}},"required":[]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string"},"staged":{"type":"boolean"},"base":{"type":"string"},"base_ref":{"type":"string"},"path":{"type":"string"},"unified":{"type":"integer"},"diff":{"type":"string"},"untracked_files":{"type":"array","items":{"type":"string"}},"untracked_skipped":{"type":"array","items":{"type":"string"}},"truncated":{"type":"boolean"},"size_bytes":{"type":"integer"}},"required":["repo_root","staged","unified","diff","truncated","size_bytes"]}`),
 		Capabilities: []domain.Capability{domain.CapGitRead},
 		Source:       domain.ToolSourceBuiltin,
 	}, validator, runner)
@@ -164,7 +163,7 @@ func (t *GitDiffTool) Execute(ctx context.Context, prepared domain.PreparedCall)
 		return toolkit.ErrorResult(prepared.Call.ID, startedAt, classifyGitError(err, result.stderr, "failed to read git diff"))
 	}
 
-	diffText := sanitizeUTF8(result.stdout)
+	diffText := toolkit.SanitizeUTF8(result.stdout)
 	truncated := result.truncated
 	sizeBytes := len(result.stdout)
 	output := gitDiffOutput{
@@ -309,7 +308,7 @@ func (t *GitDiffTool) untrackedDiff(ctx context.Context, repoRoot repoRootResolu
 		if len(raw) == 0 {
 			continue
 		}
-		rel := sanitizeUTF8(raw)
+		rel := toolkit.SanitizeUTF8(raw)
 		clean, display, err := normalizeStatusPath(repoRoot.Display, rel)
 		if err != nil {
 			skipped = append(skipped, rel+" (unsafe path)")

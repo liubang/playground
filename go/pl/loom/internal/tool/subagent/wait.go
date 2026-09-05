@@ -51,9 +51,8 @@ func NewWaitSubagentTool(m *Manager) (*WaitSubagentTool, error) {
 			"Use this after delegate_task with async=true returns a child_session_id. " +
 			"If the sub-agent is still running, this blocks until it completes (up to the optional timeout). " +
 			"If the sub-agent already finished, it returns the result immediately.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"child_session_id":{"type":"string","description":"The session ID returned by the async delegate_task call."},"timeout_seconds":{"type":"integer","minimum":1,"maximum":600,"description":"Optional maximum wait time in seconds. If the sub-agent is still running after this time, returns a timeout status. Omit to wait indefinitely."}},"required":["child_session_id"]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"conclusion":{"type":"string"},"outcome":{"type":"string"},"child_session_id":{"type":"string"},"role":{"type":"string"},"usage":{"type":"object"},"status":{"type":"string","enum":["completed","timeout","resumable"]}},"required":["child_session_id","status"]}`),
-		Source:       domain.ToolSourceSubAgent,
+		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"child_session_id":{"type":"string","description":"The session ID returned by the async delegate_task call."},"timeout_seconds":{"type":"integer","minimum":1,"maximum":600,"description":"Optional maximum wait time in seconds. If the sub-agent is still running after this time, returns a timeout status. Omit to wait indefinitely."}},"required":["child_session_id"]}`),
+		Source:      domain.ToolSourceSubAgent,
 	}
 	if err := def.Validate(); err != nil {
 		return nil, domain.NewError(domain.ErrInternal, "invalid tool definition", domain.WithCause(err))

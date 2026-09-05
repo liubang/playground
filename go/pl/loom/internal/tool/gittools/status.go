@@ -60,12 +60,14 @@ type GitStatusTool struct {
 func NewGitStatusTool(validator *workspacepkg.PathValidator, runner *process.Runner) (*GitStatusTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "git_status",
-		Description: "Read repository status (branch, head, upstream, default branch, origin remote URL, ahead/behind counts, " +
-			"staged/unstaged/untracked files) using git status porcelain v2 with deterministic JSON output. upstream is the " +
-			"tracking ref of the current branch; default_branch is the repository's default branch (origin's symbolic HEAD, " +
-			"else a local main/master probe). Both are omitted when they do not resolve.",
+		// Contract note (developer-facing): the call runs `git status
+		// --porcelain=v2 -z` and emits deterministic JSON. "upstream" is the
+		// tracking ref of the current branch; "default_branch" is the
+		// repository's default branch (origin's symbolic HEAD, else a local
+		// main/master probe). Both are omitted when they do not resolve.
+		Description: "Read repository status (branch, head, upstream, default branch, origin remote URL, " +
+			"ahead/behind counts, staged/unstaged/untracked files) as deterministic JSON.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string","minLength":1}},"required":[]}`),
-		OutputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string"},"branch":{"type":"string"},"head":{"type":"string"},"upstream":{"type":"string"},"default_branch":{"type":"string"},"remote_url":{"type":"string"},"ahead":{"type":"integer"},"behind":{"type":"integer"},"staged":{"type":"array","items":{"type":"string"}},"unstaged":{"type":"array","items":{"type":"string"}},"untracked":{"type":"array","items":{"type":"string"}}},"required":["repo_root","branch","head","ahead","behind","staged","unstaged","untracked"]}`),
 		Capabilities: []domain.Capability{domain.CapGitRead},
 		Source:       domain.ToolSourceBuiltin,
 	}, validator, runner)
@@ -140,7 +142,7 @@ func (t *GitStatusTool) Execute(ctx context.Context, prepared domain.PreparedCal
 	// Remote URL is best-effort (a local-only repository has none), so a
 	// lookup failure never fails the call.
 	if remoteResult, err := runGit(ctx, &t.base, repoRoot.Absolute, buildRemoteGetURLArgs(repoRoot.Absolute, "origin"), maxGitRevParseStdoutBytes, maxGitStderrBytes); err == nil {
-		output.RemoteURL = strings.TrimSpace(sanitizeUTF8(remoteResult.stdout))
+		output.RemoteURL = strings.TrimSpace(toolkit.SanitizeUTF8(remoteResult.stdout))
 	}
 	// Default branch resolution is likewise best-effort (codex's
 	// default_branch_name chain: origin's symbolic HEAD, then main/master).
@@ -181,7 +183,7 @@ func parseGitStatusOutput(repoRootDisplay string, data []byte) (gitStatusOutput,
 		if len(part) == 0 {
 			continue
 		}
-		line := sanitizeUTF8(part)
+		line := toolkit.SanitizeUTF8(part)
 		switch {
 		case strings.HasPrefix(line, "# branch.head "):
 			head := strings.TrimSpace(strings.TrimPrefix(line, "# branch.head "))
