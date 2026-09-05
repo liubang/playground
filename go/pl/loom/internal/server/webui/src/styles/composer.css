@@ -1,6 +1,7 @@
 /* ============================== composer ============================== */
 .composer {
-  padding: 12px 24px 14px;
+  /* Same width-clamp as .transcript-inner: both columns share --content-width, so their gutters must breathe together */
+  padding: 12px clamp(12px, 3vw, 24px) 14px;
   background: var(--bg0);
 }
 .composer-box {
@@ -162,6 +163,13 @@ standard mode) stay level with the text capsules beside them */
   height: 100%;
   object-fit: cover;
   display: block;
+}
+/* Touch/coarse pointers have no hover state: keep the remove affordance visible there, otherwise
+   removing an attachment is undiscoverable on tablets */
+@media (hover: none) {
+  .attach-remove {
+    opacity: 1;
+  }
 }
 .attach-remove {
   position: absolute;

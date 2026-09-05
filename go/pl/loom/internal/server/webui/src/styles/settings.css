@@ -466,12 +466,7 @@ textarea.set-input {
   max-width: 420px;
   max-height: min(320px, calc(100vh - 32px));
   overflow-y: auto;
-  background: var(--bg1);
-  border: 1px solid var(--bg2);
-  border-radius: 10px;
-  padding: 6px;
-  box-shadow: var(--shadow-md);
-  animation: menu-pop 0.12s ease;
+  /* chrome merged into ui.css's shared .menu,.sel-pop group */
   transform-origin: top left;
 }
 .sel-item {

@@ -51,10 +51,28 @@ export const Sidebar = memo(function Sidebar({
 
   // Relative times ("3m ago") drift with real time: tick once every 30s and pass nowMs to list items,
   // so timestamps on a long-lived page don't go stale. Memoized child components rely on this prop to sense refreshes.
+  // Hidden tabs skip ticking entirely — a background window used to re-render the whole session tree
+  // twice a minute forever; on visibility restoration we refresh immediately.
   const [nowMs, setNowMs] = useState(() => Date.now())
   useEffect(() => {
-    const t = setInterval(() => setNowMs(Date.now()), 30_000)
-    return () => clearInterval(t)
+    let t: ReturnType<typeof setInterval> | null = null
+    const stop = () => {
+      if (t !== null) {
+        clearInterval(t)
+        t = null
+      }
+    }
+    const start = () => {
+      setNowMs(Date.now()) // snap after sleep/tab-switch instead of showing stale ages
+      if (t === null) t = setInterval(() => setNowMs(Date.now()), 30_000)
+    }
+    const sync = () => (document.visibilityState === 'visible' ? start() : stop())
+    sync()
+    document.addEventListener('visibilitychange', sync)
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', sync)
+    }
   }, [])
 
   // Stable reference: WorkspaceGroup's memo depends on onToggle staying unchanged (previously a new arrow function was

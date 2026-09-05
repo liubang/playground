@@ -49,15 +49,22 @@ function show(target: Element) {
 }
 
 export function initTooltips() {
+  // Takeover shared by hover and keyboard focus: stash the text into data-tip and remove title
+  // (the native tooltip is fully suppressed). The text also lands in aria-label so screen
+  // reader users don't lose the hint when title disappears.
+  const takeOver = (t: Element) => {
+    if (!t.hasAttribute('title')) return
+    const text = t.getAttribute('title') || ''
+    ;(t as HTMLElement).dataset.tip = text
+    t.removeAttribute('title')
+    if (text && t instanceof HTMLElement && !t.getAttribute('aria-label')) {
+      t.setAttribute('aria-label', text)
+    }
+  }
   document.addEventListener('mouseover', (e) => {
     const t = e.target instanceof Element ? e.target.closest('[title], [data-tip]') : null
     if (!t) return
-    if (t.hasAttribute('title')) {
-      // Take over: stash the text and remove the native title (the system tooltip only appears after hover
-      // settles, so removing it on mouseover fully suppresses it)
-      ;(t as HTMLElement).dataset.tip = t.getAttribute('title') || ''
-      t.removeAttribute('title')
-    }
+    takeOver(t)
     if (!(t as HTMLElement).dataset.tip || current === t) return
     clearTimeout(timer)
     current = t
@@ -69,8 +76,31 @@ export function initTooltips() {
     if (e.relatedTarget instanceof Node && current.contains(e.relatedTarget)) return
     hide()
   })
+  // Keyboard parity: focusing a labelled control shows its hint immediately (no delay —
+  // keyboard users asked for it deliberately); moving focus away hides it.
+  document.addEventListener('focusin', (e) => {
+    const t = e.target instanceof Element ? e.target.closest('[title], [data-tip]') : null
+    if (!t) return
+    takeOver(t)
+    if (!(t as HTMLElement).dataset.tip || current === t) return
+    clearTimeout(timer)
+    current = t
+    show(t)
+  })
+  document.addEventListener('focusout', (e) => {
+    if (!current) return
+    if (e.relatedTarget instanceof Node && current.contains(e.relatedTarget)) return
+    hide()
+  })
   document.addEventListener('mousedown', hide, true)
   document.addEventListener('scroll', hide, true)
-  document.addEventListener('keydown', hide, true)
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      // Escape-only: typing into an input with a tooltip must not flicker the hint on every key
+      if (e.key === 'Escape') hide()
+    },
+    true,
+  )
   window.addEventListener('blur', hide)
 }

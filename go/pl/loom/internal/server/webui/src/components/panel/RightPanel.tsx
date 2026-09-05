@@ -47,6 +47,8 @@ export function RightPanel({ controller }: { controller: AppController }) {
         <div className="rp-tabs" role="tablist">
           <button
             type="button"
+            role="tab"
+            aria-selected={tab === 'changes'}
             className={'rp-tab' + (tab === 'changes' ? ' is-active' : '')}
             onClick={() => controller.setRightPanelTab('changes')}
           >
@@ -54,6 +56,8 @@ export function RightPanel({ controller }: { controller: AppController }) {
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={tab === 'files'}
             className={'rp-tab' + (tab === 'files' ? ' is-active' : '')}
             onClick={() => controller.setRightPanelTab('files')}
           >
@@ -418,6 +422,10 @@ function DirChildren({
   )
 }
 
+// Above this size, whole-file hljs costs more than the readability it buys (plus the
+// server truncates at 256KB anyway): fall through to plain <code>{text}</code>.
+const HIGHLIGHT_CHAR_LIMIT = 120_000
+
 // File preview: whole-file syntax highlighting (highlightToHtml already passes
 // through the sanitize whitelist internally); binary and over-limit truncation
 // are flagged by the server.
@@ -455,7 +463,9 @@ const FilePreview = memo(function FilePreview({
 
   const html = useMemo(
     () =>
-      data && !data.binary && data.content ? highlightToHtml(data.content, langFromPath(path)) : '',
+      data && !data.binary && data.content && data.content.length <= HIGHLIGHT_CHAR_LIMIT
+        ? highlightToHtml(data.content, langFromPath(path))
+        : '', // over the limit: plain text — hljs on a 256KB buffer blocks the main thread for seconds
     [data, path],
   )
 

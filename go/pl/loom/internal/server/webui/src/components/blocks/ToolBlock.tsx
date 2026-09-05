@@ -160,15 +160,18 @@ export const ToolBlock = memo(function ToolBlock({
 
 // Tool output area: collapsed by default; expanding shows the bounded preview
 // (truncation marked by a trailing "\n…"); the copy button always copies the
-// full output.
-function ToolOutput({
+// full output. Memoized: tool blocks re-render on every streaming tick.
+const ToolOutput = memo(function ToolOutput({
   preview,
   getFullText,
 }: {
   preview: string
   getFullText: () => Promise<string>
 }) {
-  const [label, setLabel] = useState<'复制' | '已复制' | '复制失败'>('复制')
+  // '复制中…' disables the button while the full-output fetch is in flight — a double
+  // click previously kicked off two fetches; '复制失败' is clickable again so a flaky
+  // request can be retried.
+  const [label, setLabel] = useState<'复制' | '复制中…' | '已复制' | '复制失败'>('复制')
   const truncated = preview.endsWith('\n…')
   return (
     <details className="tool-output disclosure">
@@ -183,6 +186,8 @@ function ToolOutput({
           onClick={async (e) => {
             e.preventDefault() // don't toggle the details disclosure
             e.stopPropagation()
+            if (label === '复制中…') return
+            setLabel('复制中…')
             try {
               const text = await getFullText()
               if (!(await copyText(text))) throw new Error('clipboard unavailable')
@@ -205,4 +210,4 @@ function ToolOutput({
       <div className="tool-preview mono">{preview}</div>
     </details>
   )
-}
+})

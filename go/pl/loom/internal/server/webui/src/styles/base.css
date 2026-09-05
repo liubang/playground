@@ -49,6 +49,9 @@ body {
   --radius-full: 999px;
   /* Conversation column width (shared by transcript/composer/plan panel) */
   --content-width: 960px;
+  /* Side chrome widths (grid tracks; mid-range screens tighten both via the 1360px breakpoint) */
+  --sidebar-w: 288px;
+  --rpanel-w: 360px;
   /* Stacking scale: follow button < narrow drawer < dropdown menu < confirm modal < toast */
   --z-follow: 10;
   --z-drawer: 55;
@@ -60,4 +63,28 @@ code,
 pre,
 .mono {
   font-family: var(--font-mono);
+}
+
+/* Uniform thin scrollbars: classic (non-overlay) scrollbars on Linux/WKWebView used to be
+   wide and unthemed; keep them at the panel's recessed color and hover-brighten */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg2) transparent;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg2);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
 }

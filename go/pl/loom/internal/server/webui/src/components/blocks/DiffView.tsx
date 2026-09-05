@@ -7,7 +7,10 @@ import { memo, useMemo } from 'react'
 import { DIFF_COLLAPSE_LINES, parseDiff, type DiffLine } from '../../lib/diff'
 import { highlightToHtml } from '../../lib/markdown'
 
-function DiffLineView({ line, lang }: { line: DiffLine; lang: string }) {
+// Memoized per line: large diffs render hundreds of lines inside the transcript — without
+// memo every streaming tick re-rendered (and re-reconciled innerHTML for) every line.
+// Line objects stay reference-stable because parseDiff is memoized on diffText above.
+const DiffLineView = memo(function DiffLineView({ line, lang }: { line: DiffLine; lang: string }) {
   const html = useMemo(() => highlightToHtml(line.text, lang), [line.text, lang])
   const cls =
     line.kind === 'hunk'
@@ -29,7 +32,7 @@ function DiffLineView({ line, lang }: { line: DiffLine; lang: string }) {
       )}
     </div>
   )
-}
+})
 
 export const DiffView = memo(function DiffView({ diffText }: { diffText: string }) {
   const diff = useMemo(() => parseDiff(diffText), [diffText])

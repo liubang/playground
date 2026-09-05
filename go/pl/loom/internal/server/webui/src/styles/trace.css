@@ -45,7 +45,7 @@
   display: flex;
   flex-direction: column;
   justify-content: space-around;
-  font-size: 9px;
+  font-size: 10px;
   color: var(--muted);
   flex: none;
   user-select: none;
@@ -76,6 +76,10 @@
 .trace-turn {
   position: relative;
   padding: 4px 0 8px;
+  /* Off-screen turns skip layout/paint entirely (a long session is thousands of rows);
+     `auto` remembers the last rendered size so the scrollbar stays steady */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 96px;
 }
 /* Turn gutter rail: connects the first dot to the last */
 .trace-turn::before {
@@ -131,7 +135,7 @@
 }
 .trace-badge {
   flex: none;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.4px;
   padding: 1px 6px;
@@ -190,7 +194,7 @@
 }
 .trace-caret {
   flex: none;
-  font-size: 9px;
+  font-size: 10px;
   color: var(--muted);
 }
 

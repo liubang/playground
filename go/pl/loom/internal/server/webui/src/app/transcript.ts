@@ -873,14 +873,17 @@ export class TranscriptController {
       0,
       STREAM_RENDER_MIN_INTERVAL_MS - (performance.now() - this.streamLastRender),
     )
-    setTimeout(() => {
+    const flush = () =>
       requestAnimationFrame(() => {
         this.streamScheduled = false
         if (this.streamDestroyed || !this.streamId) return
         this.streamLastRender = performance.now()
         this.patchBlock(this.streamId, { text: this.streamBuf })
       })
-    }, wait)
+    // No throttle debt (idle first token / sparse deltas): draw on the very next frame
+    // instead of adding a full timer tick of latency on top.
+    if (wait <= 0) flush()
+    else setTimeout(flush, wait)
   }
 
   private finalizeStream() {
@@ -930,14 +933,16 @@ export class TranscriptController {
       0,
       STREAM_RENDER_MIN_INTERVAL_MS - (performance.now() - this.reasoningLastRender),
     )
-    setTimeout(() => {
+    const flush = () =>
       requestAnimationFrame(() => {
         this.reasoningScheduled = false
         if (this.reasoningId !== id) return // already switched away by finalize/clear
         this.reasoningLastRender = performance.now()
         this.patchBlock(id, { text: this.reasoningBuf })
       })
-    }, wait)
+    // Same as streamAppend: idle first token renders on the next frame immediately.
+    if (wait <= 0) flush()
+    else setTimeout(flush, wait)
   }
 
   // Under interleaved protocols (OpenAI family: text and reasoning may mix in

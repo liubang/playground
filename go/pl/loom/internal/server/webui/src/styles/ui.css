@@ -196,3 +196,27 @@ button {
     opacity: 0.4;
   }
 }
+
+/* ============================== Overlay surfaces (shared chrome) ============================== */
+/* Dropdown family (.menu / .sel-pop): the identical bg/border/radius/shadow/pop-animation
+   used to live in both menu.css and settings.css and had drifted; component stylesheets now
+   only carry layout (size, padding, origin). */
+.menu,
+.sel-pop {
+  background: var(--bg1);
+  border: 1px solid var(--bg2);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: var(--shadow-md);
+  animation: menu-pop 0.12s ease;
+}
+/* Dialog family (.modal / .palette): radius stays on the lg token (menus keep 10px);
+   the palette used --shadow-lg for extra presence — unified here by design. */
+.modal,
+.palette {
+  background: var(--bg1);
+  border: 1px solid var(--bg2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  animation: menu-pop 0.12s ease;
+}

@@ -8,14 +8,10 @@
   place-items: center;
   animation: fadein 0.12s ease;
 }
+/* Surface chrome comes from ui.css's shared .modal,.palette group. */
 .modal {
   width: min(400px, 90vw);
   padding: 20px 22px;
-  background: var(--bg1);
-  border: 1px solid var(--bg2);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  animation: menu-pop 0.12s ease;
 }
 .modal .modal-title {
   font-size: var(--text-lg);

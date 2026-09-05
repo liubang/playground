@@ -41,6 +41,7 @@ function openImageLightbox(src: string, alt?: string) {
   const img = document.createElement('img')
   img.src = src
   img.alt = alt || 'image'
+  img.decoding = 'async'
   overlay.appendChild(img)
   overlay.onclick = () => closeImageLightbox()
   document.body.appendChild(overlay)
@@ -65,9 +66,12 @@ function onZoomKeydown(e: KeyboardEvent<HTMLImageElement>) {
   }
 }
 
+// Shared props for zoomable thumbnails: async decoding keeps large base64 images off the
+// load-event critical path (decode happens on the raster thread when idle).
 const zoomableProps = {
   tabIndex: 0,
   title: '点击放大',
+  decoding: 'async' as const,
 }
 
 // InlineImage renders an inline image element (base64 data URI).

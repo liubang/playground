@@ -8,7 +8,7 @@
 }
 .app-body {
   display: grid;
-  grid-template-columns: 288px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   min-height: 0;
 }
 .shell.sidebar-collapsed .app-body {
@@ -317,7 +317,24 @@
   background: var(--warning);
   border-radius: var(--radius-full);
   padding: 3px 6px;
-  animation: pulse 1.6s ease-in-out infinite;
+  /* The badge itself no longer pulses (the whole pill breathing was jittery); an
+     expanding ring draws the eye without moving any text */
+  position: relative;
+}
+.ws-node .ws-attn::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  animation: attn-ring 1.8s ease-out infinite;
+}
+@keyframes attn-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--warning) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 5px transparent;
+  }
 }
 /* Sessions in a group: hierarchy guide hidden by default, appears on group hover (VSCode tree
    indent-guide interaction — always-on guides are pure visual noise); stacks with sub-agent indent */
@@ -336,6 +353,16 @@
   padding: 4px 10px;
   color: var(--muted);
   font-size: var(--text-xs);
+}
+
+/* Mid-range screens (laptop splits, ~1024-1360px windows): tighten both chrome columns
+   so the conversation column keeps a comfortable width; full drawer behavior still waits
+   for the 767px breakpoint below */
+@media (min-width: 768px) and (max-width: 1360px) {
+  :root {
+    --sidebar-w: 232px;
+    --rpanel-w: 320px;
+  }
 }
 
 /* Main area */

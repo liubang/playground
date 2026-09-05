@@ -504,12 +504,15 @@ export class AppController {
       void this.refreshSessions()
     })
     window.addEventListener('online', () => this.stream.ensureLive())
-    // Sidebar polling (while page is visible, 5s)
+    // Sidebar polling (while page is visible, 15s). The event stream itself drives
+    // refreshSessions on state changes, and window focus/visibility restores trigger
+    // one above — the interval is only a backstop for missed events, so 5s of churn
+    // (a full sessions query + signature diff every 5s forever) bought nothing.
     setInterval(() => {
       if (document.visibilityState === 'visible' && this.store.get().view === 'app') {
         void this.refreshSessions()
       }
-    }, 5000)
+    }, 15_000)
 
     if (!this.token) {
       this.showGate()

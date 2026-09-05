@@ -3,14 +3,14 @@
 // Iron rule: all model/tool text goes through textContent only; MarkdownView
 // (marked → DOMPurify) is the sole markdown rendering entry.
 
-import { memo, useEffect, useRef } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { useRafScroll } from '../../lib/rafScroll'
 import type { AssistantActionContext, UserImage } from '../../app/transcript'
 import { isInlineImage } from '../../app/transcript'
 import type { ContextCompactedPayload } from '../../protocol/events'
 import { fmtBytes, fmtDuration, fmtTokens } from '../../lib/format'
 import { Icon } from '../../lib/icons'
-import { markdownStableBoundary, renderMarkdown } from '../../lib/markdown'
+import { markdownStableBoundary, renderMarkdown, renderStreamTail } from '../../lib/markdown'
 import { MarkdownView } from './MarkdownView'
 import { MessageActions } from './MessageActions'
 import { ArtifactImage, InlineImage } from './images'
@@ -140,7 +140,9 @@ export const StreamBlock = memo(function StreamBlock({ text }: { text: string })
     cache.stableText = stableText
     cache.stableHtml = stableHtml
   }
-  const tailHtml = renderMarkdown(text.slice(end))
+  // An unclosed code fence's growing body is rendered as plain text this tick (see
+  // renderStreamTail); full highlighting kicks in the moment the fence closes.
+  const tailHtml = renderStreamTail(text.slice(end))
 
   useEffect(() => {
     const md = mdRef.current
@@ -220,6 +222,10 @@ export const ReasoningBlock = memo(function ReasoningBlock({
   live?: boolean
 }) {
   const active = !!live && durationMs == null
+  // Collapsed state: the (potentially huge) reasoning text is only inserted into the DOM
+  // while expanded. A collapsed block used to receive a full text-node update per streaming
+  // delta — tens of KB of DOM churn per tick that was invisible anyway.
+  const [open, setOpen] = useState(false)
   const head = active
     ? 'thinking…'
     : durationMs != null
@@ -243,17 +249,19 @@ export const ReasoningBlock = memo(function ReasoningBlock({
   })
   useEffect(() => {
     const body = bodyRef.current
-    if (!active || !body || !stickRef.current) return
+    if (!active || !open || !body || !stickRef.current) return
     body.scrollTop = body.scrollHeight
-  }, [text, active])
+  }, [text, active, open])
   return (
     <details
       className={'block block-reasoning disclosure' + (active ? ' is-live' : '')}
       onToggle={(e) => {
-        if ((e.target as HTMLDetailsElement).open && active) {
+        const isOpen = (e.target as HTMLDetailsElement).open
+        setOpen(isOpen)
+        if (isOpen && active) {
           stickRef.current = true
-          const body = bodyRef.current
-          if (body) body.scrollTop = body.scrollHeight
+          // The body content mounts this same commit; scroll pinning happens in the
+          // effect below once the text is in the DOM.
         }
       }}
     >
@@ -267,7 +275,7 @@ export const ReasoningBlock = memo(function ReasoningBlock({
       </summary>
       {tail && <div className="reasoning-tail">{tail}</div>}
       <div className="body" ref={bodyRef} onScroll={onBodyScroll}>
-        {text}
+        {open ? text : ''}
       </div>
     </details>
   )

@@ -33,7 +33,9 @@ overflow-x scroll container and are unaffected. */
 .transcript-inner {
   max-width: var(--content-width);
   margin: 0 auto;
-  padding: 24px 24px 12px;
+  /* Horizontal breathing room follows the viewport instead of a fixed 24px, so mid-sized
+   windows keep a balanced gutter; bottom padding is unchanged */
+  padding: 24px clamp(16px, 4vw, 24px) 12px;
   display: flex;
   flex-direction: column;
 }
@@ -86,7 +88,8 @@ overflow-x scroll container and are unaffected. */
 .no-workspace-card h2 {
   font-size: 20px;
   font-weight: 600;
-  color: var(--text);
+  /* was var(--text) — never defined (fell back to inherited fg); corrected to the token */
+  color: var(--fg);
   margin: 0 0 8px;
 }
 .no-workspace-desc {
@@ -183,19 +186,30 @@ overflow-x scroll container and are unaffected. */
   gap: 18px;
   padding: 6px 2px;
 }
+/* Skeleton rows: the sweep runs on a pseudo-element's transform (composite-only), so a
+   hidden tab or long scroll list no longer repaints the gradient every frame */
 .sk-row {
+  position: relative;
+  overflow: hidden;
   height: 14px;
   border-radius: var(--radius-full);
-  background: linear-gradient(90deg, var(--bg1) 25%, var(--bg2) 50%, var(--bg1) 75%);
-  background-size: 200% 100%;
-  animation: sk-shimmer 1.4s linear infinite;
+  background: var(--bg1);
+}
+.sk-row::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  background: linear-gradient(90deg, transparent, var(--bg2), transparent);
+  animation: sk-shimmer 1.4s ease-in-out infinite alternate;
+  will-change: transform;
 }
 @keyframes sk-shimmer {
   from {
-    background-position: 200% 0;
+    transform: translateX(-100%);
   }
   to {
-    background-position: -200% 0;
+    transform: translateX(240%);
   }
 }
 .sk-w-40 {

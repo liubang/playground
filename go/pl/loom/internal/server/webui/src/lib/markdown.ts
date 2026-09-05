@@ -154,6 +154,47 @@ export function renderMarkdown(text: string): string {
   return DOMPurify.sanitize(html, PURIFY_OPTS)
 }
 
+// renderStreamTail renders the LIVE, still-growing tail of a streaming message
+// (everything after markdownStableBoundary). The hot case is a model writing a
+// long code block: hljs re-highlights the entire growing fence body on every
+// 60ms tick — O(n²) total work per code block. Instead, an unclosed fence's
+// opening line is split off and its body is emitted as plain escaped text
+// (escaped, then DOMPurify-sanitized like everything else); highlighting
+// arrives for free once the fence closes and the stable boundary passes it.
+// The final turn-end render is a full renderMarkdown, which is the visual
+// ground truth — this is a transient streaming optimization only.
+export function renderStreamTail(tail: string): string {
+  // Scan fence lines with the same tolerance as markdownStableBoundary: the first
+  // fence line in the tail is an opener; a second one closes it (or a later fence's
+  // own opener — either way, nothing unclosed remains for us to special-case).
+  let idx = 0
+  let openFenceAt = -1
+  for (;;) {
+    const nl = tail.indexOf('\n', idx)
+    const end = nl < 0 ? tail.length : nl
+    const trimmed = tail.slice(idx, end).trim()
+    if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
+      if (openFenceAt < 0) openFenceAt = idx
+      else return renderMarkdown(tail) // fence closed again inside the tail: normal path
+    }
+    if (nl < 0) break
+    idx = nl + 1
+  }
+  if (openFenceAt < 0) return renderMarkdown(tail)
+  const fenceEnd = tail.indexOf('\n', openFenceAt)
+  const head = tail.slice(0, openFenceAt)
+  const lang = tail
+    .slice(openFenceAt, fenceEnd < 0 ? tail.length : fenceEnd)
+    .replaceAll(/[`~]/g, '')
+    .trim()
+  const code = fenceEnd < 0 ? '' : tail.slice(fenceEnd + 1)
+  const cls = lang && hljs.getLanguage(lang) ? ` class="hljs language-${escapeHtml(lang)}"` : ''
+  const codeHtml = `<pre><code${cls}>${escapeHtml(code)}</code></pre>`
+  // Concatenating the two fragments before one sanitize pass keeps the safety
+  // contract identical to renderMarkdown (single whitelist boundary).
+  return DOMPurify.sanitize(renderMarkdown(head) + codeHtml, PURIFY_OPTS)
+}
+
 // markdownStableBoundary returns the byte offset of the longest prefix of text
 // that consists of fully closed markdown blocks. Everything after this offset
 // is the "live tail" that may still be growing (an open paragraph / list /

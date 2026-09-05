@@ -34,6 +34,12 @@ const AXIS_H = 26 // bottom tick strip
 const GAP_BAND_H = 16 // folded-seam caption row (reserved only when gaps exist)
 const PAD_X = 12
 const MIN_BAR_W = 5
+// Viewport culling margin: off-screen nodes beyond this pixel slack don't even
+// create React elements (they used to fully render and then return null INSIDE
+// the component — hundreds of wasted component renders per pan/zoom frame on long
+// sessions). Sized generously so a sub-agent's side label (up to ~300px wide) is
+// painted before it scrolls into view, avoiding label pop-in.
+const CULL_MARGIN = 320
 
 // Touch devices have no hover; hover cards stick on tap there, so node
 // hover handlers check this first (tap still opens the detail panel).
@@ -726,43 +732,59 @@ export const MazeView = memo(function MazeView({
                     y2={mainY}
                     className={`maze-mainline${compare ? ` lane-${li + 1}` : ''}`}
                   />
-                  {/* main nodes */}
-                  {lane.main.map((n) => (
-                    <MainNode
-                      key={n.step}
-                      n={n}
-                      laneKey={lane.key}
-                      y={mainY}
-                      parH={parH}
-                      axis={axis}
-                      toX={toX}
-                      svgW={svgW}
-                      dim={isDim(lane.key, n.step)}
-                      selected={selected?.laneKey === lane.key && selected.node.step === n.step}
-                      onHover={setHover}
-                      onSelect={setSelected}
-                    />
-                  ))}
-                  {/* detours */}
-                  {lane.detours.map((d, di) => (
-                    <DetourNode
-                      key={d.step}
-                      n={d}
-                      laneKey={lane.key}
-                      row={rows[di]}
-                      mainY={mainY}
-                      detourTop={detourTop}
-                      // attach may be missing (no mount step found: same semantics as the previous find miss)
-                      attachNode={d.attach != null ? byStep.get(d.attach) : undefined}
-                      axis={axis}
-                      toX={toX}
-                      svgW={svgW}
-                      dim={isDim(lane.key, d.step)}
-                      selected={selected?.laneKey === lane.key && selected.node.step === d.step}
-                      onHover={setHover}
-                      onSelect={setSelected}
-                    />
-                  ))}
+                  {/* main nodes (culled to the visible window + CULL_MARGIN) */}
+                  {lane.main.map((n) => {
+                    if (
+                      toX(axis.map(n.s), svgW) > svgW + CULL_MARGIN ||
+                      toX(axis.map(n.e), svgW) < -CULL_MARGIN
+                    )
+                      return null
+                    // eslint-disable-next-line react/jsx-key -- key is set on the element below
+                    return (
+                      <MainNode
+                        key={n.step}
+                        n={n}
+                        laneKey={lane.key}
+                        y={mainY}
+                        parH={parH}
+                        axis={axis}
+                        toX={toX}
+                        svgW={svgW}
+                        dim={isDim(lane.key, n.step)}
+                        selected={selected?.laneKey === lane.key && selected.node.step === n.step}
+                        onHover={setHover}
+                        onSelect={setSelected}
+                      />
+                    )
+                  })}
+                  {/* detours (same culling as the main nodes) */}
+                  {lane.detours.map((d, di) => {
+                    if (
+                      toX(axis.map(d.s), svgW) > svgW + CULL_MARGIN ||
+                      toX(axis.map(d.e), svgW) < -CULL_MARGIN
+                    )
+                      return null
+                    // eslint-disable-next-line react/jsx-key -- key is set on the element below
+                    return (
+                      <DetourNode
+                        key={d.step}
+                        n={d}
+                        laneKey={lane.key}
+                        row={rows[di]}
+                        mainY={mainY}
+                        detourTop={detourTop}
+                        // attach may be missing (no mount step found: same semantics as the previous find miss)
+                        attachNode={d.attach != null ? byStep.get(d.attach) : undefined}
+                        axis={axis}
+                        toX={toX}
+                        svgW={svgW}
+                        dim={isDim(lane.key, d.step)}
+                        selected={selected?.laneKey === lane.key && selected.node.step === d.step}
+                        onHover={setHover}
+                        onSelect={setSelected}
+                      />
+                    )
+                  })}
                   {/* turn-alignment lines (two lanes) */}
                   {compare &&
                     li === 0 &&

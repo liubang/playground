@@ -1,10 +1,11 @@
 /* ============================== Right workspace panel (changes / file tree) ============================== */
-/* Three-column grid: opening the panel appends a 360px right column; when closed the aside isn't rendered, so no reset rules needed */
+/* Three-column grid: opening the panel appends the --rpanel-w right column; when closed the
+   aside isn't rendered, so no reset rules needed */
 .shell.panel-open .app-body {
-  grid-template-columns: 288px minmax(0, 1fr) 360px;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--rpanel-w);
 }
 .shell.panel-open.sidebar-collapsed .app-body {
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) var(--rpanel-w);
 }
 .right-panel {
   background: var(--bg1);
