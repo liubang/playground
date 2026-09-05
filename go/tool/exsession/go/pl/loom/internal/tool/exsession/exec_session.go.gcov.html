@@ -1,0 +1,296 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - tool/exsession/go/pl/loom/internal/tool/exsession/exec_session.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../../../index.html">top level</a> - <a href="index.html">tool/exsession/go/pl/loom/internal/tool/exsession</a> - exec_session.go<span style="font-size: 80%;"> (source / <a href="exec_session.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryLo">70.3&nbsp;%</td>
+            <td class="headerCovTableEntry">155</td>
+            <td class="headerCovTableEntry">109</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-09-05 12:00:02</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : package exsession</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : </span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : import (</span>
+<span id="L18"><span class="lineNum">      18</span>                 :             :         &quot;context&quot;</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             :         &quot;encoding/json&quot;</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             :         &quot;errors&quot;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             :         &quot;fmt&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             :         &quot;time&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : </span>
+<span id="L24"><span class="lineNum">      24</span>                 :             :         &quot;github.com/liubang/playground/go/pl/loom/internal/domain&quot;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             :         &quot;github.com/liubang/playground/go/pl/loom/internal/process&quot;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             :         &quot;github.com/liubang/playground/go/pl/loom/internal/tool/toolkit&quot;</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             :         workspacepkg &quot;github.com/liubang/playground/go/pl/loom/internal/workspace&quot;</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : )</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : </span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : // ExecSessionTool starts a long-running command as a background session,</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : // returning a session_id the model drives with write_stdin.</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : type ExecSessionTool struct {</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             :         def       domain.ToolDefinition</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             :         validator *workspacepkg.PathValidator</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :         manager   *Manager</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :         signer    signer</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : }</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : </span>
+<span id="L39"><span class="lineNum">      39</span>                 :             : // NewExecSessionTool creates the exec_session tool bound to the session</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             : // manager shared with write_stdin.</span>
+<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC tlaBgGNC">          34 : func NewExecSessionTool(validator *workspacepkg.PathValidator, manager *Manager) (*ExecSessionTool, error) {</span></span>
+<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">          34 :         if validator == nil {</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, domain.NewError(domain.ErrInvalidInput, &quot;path validator is required&quot;)</span></span>
+<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC tlaBgGNC">          34 :         if manager == nil {</span></span>
+<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, domain.NewError(domain.ErrInvalidInput, &quot;session manager is required&quot;)</span></span>
+<span id="L47"><span class="lineNum">      47</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC tlaBgGNC">          34 :         s, err := newSigner()</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">          34 :         if err != nil {</span></span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC tlaBgGNC">          34 :         def := domain.ToolDefinition{</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">          34 :                 Name: &quot;exec_session&quot;,</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">          34 :                 Description: &quot;Start a long-running command as a background session inside the sandbox and return a session_id, &quot; +</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">          34 :                         &quot;without waiting for it to finish. Use it for processes that stay alive or need interaction: dev servers, &quot; +</span></span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">          34 :                         &quot;watch-mode test runners, REPLs, database consoles; for one-shot commands that run to completion, prefer run_cmd. &quot; +</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">          34 :                         &quot;The command runs via 'sh -c' — write it exactly as you would type it in a terminal &quot; +</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">          34 :                         &quot;(e.g. {\&quot;command\&quot;:\&quot;npm run dev\&quot;,\&quot;working_dir\&quot;:\&quot;web\&quot;}). &quot; +</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">          34 :                         &quot;Set working_dir explicitly instead of wrapping the command in 'cd ... &amp;&amp;'. &quot; +</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">          34 :                         &quot;Only 'command' is required: working_dir defaults to '.', yield_time_ms to 1000 (0 returns immediately; max 300000), max_output_bytes to 16384. &quot; +</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">          34 :                         &quot;The call returns early with status='running' and the output produced so far; drive the session afterwards with &quot; +</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">          34 :                         &quot;write_stdin (send input, or poll with empty chars). stdout and stderr are merged in arrival order like a terminal. &quot; +</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">          34 :                         &quot;The session runs sandboxed like run_cmd (no outbound network/DNS, no GUI opens, no writes outside the workspace and temp dir): &quot; +</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">          34 :                         &quot;grant GUI opens from inside the sandbox with needs_gui_open=true (e.g. a dev server opening the browser), and run outside &quot; +</span></span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">          34 :                         &quot;the sandbox only via sandbox_permissions='require_escalated' with a justification. &quot; +</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">          34 :                         &quot;Sessions are killed automatically after 30 minutes without any write_stdin interaction — poll long-lived &quot; +</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">          34 :                         &quot;services periodically if they must stay up.&quot;,</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">          34 :                 InputSchema:  json.RawMessage(`{&quot;type&quot;:&quot;object&quot;,&quot;additionalProperties&quot;:false,&quot;properties&quot;:{&quot;command&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:32768,&quot;description&quot;:&quot;The shell command to run as a session, exactly as you would type it in a terminal (e.g. \&quot;npm run dev\&quot;). Runs via 'sh -c'.&quot;},&quot;working_dir&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:4096,&quot;description&quot;:&quot;Directory to run the command in, relative to the workspace root (default '.'). Set this instead of prefixing the command with 'cd ... &amp;&amp;'.&quot;},&quot;env&quot;:{&quot;type&quot;:&quot;object&quot;,&quot;maxProperties&quot;:64,&quot;additionalProperties&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;maxLength&quot;:8192},&quot;description&quot;:&quot;Extra environment variables (filtered by the sandbox security allowlist).&quot;},&quot;yield_time_ms&quot;:{&quot;type&quot;:&quot;integer&quot;,&quot;minimum&quot;:0,&quot;maximum&quot;:300000,&quot;description&quot;:&quot;How long to wait for the first output before returning in milliseconds (default 1000; 0 returns immediately).&quot;},&quot;max_output_bytes&quot;:{&quot;type&quot;:&quot;integer&quot;,&quot;minimum&quot;:0,&quot;maximum&quot;:65536,&quot;description&quot;:&quot;Maximum bytes of merged output returned (default 16384).&quot;},&quot;sandbox_permissions&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;enum&quot;:[&quot;use_default&quot;,&quot;require_escalated&quot;],&quot;description&quot;:&quot;'require_escalated' runs the session OUTSIDE the sandbox with the full user environment after explicit approval; requires a justification.&quot;},&quot;needs_gui_open&quot;:{&quot;type&quot;:&quot;boolean&quot;,&quot;description&quot;:&quot;Allow the session to open URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval.&quot;},&quot;justification&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:240,&quot;description&quot;:&quot;Short note shown to the user at approval time; required with sandbox_permissions='require_escalated'.&quot;}},&quot;required&quot;:[&quot;command&quot;]}`),</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">          34 :                 Capabilities: []domain.Capability{domain.CapProcessExec},</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">          34 :                 Source:       domain.ToolSourceBuiltin,</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">          34 :         }</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">          34 :         if err := def.Validate(); err != nil {</span></span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, domain.NewError(domain.ErrInvalidInput, &quot;invalid tool definition&quot;, domain.WithCause(err))</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC tlaBgGNC">          34 :         return &amp;ExecSessionTool{def: def, validator: validator, manager: manager, signer: s}, nil</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :             : }</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             : </span>
+<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">          58 : func (t *ExecSessionTool) Definition() domain.ToolDefinition {</span></span>
+<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">          58 :         return t.def</span></span>
+<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">          58 : }</span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : </span>
+<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">           7 : func (t *ExecSessionTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {</span></span>
+<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">           7 :         if err := ctx.Err(); err != nil {</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.PreparedCall{}, err</span></span>
+<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC tlaBgGNC">           7 :         if err := call.Validate(); err != nil {</span></span>
+<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, &quot;invalid tool call&quot;, domain.WithCause(err))</span></span>
+<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC tlaBgGNC">           7 :         if call.Name != t.def.Name {</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf(&quot;tool call name must be %q&quot;, t.def.Name))</span></span>
+<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaGNC tlaBgGNC">           7 :         args, err := toolkit.DecodeStrict[commandArgs](call.Arguments)</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">           7 :         if err != nil {</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.PreparedCall{}, err</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC tlaBgGNC">           7 :         if _, err := validateCommandArgs(t.validator, &amp;args); err != nil {</span></span>
+<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">           1 :                 return domain.PreparedCall{}, err</span></span>
+<span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">           6 :         canonicalBytes, err := json.Marshal(args)</span></span>
+<span id="L100"><span class="lineNum">     100</span>                 :<span class="tlaGNC">           6 :         if err != nil {</span></span>
+<span id="L101"><span class="lineNum">     101</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, &quot;failed to encode canonical arguments&quot;, domain.WithCause(err))</span></span>
+<span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L103"><span class="lineNum">     103</span>                 :             :         // Keep the RawMessage type: a plain []byte would be base64-encoded by</span>
+<span id="L104"><span class="lineNum">     104</span>                 :             :         // json.Marshal inside the signature payload, breaking Prepare/Execute</span>
+<span id="L105"><span class="lineNum">     105</span>                 :             :         // signature symmetry.</span>
+<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC tlaBgGNC">           6 :         canonical := json.RawMessage(canonicalBytes)</span></span>
+<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">           6 : </span></span>
+<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">           6 :         risk := riskForCommand(args, t.def.Risk())</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">           6 :         approvalDesc := fmt.Sprintf(&quot;Start session %s; cwd=%s&quot;, args.Command, args.WorkingDir)</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">           6 :         if args.SandboxPermissions == toolkit.SandboxRequireEscalated {</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">           1 :                 approvalDesc += &quot;; ESCALATED(no-sandbox)[&quot; + args.Justification + &quot;]&quot;</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">           6 :         prepared := domain.PreparedCall{</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">           6 :                 Call: domain.ToolCall{</span></span>
+<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">           6 :                         ID:        call.ID,</span></span>
+<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">           6 :                         Name:      t.def.Name,</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">           6 :                         Arguments: canonical,</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">           6 :                 },</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">           6 :                 Definition:   t.def,</span></span>
+<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">           6 :                 Risk:         risk,</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">           6 :                 ApprovalDesc: approvalDesc,</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">           6 :                 ReadPaths:    []string{t.validator.Root()},</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">           6 :                 WritePaths:   []string{t.validator.Root()},</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">           6 :                 // Same typed execution contract as run_cmd: argv rules, the</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">           6 :                 // danger screen, and session memory apply to sessions too.</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">           6 :                 ExecRequest: &amp;domain.ExecRequest{</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">           6 :                         Argv:         []string{&quot;sh&quot;, &quot;-c&quot;, args.Command},</span></span>
+<span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaGNC">           6 :                         Escalated:    args.SandboxPermissions == toolkit.SandboxRequireEscalated,</span></span>
+<span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC">           6 :                         NeedsGUIOpen: args.NeedsGUIOpen,</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">           6 :                 },</span></span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">           6 :         }</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">           6 :         prepared.ArgsHash = t.signer.sign(prepared.Call.ID.String(), t.def.Name, canonical, prepared.ReadPaths, prepared.WritePaths, risk, prepared.ExecRequest)</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">           6 :         return prepared, nil</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :             : }</span>
+<span id="L135"><span class="lineNum">     135</span>                 :             : </span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">           4 : func (t *ExecSessionTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">           4 :         startedAt := time.Now()</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">           4 :         if err := t.verifyPreparedCall(prepared); err != nil {</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">           1 :                 return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">           3 :         args, err := toolkit.DecodeStrict[commandArgs](prepared.Call.Arguments)</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">           3 :         if err != nil {</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         absoluteDir, err := validateCommandArgs(t.validator, &amp;args)</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">           3 :         if err != nil {</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :             : </span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         yieldMs := args.YieldTimeMs</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">           3 :         if yieldMs == 0 {</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">           3 :                 yieldMs = defaultStartYieldMs</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">           3 :         }</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">           3 :         grant := process.Grant{</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">           3 :                 Unsandboxed:   prepared.Grant.Unsandboxed,</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">           3 :                 NetworkFull:   prepared.Grant.NetworkFull,</span></span>
+<span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC">           3 :                 WritablePaths: prepared.Grant.WritablePaths,</span></span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">           3 :                 GUIOpen:       prepared.Grant.GUIOpen,</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaGNC">           3 :         }</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">           3 :         entry, err := t.manager.Start(ctx, process.CommandSpec{</span></span>
+<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">           3 :                 Program: &quot;sh&quot;,</span></span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">           3 :                 Args:    []string{&quot;-c&quot;, args.Command},</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">           3 :                 Cwd:     absoluteDir,</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">           3 :                 Env:     args.Env,</span></span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">           3 :         }, grant, args.Command)</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">           3 :         if err != nil {</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return toolkit.ErrorResult(prepared.Call.ID, startedAt, classifyStartError(err))</span></span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :             : </span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         awaitYield(ctx, entry, yieldMs)</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">           3 :         output := drainSession(ctx, t.manager, entry, args.MaxOutputBytes)</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">           3 :         return toolkit.SuccessResult(prepared.Call.ID, startedAt, output)</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :             : }</span>
+<span id="L174"><span class="lineNum">     174</span>                 :             : </span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">           4 : func (t *ExecSessionTool) verifyPreparedCall(prepared domain.PreparedCall) error {</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">           4 :         if prepared.Call.Name != t.def.Name {</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.NewError(domain.ErrSecurity, &quot;prepared call tool name mismatch&quot;)</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC tlaBgGNC">           4 :         if prepared.Definition.Name != t.def.Name || prepared.Definition.Source != t.def.Source {</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.NewError(domain.ErrSecurity, &quot;prepared call definition mismatch&quot;)</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC tlaBgGNC">           4 :         args, err := toolkit.DecodeStrict[commandArgs](prepared.Call.Arguments)</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">           4 :         if err != nil {</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.NewError(domain.ErrSecurity, &quot;prepared call arguments are unreadable&quot;)</span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC tlaBgGNC">           4 :         if prepared.Risk != riskForCommand(args, t.def.Risk()) {</span></span>
+<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.NewError(domain.ErrSecurity, &quot;prepared call risk mismatch&quot;)</span></span>
+<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC tlaBgGNC">           4 :         expected := t.signer.sign(prepared.Call.ID.String(), t.def.Name, prepared.Call.Arguments, prepared.ReadPaths, prepared.WritePaths, prepared.Risk, prepared.ExecRequest)</span></span>
+<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">           4 :         if !t.signer.verify(expected, prepared.ArgsHash) {</span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">           1 :                 return domain.NewError(domain.ErrSecurity, &quot;prepared call verification failed&quot;)</span></span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">           3 :         return nil</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :             : }</span>
+<span id="L195"><span class="lineNum">     195</span>                 :             : </span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaUNC tlaBgUNC">           0 : func classifyStartError(err error) error {</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaUNC">           0 :         switch {</span></span>
+<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaUNC">           0 :         case err == nil:</span></span>
+<span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaUNC">           0 :                 return nil</span></span>
+<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaUNC">           0 :         case errors.Is(err, process.ErrSandboxRequired), errors.Is(err, process.ErrSandboxUnavailable):</span></span>
+<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaUNC">           0 :                 return domain.NewError(domain.ErrUnavailable, &quot;process sandbox is unavailable&quot;, domain.WithCause(err))</span></span>
+<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaUNC">           0 :         case errors.Is(err, context.Canceled):</span></span>
+<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaUNC">           0 :                 return domain.NewError(domain.ErrCancelled, &quot;operation cancelled&quot;, domain.WithCause(err))</span></span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaUNC">           0 :         default:</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaUNC">           0 :                 var agentErr *domain.AgentError</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaUNC">           0 :                 if errors.As(err, &amp;agentErr) {</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaUNC">           0 :                         return err</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaUNC">           0 :                 return domain.NewError(domain.ErrUnavailable, &quot;session start failed&quot;, domain.WithCause(err))</span></span>
+<span id="L210"><span class="lineNum">     210</span>                 :             :         }</span>
+<span id="L211"><span class="lineNum">     211</span>                 :             : }</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

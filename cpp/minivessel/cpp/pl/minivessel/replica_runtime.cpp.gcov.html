@@ -1,0 +1,484 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - minivessel/cpp/pl/minivessel/replica_runtime.cpp</title>
+  <link rel="stylesheet" type="text/css" href="../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../index.html">top level</a> - <a href="index.html">minivessel/cpp/pl/minivessel</a> - replica_runtime.cpp<span style="font-size: 80%;"> (source / <a href="replica_runtime.cpp.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryMed">86.9&nbsp;%</td>
+            <td class="headerCovTableEntry">213</td>
+            <td class="headerCovTableEntry">185</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-08-29 12:49:44</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">92.3&nbsp;%</td>
+            <td class="headerCovTableEntry">26</td>
+            <td class="headerCovTableEntry">24</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryLo">49.5&nbsp;%</td>
+            <td class="headerCovTableEntry">315</td>
+            <td class="headerCovTableEntry">156</td>
+          </tr>
+                  <tr><td><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : </span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : #include &quot;cpp/pl/minivessel/replica_runtime.h&quot;</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : </span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : #include &lt;limits&gt;</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : #include &lt;utility&gt;</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : </span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : namespace pl::minivessel {</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : </span>
+<span id="L10"><span class="lineNum">      10</span>                 :<span class="tlaGNC tlaBgGNC">          20 : ReplicaRuntime::ReplicaRuntime(SharedWal* wal,</span></span>
+<span id="L11"><span class="lineNum">      11</span>                 :             :                                ReplicatedStateMachine* state_machine,</span>
+<span id="L12"><span class="lineNum">      12</span>                 :<span class="tlaGNC">          20 :                                ReplicaRuntimeOptions options)</span></span>
+<span id="L13"><span class="lineNum">      13</span>                 :<span class="tlaGNC">          20 :     : wal_(wal),</span></span>
+<span id="L14"><span class="lineNum">      14</span>                 :<span class="tlaGNC">          20 :       state_machine_(state_machine),</span></span>
+<span id="L15"><span class="lineNum">      15</span>                 :<span class="tlaGNC">          20 :       options_(std::move(options)),</span></span>
+<span id="L16"><span class="lineNum">      16</span>         [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          20 :       lifetime_(std::make_shared&lt;LifetimeControl&gt;()) {</span></span>
+<span id="L17"><span class="lineNum">      17</span>                 :<span class="tlaGNC">          20 :     lifetime_-&gt;runtime = this;</span></span>
+<span id="L18"><span class="lineNum">      18</span>                 :<span class="tlaGNC">          20 : }</span></span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :<span class="tlaGNC">          20 : ReplicaRuntime::~ReplicaRuntime() {</span></span>
+<span id="L21"><span class="lineNum">      21</span>                 :<span class="tlaGNC">          20 :     std::lock_guard lifetime_lock(lifetime_-&gt;mutex);</span></span>
+<span id="L22"><span class="lineNum">      22</span>                 :<span class="tlaGNC">          20 :     stop();</span></span>
+<span id="L23"><span class="lineNum">      23</span>                 :<span class="tlaGNC">          20 :     lifetime_-&gt;runtime = nullptr;</span></span>
+<span id="L24"><span class="lineNum">      24</span>                 :<span class="tlaGNC">          20 : }</span></span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : </span>
+<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC">          63 : void ReplicaRuntime::set_role_locked(RuntimeRole role) {</span></span>
+<span id="L27"><span class="lineNum">      27</span>         [<span class="tlaGBC" title="Branch 0 was taken 63 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          63 :     if (status_.role == role) {</span></span>
+<span id="L28"><span class="lineNum">      28</span>                 :             :         return;</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             :     }</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             :     const RuntimeRole previous = status_.role;</span>
+<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC">          63 :     status_.role = role;</span></span>
+<span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC">         126 :     role_changes_.push_back(RoleChange{previous, status_});</span></span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : }</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : </span>
+<span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaGNC">           6 : std::vector&lt;ReplicaRuntime::RoleChange&gt; ReplicaRuntime::take_role_changes_locked() {</span></span>
+<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC">           6 :     return std::exchange(role_changes_, {});</span></span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : }</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : </span>
+<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">          64 : void ReplicaRuntime::notify_role_changes() {</span></span>
+<span id="L40"><span class="lineNum">      40</span>         [<span class="tlaGBC" title="Branch 0 was taken 61 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">          64 :     if (options_.role_lifecycle == nullptr) {</span></span>
+<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">          61 :         std::lock_guard lock(mutex_);</span></span>
+<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">          61 :         role_changes_.clear();</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :         return;</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :     }</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :     {</span>
+<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">           3 :         std::lock_guard lock(mutex_);</span></span>
+<span id="L47"><span class="lineNum">      47</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :         if (notifying_role_changes_ || role_changes_.empty()) {</span></span>
+<span id="L48"><span class="lineNum">      48</span>                 :             :             return;</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :         }</span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">           3 :         notifying_role_changes_ = true;</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :     }</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             :     while (true) {</span>
+<span id="L53"><span class="lineNum">      53</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :         std::vector&lt;RoleChange&gt; changes;</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :         {</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             :             std::lock_guard lock(mutex_);</span>
+<span id="L56"><span class="lineNum">      56</span>   [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 3 times"> + </span>]:<span class="tlaGNC">          12 :             changes = take_role_changes_locked();</span></span>
+<span id="L57"><span class="lineNum">      57</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           6 :             if (changes.empty()) {</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">           3 :                 notifying_role_changes_ = false;</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :             :                 return;</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :             }</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :         }</span>
+<span id="L62"><span class="lineNum">      62</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           7 :         for (const auto&amp; change : changes) {</span></span>
+<span id="L63"><span class="lineNum">      63</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :             options_.role_lifecycle-&gt;on_role_change(change.previous, change.current);</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :         }</span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">           6 :     }</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :             : }</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             : </span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">          35 : absl::Status ReplicaRuntime::release_writer_locked() {</span></span>
+<span id="L69"><span class="lineNum">      69</span>         [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          35 :     if (!writer_held_) {</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :         return absl::OkStatus();</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             :     }</span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">          15 :     writer_held_ = false;</span></span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">          15 :     status_.writer_epoch = {};</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">          15 :     return wal_-&gt;release_writer();</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :             : }</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             : </span>
+<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">           2 : absl::Status ReplicaRuntime::fail_locked(absl::Status status) {</span></span>
+<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">           2 :     status_.last_error = status;</span></span>
+<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">           2 :     (void)release_writer_locked();</span></span>
+<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">           2 :     set_role_locked(RuntimeRole::kFailed);</span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">           2 :     return status;</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :             : }</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             : </span>
+<span id="L84"><span class="lineNum">      84</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 34 times"> + </span>]:<span class="tlaGNC">          34 : absl::StatusOr&lt;ApplyResult&gt; ReplicaRuntime::apply_locked(const LogRecord&amp; record,</span></span>
+<span id="L85"><span class="lineNum">      85</span>                 :             :                                                          ApplySource source) {</span>
+<span id="L86"><span class="lineNum">      86</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 34 times"> + </span>]:<span class="tlaGNC">          34 :     if (status_.applied_lrsn.value() == std::numeric_limits&lt;uint64_t&gt;::max()) {</span></span>
+<span id="L87"><span class="lineNum">      87</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return fail_locked(absl::OutOfRangeError(&quot;replica exhausted the LRSN space&quot;));</span></span>
+<span id="L88"><span class="lineNum">      88</span>                 :             :     }</span>
+<span id="L89"><span class="lineNum">      89</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 34 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          34 :     if (record.lrsn.value() != status_.applied_lrsn.value() + 1) {</span></span>
+<span id="L90"><span class="lineNum">      90</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return fail_locked(absl::DataLossError(&quot;replica observed a WAL LRSN gap or duplicate&quot;));</span></span>
+<span id="L91"><span class="lineNum">      91</span>                 :             :     }</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             : </span>
+<span id="L93"><span class="lineNum">      93</span>                 :             :     ApplyResult result = ApplyResult::Applied();</span>
+<span id="L94"><span class="lineNum">      94</span>      [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 19 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          34 :     switch (record.type) {</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">          13 :         case LogRecordType::kMutation: {</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">          13 :             auto applied = state_machine_-&gt;apply(</span></span>
+<span id="L97"><span class="lineNum">      97</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 11 times"> + </span>]:<span class="tlaGNC">          13 :                 record, ApplyContext{.source = source, .writer_epoch = record.writer_epoch});</span></span>
+<span id="L98"><span class="lineNum">      98</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 11 times"> + </span>]:<span class="tlaGNC">          13 :             if (!applied.ok()) {</span></span>
+<span id="L99"><span class="lineNum">      99</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           2 :                 return fail_locked(absl::InternalError(&quot;replicated state machine system failure: &quot; +</span></span>
+<span id="L100"><span class="lineNum">     100</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           4 :                                                        applied.status().ToString()));</span></span>
+<span id="L101"><span class="lineNum">     101</span>                 :             :             }</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             :             result = std::move(*applied);</span>
+<span id="L103"><span class="lineNum">     103</span>                 :             :             break;</span>
+<span id="L104"><span class="lineNum">     104</span>                 :             :         }</span>
+<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC">           2 :         case LogRecordType::kCheckpoint: {</span></span>
+<span id="L106"><span class="lineNum">     106</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :             auto restored = state_machine_-&gt;restore_checkpoint(record.payload, record.lrsn);</span></span>
+<span id="L107"><span class="lineNum">     107</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :             if (!restored.ok()) {</span></span>
+<span id="L108"><span class="lineNum">     108</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :                 return fail_locked(absl::InternalError(&quot;replicated checkpoint restore failed: &quot; +</span></span>
+<span id="L109"><span class="lineNum">     109</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC">           0 :                                                        restored.ToString()));</span></span>
+<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span><span class="tlaUNC" title="Branch 6 was not executed"> # </span><span class="tlaUNC" title="Branch 7 was not executed"> # </span>]
+<span id="L110"><span class="lineNum">     110</span>                 :             :             }</span>
+<span id="L111"><span class="lineNum">     111</span>                 :             :             break;</span>
+<span id="L112"><span class="lineNum">     112</span>                 :             :         }</span>
+<span id="L113"><span class="lineNum">     113</span>                 :             :         case LogRecordType::kPrimaryBarrier:</span>
+<span id="L114"><span class="lineNum">     114</span>                 :             :             break;</span>
+<span id="L115"><span class="lineNum">     115</span>                 :             :     }</span>
+<span id="L116"><span class="lineNum">     116</span>                 :             :     // Deterministic business rejection is itself the applied outcome of this durable record.</span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC tlaBgGNC">          32 :     status_.applied_lrsn = record.lrsn;</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :             :     return result;</span>
+<span id="L119"><span class="lineNum">     119</span>                 :             : }</span>
+<span id="L120"><span class="lineNum">     120</span>                 :             : </span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">          20 : absl::Status ReplicaRuntime::catch_up_locked() {</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :             :     while (true) {</span>
+<span id="L123"><span class="lineNum">     123</span>                 :             :         auto records =</span>
+<span id="L124"><span class="lineNum">     124</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 20 times"> + </span>]:<span class="tlaGNC">          20 :             wal_-&gt;read(Lrsn(status_.applied_lrsn.value() + 1), options_.tail_batch_records);</span></span>
+<span id="L125"><span class="lineNum">     125</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 20 times"> + </span>]:<span class="tlaGNC">          20 :         if (!records.ok()) {</span></span>
+<span id="L126"><span class="lineNum">     126</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             if (records.status().code() == absl::StatusCode::kUnavailable) {</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :             :                 return records.status();</span>
+<span id="L128"><span class="lineNum">     128</span>                 :             :             }</span>
+<span id="L129"><span class="lineNum">     129</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             return fail_locked(records.status());</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :             :         }</span>
+<span id="L131"><span class="lineNum">     131</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          20 :         if (records-&gt;empty()) {</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :             :             return absl::OkStatus();</span>
+<span id="L133"><span class="lineNum">     133</span>                 :             :         }</span>
+<span id="L134"><span class="lineNum">     134</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">          17 :         for (const auto&amp; record : *records) {</span></span>
+<span id="L135"><span class="lineNum">     135</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :             auto result = apply_locked(record, ApplySource::kWalReplay);</span></span>
+<span id="L136"><span class="lineNum">     136</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 11 times"> + </span>]:<span class="tlaGNC">          12 :             if (!result.ok()) {</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :             :                 return result.status();</span>
+<span id="L138"><span class="lineNum">     138</span>                 :             :             }</span>
+<span id="L139"><span class="lineNum">     139</span>                 :             :         }</span>
+<span id="L140"><span class="lineNum">     140</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :         if (records-&gt;size() &lt; options_.tail_batch_records) {</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :             :             return absl::OkStatus();</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             :         }</span>
+<span id="L143"><span class="lineNum">     143</span>                 :             :     }</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             : }</span>
+<span id="L145"><span class="lineNum">     145</span>                 :             : </span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaUNC tlaBgUNC">           0 : absl::Status ReplicaRuntime::renew_writer_locked() {</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaUNC">           0 :     auto lease = wal_-&gt;renew_writer();</span></span>
+<span id="L148"><span class="lineNum">     148</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (!lease.ok() || lease-&gt;writer_epoch != status_.writer_epoch) {</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :             :         const absl::Status error =</span>
+<span id="L150"><span class="lineNum">     150</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :             lease.ok() ? absl::AbortedError(&quot;writer epoch changed while renewing&quot;) : lease.status();</span></span>
+<span id="L151"><span class="lineNum">     151</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :         (void)release_writer_locked();</span></span>
+<span id="L152"><span class="lineNum">     152</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         set_role_locked(RuntimeRole::kStandby);</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :             :         return error;</span>
+<span id="L154"><span class="lineNum">     154</span>                 :             :     }</span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaUNC">           0 :     return absl::OkStatus();</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :             : }</span>
+<span id="L157"><span class="lineNum">     157</span>                 :             : </span>
+<span id="L158"><span class="lineNum">     158</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           5 : absl::Status ReplicaRuntime::poll() {</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :             :     absl::Status result;</span>
+<span id="L160"><span class="lineNum">     160</span>                 :             :     {</span>
+<span id="L161"><span class="lineNum">     161</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :         std::lock_guard lock(mutex_);</span></span>
+<span id="L162"><span class="lineNum">     162</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :         if (status_.role == RuntimeRole::kFailed) {</span></span>
+<span id="L163"><span class="lineNum">     163</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             result = status_.last_error;</span></span>
+<span id="L164"><span class="lineNum">     164</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           5 :         } else if (status_.role == RuntimeRole::kStopped) {</span></span>
+<span id="L165"><span class="lineNum">     165</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             result = absl::FailedPreconditionError(&quot;replica is stopped&quot;);</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :             :         } else {</span>
+<span id="L167"><span class="lineNum">     167</span>                 :             :             result =</span>
+<span id="L168"><span class="lineNum">     168</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC tlaBgGNC">          15 :                 status_.role == RuntimeRole::kPrimary ? renew_writer_locked() : absl::OkStatus();</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
+<span id="L169"><span class="lineNum">     169</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :             if (result.ok()) {</span></span>
+<span id="L170"><span class="lineNum">     170</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :                 result = catch_up_locked();</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :             :             }</span>
+<span id="L172"><span class="lineNum">     172</span>                 :             :         }</span>
+<span id="L173"><span class="lineNum">     173</span>                 :             :     }</span>
+<span id="L174"><span class="lineNum">     174</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :     notify_role_changes();</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">           5 :     return result;</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :             : }</span>
+<span id="L177"><span class="lineNum">     177</span>                 :             : </span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">          21 : absl::StatusOr&lt;ReplicaRuntime::PrimarySession&gt; ReplicaRuntime::promote_session() {</span></span>
+<span id="L179"><span class="lineNum">     179</span>   [<span class="tlaGBC" title="Branch 0 was taken 19 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 18 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span> :<span class="tlaGNC">          20 :     if (wal_ == nullptr || state_machine_ == nullptr || options_.replica_id.empty() ||</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 17 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 1 time"> + </span>]
+<span id="L180"><span class="lineNum">     180</span>   [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 16 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">          38 :         !options_.assignment_epoch.valid() || options_.writer_lease_timeout_ms == 0 ||</span></span>
+<span id="L181"><span class="lineNum">     181</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          16 :         options_.tail_batch_records == 0) {</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">          12 :         return absl::InvalidArgumentError(&quot;promotion requires WAL, state machine, replica ID, &quot;</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :             :                                           &quot;assignment epoch, lease timeout and batch size&quot;);</span>
+<span id="L184"><span class="lineNum">     184</span>                 :             :     }</span>
+<span id="L185"><span class="lineNum">     185</span>                 :             :     absl::Status result;</span>
+<span id="L186"><span class="lineNum">     186</span>                 :             :     PrimaryToken token;</span>
+<span id="L187"><span class="lineNum">     187</span>                 :             :     {</span>
+<span id="L188"><span class="lineNum">     188</span>         [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          15 :         std::lock_guard lock(mutex_);</span></span>
+<span id="L189"><span class="lineNum">     189</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          15 :         if (status_.role == RuntimeRole::kFailed) {</span></span>
+<span id="L190"><span class="lineNum">     190</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             result = status_.last_error;</span></span>
+<span id="L191"><span class="lineNum">     191</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          15 :         } else if (status_.role != RuntimeRole::kStandby) {</span></span>
+<span id="L192"><span class="lineNum">     192</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             result = absl::FailedPreconditionError(&quot;only a standby can be promoted&quot;);</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :             :         } else {</span>
+<span id="L194"><span class="lineNum">     194</span>         [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          15 :             set_role_locked(RuntimeRole::kPromoting);</span></span>
+<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">          15 :             auto lease = wal_-&gt;acquire_writer(</span></span>
+<span id="L196"><span class="lineNum">     196</span>         [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          15 :                 options_.replica_id, options_.assignment_epoch, options_.writer_lease_timeout_ms);</span></span>
+<span id="L197"><span class="lineNum">     197</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          15 :             if (!lease.ok()) {</span></span>
+<span id="L198"><span class="lineNum">     198</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :                 set_role_locked(RuntimeRole::kStandby);</span></span>
+<span id="L199"><span class="lineNum">     199</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                 result = lease.status();</span></span>
+<span id="L200"><span class="lineNum">     200</span>                 :             :             } else {</span>
+<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC tlaBgGNC">          15 :                 status_.writer_epoch = lease-&gt;writer_epoch;</span></span>
+<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">          15 :                 writer_held_ = true;</span></span>
+<span id="L203"><span class="lineNum">     203</span>   [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">          30 :                 result = catch_up_locked();</span></span>
+<span id="L204"><span class="lineNum">     204</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">          15 :                 if (result.ok()) {</span></span>
+<span id="L205"><span class="lineNum">     205</span>   [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 14 times"> + </span>]:<span class="tlaGNC">          28 :                     auto barrier = wal_-&gt;append(LogRecordType::kPrimaryBarrier, {}, {});</span></span>
+<span id="L206"><span class="lineNum">     206</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          14 :                     if (!barrier.ok()) {</span></span>
+<span id="L207"><span class="lineNum">     207</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :                         result = barrier.status();</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :             :                     } else {</span>
+<span id="L209"><span class="lineNum">     209</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          14 :                         auto applied = apply_locked(barrier-&gt;record, ApplySource::kPrimaryCommit);</span></span>
+<span id="L210"><span class="lineNum">     210</span>   [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          42 :                         result = applied.ok() ? absl::OkStatus() : applied.status();</span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :             :                     }</span>
+<span id="L212"><span class="lineNum">     212</span>                 :             :                 }</span>
+<span id="L213"><span class="lineNum">     213</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">          15 :                 if (result.ok()) {</span></span>
+<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">          14 :                     ++generation_;</span></span>
+<span id="L215"><span class="lineNum">     215</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          14 :                     if (generation_ == 0) {</span></span>
+<span id="L216"><span class="lineNum">     216</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :                         result = fail_locked(absl::OutOfRangeError(&quot;runtime generation exhausted&quot;));</span></span>
+<span id="L217"><span class="lineNum">     217</span>                 :             :                     } else {</span>
+<span id="L218"><span class="lineNum">     218</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          14 :                         set_role_locked(RuntimeRole::kPrimary);</span></span>
+<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaGNC">          14 :                         token = PrimaryToken{generation_, status_.writer_epoch};</span></span>
+<span id="L220"><span class="lineNum">     220</span>                 :             :                     }</span>
+<span id="L221"><span class="lineNum">     221</span>                 :             :                 } else {</span>
+<span id="L222"><span class="lineNum">     222</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :                     (void)release_writer_locked();</span></span>
+<span id="L223"><span class="lineNum">     223</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :                     if (status_.role != RuntimeRole::kFailed) {</span></span>
+<span id="L224"><span class="lineNum">     224</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :                         set_role_locked(RuntimeRole::kStandby);</span></span>
+<span id="L225"><span class="lineNum">     225</span>                 :             :                     }</span>
+<span id="L226"><span class="lineNum">     226</span>                 :             :                 }</span>
+<span id="L227"><span class="lineNum">     227</span>                 :             :             }</span>
+<span id="L228"><span class="lineNum">     228</span>                 :             :         }</span>
+<span id="L229"><span class="lineNum">     229</span>                 :             :     }</span>
+<span id="L230"><span class="lineNum">     230</span>         [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          15 :     notify_role_changes();</span></span>
+<span id="L231"><span class="lineNum">     231</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          15 :     if (!result.ok()) {</span></span>
+<span id="L232"><span class="lineNum">     232</span>                 :             :         return result;</span>
+<span id="L233"><span class="lineNum">     233</span>                 :             :     }</span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC">          14 :     return PrimarySession(lifetime_, token);</span></span>
+<span id="L235"><span class="lineNum">     235</span>                 :             : }</span>
+<span id="L236"><span class="lineNum">     236</span>                 :             : </span>
+<span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaGNC">          24 : bool ReplicaRuntime::token_valid_locked(const PrimaryToken&amp; token) const noexcept {</span></span>
+<span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">          46 :     return status_.role == RuntimeRole::kPrimary &amp;&amp; token.valid() &amp;&amp;</span></span>
+<span id="L239"><span class="lineNum">     239</span>   [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 21 times"> + </span>]:<span class="tlaGNC">          46 :            token.runtime_generation == generation_ &amp;&amp; token.writer_epoch == status_.writer_epoch;</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :             : }</span>
+<span id="L241"><span class="lineNum">     241</span>                 :             : </span>
+<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">           9 : absl::StatusOr&lt;CommitResult&gt; ReplicaRuntime::submit(const PrimaryToken&amp; token,</span></span>
+<span id="L243"><span class="lineNum">     243</span>                 :             :                                                     std::string request_id,</span>
+<span id="L244"><span class="lineNum">     244</span>                 :             :                                                     std::span&lt;const std::byte&gt; payload) {</span>
+<span id="L245"><span class="lineNum">     245</span>                 :             :     absl::StatusOr&lt;CommitResult&gt; result =</span>
+<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">           9 :         absl::FailedPreconditionError(&quot;stale or invalid primary token&quot;);</span></span>
+<span id="L247"><span class="lineNum">     247</span>                 :             :     {</span>
+<span id="L248"><span class="lineNum">     248</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :         std::lock_guard lock(mutex_);</span></span>
+<span id="L249"><span class="lineNum">     249</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           9 :         if (token_valid_locked(token)) {</span></span>
+<span id="L250"><span class="lineNum">     250</span>   [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 7 times"> + </span>]:<span class="tlaGNC">          16 :             auto durable = wal_-&gt;append(LogRecordType::kMutation, std::move(request_id), payload);</span></span>
+<span id="L251"><span class="lineNum">     251</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">           8 :             if (!durable.ok()) {</span></span>
+<span id="L252"><span class="lineNum">     252</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :                 (void)release_writer_locked();</span></span>
+<span id="L253"><span class="lineNum">     253</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :                 set_role_locked(RuntimeRole::kStandby);</span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :             :                 result = durable.status();</span>
+<span id="L255"><span class="lineNum">     255</span>                 :             :             } else {</span>
+<span id="L256"><span class="lineNum">     256</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :                 auto applied = apply_locked(durable-&gt;record, ApplySource::kPrimaryCommit);</span></span>
+<span id="L257"><span class="lineNum">     257</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">          14 :                 result = applied.ok() ? absl::StatusOr&lt;CommitResult&gt;(</span></span>
+<span id="L258"><span class="lineNum">     258</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaGNC">           6 :                                             CommitResult{durable-&gt;record.lrsn, std::move(*applied)})</span></span>
+<span id="L259"><span class="lineNum">     259</span>                 :             :                                       : absl::StatusOr&lt;CommitResult&gt;(applied.status());</span>
+<span id="L260"><span class="lineNum">     260</span>                 :             :             }</span>
+<span id="L261"><span class="lineNum">     261</span>                 :             :         }</span>
+<span id="L262"><span class="lineNum">     262</span>                 :             :     }</span>
+<span id="L263"><span class="lineNum">     263</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :     notify_role_changes();</span></span>
+<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">           9 :     return result;</span></span>
+<span id="L265"><span class="lineNum">     265</span>                 :             : }</span>
+<span id="L266"><span class="lineNum">     266</span>                 :             : </span>
+<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">           2 : absl::StatusOr&lt;CommitResult&gt; ReplicaRuntime::checkpoint(const PrimaryToken&amp; token) {</span></span>
+<span id="L268"><span class="lineNum">     268</span>                 :             :     absl::StatusOr&lt;CommitResult&gt; result =</span>
+<span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaGNC">           2 :         absl::FailedPreconditionError(&quot;stale or invalid primary token&quot;);</span></span>
+<span id="L270"><span class="lineNum">     270</span>                 :             :     {</span>
+<span id="L271"><span class="lineNum">     271</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         std::lock_guard lock(mutex_);</span></span>
+<span id="L272"><span class="lineNum">     272</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         if (token_valid_locked(token)) {</span></span>
+<span id="L273"><span class="lineNum">     273</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :             auto payload = state_machine_-&gt;create_checkpoint();</span></span>
+<span id="L274"><span class="lineNum">     274</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :             if (!payload.ok()) {</span></span>
+<span id="L275"><span class="lineNum">     275</span>                 :             :                 result = payload.status();</span>
+<span id="L276"><span class="lineNum">     276</span>                 :             :             } else {</span>
+<span id="L277"><span class="lineNum">     277</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">           4 :                 auto durable = wal_-&gt;append(LogRecordType::kCheckpoint, {}, *payload);</span></span>
+<span id="L278"><span class="lineNum">     278</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           2 :                 if (!durable.ok()) {</span></span>
+<span id="L279"><span class="lineNum">     279</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :                     (void)release_writer_locked();</span></span>
+<span id="L280"><span class="lineNum">     280</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :                     set_role_locked(RuntimeRole::kStandby);</span></span>
+<span id="L281"><span class="lineNum">     281</span>                 :             :                     result = durable.status();</span>
+<span id="L282"><span class="lineNum">     282</span>                 :             :                 } else {</span>
+<span id="L283"><span class="lineNum">     283</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :                     auto applied = apply_locked(durable-&gt;record, ApplySource::kPrimaryCommit);</span></span>
+<span id="L284"><span class="lineNum">     284</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           3 :                     result = applied.ok() ? absl::StatusOr&lt;CommitResult&gt;(CommitResult{</span></span>
+<span id="L285"><span class="lineNum">     285</span>                 :             :                                                 durable-&gt;record.lrsn, std::move(*applied)})</span>
+<span id="L286"><span class="lineNum">     286</span>                 :             :                                           : absl::StatusOr&lt;CommitResult&gt;(applied.status());</span>
+<span id="L287"><span class="lineNum">     287</span>                 :             :                 }</span>
+<span id="L288"><span class="lineNum">     288</span>                 :             :             }</span>
+<span id="L289"><span class="lineNum">     289</span>                 :             :         }</span>
+<span id="L290"><span class="lineNum">     290</span>                 :             :     }</span>
+<span id="L291"><span class="lineNum">     291</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     notify_role_changes();</span></span>
+<span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaGNC">           2 :     return result;</span></span>
+<span id="L293"><span class="lineNum">     293</span>                 :             : }</span>
+<span id="L294"><span class="lineNum">     294</span>                 :             : </span>
+<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">          13 : absl::Status ReplicaRuntime::demote_locked(const PrimaryToken* token) {</span></span>
+<span id="L296"><span class="lineNum">     296</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span>]:<span class="tlaGNC">          13 :     if (status_.role == RuntimeRole::kStopped) {</span></span>
+<span id="L297"><span class="lineNum">     297</span>                 :             :         return absl::OkStatus();</span>
+<span id="L298"><span class="lineNum">     298</span>                 :             :     }</span>
+<span id="L299"><span class="lineNum">     299</span>   [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 10 times"> + </span>]:<span class="tlaGNC">          12 :     if (token != nullptr &amp;&amp; !token_valid_locked(*token)) {</span></span>
+<span id="L300"><span class="lineNum">     300</span>                 :<span class="tlaGNC">           2 :         return absl::FailedPreconditionError(&quot;stale or invalid primary token&quot;);</span></span>
+<span id="L301"><span class="lineNum">     301</span>                 :             :     }</span>
+<span id="L302"><span class="lineNum">     302</span>                 :<span class="tlaGNC">          10 :     auto result = release_writer_locked();</span></span>
+<span id="L303"><span class="lineNum">     303</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :     if (status_.role != RuntimeRole::kFailed) {</span></span>
+<span id="L304"><span class="lineNum">     304</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :         set_role_locked(RuntimeRole::kStandby);</span></span>
+<span id="L305"><span class="lineNum">     305</span>                 :             :     }</span>
+<span id="L306"><span class="lineNum">     306</span>                 :             :     return result;</span>
+<span id="L307"><span class="lineNum">     307</span>                 :             : }</span>
+<span id="L308"><span class="lineNum">     308</span>                 :             : </span>
+<span id="L309"><span class="lineNum">     309</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          13 : absl::Status ReplicaRuntime::demote(const PrimaryToken&amp; token) {</span></span>
+<span id="L310"><span class="lineNum">     310</span>                 :             :     absl::Status result;</span>
+<span id="L311"><span class="lineNum">     311</span>                 :             :     {</span>
+<span id="L312"><span class="lineNum">     312</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          13 :         std::lock_guard lock(mutex_);</span></span>
+<span id="L313"><span class="lineNum">     313</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          26 :         result = demote_locked(&amp;token);</span></span>
+<span id="L314"><span class="lineNum">     314</span>                 :             :     }</span>
+<span id="L315"><span class="lineNum">     315</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          13 :     notify_role_changes();</span></span>
+<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaGNC">          13 :     return result;</span></span>
+<span id="L317"><span class="lineNum">     317</span>                 :             : }</span>
+<span id="L318"><span class="lineNum">     318</span>                 :             : </span>
+<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">          28 : void ReplicaRuntime::stop() {</span></span>
+<span id="L320"><span class="lineNum">     320</span>                 :             :     {</span>
+<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">          28 :         std::lock_guard lock(mutex_);</span></span>
+<span id="L322"><span class="lineNum">     322</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 20 times"> + </span>]:<span class="tlaGNC">          28 :         if (status_.role == RuntimeRole::kStopped) {</span></span>
+<span id="L323"><span class="lineNum">     323</span>                 :             :             return;</span>
+<span id="L324"><span class="lineNum">     324</span>                 :             :         }</span>
+<span id="L325"><span class="lineNum">     325</span>         [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          20 :         (void)release_writer_locked();</span></span>
+<span id="L326"><span class="lineNum">     326</span>         [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          20 :         set_role_locked(RuntimeRole::kStopped);</span></span>
+<span id="L327"><span class="lineNum">     327</span>                 :             :     }</span>
+<span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaGNC">          20 :     notify_role_changes();</span></span>
+<span id="L329"><span class="lineNum">     329</span>                 :             : }</span>
+<span id="L330"><span class="lineNum">     330</span>                 :             : </span>
+<span id="L331"><span class="lineNum">     331</span>                 :<span class="tlaGNC">          19 : ReplicaStatus ReplicaRuntime::status() const {</span></span>
+<span id="L332"><span class="lineNum">     332</span>                 :<span class="tlaGNC">          19 :     std::lock_guard lock(mutex_);</span></span>
+<span id="L333"><span class="lineNum">     333</span>                 :<span class="tlaGNC">          19 :     return status_;</span></span>
+<span id="L334"><span class="lineNum">     334</span>                 :             : }</span>
+<span id="L335"><span class="lineNum">     335</span>                 :             : </span>
+<span id="L336"><span class="lineNum">     336</span>                 :<span class="tlaGNC">           1 : ReplicaRuntime::ReadGuard ReplicaRuntime::read(PrimaryToken token) {</span></span>
+<span id="L337"><span class="lineNum">     337</span>                 :<span class="tlaGNC">           1 :     std::unique_lock lock(mutex_);</span></span>
+<span id="L338"><span class="lineNum">     338</span>                 :<span class="tlaGNC">           1 :     const bool valid = token_valid_locked(token);</span></span>
+<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaGNC">           1 :     return ReadGuard(std::move(lock), status_, valid, state_machine_);</span></span>
+<span id="L340"><span class="lineNum">     340</span>                 :             : }</span>
+<span id="L341"><span class="lineNum">     341</span>                 :             : </span>
+<span id="L342"><span class="lineNum">     342</span>                 :<span class="tlaGNC">          18 : ReplicaRuntime::PrimarySession::PrimarySession(PrimarySession&amp;&amp; other) noexcept</span></span>
+<span id="L343"><span class="lineNum">     343</span>                 :<span class="tlaGNC">          18 :     : lifetime_(std::move(other.lifetime_)), token_(std::exchange(other.token_, {})) {}</span></span>
+<span id="L344"><span class="lineNum">     344</span>                 :             : </span>
+<span id="L345"><span class="lineNum">     345</span>                 :<span class="tlaUNC tlaBgUNC">           0 : ReplicaRuntime::PrimarySession&amp; ReplicaRuntime::PrimarySession::operator=(</span></span>
+<span id="L346"><span class="lineNum">     346</span>                 :             :     PrimarySession&amp;&amp; other) noexcept {</span>
+<span id="L347"><span class="lineNum">     347</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (this != &amp;other) {</span></span>
+<span id="L348"><span class="lineNum">     348</span>                 :<span class="tlaUNC">           0 :         (void)demote();</span></span>
+<span id="L349"><span class="lineNum">     349</span>                 :             :         lifetime_ = std::move(other.lifetime_);</span>
+<span id="L350"><span class="lineNum">     350</span>                 :<span class="tlaUNC">           0 :         token_ = std::exchange(other.token_, {});</span></span>
+<span id="L351"><span class="lineNum">     351</span>                 :             :     }</span>
+<span id="L352"><span class="lineNum">     352</span>                 :<span class="tlaUNC">           0 :     return *this;</span></span>
+<span id="L353"><span class="lineNum">     353</span>                 :             : }</span>
+<span id="L354"><span class="lineNum">     354</span>                 :             : </span>
+<span id="L355"><span class="lineNum">     355</span>                 :<span class="tlaGNC tlaBgGNC">          32 : ReplicaRuntime::PrimarySession::~PrimarySession() {</span></span>
+<span id="L356"><span class="lineNum">     356</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 32 times"> + </span>]:<span class="tlaGNC">          64 :     (void)demote();</span></span>
+<span id="L357"><span class="lineNum">     357</span>                 :<span class="tlaGNC">          32 : }</span></span>
+<span id="L358"><span class="lineNum">     358</span>                 :             : </span>
+<span id="L359"><span class="lineNum">     359</span>                 :<span class="tlaGNC">           9 : absl::StatusOr&lt;CommitResult&gt; ReplicaRuntime::PrimarySession::submit(</span></span>
+<span id="L360"><span class="lineNum">     360</span>                 :             :     std::string request_id, std::span&lt;const std::byte&gt; payload) {</span>
+<span id="L361"><span class="lineNum">     361</span>                 :             :     auto lifetime = lifetime_.lock();</span>
+<span id="L362"><span class="lineNum">     362</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           9 :     if (lifetime == nullptr || !token_.valid()) {</span></span>
+<span id="L363"><span class="lineNum">     363</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           2 :         return absl::FailedPreconditionError(&quot;primary session is closed&quot;);</span></span>
+<span id="L364"><span class="lineNum">     364</span>                 :             :     }</span>
+<span id="L365"><span class="lineNum">     365</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     std::lock_guard lock(lifetime-&gt;mutex);</span></span>
+<span id="L366"><span class="lineNum">     366</span>                 :<span class="tlaGNC">           8 :     return lifetime-&gt;runtime == nullptr</span></span>
+<span id="L367"><span class="lineNum">     367</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">           8 :                ? absl::StatusOr&lt;CommitResult&gt;(</span></span>
+<span id="L368"><span class="lineNum">     368</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaGNC">           8 :                      absl::FailedPreconditionError(&quot;primary session runtime is destroyed&quot;))</span></span>
+<span id="L369"><span class="lineNum">     369</span>   [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 8 times"> + </span> :<span class="tlaGNC">          16 :                : lifetime-&gt;runtime-&gt;submit(token_, std::move(request_id), payload);</span></span>
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
+<span id="L370"><span class="lineNum">     370</span>                 :             : }</span>
+<span id="L371"><span class="lineNum">     371</span>                 :             : </span>
+<span id="L372"><span class="lineNum">     372</span>                 :<span class="tlaGNC">           2 : absl::StatusOr&lt;CommitResult&gt; ReplicaRuntime::PrimarySession::checkpoint() {</span></span>
+<span id="L373"><span class="lineNum">     373</span>                 :             :     auto lifetime = lifetime_.lock();</span>
+<span id="L374"><span class="lineNum">     374</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     if (lifetime == nullptr || !token_.valid()) {</span></span>
+<span id="L375"><span class="lineNum">     375</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return absl::FailedPreconditionError(&quot;primary session is closed&quot;);</span></span>
+<span id="L376"><span class="lineNum">     376</span>                 :             :     }</span>
+<span id="L377"><span class="lineNum">     377</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           2 :     std::lock_guard lock(lifetime-&gt;mutex);</span></span>
+<span id="L378"><span class="lineNum">     378</span>                 :<span class="tlaGNC">           2 :     return lifetime-&gt;runtime == nullptr</span></span>
+<span id="L379"><span class="lineNum">     379</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :                ? absl::StatusOr&lt;CommitResult&gt;(</span></span>
+<span id="L380"><span class="lineNum">     380</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaGNC">           2 :                      absl::FailedPreconditionError(&quot;primary session runtime is destroyed&quot;))</span></span>
+<span id="L381"><span class="lineNum">     381</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :                : lifetime-&gt;runtime-&gt;checkpoint(token_);</span></span>
+<span id="L382"><span class="lineNum">     382</span>                 :             : }</span>
+<span id="L383"><span class="lineNum">     383</span>                 :             : </span>
+<span id="L384"><span class="lineNum">     384</span>                 :<span class="tlaGNC">          36 : absl::Status ReplicaRuntime::PrimarySession::demote() {</span></span>
+<span id="L385"><span class="lineNum">     385</span>                 :             :     auto lifetime = lifetime_.lock();</span>
+<span id="L386"><span class="lineNum">     386</span>                 :<span class="tlaGNC">          36 :     lifetime_.reset();</span></span>
+<span id="L387"><span class="lineNum">     387</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 23 times"> + </span>]:<span class="tlaGNC">          36 :     const PrimaryToken token = std::exchange(token_, {});</span></span>
+<span id="L388"><span class="lineNum">     388</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 23 times"> + </span>]:<span class="tlaGNC">          36 :     if (lifetime == nullptr || !token.valid()) {</span></span>
+<span id="L389"><span class="lineNum">     389</span>                 :             :         return absl::OkStatus();</span>
+<span id="L390"><span class="lineNum">     390</span>                 :             :     }</span>
+<span id="L391"><span class="lineNum">     391</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          13 :     std::lock_guard lock(lifetime-&gt;mutex);</span></span>
+<span id="L392"><span class="lineNum">     392</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          13 :     return lifetime-&gt;runtime == nullptr ? absl::OkStatus() : lifetime-&gt;runtime-&gt;demote(token);</span></span>
+<span id="L393"><span class="lineNum">     393</span>                 :             : }</span>
+<span id="L394"><span class="lineNum">     394</span>                 :             : </span>
+<span id="L395"><span class="lineNum">     395</span>                 :             : } // namespace pl::minivessel</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

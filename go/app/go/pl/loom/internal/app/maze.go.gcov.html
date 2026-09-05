@@ -1,0 +1,1088 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - app/go/pl/loom/internal/app/maze.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">app/go/pl/loom/internal/app</a> - maze.go<span style="font-size: 80%;"> (source / <a href="maze.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryLo">73.4&nbsp;%</td>
+            <td class="headerCovTableEntry">591</td>
+            <td class="headerCovTableEntry">434</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-09-05 12:00:02</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // maze.go — the execution-trace maze: folds a session's event log into a</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // &quot;main path + detour branches&quot; timeline (MazeData) rendered by the webui's</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : // trace tab, two-session compare view, and shared-session page.</span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : //</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : // Data contract (mirrored by src/components/maze):</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : //   - one step = one model request (model.request_started →</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : //     model.response_completed); parallel tool calls within a step carry</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : //     their real spans (ToolResult.StartedAt/FinishedAt);</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : //   - the main path holds steps judged ok/answer; error/deadend/retry steps</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : //     become detours whose attach points at the nearest main-path step;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : //   - sub-agent sessions fold into one aggregated detour node each</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : //     (sub=true), sharing the parent's clock;</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : //   - verdicts rest on the structured ToolResult.Status first; text</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : //     sniffing only detects &quot;succeeded but empty&quot; dead ends. Blind-retry</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : //     marking is behavioral (a consecutive same-tool cluster with similar</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : //     arguments and at least one failure), after AgentLens's deterministic</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : //     waste detection and dsh-trace-compare's calibration.</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : </span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : package app</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : </span>
+<span id="L35"><span class="lineNum">      35</span>                 :             : import (</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :         &quot;context&quot;</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             :         &quot;encoding/json&quot;</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :         &quot;fmt&quot;</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :         &quot;sort&quot;</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :         &quot;strings&quot;</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :         &quot;time&quot;</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             : </span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :         &quot;github.com/liubang/playground/go/pl/loom/internal/domain&quot;</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :         &quot;github.com/liubang/playground/go/pl/loom/internal/session&quot;</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :         &quot;github.com/liubang/playground/go/pl/loom/internal/tool/toolkit&quot;</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             : )</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : </span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : // --- wire types (mirrored by protocol/types.ts Maze* interfaces) ---</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : </span>
+<span id="L50"><span class="lineNum">      50</span>                 :             : // MazeData is the trace-maze payload: one lane per session on a shared</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             : // wall-clock axis (seconds since the lane's first user message).</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             : type MazeData struct {</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             :         Tmax  float64    `json:&quot;tmax&quot;`</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :         Lanes []MazeLane `json:&quot;lanes&quot;`</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             : }</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : </span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : // MazeLane is one session's maze: main path + detour branches + stats.</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : type MazeLane struct {</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             :         Key       string     `json:&quot;key&quot;`</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :         SessionID string     `json:&quot;session_id&quot;`</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :         Title     string     `json:&quot;title,omitempty&quot;`</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             :         Model     string     `json:&quot;model,omitempty&quot;`</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :         Main      []MazeNode `json:&quot;main&quot;`</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :         Detours   []MazeNode `json:&quot;detours&quot;`</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :         Stats     MazeStats  `json:&quot;stats&quot;`</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             : }</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             : </span>
+<span id="L68"><span class="lineNum">      68</span>                 :             : // MazeStats aggregates one lane for the header strip.</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             : type MazeStats struct {</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :         Steps   int     `json:&quot;steps&quot;`</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             :         Tools   int     `json:&quot;tools&quot;`</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             :         Rz      int     `json:&quot;rz&quot;`</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             :         RzMs    int64   `json:&quot;rz_ms,omitempty&quot;`</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             :         InTok   int64   `json:&quot;in_tok&quot;`</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             :         RzTok   int64   `json:&quot;rz_tok&quot;`</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             :         OutTok  int64   `json:&quot;out_tok&quot;`</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :         T       float64 `json:&quot;t&quot;`</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             :         Main    int     `json:&quot;main&quot;`</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             :         Detours int     `json:&quot;detours&quot;`</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             : }</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : </span>
+<span id="L82"><span class="lineNum">      82</span>                 :             : // MazeNode is one step (a model request plus its tool calls), or an</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             : // aggregated sub-agent branch (Sub=true).</span>
+<span id="L84"><span class="lineNum">      84</span>                 :             : type MazeNode struct {</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             :         Step  int        `json:&quot;step&quot;`</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             :         Turn  int        `json:&quot;turn&quot;`</span>
+<span id="L87"><span class="lineNum">      87</span>                 :             :         S     float64    `json:&quot;s&quot;`</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             :         E     float64    `json:&quot;e&quot;`</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             :         Tools []MazeTool `json:&quot;tools&quot;`</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             :         // Rz counts reasoning blocks; RzTxt is a flattened excerpt (≤2000</span>
+<span id="L91"><span class="lineNum">      91</span>                 :             :         // chars) for the detail panel. RzMs is their summed wall-clock span</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             :         // (ReasoningContent.DurationMs; 0 for pre-duration transcripts).</span>
+<span id="L93"><span class="lineNum">      93</span>                 :             :         Rz    int    `json:&quot;rz&quot;`</span>
+<span id="L94"><span class="lineNum">      94</span>                 :             :         RzTxt string `json:&quot;rz_txt,omitempty&quot;`</span>
+<span id="L95"><span class="lineNum">      95</span>                 :             :         RzMs  int64  `json:&quot;rz_ms,omitempty&quot;`</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             :         // Per-request token truth from the persisted response_completed</span>
+<span id="L97"><span class="lineNum">      97</span>                 :             :         // payload; nil for sessions written before per-request usage existed.</span>
+<span id="L98"><span class="lineNum">      98</span>                 :             :         InTok  *int64 `json:&quot;in_tok,omitempty&quot;`</span>
+<span id="L99"><span class="lineNum">      99</span>                 :             :         RzTok  *int64 `json:&quot;rz_tok,omitempty&quot;`</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             :         OutTok *int64 `json:&quot;out_tok,omitempty&quot;`</span>
+<span id="L101"><span class="lineNum">     101</span>                 :             :         // V: ok | answer | error | deadend | retry | pending (unsettled tools).</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             :         // Why carries user-facing UI copy (the webui is Chinese-first).</span>
+<span id="L103"><span class="lineNum">     103</span>                 :             :         V   string `json:&quot;v&quot;`</span>
+<span id="L104"><span class="lineNum">     104</span>                 :             :         Why string `json:&quot;why,omitempty&quot;`</span>
+<span id="L105"><span class="lineNum">     105</span>                 :             :         // Sub marks an aggregated sub-agent child node; Label is its title.</span>
+<span id="L106"><span class="lineNum">     106</span>                 :             :         Sub   bool   `json:&quot;sub,omitempty&quot;`</span>
+<span id="L107"><span class="lineNum">     107</span>                 :             :         Label string `json:&quot;label,omitempty&quot;`</span>
+<span id="L108"><span class="lineNum">     108</span>                 :             :         // Attach is the main-path step this detour hangs off (0 = origin).</span>
+<span id="L109"><span class="lineNum">     109</span>                 :             :         Attach int `json:&quot;attach,omitempty&quot;`</span>
+<span id="L110"><span class="lineNum">     110</span>                 :             :         // MsgSeq anchors the chat jump to the assistant message sequence.</span>
+<span id="L111"><span class="lineNum">     111</span>                 :             :         MsgSeq int64 `json:&quot;msg_seq,omitempty&quot;`</span>
+<span id="L112"><span class="lineNum">     112</span>                 :             :         // Retries counts model.request_retrying waits the step slept through.</span>
+<span id="L113"><span class="lineNum">     113</span>                 :             :         Retries int  `json:&quot;retries,omitempty&quot;`</span>
+<span id="L114"><span class="lineNum">     114</span>                 :             :         Live    bool `json:&quot;live,omitempty&quot;`</span>
+<span id="L115"><span class="lineNum">     115</span>                 :             : }</span>
+<span id="L116"><span class="lineNum">     116</span>                 :             : </span>
+<span id="L117"><span class="lineNum">     117</span>                 :             : // MazeTool is one tool call inside a step.</span>
+<span id="L118"><span class="lineNum">     118</span>                 :             : type MazeTool struct {</span>
+<span id="L119"><span class="lineNum">     119</span>                 :             :         Name     string   `json:&quot;name&quot;`</span>
+<span id="L120"><span class="lineNum">     120</span>                 :             :         Args     string   `json:&quot;args&quot;`                // bar label (≤120 chars)</span>
+<span id="L121"><span class="lineNum">     121</span>                 :             :         ArgsFull string   `json:&quot;args_full,omitempty&quot;` // detail panel (≤4000 chars)</span>
+<span id="L122"><span class="lineNum">     122</span>                 :             :         S        float64  `json:&quot;s&quot;`</span>
+<span id="L123"><span class="lineNum">     123</span>                 :             :         E        *float64 `json:&quot;e&quot;` // null = still executing</span>
+<span id="L124"><span class="lineNum">     124</span>                 :             :         Dur      float64  `json:&quot;dur&quot;`</span>
+<span id="L125"><span class="lineNum">     125</span>                 :             :         Res      string   `json:&quot;res&quot;`                // hover excerpt (≤380 chars)</span>
+<span id="L126"><span class="lineNum">     126</span>                 :             :         ResFull  string   `json:&quot;res_full,omitempty&quot;` // detail panel (≤5000 chars)</span>
+<span id="L127"><span class="lineNum">     127</span>                 :             :         V        string   `json:&quot;v&quot;`                  // ok | error | deadend | retry | pending</span>
+<span id="L128"><span class="lineNum">     128</span>                 :             :         Why      string   `json:&quot;why,omitempty&quot;`      // user-facing UI copy</span>
+<span id="L129"><span class="lineNum">     129</span>                 :             :         CallID   string   `json:&quot;call_id&quot;`</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             :         Status   string   `json:&quot;status,omitempty&quot;`</span>
+<span id="L131"><span class="lineNum">     131</span>                 :             :         ChildID  string   `json:&quot;child_id,omitempty&quot;` // sub-session spawned by delegate_task</span>
+<span id="L132"><span class="lineNum">     132</span>                 :             : }</span>
+<span id="L133"><span class="lineNum">     133</span>                 :             : </span>
+<span id="L134"><span class="lineNum">     134</span>                 :             : // --- verdict rules ---</span>
+<span id="L135"><span class="lineNum">     135</span>                 :             : </span>
+<span id="L136"><span class="lineNum">     136</span>                 :             : // Write tools: success confirmations are naturally short — no error means</span>
+<span id="L137"><span class="lineNum">     137</span>                 :             : // success; output length never implies a dead end.</span>
+<span id="L138"><span class="lineNum">     138</span>                 :             : var mazeWriteTools = map[string]bool{</span>
+<span id="L139"><span class="lineNum">     139</span>                 :             :         &quot;write&quot;: true, &quot;edit&quot;: true,</span>
+<span id="L140"><span class="lineNum">     140</span>                 :             : }</span>
+<span id="L141"><span class="lineNum">     141</span>                 :             : </span>
+<span id="L142"><span class="lineNum">     142</span>                 :             : // Search tools: only an empty result counts as a dead end; any hit (even a</span>
+<span id="L143"><span class="lineNum">     143</span>                 :             : // single line) is success.</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             : var mazeSearchTools = map[string]bool{</span>
+<span id="L145"><span class="lineNum">     145</span>                 :             :         &quot;read_file&quot;: true, &quot;grep&quot;: true, &quot;glob&quot;: true, &quot;list_dir&quot;: true,</span>
+<span id="L146"><span class="lineNum">     146</span>                 :             :         &quot;web_search&quot;: true, &quot;web_fetch&quot;: true, &quot;kb_search&quot;: true, &quot;kb_read&quot;: true,</span>
+<span id="L147"><span class="lineNum">     147</span>                 :             :         &quot;git_log&quot;: true, &quot;git_blame&quot;: true, &quot;git_diff&quot;: true, &quot;git_status&quot;: true,</span>
+<span id="L148"><span class="lineNum">     148</span>                 :             :         &quot;git_merge_base&quot;: true, &quot;view_image&quot;: true, &quot;lint&quot;: true, &quot;read_skill&quot;: true,</span>
+<span id="L149"><span class="lineNum">     149</span>                 :             : }</span>
+<span id="L150"><span class="lineNum">     150</span>                 :             : </span>
+<span id="L151"><span class="lineNum">     151</span>                 :             : // Empty/no-hit markers (head window only): a genuine empty-result notice is</span>
+<span id="L152"><span class="lineNum">     152</span>                 :             : // the whole short message; &quot;not found&quot; quoted inside a file's content must</span>
+<span id="L153"><span class="lineNum">     153</span>                 :             : // not count.</span>
+<span id="L154"><span class="lineNum">     154</span>                 :             : var mazeNoResultNeedles = []string{&quot;no matches&quot;, &quot;no results&quot;, &quot;not found in&quot;, &quot;0 matches&quot;}</span>
+<span id="L155"><span class="lineNum">     155</span>                 :             : </span>
+<span id="L156"><span class="lineNum">     156</span>                 :             : const (</span>
+<span id="L157"><span class="lineNum">     157</span>                 :             :         mazeNoResultScanChars = 300</span>
+<span id="L158"><span class="lineNum">     158</span>                 :             :         // Blind retry: Jaccard similarity threshold over argument tokens of</span>
+<span id="L159"><span class="lineNum">     159</span>                 :             :         // adjacent same-tool calls / minimum cluster length.</span>
+<span id="L160"><span class="lineNum">     160</span>                 :             :         mazeRetrySimilarity  = 0.6</span>
+<span id="L161"><span class="lineNum">     161</span>                 :             :         mazeRetryMinCluster  = 2</span>
+<span id="L162"><span class="lineNum">     162</span>                 :             :         mazeTooltipResChars  = 380</span>
+<span id="L163"><span class="lineNum">     163</span>                 :             :         mazeDetailResChars   = 5000</span>
+<span id="L164"><span class="lineNum">     164</span>                 :             :         mazeArgsLabelChars   = 120</span>
+<span id="L165"><span class="lineNum">     165</span>                 :             :         mazeArgsDetailChars  = 4000</span>
+<span id="L166"><span class="lineNum">     166</span>                 :             :         mazeReasoningExcerpt = 2000</span>
+<span id="L167"><span class="lineNum">     167</span>                 :             :         // Step ids of aggregated sub-agent nodes start here so they never</span>
+<span id="L168"><span class="lineNum">     168</span>                 :             :         // collide with parent step ids.</span>
+<span id="L169"><span class="lineNum">     169</span>                 :             :         mazeChildStepBase = 100000</span>
+<span id="L170"><span class="lineNum">     170</span>                 :             :         // Defensive cap on sub-agent branches folded into one lane.</span>
+<span id="L171"><span class="lineNum">     171</span>                 :             :         mazeMaxChildren = 20</span>
+<span id="L172"><span class="lineNum">     172</span>                 :             : )</span>
+<span id="L173"><span class="lineNum">     173</span>                 :             : </span>
+<span id="L174"><span class="lineNum">     174</span>                 :             : // --- event payload DTOs (mirror the agent package's unexported payloads,</span>
+<span id="L175"><span class="lineNum">     175</span>                 :             : // same pattern as controller.go's local DTOs) ---</span>
+<span id="L176"><span class="lineNum">     176</span>                 :             : </span>
+<span id="L177"><span class="lineNum">     177</span>                 :             : type mazeRequestStartedDTO struct {</span>
+<span id="L178"><span class="lineNum">     178</span>                 :             :         RequestID domain.EventID `json:&quot;request_id&quot;`</span>
+<span id="L179"><span class="lineNum">     179</span>                 :             :         ModelName string         `json:&quot;model_name&quot;`</span>
+<span id="L180"><span class="lineNum">     180</span>                 :             :         Turn      int            `json:&quot;turn,omitempty&quot;`</span>
+<span id="L181"><span class="lineNum">     181</span>                 :             : }</span>
+<span id="L182"><span class="lineNum">     182</span>                 :             : </span>
+<span id="L183"><span class="lineNum">     183</span>                 :             : type mazeRequestFailedDTO struct {</span>
+<span id="L184"><span class="lineNum">     184</span>                 :             :         RequestID domain.EventID `json:&quot;request_id&quot;`</span>
+<span id="L185"><span class="lineNum">     185</span>                 :             :         Stage     string         `json:&quot;stage&quot;`</span>
+<span id="L186"><span class="lineNum">     186</span>                 :             :         Code      string         `json:&quot;code&quot;`</span>
+<span id="L187"><span class="lineNum">     187</span>                 :             :         Message   string         `json:&quot;message,omitempty&quot;`</span>
+<span id="L188"><span class="lineNum">     188</span>                 :             : }</span>
+<span id="L189"><span class="lineNum">     189</span>                 :             : </span>
+<span id="L190"><span class="lineNum">     190</span>                 :             : type mazeExecStartedDTO struct {</span>
+<span id="L191"><span class="lineNum">     191</span>                 :             :         CallID domain.ToolCallID `json:&quot;call_id&quot;`</span>
+<span id="L192"><span class="lineNum">     192</span>                 :             : }</span>
+<span id="L193"><span class="lineNum">     193</span>                 :             : </span>
+<span id="L194"><span class="lineNum">     194</span>                 :             : type mazeExecCompletedDTO struct {</span>
+<span id="L195"><span class="lineNum">     195</span>                 :             :         CallID       domain.ToolCallID `json:&quot;call_id&quot;`</span>
+<span id="L196"><span class="lineNum">     196</span>                 :             :         Status       domain.ToolStatus `json:&quot;status&quot;`</span>
+<span id="L197"><span class="lineNum">     197</span>                 :             :         ErrorCode    string            `json:&quot;error_code,omitempty&quot;`</span>
+<span id="L198"><span class="lineNum">     198</span>                 :             :         ErrorMessage string            `json:&quot;error_message,omitempty&quot;`</span>
+<span id="L199"><span class="lineNum">     199</span>                 :             :         StartedAt    time.Time         `json:&quot;started_at&quot;`</span>
+<span id="L200"><span class="lineNum">     200</span>                 :             :         FinishedAt   time.Time         `json:&quot;finished_at&quot;`</span>
+<span id="L201"><span class="lineNum">     201</span>                 :             : }</span>
+<span id="L202"><span class="lineNum">     202</span>                 :             : </span>
+<span id="L203"><span class="lineNum">     203</span>                 :             : // --- builder internals ---</span>
+<span id="L204"><span class="lineNum">     204</span>                 :             : </span>
+<span id="L205"><span class="lineNum">     205</span>                 :             : // mazeStep accumulates one model request's maze state during the scan.</span>
+<span id="L206"><span class="lineNum">     206</span>                 :             : type mazeStep struct {</span>
+<span id="L207"><span class="lineNum">     207</span>                 :             :         node      MazeNode</span>
+<span id="L208"><span class="lineNum">     208</span>                 :             :         tools     map[domain.ToolCallID]*MazeTool</span>
+<span id="L209"><span class="lineNum">     209</span>                 :             :         toolOrder []domain.ToolCallID</span>
+<span id="L210"><span class="lineNum">     210</span>                 :             :         failed    bool</span>
+<span id="L211"><span class="lineNum">     211</span>                 :             :         // answered marks that the response (or a terminal failure) arrived;</span>
+<span id="L212"><span class="lineNum">     212</span>                 :             :         // an unanswered step is the in-flight one and stays on the main path.</span>
+<span id="L213"><span class="lineNum">     213</span>                 :             :         answered bool</span>
+<span id="L214"><span class="lineNum">     214</span>                 :             : }</span>
+<span id="L215"><span class="lineNum">     215</span>                 :             : </span>
+<span id="L216"><span class="lineNum">     216</span>                 :             : // mazeChild is one resolved sub-agent child session folded into its</span>
+<span id="L217"><span class="lineNum">     217</span>                 :             : // parent's maze as an aggregated detour node.</span>
+<span id="L218"><span class="lineNum">     218</span>                 :             : type mazeChild struct {</span>
+<span id="L219"><span class="lineNum">     219</span>                 :             :         Label   string</span>
+<span id="L220"><span class="lineNum">     220</span>                 :             :         Running bool</span>
+<span id="L221"><span class="lineNum">     221</span>                 :             :         Events  []domain.Event</span>
+<span id="L222"><span class="lineNum">     222</span>                 :             : }</span>
+<span id="L223"><span class="lineNum">     223</span>                 :             : </span>
+<span id="L224"><span class="lineNum">     224</span>                 :             : // mazeClock maps wall-clock time onto the lane axis (seconds, 0.1s grid).</span>
+<span id="L225"><span class="lineNum">     225</span>                 :             : // live reports whether the session is actively executing right now: only</span>
+<span id="L226"><span class="lineNum">     226</span>                 :             : // then do in-flight steps/tools extend to now — a crashed or finished</span>
+<span id="L227"><span class="lineNum">     227</span>                 :             : // session's unsettled work must not smear across the axis.</span>
+<span id="L228"><span class="lineNum">     228</span>                 :             : type mazeClock struct {</span>
+<span id="L229"><span class="lineNum">     229</span>                 :             :         anchor time.Time</span>
+<span id="L230"><span class="lineNum">     230</span>                 :             :         now    time.Time</span>
+<span id="L231"><span class="lineNum">     231</span>                 :             :         live   bool</span>
+<span id="L232"><span class="lineNum">     232</span>                 :             : }</span>
+<span id="L233"><span class="lineNum">     233</span>                 :             : </span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC tlaBgGNC">          51 : func (c mazeClock) rel(t time.Time) float64 {</span></span>
+<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC">          51 :         s := t.Sub(c.anchor).Seconds()</span></span>
+<span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaGNC">          51 :         if s &lt; 0 {</span></span>
+<span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 s = 0</span></span>
+<span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC tlaBgGNC">          51 :         return float64(int(s*10+0.5)) / 10</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :             : }</span>
+<span id="L241"><span class="lineNum">     241</span>                 :             : </span>
+<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">           7 : func contentText(parts []domain.ContentPart) string {</span></span>
+<span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaGNC">           7 :         var b strings.Builder</span></span>
+<span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaGNC">           7 :         for _, p := range parts {</span></span>
+<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">           7 :                 if p.Kind == domain.PartText {</span></span>
+<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">           7 :                         b.WriteString(p.Text)</span></span>
+<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC">           7 :                 }</span></span>
+<span id="L248"><span class="lineNum">     248</span>                 :             :         }</span>
+<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">           7 :         return b.String()</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :             : }</span>
+<span id="L251"><span class="lineNum">     251</span>                 :             : </span>
+<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">          27 : func flattenWs(s string) string {</span></span>
+<span id="L253"><span class="lineNum">     253</span>                 :<span class="tlaGNC">          27 :         return strings.Join(strings.Fields(s), &quot; &quot;)</span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">          27 : }</span></span>
+<span id="L255"><span class="lineNum">     255</span>                 :             : </span>
+<span id="L256"><span class="lineNum">     256</span>                 :             : // argSummary picks the most telling argument as the bar label, mirroring</span>
+<span id="L257"><span class="lineNum">     257</span>                 :             : // the tools' actual schemas (command / path / pattern / query / url).</span>
+<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC">           7 : func argSummary(raw json.RawMessage) string {</span></span>
+<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">           7 :         if len(raw) == 0 {</span></span>
+<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;&quot;</span></span>
+<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC tlaBgGNC">           7 :         var m map[string]any</span></span>
+<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC">           7 :         if err := json.Unmarshal(raw, &amp;m); err != nil {</span></span>
+<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return toolkit.Ellipsize(string(raw), mazeArgsLabelChars)</span></span>
+<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaGNC tlaBgGNC">          12 :         for _, k := range []string{&quot;command&quot;, &quot;path&quot;, &quot;file_path&quot;, &quot;pattern&quot;, &quot;query&quot;, &quot;url&quot;, &quot;task&quot;} {</span></span>
+<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">          12 :                 if v, ok := m[k].(string); ok &amp;&amp; v != &quot;&quot; {</span></span>
+<span id="L268"><span class="lineNum">     268</span>                 :<span class="tlaGNC">           7 :                         if k == &quot;pattern&quot; {</span></span>
+<span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaGNC">           1 :                                 if p, _ := m[&quot;path&quot;].(string); p != &quot;&quot; {</span></span>
+<span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                         return toolkit.Ellipsize(&quot;pattern=&quot;+v+&quot; path=&quot;+p, mazeArgsLabelChars)</span></span>
+<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaUNC">           0 :                                 }</span></span>
+<span id="L272"><span class="lineNum">     272</span>                 :             :                         }</span>
+<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC tlaBgGNC">           7 :                         return toolkit.Ellipsize(v, mazeArgsLabelChars)</span></span>
+<span id="L274"><span class="lineNum">     274</span>                 :             :                 }</span>
+<span id="L275"><span class="lineNum">     275</span>                 :             :         }</span>
+<span id="L276"><span class="lineNum">     276</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         compact, err := json.Marshal(m)</span></span>
+<span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaUNC">           0 :         if err != nil {</span></span>
+<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaUNC">           0 :                 return toolkit.Ellipsize(string(raw), mazeArgsLabelChars)</span></span>
+<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaUNC">           0 :         return toolkit.Ellipsize(string(compact), mazeArgsLabelChars)</span></span>
+<span id="L281"><span class="lineNum">     281</span>                 :             : }</span>
+<span id="L282"><span class="lineNum">     282</span>                 :             : </span>
+<span id="L283"><span class="lineNum">     283</span>                 :             : // scanSteps folds one session's events into verdict-settled steps on the</span>
+<span id="L284"><span class="lineNum">     284</span>                 :             : // given clock. Pending (in-flight) tools keep E=nil and do not vote.</span>
+<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaGNC tlaBgGNC">          12 : func scanSteps(events []domain.Event, clk mazeClock) []*mazeStep {</span></span>
+<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaGNC">          12 :         var steps []*mazeStep</span></span>
+<span id="L287"><span class="lineNum">     287</span>                 :<span class="tlaGNC">          12 :         byRequest := make(map[domain.EventID]*mazeStep)</span></span>
+<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC">          12 :         byCall := make(map[domain.ToolCallID]*MazeTool)</span></span>
+<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">          12 :         turnCount := 0</span></span>
+<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC">          12 : </span></span>
+<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaGNC">          58 :         for _, evt := range events {</span></span>
+<span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaGNC">          58 :                 switch evt.Type {</span></span>
+<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC">          13 :                 case domain.EventUserMessageAdded:</span></span>
+<span id="L294"><span class="lineNum">     294</span>                 :<span class="tlaGNC">          13 :                         turnCount++</span></span>
+<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">          15 :                 case domain.EventModelRequestStarted:</span></span>
+<span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaGNC">          15 :                         var p mazeRequestStartedDTO</span></span>
+<span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaGNC">          15 :                         if err := json.Unmarshal(evt.Payload, &amp;p); err != nil {</span></span>
+<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 continue</span></span>
+<span id="L299"><span class="lineNum">     299</span>                 :             :                         }</span>
+<span id="L300"><span class="lineNum">     300</span>                 :<span class="tlaGNC tlaBgGNC">          15 :                         turn := p.Turn</span></span>
+<span id="L301"><span class="lineNum">     301</span>                 :<span class="tlaGNC">          15 :                         if turn &lt;= 0 {</span></span>
+<span id="L302"><span class="lineNum">     302</span>                 :<span class="tlaGNC">           2 :                                 // Logs written before turn was persisted: fall back to</span></span>
+<span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaGNC">           2 :                                 // counting user messages.</span></span>
+<span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaGNC">           2 :                                 turn = turnCount</span></span>
+<span id="L305"><span class="lineNum">     305</span>                 :<span class="tlaGNC">           2 :                                 if turn &lt;= 0 {</span></span>
+<span id="L306"><span class="lineNum">     306</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                         turn = 1</span></span>
+<span id="L307"><span class="lineNum">     307</span>                 :<span class="tlaUNC">           0 :                                 }</span></span>
+<span id="L308"><span class="lineNum">     308</span>                 :             :                         }</span>
+<span id="L309"><span class="lineNum">     309</span>                 :<span class="tlaGNC tlaBgGNC">          15 :                         st := &amp;mazeStep{</span></span>
+<span id="L310"><span class="lineNum">     310</span>                 :<span class="tlaGNC">          15 :                                 node: MazeNode{</span></span>
+<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC">          15 :                                         Step: len(steps) + 1, Turn: turn,</span></span>
+<span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC">          15 :                                         S: clk.rel(evt.Timestamp), E: clk.rel(evt.Timestamp),</span></span>
+<span id="L313"><span class="lineNum">     313</span>                 :<span class="tlaGNC">          15 :                                 },</span></span>
+<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">          15 :                                 tools: make(map[domain.ToolCallID]*MazeTool),</span></span>
+<span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaGNC">          15 :                         }</span></span>
+<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaGNC">          15 :                         steps = append(steps, st)</span></span>
+<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaGNC">          15 :                         if !p.RequestID.IsZero() {</span></span>
+<span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaGNC">          15 :                                 byRequest[p.RequestID] = st</span></span>
+<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">          15 :                         }</span></span>
+<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC">          12 :                 case domain.EventModelResponseCompleted:</span></span>
+<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">          12 :                         var p domain.ResponseCompletedPayload</span></span>
+<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC">          12 :                         if err := json.Unmarshal(evt.Payload, &amp;p); err != nil {</span></span>
+<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 continue</span></span>
+<span id="L324"><span class="lineNum">     324</span>                 :             :                         }</span>
+<span id="L325"><span class="lineNum">     325</span>                 :<span class="tlaGNC tlaBgGNC">          12 :                         reqID, _ := domain.ParseEventID(p.Message.Metadata[&quot;request_id&quot;])</span></span>
+<span id="L326"><span class="lineNum">     326</span>                 :<span class="tlaGNC">          12 :                         st := byRequest[reqID]</span></span>
+<span id="L327"><span class="lineNum">     327</span>                 :<span class="tlaGNC">          12 :                         if st == nil &amp;&amp; len(steps) &gt; 0 {</span></span>
+<span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 st = steps[len(steps)-1] // legacy fallback: nearest step</span></span>
+<span id="L329"><span class="lineNum">     329</span>                 :<span class="tlaUNC">           0 :                         }</span></span>
+<span id="L330"><span class="lineNum">     330</span>                 :<span class="tlaGNC tlaBgGNC">          12 :                         if st == nil {</span></span>
+<span id="L331"><span class="lineNum">     331</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 continue</span></span>
+<span id="L332"><span class="lineNum">     332</span>                 :             :                         }</span>
+<span id="L333"><span class="lineNum">     333</span>                 :<span class="tlaGNC tlaBgGNC">          12 :                         st.answered = true</span></span>
+<span id="L334"><span class="lineNum">     334</span>                 :<span class="tlaGNC">          12 :                         st.node.E = clk.rel(evt.Timestamp)</span></span>
+<span id="L335"><span class="lineNum">     335</span>                 :<span class="tlaGNC">          12 :                         st.node.MsgSeq = p.Message.Sequence</span></span>
+<span id="L336"><span class="lineNum">     336</span>                 :<span class="tlaGNC">          12 :                         var rzTxt string</span></span>
+<span id="L337"><span class="lineNum">     337</span>                 :<span class="tlaGNC">          14 :                         for _, part := range p.Message.Parts {</span></span>
+<span id="L338"><span class="lineNum">     338</span>                 :<span class="tlaGNC">          14 :                                 switch part.Kind {</span></span>
+<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaGNC">           5 :                                 case domain.PartReasoning:</span></span>
+<span id="L340"><span class="lineNum">     340</span>                 :<span class="tlaGNC">           5 :                                         if part.Reasoning != nil &amp;&amp; part.Reasoning.Text != &quot;&quot; {</span></span>
+<span id="L341"><span class="lineNum">     341</span>                 :<span class="tlaGNC">           5 :                                                 st.node.Rz++</span></span>
+<span id="L342"><span class="lineNum">     342</span>                 :<span class="tlaGNC">           5 :                                                 st.node.RzMs += part.Reasoning.DurationMs</span></span>
+<span id="L343"><span class="lineNum">     343</span>                 :<span class="tlaGNC">           5 :                                                 rzTxt += part.Reasoning.Text</span></span>
+<span id="L344"><span class="lineNum">     344</span>                 :<span class="tlaGNC">           5 :                                         }</span></span>
+<span id="L345"><span class="lineNum">     345</span>                 :<span class="tlaGNC">           7 :                                 case domain.PartToolCall:</span></span>
+<span id="L346"><span class="lineNum">     346</span>                 :<span class="tlaGNC">           7 :                                         if part.ToolCall == nil {</span></span>
+<span id="L347"><span class="lineNum">     347</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                                 continue</span></span>
+<span id="L348"><span class="lineNum">     348</span>                 :             :                                         }</span>
+<span id="L349"><span class="lineNum">     349</span>                 :<span class="tlaGNC tlaBgGNC">           7 :                                         call := part.ToolCall</span></span>
+<span id="L350"><span class="lineNum">     350</span>                 :<span class="tlaGNC">           7 :                                         tool := &amp;MazeTool{</span></span>
+<span id="L351"><span class="lineNum">     351</span>                 :<span class="tlaGNC">           7 :                                                 Name:   call.Name,</span></span>
+<span id="L352"><span class="lineNum">     352</span>                 :<span class="tlaGNC">           7 :                                                 Args:   argSummary(call.Arguments),</span></span>
+<span id="L353"><span class="lineNum">     353</span>                 :<span class="tlaGNC">           7 :                                                 S:      st.node.S,</span></span>
+<span id="L354"><span class="lineNum">     354</span>                 :<span class="tlaGNC">           7 :                                                 CallID: call.ID.String(),</span></span>
+<span id="L355"><span class="lineNum">     355</span>                 :<span class="tlaGNC">           7 :                                                 V:      &quot;pending&quot;,</span></span>
+<span id="L356"><span class="lineNum">     356</span>                 :<span class="tlaGNC">           7 :                                         }</span></span>
+<span id="L357"><span class="lineNum">     357</span>                 :<span class="tlaGNC">           7 :                                         if len(call.Arguments) &gt; 0 {</span></span>
+<span id="L358"><span class="lineNum">     358</span>                 :<span class="tlaGNC">           7 :                                                 tool.ArgsFull = toolkit.Ellipsize(flattenWs(string(call.Arguments)), mazeArgsDetailChars)</span></span>
+<span id="L359"><span class="lineNum">     359</span>                 :<span class="tlaGNC">           7 :                                         }</span></span>
+<span id="L360"><span class="lineNum">     360</span>                 :<span class="tlaGNC">           7 :                                         st.tools[call.ID] = tool</span></span>
+<span id="L361"><span class="lineNum">     361</span>                 :<span class="tlaGNC">           7 :                                         st.toolOrder = append(st.toolOrder, call.ID)</span></span>
+<span id="L362"><span class="lineNum">     362</span>                 :<span class="tlaGNC">           7 :                                         byCall[call.ID] = tool</span></span>
+<span id="L363"><span class="lineNum">     363</span>                 :             :                                 }</span>
+<span id="L364"><span class="lineNum">     364</span>                 :             :                         }</span>
+<span id="L365"><span class="lineNum">     365</span>                 :<span class="tlaGNC">          12 :                         st.node.RzTxt = toolkit.Ellipsize(flattenWs(rzTxt), mazeReasoningExcerpt)</span></span>
+<span id="L366"><span class="lineNum">     366</span>                 :<span class="tlaGNC">          12 :                         if u := p.Usage; u != nil {</span></span>
+<span id="L367"><span class="lineNum">     367</span>                 :<span class="tlaGNC">          12 :                                 st.node.InTok = &amp;u.InputTokens</span></span>
+<span id="L368"><span class="lineNum">     368</span>                 :<span class="tlaGNC">          12 :                                 st.node.OutTok = &amp;u.OutputTokens</span></span>
+<span id="L369"><span class="lineNum">     369</span>                 :<span class="tlaGNC">          12 :                                 if u.ReasoningTokens &gt; 0 {</span></span>
+<span id="L370"><span class="lineNum">     370</span>                 :<span class="tlaGNC">          10 :                                         st.node.RzTok = &amp;u.ReasoningTokens</span></span>
+<span id="L371"><span class="lineNum">     371</span>                 :<span class="tlaGNC">          10 :                                 }</span></span>
+<span id="L372"><span class="lineNum">     372</span>                 :             :                         }</span>
+<span id="L373"><span class="lineNum">     373</span>                 :<span class="tlaGNC">           1 :                 case domain.EventModelRequestFailed:</span></span>
+<span id="L374"><span class="lineNum">     374</span>                 :<span class="tlaGNC">           1 :                         var p mazeRequestFailedDTO</span></span>
+<span id="L375"><span class="lineNum">     375</span>                 :<span class="tlaGNC">           1 :                         if err := json.Unmarshal(evt.Payload, &amp;p); err != nil {</span></span>
+<span id="L376"><span class="lineNum">     376</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 continue</span></span>
+<span id="L377"><span class="lineNum">     377</span>                 :             :                         }</span>
+<span id="L378"><span class="lineNum">     378</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                         if st := byRequest[p.RequestID]; st != nil {</span></span>
+<span id="L379"><span class="lineNum">     379</span>                 :<span class="tlaGNC">           1 :                                 st.failed = true</span></span>
+<span id="L380"><span class="lineNum">     380</span>                 :<span class="tlaGNC">           1 :                                 st.answered = true</span></span>
+<span id="L381"><span class="lineNum">     381</span>                 :<span class="tlaGNC">           1 :                                 st.node.E = clk.rel(evt.Timestamp)</span></span>
+<span id="L382"><span class="lineNum">     382</span>                 :<span class="tlaGNC">           1 :                                 st.node.Why = &quot;模型请求失败（&quot; + p.Stage + &quot;）: &quot; + p.Message</span></span>
+<span id="L383"><span class="lineNum">     383</span>                 :<span class="tlaGNC">           1 :                         }</span></span>
+<span id="L384"><span class="lineNum">     384</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 case domain.EventModelRequestRetrying:</span></span>
+<span id="L385"><span class="lineNum">     385</span>                 :<span class="tlaUNC">           0 :                         var p mazeRequestFailedDTO // first fields share the same shape</span></span>
+<span id="L386"><span class="lineNum">     386</span>                 :<span class="tlaUNC">           0 :                         if err := json.Unmarshal(evt.Payload, &amp;p); err != nil {</span></span>
+<span id="L387"><span class="lineNum">     387</span>                 :<span class="tlaUNC">           0 :                                 continue</span></span>
+<span id="L388"><span class="lineNum">     388</span>                 :             :                         }</span>
+<span id="L389"><span class="lineNum">     389</span>                 :<span class="tlaUNC">           0 :                         if st := byRequest[p.RequestID]; st != nil {</span></span>
+<span id="L390"><span class="lineNum">     390</span>                 :<span class="tlaUNC">           0 :                                 st.node.Retries++</span></span>
+<span id="L391"><span class="lineNum">     391</span>                 :<span class="tlaUNC">           0 :                         }</span></span>
+<span id="L392"><span class="lineNum">     392</span>                 :<span class="tlaUNC">           0 :                 case domain.EventToolExecutionStarted:</span></span>
+<span id="L393"><span class="lineNum">     393</span>                 :<span class="tlaUNC">           0 :                         var p mazeExecStartedDTO</span></span>
+<span id="L394"><span class="lineNum">     394</span>                 :<span class="tlaUNC">           0 :                         if err := json.Unmarshal(evt.Payload, &amp;p); err != nil {</span></span>
+<span id="L395"><span class="lineNum">     395</span>                 :<span class="tlaUNC">           0 :                                 continue</span></span>
+<span id="L396"><span class="lineNum">     396</span>                 :             :                         }</span>
+<span id="L397"><span class="lineNum">     397</span>                 :<span class="tlaUNC">           0 :                         if t := byCall[p.CallID]; t != nil {</span></span>
+<span id="L398"><span class="lineNum">     398</span>                 :<span class="tlaUNC">           0 :                                 t.S = clk.rel(evt.Timestamp)</span></span>
+<span id="L399"><span class="lineNum">     399</span>                 :<span class="tlaUNC">           0 :                         }</span></span>
+<span id="L400"><span class="lineNum">     400</span>                 :<span class="tlaUNC">           0 :                 case domain.EventToolExecutionCompleted:</span></span>
+<span id="L401"><span class="lineNum">     401</span>                 :<span class="tlaUNC">           0 :                         var p mazeExecCompletedDTO</span></span>
+<span id="L402"><span class="lineNum">     402</span>                 :<span class="tlaUNC">           0 :                         if err := json.Unmarshal(evt.Payload, &amp;p); err != nil {</span></span>
+<span id="L403"><span class="lineNum">     403</span>                 :<span class="tlaUNC">           0 :                                 continue</span></span>
+<span id="L404"><span class="lineNum">     404</span>                 :             :                         }</span>
+<span id="L405"><span class="lineNum">     405</span>                 :<span class="tlaUNC">           0 :                         t := byCall[p.CallID]</span></span>
+<span id="L406"><span class="lineNum">     406</span>                 :<span class="tlaUNC">           0 :                         if t == nil {</span></span>
+<span id="L407"><span class="lineNum">     407</span>                 :<span class="tlaUNC">           0 :                                 continue</span></span>
+<span id="L408"><span class="lineNum">     408</span>                 :             :                         }</span>
+<span id="L409"><span class="lineNum">     409</span>                 :<span class="tlaUNC">           0 :                         t.Status = string(p.Status)</span></span>
+<span id="L410"><span class="lineNum">     410</span>                 :<span class="tlaUNC">           0 :                         if !p.StartedAt.IsZero() {</span></span>
+<span id="L411"><span class="lineNum">     411</span>                 :<span class="tlaUNC">           0 :                                 t.S = clk.rel(p.StartedAt)</span></span>
+<span id="L412"><span class="lineNum">     412</span>                 :<span class="tlaUNC">           0 :                         }</span></span>
+<span id="L413"><span class="lineNum">     413</span>                 :<span class="tlaUNC">           0 :                         e := clk.rel(evt.Timestamp)</span></span>
+<span id="L414"><span class="lineNum">     414</span>                 :<span class="tlaUNC">           0 :                         if !p.FinishedAt.IsZero() {</span></span>
+<span id="L415"><span class="lineNum">     415</span>                 :<span class="tlaUNC">           0 :                                 e = clk.rel(p.FinishedAt)</span></span>
+<span id="L416"><span class="lineNum">     416</span>                 :<span class="tlaUNC">           0 :                         }</span></span>
+<span id="L417"><span class="lineNum">     417</span>                 :<span class="tlaUNC">           0 :                         t.E = &amp;e</span></span>
+<span id="L418"><span class="lineNum">     418</span>                 :<span class="tlaUNC">           0 :                         if p.Status == domain.ToolStatusError &amp;&amp; p.ErrorMessage != &quot;&quot; {</span></span>
+<span id="L419"><span class="lineNum">     419</span>                 :<span class="tlaUNC">           0 :                                 t.Why = p.ErrorMessage</span></span>
+<span id="L420"><span class="lineNum">     420</span>                 :<span class="tlaUNC">           0 :                         }</span></span>
+<span id="L421"><span class="lineNum">     421</span>                 :<span class="tlaGNC tlaBgGNC">           7 :                 case domain.EventToolResultAdded:</span></span>
+<span id="L422"><span class="lineNum">     422</span>                 :<span class="tlaGNC">           7 :                         var p domain.MessageEventPayload</span></span>
+<span id="L423"><span class="lineNum">     423</span>                 :<span class="tlaGNC">           7 :                         if err := json.Unmarshal(evt.Payload, &amp;p); err != nil {</span></span>
+<span id="L424"><span class="lineNum">     424</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 continue</span></span>
+<span id="L425"><span class="lineNum">     425</span>                 :             :                         }</span>
+<span id="L426"><span class="lineNum">     426</span>                 :<span class="tlaGNC tlaBgGNC">           7 :                         for _, part := range p.Message.Parts {</span></span>
+<span id="L427"><span class="lineNum">     427</span>                 :<span class="tlaGNC">           7 :                                 if part.Kind != domain.PartToolResult || part.ToolResult == nil {</span></span>
+<span id="L428"><span class="lineNum">     428</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                         continue</span></span>
+<span id="L429"><span class="lineNum">     429</span>                 :             :                                 }</span>
+<span id="L430"><span class="lineNum">     430</span>                 :<span class="tlaGNC tlaBgGNC">           7 :                                 res := part.ToolResult</span></span>
+<span id="L431"><span class="lineNum">     431</span>                 :<span class="tlaGNC">           7 :                                 t := byCall[res.CallID]</span></span>
+<span id="L432"><span class="lineNum">     432</span>                 :<span class="tlaGNC">           7 :                                 if t == nil {</span></span>
+<span id="L433"><span class="lineNum">     433</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                         continue</span></span>
+<span id="L434"><span class="lineNum">     434</span>                 :             :                                 }</span>
+<span id="L435"><span class="lineNum">     435</span>                 :<span class="tlaGNC tlaBgGNC">           7 :                                 full := flattenWs(contentText(res.Content))</span></span>
+<span id="L436"><span class="lineNum">     436</span>                 :<span class="tlaGNC">           7 :                                 t.ResFull = toolkit.Ellipsize(full, mazeDetailResChars)</span></span>
+<span id="L437"><span class="lineNum">     437</span>                 :<span class="tlaGNC">           7 :                                 t.Res = toolkit.Ellipsize(full, mazeTooltipResChars)</span></span>
+<span id="L438"><span class="lineNum">     438</span>                 :<span class="tlaGNC">           7 :                                 t.Status = string(res.Status)</span></span>
+<span id="L439"><span class="lineNum">     439</span>                 :<span class="tlaGNC">           7 :                                 if !res.StartedAt.IsZero() {</span></span>
+<span id="L440"><span class="lineNum">     440</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                         t.S = clk.rel(res.StartedAt)</span></span>
+<span id="L441"><span class="lineNum">     441</span>                 :<span class="tlaUNC">           0 :                                 }</span></span>
+<span id="L442"><span class="lineNum">     442</span>                 :<span class="tlaGNC tlaBgGNC">           7 :                                 if !res.FinishedAt.IsZero() {</span></span>
+<span id="L443"><span class="lineNum">     443</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                         e := clk.rel(res.FinishedAt)</span></span>
+<span id="L444"><span class="lineNum">     444</span>                 :<span class="tlaUNC">           0 :                                         t.E = &amp;e</span></span>
+<span id="L445"><span class="lineNum">     445</span>                 :<span class="tlaUNC">           0 :                                 }</span></span>
+<span id="L446"><span class="lineNum">     446</span>                 :<span class="tlaGNC tlaBgGNC">           7 :                                 if res.Error != nil &amp;&amp; res.Error.Message != &quot;&quot; {</span></span>
+<span id="L447"><span class="lineNum">     447</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                         t.Why = res.Error.Message</span></span>
+<span id="L448"><span class="lineNum">     448</span>                 :<span class="tlaUNC">           0 :                                 }</span></span>
+<span id="L449"><span class="lineNum">     449</span>                 :<span class="tlaGNC tlaBgGNC">           7 :                                 if cid := res.Metadata[&quot;child_session_id&quot;]; cid != &quot;&quot; {</span></span>
+<span id="L450"><span class="lineNum">     450</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                         t.ChildID = cid</span></span>
+<span id="L451"><span class="lineNum">     451</span>                 :<span class="tlaUNC">           0 :                                 }</span></span>
+<span id="L452"><span class="lineNum">     452</span>                 :             :                                 // A landed result settles the call: StartedAt/FinishedAt are</span>
+<span id="L453"><span class="lineNum">     453</span>                 :             :                                 // the precise span; fall back to the event time (legacy logs,</span>
+<span id="L454"><span class="lineNum">     454</span>                 :             :                                 // truncated replays) so the call never stays in-flight forever.</span>
+<span id="L455"><span class="lineNum">     455</span>                 :<span class="tlaGNC tlaBgGNC">           7 :                                 if t.E == nil {</span></span>
+<span id="L456"><span class="lineNum">     456</span>                 :<span class="tlaGNC">           7 :                                         e := clk.rel(evt.Timestamp)</span></span>
+<span id="L457"><span class="lineNum">     457</span>                 :<span class="tlaGNC">           7 :                                         t.E = &amp;e</span></span>
+<span id="L458"><span class="lineNum">     458</span>                 :<span class="tlaGNC">           7 :                                 }</span></span>
+<span id="L459"><span class="lineNum">     459</span>                 :             :                         }</span>
+<span id="L460"><span class="lineNum">     460</span>                 :             :                 }</span>
+<span id="L461"><span class="lineNum">     461</span>                 :             :         }</span>
+<span id="L462"><span class="lineNum">     462</span>                 :             : </span>
+<span id="L463"><span class="lineNum">     463</span>                 :<span class="tlaGNC">          15 :         for _, st := range steps {</span></span>
+<span id="L464"><span class="lineNum">     464</span>                 :<span class="tlaGNC">          15 :                 for _, id := range st.toolOrder {</span></span>
+<span id="L465"><span class="lineNum">     465</span>                 :<span class="tlaGNC">           7 :                         st.node.Tools = append(st.node.Tools, *st.tools[id])</span></span>
+<span id="L466"><span class="lineNum">     466</span>                 :<span class="tlaGNC">           7 :                 }</span></span>
+<span id="L467"><span class="lineNum">     467</span>                 :<span class="tlaGNC">          15 :                 if st.node.Tools == nil {</span></span>
+<span id="L468"><span class="lineNum">     468</span>                 :<span class="tlaGNC">           9 :                         st.node.Tools = []MazeTool{} // wire shape: [], not null</span></span>
+<span id="L469"><span class="lineNum">     469</span>                 :<span class="tlaGNC">           9 :                 }</span></span>
+<span id="L470"><span class="lineNum">     470</span>                 :<span class="tlaGNC">          15 :                 for i := range st.node.Tools {</span></span>
+<span id="L471"><span class="lineNum">     471</span>                 :<span class="tlaGNC">           7 :                         t := &amp;st.node.Tools[i]</span></span>
+<span id="L472"><span class="lineNum">     472</span>                 :<span class="tlaGNC">           7 :                         if t.E != nil {</span></span>
+<span id="L473"><span class="lineNum">     473</span>                 :<span class="tlaGNC">           7 :                                 t.Dur = float64(int((*t.E-t.S)*10+0.5)) / 10</span></span>
+<span id="L474"><span class="lineNum">     474</span>                 :<span class="tlaGNC">           7 :                                 if *t.E &gt; st.node.E {</span></span>
+<span id="L475"><span class="lineNum">     475</span>                 :<span class="tlaGNC">           7 :                                         st.node.E = *t.E</span></span>
+<span id="L476"><span class="lineNum">     476</span>                 :<span class="tlaGNC">           7 :                                 }</span></span>
+<span id="L477"><span class="lineNum">     477</span>                 :             :                         }</span>
+<span id="L478"><span class="lineNum">     478</span>                 :             :                 }</span>
+<span id="L479"><span class="lineNum">     479</span>                 :<span class="tlaGNC">          15 :                 if st.failed {</span></span>
+<span id="L480"><span class="lineNum">     480</span>                 :<span class="tlaGNC">           1 :                         st.node.V = &quot;error&quot;</span></span>
+<span id="L481"><span class="lineNum">     481</span>                 :<span class="tlaGNC">           1 :                         continue</span></span>
+<span id="L482"><span class="lineNum">     482</span>                 :             :                 }</span>
+<span id="L483"><span class="lineNum">     483</span>                 :<span class="tlaGNC">          14 :                 hasPending := false</span></span>
+<span id="L484"><span class="lineNum">     484</span>                 :<span class="tlaGNC">          14 :                 for i := range st.node.Tools {</span></span>
+<span id="L485"><span class="lineNum">     485</span>                 :<span class="tlaGNC">           7 :                         if st.node.Tools[i].E == nil {</span></span>
+<span id="L486"><span class="lineNum">     486</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 hasPending = true</span></span>
+<span id="L487"><span class="lineNum">     487</span>                 :<span class="tlaUNC">           0 :                                 break</span></span>
+<span id="L488"><span class="lineNum">     488</span>                 :             :                         }</span>
+<span id="L489"><span class="lineNum">     489</span>                 :             :                 }</span>
+<span id="L490"><span class="lineNum">     490</span>                 :             :                 // In-flight step: the request is out (no response yet) or tools are</span>
+<span id="L491"><span class="lineNum">     491</span>                 :             :                 // still executing. While the session is live, the axis extends to</span>
+<span id="L492"><span class="lineNum">     492</span>                 :             :                 // now and the step renders as a growing capsule; it does not vote.</span>
+<span id="L493"><span class="lineNum">     493</span>                 :             :                 // In a dead session the step keeps its last known end instead.</span>
+<span id="L494"><span class="lineNum">     494</span>                 :<span class="tlaGNC tlaBgGNC">          14 :                 if clk.live &amp;&amp; (!st.answered || hasPending) {</span></span>
+<span id="L495"><span class="lineNum">     495</span>                 :<span class="tlaGNC">           1 :                         st.node.Live = true</span></span>
+<span id="L496"><span class="lineNum">     496</span>                 :<span class="tlaGNC">           1 :                         st.node.V = &quot;ok&quot;</span></span>
+<span id="L497"><span class="lineNum">     497</span>                 :<span class="tlaGNC">           1 :                         st.node.E = clk.rel(clk.now)</span></span>
+<span id="L498"><span class="lineNum">     498</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L499"><span class="lineNum">     499</span>                 :             :         }</span>
+<span id="L500"><span class="lineNum">     500</span>                 :<span class="tlaGNC">          12 :         return steps</span></span>
+<span id="L501"><span class="lineNum">     501</span>                 :             : }</span>
+<span id="L502"><span class="lineNum">     502</span>                 :             : </span>
+<span id="L503"><span class="lineNum">     503</span>                 :             : // settleVerdicts computes tool verdicts (structured status first, empty-</span>
+<span id="L504"><span class="lineNum">     504</span>                 :             : // result sniffing only for successful searches), marks blind-retry</span>
+<span id="L505"><span class="lineNum">     505</span>                 :             : // clusters, then aggregates step verdicts. Steps with in-flight tools</span>
+<span id="L506"><span class="lineNum">     506</span>                 :             : // stay on the main path until their outcomes land.</span>
+<span id="L507"><span class="lineNum">     507</span>                 :<span class="tlaGNC">          12 : func settleVerdicts(steps []*mazeStep) {</span></span>
+<span id="L508"><span class="lineNum">     508</span>                 :<span class="tlaGNC">          12 :         var settled []*MazeTool</span></span>
+<span id="L509"><span class="lineNum">     509</span>                 :<span class="tlaGNC">          15 :         for _, st := range steps {</span></span>
+<span id="L510"><span class="lineNum">     510</span>                 :<span class="tlaGNC">          15 :                 for i := range st.node.Tools {</span></span>
+<span id="L511"><span class="lineNum">     511</span>                 :<span class="tlaGNC">           7 :                         t := &amp;st.node.Tools[i]</span></span>
+<span id="L512"><span class="lineNum">     512</span>                 :<span class="tlaGNC">           7 :                         if t.E == nil {</span></span>
+<span id="L513"><span class="lineNum">     513</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 continue // in-flight calls do not vote</span></span>
+<span id="L514"><span class="lineNum">     514</span>                 :             :                         }</span>
+<span id="L515"><span class="lineNum">     515</span>                 :<span class="tlaGNC tlaBgGNC">           7 :                         t.V, t.Why = toolVerdict(t)</span></span>
+<span id="L516"><span class="lineNum">     516</span>                 :<span class="tlaGNC">           7 :                         settled = append(settled, t)</span></span>
+<span id="L517"><span class="lineNum">     517</span>                 :             :                 }</span>
+<span id="L518"><span class="lineNum">     518</span>                 :             :         }</span>
+<span id="L519"><span class="lineNum">     519</span>                 :<span class="tlaGNC">          12 :         markRetryClusters(settled)</span></span>
+<span id="L520"><span class="lineNum">     520</span>                 :<span class="tlaGNC">          15 :         for _, st := range steps {</span></span>
+<span id="L521"><span class="lineNum">     521</span>                 :<span class="tlaGNC">          15 :                 if st.failed || st.node.Live {</span></span>
+<span id="L522"><span class="lineNum">     522</span>                 :<span class="tlaGNC">           2 :                         continue // failed / in-flight steps already carry their verdict</span></span>
+<span id="L523"><span class="lineNum">     523</span>                 :             :                 }</span>
+<span id="L524"><span class="lineNum">     524</span>                 :<span class="tlaGNC">          13 :                 if !st.answered {</span></span>
+<span id="L525"><span class="lineNum">     525</span>                 :<span class="tlaGNC">           1 :                         // Dead session, response never landed: neutral pending — never</span></span>
+<span id="L526"><span class="lineNum">     526</span>                 :<span class="tlaGNC">           1 :                         // mislabel it as an answer node.</span></span>
+<span id="L527"><span class="lineNum">     527</span>                 :<span class="tlaGNC">           1 :                         st.node.V = &quot;pending&quot;</span></span>
+<span id="L528"><span class="lineNum">     528</span>                 :<span class="tlaGNC">           1 :                         st.node.Why = &quot;响应未到达（会话已中断）&quot;</span></span>
+<span id="L529"><span class="lineNum">     529</span>                 :<span class="tlaGNC">           1 :                         continue</span></span>
+<span id="L530"><span class="lineNum">     530</span>                 :             :                 }</span>
+<span id="L531"><span class="lineNum">     531</span>                 :<span class="tlaGNC">          12 :                 if len(st.node.Tools) == 0 {</span></span>
+<span id="L532"><span class="lineNum">     532</span>                 :<span class="tlaGNC">           6 :                         st.node.V = &quot;answer&quot;</span></span>
+<span id="L533"><span class="lineNum">     533</span>                 :<span class="tlaGNC">           6 :                         continue</span></span>
+<span id="L534"><span class="lineNum">     534</span>                 :             :                 }</span>
+<span id="L535"><span class="lineNum">     535</span>                 :<span class="tlaGNC">           6 :                 worst := &quot;&quot;</span></span>
+<span id="L536"><span class="lineNum">     536</span>                 :<span class="tlaGNC">           6 :                 why := &quot;&quot;</span></span>
+<span id="L537"><span class="lineNum">     537</span>                 :<span class="tlaGNC">           6 :                 pending := false</span></span>
+<span id="L538"><span class="lineNum">     538</span>                 :<span class="tlaGNC">           7 :                 for i := range st.node.Tools {</span></span>
+<span id="L539"><span class="lineNum">     539</span>                 :<span class="tlaGNC">           7 :                         t := &amp;st.node.Tools[i]</span></span>
+<span id="L540"><span class="lineNum">     540</span>                 :<span class="tlaGNC">           7 :                         if t.V == &quot;pending&quot; {</span></span>
+<span id="L541"><span class="lineNum">     541</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 pending = true</span></span>
+<span id="L542"><span class="lineNum">     542</span>                 :<span class="tlaUNC">           0 :                                 continue</span></span>
+<span id="L543"><span class="lineNum">     543</span>                 :             :                         }</span>
+<span id="L544"><span class="lineNum">     544</span>                 :<span class="tlaGNC tlaBgGNC">           7 :                         if mazeSeverity(t.V) &gt; mazeSeverity(worst) {</span></span>
+<span id="L545"><span class="lineNum">     545</span>                 :<span class="tlaGNC">           6 :                                 worst, why = t.V, t.Why</span></span>
+<span id="L546"><span class="lineNum">     546</span>                 :<span class="tlaGNC">           6 :                         }</span></span>
+<span id="L547"><span class="lineNum">     547</span>                 :             :                 }</span>
+<span id="L548"><span class="lineNum">     548</span>                 :<span class="tlaGNC">           6 :                 switch {</span></span>
+<span id="L549"><span class="lineNum">     549</span>                 :<span class="tlaGNC">           6 :                 case worst != &quot;&quot;:</span></span>
+<span id="L550"><span class="lineNum">     550</span>                 :<span class="tlaGNC">           6 :                         st.node.V = worst</span></span>
+<span id="L551"><span class="lineNum">     551</span>                 :<span class="tlaGNC">           6 :                         if st.node.Why == &quot;&quot; {</span></span>
+<span id="L552"><span class="lineNum">     552</span>                 :<span class="tlaGNC">           6 :                                 st.node.Why = why</span></span>
+<span id="L553"><span class="lineNum">     553</span>                 :<span class="tlaGNC">           6 :                         }</span></span>
+<span id="L554"><span class="lineNum">     554</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 case pending:</span></span>
+<span id="L555"><span class="lineNum">     555</span>                 :<span class="tlaUNC">           0 :                         st.node.V = &quot;pending&quot;</span></span>
+<span id="L556"><span class="lineNum">     556</span>                 :             :                 }</span>
+<span id="L557"><span class="lineNum">     557</span>                 :             :         }</span>
+<span id="L558"><span class="lineNum">     558</span>                 :             : }</span>
+<span id="L559"><span class="lineNum">     559</span>                 :             : </span>
+<span id="L560"><span class="lineNum">     560</span>                 :<span class="tlaGNC tlaBgGNC">          14 : func mazeSeverity(v string) int {</span></span>
+<span id="L561"><span class="lineNum">     561</span>                 :<span class="tlaGNC">          14 :         switch v {</span></span>
+<span id="L562"><span class="lineNum">     562</span>                 :<span class="tlaGNC">           2 :         case &quot;error&quot;:</span></span>
+<span id="L563"><span class="lineNum">     563</span>                 :<span class="tlaGNC">           2 :                 return 4</span></span>
+<span id="L564"><span class="lineNum">     564</span>                 :<span class="tlaGNC">           2 :         case &quot;retry&quot;:</span></span>
+<span id="L565"><span class="lineNum">     565</span>                 :<span class="tlaGNC">           2 :                 return 3</span></span>
+<span id="L566"><span class="lineNum">     566</span>                 :<span class="tlaGNC">           2 :         case &quot;deadend&quot;:</span></span>
+<span id="L567"><span class="lineNum">     567</span>                 :<span class="tlaGNC">           2 :                 return 2</span></span>
+<span id="L568"><span class="lineNum">     568</span>                 :<span class="tlaGNC">           2 :         case &quot;ok&quot;, &quot;answer&quot;:</span></span>
+<span id="L569"><span class="lineNum">     569</span>                 :<span class="tlaGNC">           2 :                 return 1</span></span>
+<span id="L570"><span class="lineNum">     570</span>                 :             :         }</span>
+<span id="L571"><span class="lineNum">     571</span>                 :<span class="tlaGNC">           6 :         return 0</span></span>
+<span id="L572"><span class="lineNum">     572</span>                 :             : }</span>
+<span id="L573"><span class="lineNum">     573</span>                 :             : </span>
+<span id="L574"><span class="lineNum">     574</span>                 :             : // toolVerdict judges one settled tool call. The structured Status is the</span>
+<span id="L575"><span class="lineNum">     575</span>                 :             : // primary source — text sniffing only detects the &quot;succeeded but empty&quot;</span>
+<span id="L576"><span class="lineNum">     576</span>                 :             : // dead end, which keeps the false-positive surface far below dsh's</span>
+<span id="L577"><span class="lineNum">     577</span>                 :             : // head/tail-window regexes on our own corpus.</span>
+<span id="L578"><span class="lineNum">     578</span>                 :<span class="tlaGNC">           7 : func toolVerdict(t *MazeTool) (string, string) {</span></span>
+<span id="L579"><span class="lineNum">     579</span>                 :<span class="tlaGNC">           7 :         switch domain.ToolStatus(t.Status) {</span></span>
+<span id="L580"><span class="lineNum">     580</span>                 :<span class="tlaGNC">           2 :         case domain.ToolStatusError:</span></span>
+<span id="L581"><span class="lineNum">     581</span>                 :<span class="tlaGNC">           2 :                 if t.Why != &quot;&quot; {</span></span>
+<span id="L582"><span class="lineNum">     582</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return &quot;error&quot;, &quot;执行失败: &quot; + t.Why</span></span>
+<span id="L583"><span class="lineNum">     583</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L584"><span class="lineNum">     584</span>                 :<span class="tlaGNC tlaBgGNC">           2 :                 return &quot;error&quot;, &quot;执行失败&quot;</span></span>
+<span id="L585"><span class="lineNum">     585</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         case domain.ToolStatusTimeout:</span></span>
+<span id="L586"><span class="lineNum">     586</span>                 :<span class="tlaUNC">           0 :                 return &quot;error&quot;, &quot;执行超时&quot;</span></span>
+<span id="L587"><span class="lineNum">     587</span>                 :<span class="tlaUNC">           0 :         case domain.ToolStatusCancelled:</span></span>
+<span id="L588"><span class="lineNum">     588</span>                 :<span class="tlaUNC">           0 :                 // A user cancel is a deliberate action, not a failed exploration:</span></span>
+<span id="L589"><span class="lineNum">     589</span>                 :<span class="tlaUNC">           0 :                 // it never counts as a detour.</span></span>
+<span id="L590"><span class="lineNum">     590</span>                 :<span class="tlaUNC">           0 :                 return &quot;ok&quot;, &quot;已取消&quot;</span></span>
+<span id="L591"><span class="lineNum">     591</span>                 :             :         }</span>
+<span id="L592"><span class="lineNum">     592</span>                 :<span class="tlaGNC tlaBgGNC">           5 :         head := t.ResFull</span></span>
+<span id="L593"><span class="lineNum">     593</span>                 :<span class="tlaGNC">           5 :         if head == &quot;&quot; {</span></span>
+<span id="L594"><span class="lineNum">     594</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 head = t.Res</span></span>
+<span id="L595"><span class="lineNum">     595</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L596"><span class="lineNum">     596</span>                 :<span class="tlaGNC tlaBgGNC">           5 :         head = toolkit.Ellipsize(head, mazeNoResultScanChars)</span></span>
+<span id="L597"><span class="lineNum">     597</span>                 :<span class="tlaGNC">           5 :         if mazeWriteTools[t.Name] {</span></span>
+<span id="L598"><span class="lineNum">     598</span>                 :<span class="tlaGNC">           1 :                 return &quot;ok&quot;, &quot;&quot;</span></span>
+<span id="L599"><span class="lineNum">     599</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L600"><span class="lineNum">     600</span>                 :<span class="tlaGNC">           4 :         noHit := strings.TrimSpace(head) == &quot;&quot;</span></span>
+<span id="L601"><span class="lineNum">     601</span>                 :<span class="tlaGNC">           4 :         if !noHit {</span></span>
+<span id="L602"><span class="lineNum">     602</span>                 :<span class="tlaGNC">           4 :                 lower := strings.ToLower(head)</span></span>
+<span id="L603"><span class="lineNum">     603</span>                 :<span class="tlaGNC">          13 :                 for _, needle := range mazeNoResultNeedles {</span></span>
+<span id="L604"><span class="lineNum">     604</span>                 :<span class="tlaGNC">          13 :                         if strings.Contains(lower, needle) {</span></span>
+<span id="L605"><span class="lineNum">     605</span>                 :<span class="tlaGNC">           1 :                                 noHit = true</span></span>
+<span id="L606"><span class="lineNum">     606</span>                 :<span class="tlaGNC">           1 :                                 break</span></span>
+<span id="L607"><span class="lineNum">     607</span>                 :             :                         }</span>
+<span id="L608"><span class="lineNum">     608</span>                 :             :                 }</span>
+<span id="L609"><span class="lineNum">     609</span>                 :             :         }</span>
+<span id="L610"><span class="lineNum">     610</span>                 :<span class="tlaGNC">           4 :         if mazeSearchTools[t.Name] {</span></span>
+<span id="L611"><span class="lineNum">     611</span>                 :<span class="tlaGNC">           2 :                 if noHit {</span></span>
+<span id="L612"><span class="lineNum">     612</span>                 :<span class="tlaGNC">           1 :                         return &quot;deadend&quot;, &quot;检索无命中&quot;</span></span>
+<span id="L613"><span class="lineNum">     613</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L614"><span class="lineNum">     614</span>                 :<span class="tlaGNC">           1 :                 return &quot;ok&quot;, &quot;&quot;</span></span>
+<span id="L615"><span class="lineNum">     615</span>                 :             :         }</span>
+<span id="L616"><span class="lineNum">     616</span>                 :<span class="tlaGNC">           2 :         if noHit {</span></span>
+<span id="L617"><span class="lineNum">     617</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;deadend&quot;, &quot;无输出&quot;</span></span>
+<span id="L618"><span class="lineNum">     618</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L619"><span class="lineNum">     619</span>                 :<span class="tlaGNC tlaBgGNC">           2 :         return &quot;ok&quot;, &quot;&quot;</span></span>
+<span id="L620"><span class="lineNum">     620</span>                 :             : }</span>
+<span id="L621"><span class="lineNum">     621</span>                 :             : </span>
+<span id="L622"><span class="lineNum">     622</span>                 :<span class="tlaGNC">           4 : func argTokenSet(s string) map[string]struct{} {</span></span>
+<span id="L623"><span class="lineNum">     623</span>                 :<span class="tlaGNC">           4 :         out := make(map[string]struct{})</span></span>
+<span id="L624"><span class="lineNum">     624</span>                 :<span class="tlaGNC">          52 :         for _, w := range strings.FieldsFunc(s, func(r rune) bool {</span></span>
+<span id="L625"><span class="lineNum">     625</span>                 :<span class="tlaGNC">          52 :                 return !(r == '.' || r == '-' || r == '_' || r == '/' ||</span></span>
+<span id="L626"><span class="lineNum">     626</span>                 :<span class="tlaGNC">          52 :                         (r &gt;= 'a' &amp;&amp; r &lt;= 'z') || (r &gt;= 'A' &amp;&amp; r &lt;= 'Z') || (r &gt;= '0' &amp;&amp; r &lt;= '9') ||</span></span>
+<span id="L627"><span class="lineNum">     627</span>                 :<span class="tlaGNC">          52 :                         (r &gt;= 0x4e00 &amp;&amp; r &lt;= 0x9fff))</span></span>
+<span id="L628"><span class="lineNum">     628</span>                 :<span class="tlaGNC">          52 :         }) {</span></span>
+<span id="L629"><span class="lineNum">     629</span>                 :<span class="tlaGNC">          12 :                 if len([]rune(w)) &gt; 2 {</span></span>
+<span id="L630"><span class="lineNum">     630</span>                 :<span class="tlaGNC">          12 :                         out[w] = struct{}{}</span></span>
+<span id="L631"><span class="lineNum">     631</span>                 :<span class="tlaGNC">          12 :                 }</span></span>
+<span id="L632"><span class="lineNum">     632</span>                 :             :         }</span>
+<span id="L633"><span class="lineNum">     633</span>                 :<span class="tlaGNC">           4 :         return out</span></span>
+<span id="L634"><span class="lineNum">     634</span>                 :             : }</span>
+<span id="L635"><span class="lineNum">     635</span>                 :             : </span>
+<span id="L636"><span class="lineNum">     636</span>                 :<span class="tlaGNC">           2 : func argSimilarity(a, b string) float64 {</span></span>
+<span id="L637"><span class="lineNum">     637</span>                 :<span class="tlaGNC">           2 :         ta, tb := argTokenSet(a), argTokenSet(b)</span></span>
+<span id="L638"><span class="lineNum">     638</span>                 :<span class="tlaGNC">           2 :         if len(ta) == 0 || len(tb) == 0 {</span></span>
+<span id="L639"><span class="lineNum">     639</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return 0</span></span>
+<span id="L640"><span class="lineNum">     640</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L641"><span class="lineNum">     641</span>                 :<span class="tlaGNC tlaBgGNC">           2 :         inter := 0</span></span>
+<span id="L642"><span class="lineNum">     642</span>                 :<span class="tlaGNC">           6 :         for w := range ta {</span></span>
+<span id="L643"><span class="lineNum">     643</span>                 :<span class="tlaGNC">           6 :                 if _, ok := tb[w]; ok {</span></span>
+<span id="L644"><span class="lineNum">     644</span>                 :<span class="tlaGNC">           6 :                         inter++</span></span>
+<span id="L645"><span class="lineNum">     645</span>                 :<span class="tlaGNC">           6 :                 }</span></span>
+<span id="L646"><span class="lineNum">     646</span>                 :             :         }</span>
+<span id="L647"><span class="lineNum">     647</span>                 :<span class="tlaGNC">           2 :         return float64(inter) / float64(len(ta)+len(tb)-inter)</span></span>
+<span id="L648"><span class="lineNum">     648</span>                 :             : }</span>
+<span id="L649"><span class="lineNum">     649</span>                 :             : </span>
+<span id="L650"><span class="lineNum">     650</span>                 :             : // markRetryClusters is the behavioral detector: a consecutive same-tool</span>
+<span id="L651"><span class="lineNum">     651</span>                 :             : // cluster with similar arguments AND at least one failure re-marks its</span>
+<span id="L652"><span class="lineNum">     652</span>                 :             : // non-failed members as blind retries — without the failure constraint,</span>
+<span id="L653"><span class="lineNum">     653</span>                 :             : // legitimate runs like &quot;edit the same file repeatedly&quot; would be framed.</span>
+<span id="L654"><span class="lineNum">     654</span>                 :<span class="tlaGNC">          12 : func markRetryClusters(calls []*MazeTool) {</span></span>
+<span id="L655"><span class="lineNum">     655</span>                 :<span class="tlaGNC">          12 :         start := 0</span></span>
+<span id="L656"><span class="lineNum">     656</span>                 :<span class="tlaGNC">          12 :         for i := 1; i &lt;= len(calls); i++ {</span></span>
+<span id="L657"><span class="lineNum">     657</span>                 :<span class="tlaGNC">           7 :                 brk := i == len(calls) ||</span></span>
+<span id="L658"><span class="lineNum">     658</span>                 :<span class="tlaGNC">           7 :                         calls[i].Name != calls[i-1].Name ||</span></span>
+<span id="L659"><span class="lineNum">     659</span>                 :<span class="tlaGNC">           7 :                         argSimilarity(calls[i].Args, calls[i-1].Args) &lt; mazeRetrySimilarity</span></span>
+<span id="L660"><span class="lineNum">     660</span>                 :<span class="tlaGNC">           7 :                 if brk {</span></span>
+<span id="L661"><span class="lineNum">     661</span>                 :<span class="tlaGNC">           5 :                         if n := i - start; n &gt;= mazeRetryMinCluster {</span></span>
+<span id="L662"><span class="lineNum">     662</span>                 :<span class="tlaGNC">           1 :                                 cluster := calls[start:i]</span></span>
+<span id="L663"><span class="lineNum">     663</span>                 :<span class="tlaGNC">           1 :                                 fails := 0</span></span>
+<span id="L664"><span class="lineNum">     664</span>                 :<span class="tlaGNC">           3 :                                 for _, c := range cluster {</span></span>
+<span id="L665"><span class="lineNum">     665</span>                 :<span class="tlaGNC">           3 :                                         if c.V == &quot;error&quot; {</span></span>
+<span id="L666"><span class="lineNum">     666</span>                 :<span class="tlaGNC">           1 :                                                 fails++</span></span>
+<span id="L667"><span class="lineNum">     667</span>                 :<span class="tlaGNC">           1 :                                         }</span></span>
+<span id="L668"><span class="lineNum">     668</span>                 :             :                                 }</span>
+<span id="L669"><span class="lineNum">     669</span>                 :<span class="tlaGNC">           1 :                                 if fails &gt; 0 {</span></span>
+<span id="L670"><span class="lineNum">     670</span>                 :<span class="tlaGNC">           3 :                                         for _, c := range cluster {</span></span>
+<span id="L671"><span class="lineNum">     671</span>                 :<span class="tlaGNC">           3 :                                                 if c.V != &quot;error&quot; {</span></span>
+<span id="L672"><span class="lineNum">     672</span>                 :<span class="tlaGNC">           2 :                                                         c.V = &quot;retry&quot;</span></span>
+<span id="L673"><span class="lineNum">     673</span>                 :<span class="tlaGNC">           2 :                                                         c.Why = &quot;同一操作连续重试，簇内有失败，判为盲目重试&quot;</span></span>
+<span id="L674"><span class="lineNum">     674</span>                 :<span class="tlaGNC">           2 :                                                 }</span></span>
+<span id="L675"><span class="lineNum">     675</span>                 :             :                                         }</span>
+<span id="L676"><span class="lineNum">     676</span>                 :             :                                 }</span>
+<span id="L677"><span class="lineNum">     677</span>                 :             :                         }</span>
+<span id="L678"><span class="lineNum">     678</span>                 :<span class="tlaGNC">           5 :                         start = i</span></span>
+<span id="L679"><span class="lineNum">     679</span>                 :             :                 }</span>
+<span id="L680"><span class="lineNum">     680</span>                 :             :         }</span>
+<span id="L681"><span class="lineNum">     681</span>                 :             : }</span>
+<span id="L682"><span class="lineNum">     682</span>                 :             : </span>
+<span id="L683"><span class="lineNum">     683</span>                 :             : // buildLane scans events into a partitioned lane. children fold in as</span>
+<span id="L684"><span class="lineNum">     684</span>                 :             : // aggregated detour nodes on the same clock.</span>
+<span id="L685"><span class="lineNum">     685</span>                 :<span class="tlaGNC">          11 : func buildLane(key string, sessionID domain.SessionID, title string, events []domain.Event, children []mazeChild, clk mazeClock) MazeLane {</span></span>
+<span id="L686"><span class="lineNum">     686</span>                 :<span class="tlaGNC">          11 :         steps := scanSteps(events, clk)</span></span>
+<span id="L687"><span class="lineNum">     687</span>                 :<span class="tlaGNC">          11 :         settleVerdicts(steps)</span></span>
+<span id="L688"><span class="lineNum">     688</span>                 :<span class="tlaGNC">          11 : </span></span>
+<span id="L689"><span class="lineNum">     689</span>                 :<span class="tlaGNC">          11 :         model := &quot;&quot;</span></span>
+<span id="L690"><span class="lineNum">     690</span>                 :<span class="tlaGNC">          55 :         for _, evt := range events {</span></span>
+<span id="L691"><span class="lineNum">     691</span>                 :<span class="tlaGNC">          55 :                 if evt.Type == domain.EventModelRequestStarted {</span></span>
+<span id="L692"><span class="lineNum">     692</span>                 :<span class="tlaGNC">          14 :                         var p mazeRequestStartedDTO</span></span>
+<span id="L693"><span class="lineNum">     693</span>                 :<span class="tlaGNC">          14 :                         if json.Unmarshal(evt.Payload, &amp;p) == nil &amp;&amp; p.ModelName != &quot;&quot; {</span></span>
+<span id="L694"><span class="lineNum">     694</span>                 :<span class="tlaGNC">          14 :                                 model = p.ModelName</span></span>
+<span id="L695"><span class="lineNum">     695</span>                 :<span class="tlaGNC">          14 :                         }</span></span>
+<span id="L696"><span class="lineNum">     696</span>                 :             :                 }</span>
+<span id="L697"><span class="lineNum">     697</span>                 :             :         }</span>
+<span id="L698"><span class="lineNum">     698</span>                 :             : </span>
+<span id="L699"><span class="lineNum">     699</span>                 :             :         // Partition first: sub-agent detours anchor against the complete main</span>
+<span id="L700"><span class="lineNum">     700</span>                 :             :         // path. Both slices start non-nil so the wire shape is always an array,</span>
+<span id="L701"><span class="lineNum">     701</span>                 :             :         // never null.</span>
+<span id="L702"><span class="lineNum">     702</span>                 :<span class="tlaGNC">          11 :         main := []MazeNode{}</span></span>
+<span id="L703"><span class="lineNum">     703</span>                 :<span class="tlaGNC">          11 :         detours := []MazeNode{}</span></span>
+<span id="L704"><span class="lineNum">     704</span>                 :<span class="tlaGNC">          11 :         lastMain := 0</span></span>
+<span id="L705"><span class="lineNum">     705</span>                 :<span class="tlaGNC">          11 :         tmax := 0.1</span></span>
+<span id="L706"><span class="lineNum">     706</span>                 :<span class="tlaGNC">          11 :         stats := MazeStats{}</span></span>
+<span id="L707"><span class="lineNum">     707</span>                 :<span class="tlaGNC">          14 :         for _, st := range steps {</span></span>
+<span id="L708"><span class="lineNum">     708</span>                 :<span class="tlaGNC">          14 :                 n := st.node</span></span>
+<span id="L709"><span class="lineNum">     709</span>                 :<span class="tlaGNC">          14 :                 if n.E &gt; tmax {</span></span>
+<span id="L710"><span class="lineNum">     710</span>                 :<span class="tlaGNC">          12 :                         tmax = n.E</span></span>
+<span id="L711"><span class="lineNum">     711</span>                 :<span class="tlaGNC">          12 :                 }</span></span>
+<span id="L712"><span class="lineNum">     712</span>                 :<span class="tlaGNC">          14 :                 stats.Steps++</span></span>
+<span id="L713"><span class="lineNum">     713</span>                 :<span class="tlaGNC">          14 :                 stats.Tools += len(n.Tools)</span></span>
+<span id="L714"><span class="lineNum">     714</span>                 :<span class="tlaGNC">          14 :                 stats.Rz += n.Rz</span></span>
+<span id="L715"><span class="lineNum">     715</span>                 :<span class="tlaGNC">          14 :                 stats.RzMs += n.RzMs</span></span>
+<span id="L716"><span class="lineNum">     716</span>                 :<span class="tlaGNC">          14 :                 if n.InTok != nil {</span></span>
+<span id="L717"><span class="lineNum">     717</span>                 :<span class="tlaGNC">          11 :                         stats.InTok += *n.InTok</span></span>
+<span id="L718"><span class="lineNum">     718</span>                 :<span class="tlaGNC">          11 :                 }</span></span>
+<span id="L719"><span class="lineNum">     719</span>                 :<span class="tlaGNC">          14 :                 if n.RzTok != nil {</span></span>
+<span id="L720"><span class="lineNum">     720</span>                 :<span class="tlaGNC">           9 :                         stats.RzTok += *n.RzTok</span></span>
+<span id="L721"><span class="lineNum">     721</span>                 :<span class="tlaGNC">           9 :                 }</span></span>
+<span id="L722"><span class="lineNum">     722</span>                 :<span class="tlaGNC">          14 :                 if n.OutTok != nil {</span></span>
+<span id="L723"><span class="lineNum">     723</span>                 :<span class="tlaGNC">          11 :                         stats.OutTok += *n.OutTok</span></span>
+<span id="L724"><span class="lineNum">     724</span>                 :<span class="tlaGNC">          11 :                 }</span></span>
+<span id="L725"><span class="lineNum">     725</span>                 :<span class="tlaGNC">          14 :                 if n.V == &quot;ok&quot; || n.V == &quot;answer&quot; || n.V == &quot;pending&quot; || n.Live {</span></span>
+<span id="L726"><span class="lineNum">     726</span>                 :<span class="tlaGNC">           8 :                         main = append(main, n)</span></span>
+<span id="L727"><span class="lineNum">     727</span>                 :<span class="tlaGNC">           8 :                         lastMain = n.Step</span></span>
+<span id="L728"><span class="lineNum">     728</span>                 :<span class="tlaGNC">           8 :                 } else {</span></span>
+<span id="L729"><span class="lineNum">     729</span>                 :<span class="tlaGNC">           6 :                         n.Attach = lastMain</span></span>
+<span id="L730"><span class="lineNum">     730</span>                 :<span class="tlaGNC">           6 :                         detours = append(detours, n)</span></span>
+<span id="L731"><span class="lineNum">     731</span>                 :<span class="tlaGNC">           6 :                 }</span></span>
+<span id="L732"><span class="lineNum">     732</span>                 :             :         }</span>
+<span id="L733"><span class="lineNum">     733</span>                 :             : </span>
+<span id="L734"><span class="lineNum">     734</span>                 :             :         // Sub-agent detours hang off the step that spawned them (the nearest</span>
+<span id="L735"><span class="lineNum">     735</span>                 :             :         // main step by time).</span>
+<span id="L736"><span class="lineNum">     736</span>                 :<span class="tlaGNC">          11 :         childEnd := 0.0</span></span>
+<span id="L737"><span class="lineNum">     737</span>                 :<span class="tlaGNC">          11 :         for i, child := range children {</span></span>
+<span id="L738"><span class="lineNum">     738</span>                 :<span class="tlaGNC">           1 :                 node := childDetourNode(child, i, clk)</span></span>
+<span id="L739"><span class="lineNum">     739</span>                 :<span class="tlaGNC">           1 :                 if node == nil {</span></span>
+<span id="L740"><span class="lineNum">     740</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         continue</span></span>
+<span id="L741"><span class="lineNum">     741</span>                 :             :                 }</span>
+<span id="L742"><span class="lineNum">     742</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                 attach := 0</span></span>
+<span id="L743"><span class="lineNum">     743</span>                 :<span class="tlaGNC">           1 :                 turn := 1</span></span>
+<span id="L744"><span class="lineNum">     744</span>                 :<span class="tlaGNC">           1 :                 for _, m := range main {</span></span>
+<span id="L745"><span class="lineNum">     745</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         if m.S &lt;= node.S {</span></span>
+<span id="L746"><span class="lineNum">     746</span>                 :<span class="tlaUNC">           0 :                                 attach, turn = m.Step, m.Turn</span></span>
+<span id="L747"><span class="lineNum">     747</span>                 :<span class="tlaUNC">           0 :                         } else {</span></span>
+<span id="L748"><span class="lineNum">     748</span>                 :<span class="tlaUNC">           0 :                                 break</span></span>
+<span id="L749"><span class="lineNum">     749</span>                 :             :                         }</span>
+<span id="L750"><span class="lineNum">     750</span>                 :             :                 }</span>
+<span id="L751"><span class="lineNum">     751</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                 node.Attach = attach</span></span>
+<span id="L752"><span class="lineNum">     752</span>                 :<span class="tlaGNC">           1 :                 node.Turn = turn</span></span>
+<span id="L753"><span class="lineNum">     753</span>                 :<span class="tlaGNC">           1 :                 detours = append(detours, *node)</span></span>
+<span id="L754"><span class="lineNum">     754</span>                 :<span class="tlaGNC">           1 :                 if node.E &gt; childEnd {</span></span>
+<span id="L755"><span class="lineNum">     755</span>                 :<span class="tlaGNC">           1 :                         childEnd = node.E</span></span>
+<span id="L756"><span class="lineNum">     756</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L757"><span class="lineNum">     757</span>                 :             :         }</span>
+<span id="L758"><span class="lineNum">     758</span>                 :<span class="tlaGNC">          11 :         if childEnd &gt; tmax {</span></span>
+<span id="L759"><span class="lineNum">     759</span>                 :<span class="tlaGNC">           1 :                 tmax = childEnd</span></span>
+<span id="L760"><span class="lineNum">     760</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L761"><span class="lineNum">     761</span>                 :<span class="tlaGNC">          11 :         stats.T = tmax</span></span>
+<span id="L762"><span class="lineNum">     762</span>                 :<span class="tlaGNC">          11 :         stats.Main = len(main)</span></span>
+<span id="L763"><span class="lineNum">     763</span>                 :<span class="tlaGNC">          11 :         stats.Detours = len(detours)</span></span>
+<span id="L764"><span class="lineNum">     764</span>                 :<span class="tlaGNC">          11 : </span></span>
+<span id="L765"><span class="lineNum">     765</span>                 :<span class="tlaGNC">          11 :         // Keep detours in chronological order when sub-agent branches mix with</span></span>
+<span id="L766"><span class="lineNum">     766</span>                 :<span class="tlaGNC">          11 :         // plain ones.</span></span>
+<span id="L767"><span class="lineNum">     767</span>                 :<span class="tlaGNC">          11 :         sort.SliceStable(detours, func(i, j int) bool { return detours[i].S &lt; detours[j].S })</span></span>
+<span id="L768"><span class="lineNum">     768</span>                 :             : </span>
+<span id="L769"><span class="lineNum">     769</span>                 :<span class="tlaGNC">          11 :         return MazeLane{</span></span>
+<span id="L770"><span class="lineNum">     770</span>                 :<span class="tlaGNC">          11 :                 Key: key, SessionID: sessionID.String(), Title: title, Model: model,</span></span>
+<span id="L771"><span class="lineNum">     771</span>                 :<span class="tlaGNC">          11 :                 Main: main, Detours: detours, Stats: stats,</span></span>
+<span id="L772"><span class="lineNum">     772</span>                 :<span class="tlaGNC">          11 :         }</span></span>
+<span id="L773"><span class="lineNum">     773</span>                 :             : }</span>
+<span id="L774"><span class="lineNum">     774</span>                 :             : </span>
+<span id="L775"><span class="lineNum">     775</span>                 :             : // childDetourNode aggregates one sub-agent session into a single detour</span>
+<span id="L776"><span class="lineNum">     776</span>                 :             : // node: span = child activity span, sub-bars = its judged tool calls.</span>
+<span id="L777"><span class="lineNum">     777</span>                 :<span class="tlaGNC">           1 : func childDetourNode(child mazeChild, index int, clk mazeClock) *MazeNode {</span></span>
+<span id="L778"><span class="lineNum">     778</span>                 :<span class="tlaGNC">           1 :         steps := scanSteps(child.Events, mazeClock{anchor: clk.anchor, now: clk.now, live: child.Running})</span></span>
+<span id="L779"><span class="lineNum">     779</span>                 :<span class="tlaGNC">           1 :         settleVerdicts(steps)</span></span>
+<span id="L780"><span class="lineNum">     780</span>                 :<span class="tlaGNC">           1 :         if len(steps) == 0 {</span></span>
+<span id="L781"><span class="lineNum">     781</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil</span></span>
+<span id="L782"><span class="lineNum">     782</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L783"><span class="lineNum">     783</span>                 :<span class="tlaGNC tlaBgGNC">           1 :         node := &amp;MazeNode{</span></span>
+<span id="L784"><span class="lineNum">     784</span>                 :<span class="tlaGNC">           1 :                 Step:  mazeChildStepBase + index,</span></span>
+<span id="L785"><span class="lineNum">     785</span>                 :<span class="tlaGNC">           1 :                 Sub:   true,</span></span>
+<span id="L786"><span class="lineNum">     786</span>                 :<span class="tlaGNC">           1 :                 Label: child.Label,</span></span>
+<span id="L787"><span class="lineNum">     787</span>                 :<span class="tlaGNC">           1 :                 S:     steps[0].node.S,</span></span>
+<span id="L788"><span class="lineNum">     788</span>                 :<span class="tlaGNC">           1 :                 Live:  child.Running,</span></span>
+<span id="L789"><span class="lineNum">     789</span>                 :<span class="tlaGNC">           1 :                 Tools: []MazeTool{},</span></span>
+<span id="L790"><span class="lineNum">     790</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L791"><span class="lineNum">     791</span>                 :<span class="tlaGNC">           1 :         var settledErr bool</span></span>
+<span id="L792"><span class="lineNum">     792</span>                 :<span class="tlaGNC">           1 :         rzTokSum, outTokSum, inTokSum := int64(0), int64(0), int64(0)</span></span>
+<span id="L793"><span class="lineNum">     793</span>                 :<span class="tlaGNC">           1 :         hasTok := false</span></span>
+<span id="L794"><span class="lineNum">     794</span>                 :<span class="tlaGNC">           1 :         var rzTxt string</span></span>
+<span id="L795"><span class="lineNum">     795</span>                 :<span class="tlaGNC">           1 :         for _, st := range steps {</span></span>
+<span id="L796"><span class="lineNum">     796</span>                 :<span class="tlaGNC">           1 :                 n := st.node</span></span>
+<span id="L797"><span class="lineNum">     797</span>                 :<span class="tlaGNC">           1 :                 if n.E &gt; node.E {</span></span>
+<span id="L798"><span class="lineNum">     798</span>                 :<span class="tlaGNC">           1 :                         node.E = n.E</span></span>
+<span id="L799"><span class="lineNum">     799</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L800"><span class="lineNum">     800</span>                 :<span class="tlaGNC">           1 :                 node.Rz += n.Rz</span></span>
+<span id="L801"><span class="lineNum">     801</span>                 :<span class="tlaGNC">           1 :                 node.RzMs += n.RzMs</span></span>
+<span id="L802"><span class="lineNum">     802</span>                 :<span class="tlaGNC">           1 :                 rzTxt += n.RzTxt + &quot; &quot;</span></span>
+<span id="L803"><span class="lineNum">     803</span>                 :<span class="tlaGNC">           1 :                 node.Tools = append(node.Tools, n.Tools...)</span></span>
+<span id="L804"><span class="lineNum">     804</span>                 :<span class="tlaGNC">           1 :                 if n.InTok != nil {</span></span>
+<span id="L805"><span class="lineNum">     805</span>                 :<span class="tlaGNC">           1 :                         inTokSum += *n.InTok</span></span>
+<span id="L806"><span class="lineNum">     806</span>                 :<span class="tlaGNC">           1 :                         hasTok = true</span></span>
+<span id="L807"><span class="lineNum">     807</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L808"><span class="lineNum">     808</span>                 :<span class="tlaGNC">           1 :                 if n.RzTok != nil {</span></span>
+<span id="L809"><span class="lineNum">     809</span>                 :<span class="tlaGNC">           1 :                         rzTokSum += *n.RzTok</span></span>
+<span id="L810"><span class="lineNum">     810</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L811"><span class="lineNum">     811</span>                 :<span class="tlaGNC">           1 :                 if n.OutTok != nil {</span></span>
+<span id="L812"><span class="lineNum">     812</span>                 :<span class="tlaGNC">           1 :                         outTokSum += *n.OutTok</span></span>
+<span id="L813"><span class="lineNum">     813</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L814"><span class="lineNum">     814</span>                 :<span class="tlaGNC">           1 :                 if n.V == &quot;error&quot; {</span></span>
+<span id="L815"><span class="lineNum">     815</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         settledErr = true</span></span>
+<span id="L816"><span class="lineNum">     816</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L817"><span class="lineNum">     817</span>                 :             :         }</span>
+<span id="L818"><span class="lineNum">     818</span>                 :<span class="tlaGNC tlaBgGNC">           1 :         node.RzTxt = toolkit.Ellipsize(flattenWs(rzTxt), mazeReasoningExcerpt)</span></span>
+<span id="L819"><span class="lineNum">     819</span>                 :<span class="tlaGNC">           1 :         if hasTok {</span></span>
+<span id="L820"><span class="lineNum">     820</span>                 :<span class="tlaGNC">           1 :                 node.InTok = &amp;inTokSum</span></span>
+<span id="L821"><span class="lineNum">     821</span>                 :<span class="tlaGNC">           1 :                 node.OutTok = &amp;outTokSum</span></span>
+<span id="L822"><span class="lineNum">     822</span>                 :<span class="tlaGNC">           1 :                 if rzTokSum &gt; 0 {</span></span>
+<span id="L823"><span class="lineNum">     823</span>                 :<span class="tlaGNC">           1 :                         node.RzTok = &amp;rzTokSum</span></span>
+<span id="L824"><span class="lineNum">     824</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L825"><span class="lineNum">     825</span>                 :             :         }</span>
+<span id="L826"><span class="lineNum">     826</span>                 :<span class="tlaGNC">           1 :         switch {</span></span>
+<span id="L827"><span class="lineNum">     827</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         case child.Running:</span></span>
+<span id="L828"><span class="lineNum">     828</span>                 :<span class="tlaUNC">           0 :                 node.V = &quot;ok&quot;</span></span>
+<span id="L829"><span class="lineNum">     829</span>                 :<span class="tlaUNC">           0 :                 node.Why = &quot;子代理仍在运行&quot;</span></span>
+<span id="L830"><span class="lineNum">     830</span>                 :<span class="tlaUNC">           0 :         case settledErr:</span></span>
+<span id="L831"><span class="lineNum">     831</span>                 :<span class="tlaUNC">           0 :                 node.V = &quot;error&quot;</span></span>
+<span id="L832"><span class="lineNum">     832</span>                 :<span class="tlaUNC">           0 :                 node.Why = &quot;子代理支路含失败步骤&quot;</span></span>
+<span id="L833"><span class="lineNum">     833</span>                 :<span class="tlaGNC tlaBgGNC">           1 :         default:</span></span>
+<span id="L834"><span class="lineNum">     834</span>                 :<span class="tlaGNC">           1 :                 node.V = &quot;ok&quot;</span></span>
+<span id="L835"><span class="lineNum">     835</span>                 :<span class="tlaGNC">           1 :                 node.Why = &quot;子代理任务已完成，结果汇回主干&quot;</span></span>
+<span id="L836"><span class="lineNum">     836</span>                 :             :         }</span>
+<span id="L837"><span class="lineNum">     837</span>                 :<span class="tlaGNC">           1 :         return node</span></span>
+<span id="L838"><span class="lineNum">     838</span>                 :             : }</span>
+<span id="L839"><span class="lineNum">     839</span>                 :             : </span>
+<span id="L840"><span class="lineNum">     840</span>                 :             : // BuildMaze converts one session's event log into maze data. children are</span>
+<span id="L841"><span class="lineNum">     841</span>                 :             : // the session's resolved sub-agent child sessions (may be empty). running</span>
+<span id="L842"><span class="lineNum">     842</span>                 :             : // reports whether the session is actively executing in-process (it gates</span>
+<span id="L843"><span class="lineNum">     843</span>                 :             : // in-flight extension to now). A session with no activity yields one</span>
+<span id="L844"><span class="lineNum">     844</span>                 :             : // zero-stats lane so the wire shape stays stable.</span>
+<span id="L845"><span class="lineNum">     845</span>                 :             : //</span>
+<span id="L846"><span class="lineNum">     846</span>                 :             : // Wire contract: Main/Detours/Tools always serialize as JSON arrays, never</span>
+<span id="L847"><span class="lineNum">     847</span>                 :             : // null — the frontend iterates them without nil guards.</span>
+<span id="L848"><span class="lineNum">     848</span>                 :<span class="tlaGNC">          12 : func BuildMaze(sessionID domain.SessionID, title string, events []domain.Event, children []mazeChild, now time.Time, running bool) *MazeData {</span></span>
+<span id="L849"><span class="lineNum">     849</span>                 :<span class="tlaGNC">          12 :         if len(events) == 0 {</span></span>
+<span id="L850"><span class="lineNum">     850</span>                 :<span class="tlaGNC">           1 :                 return &amp;MazeData{Tmax: 60, Lanes: []MazeLane{{</span></span>
+<span id="L851"><span class="lineNum">     851</span>                 :<span class="tlaGNC">           1 :                         Key: &quot;l1&quot;, SessionID: sessionID.String(), Title: title,</span></span>
+<span id="L852"><span class="lineNum">     852</span>                 :<span class="tlaGNC">           1 :                         Main: []MazeNode{}, Detours: []MazeNode{}, Stats: MazeStats{},</span></span>
+<span id="L853"><span class="lineNum">     853</span>                 :<span class="tlaGNC">           1 :                 }}}</span></span>
+<span id="L854"><span class="lineNum">     854</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L855"><span class="lineNum">     855</span>                 :<span class="tlaGNC">          11 :         anchor := events[0].Timestamp</span></span>
+<span id="L856"><span class="lineNum">     856</span>                 :<span class="tlaGNC">          11 :         for _, evt := range events {</span></span>
+<span id="L857"><span class="lineNum">     857</span>                 :<span class="tlaGNC">          11 :                 if evt.Type == domain.EventUserMessageAdded {</span></span>
+<span id="L858"><span class="lineNum">     858</span>                 :<span class="tlaGNC">          11 :                         anchor = evt.Timestamp</span></span>
+<span id="L859"><span class="lineNum">     859</span>                 :<span class="tlaGNC">          11 :                         break</span></span>
+<span id="L860"><span class="lineNum">     860</span>                 :             :                 }</span>
+<span id="L861"><span class="lineNum">     861</span>                 :             :         }</span>
+<span id="L862"><span class="lineNum">     862</span>                 :<span class="tlaGNC">          11 :         lane := buildLane(&quot;l1&quot;, sessionID, title, events, children, mazeClock{anchor: anchor, now: now, live: running})</span></span>
+<span id="L863"><span class="lineNum">     863</span>                 :<span class="tlaGNC">          11 :         tmax := lane.Stats.T</span></span>
+<span id="L864"><span class="lineNum">     864</span>                 :<span class="tlaGNC">          11 :         if tmax &lt; 60 {</span></span>
+<span id="L865"><span class="lineNum">     865</span>                 :<span class="tlaGNC">           9 :                 tmax = 60</span></span>
+<span id="L866"><span class="lineNum">     866</span>                 :<span class="tlaGNC">           9 :         }</span></span>
+<span id="L867"><span class="lineNum">     867</span>                 :<span class="tlaGNC">          11 :         return &amp;MazeData{Tmax: tmax, Lanes: []MazeLane{lane}}</span></span>
+<span id="L868"><span class="lineNum">     868</span>                 :             : }</span>
+<span id="L869"><span class="lineNum">     869</span>                 :             : </span>
+<span id="L870"><span class="lineNum">     870</span>                 :             : // --- SessionService integration ---</span>
+<span id="L871"><span class="lineNum">     871</span>                 :             : </span>
+<span id="L872"><span class="lineNum">     872</span>                 :             : // mazeChildrenFor resolves the session's sub-agent children: each</span>
+<span id="L873"><span class="lineNum">     873</span>                 :             : // delegate_task tool result carrying child_session_id gets its child</span>
+<span id="L874"><span class="lineNum">     874</span>                 :             : // session inspected and folded in (capped at mazeMaxChildren, one level</span>
+<span id="L875"><span class="lineNum">     875</span>                 :             : // deep — grandchildren appear in the child's own maze view).</span>
+<span id="L876"><span class="lineNum">     876</span>                 :<span class="tlaGNC">           3 : func (s *SessionService) mazeChildrenFor(ctx context.Context, sqlite *session.SQLiteStore, events []domain.Event) []mazeChild {</span></span>
+<span id="L877"><span class="lineNum">     877</span>                 :<span class="tlaGNC">           3 :         seen := make(map[domain.SessionID]bool)</span></span>
+<span id="L878"><span class="lineNum">     878</span>                 :<span class="tlaGNC">           3 :         var children []mazeChild</span></span>
+<span id="L879"><span class="lineNum">     879</span>                 :<span class="tlaGNC">          16 :         for _, evt := range events {</span></span>
+<span id="L880"><span class="lineNum">     880</span>                 :<span class="tlaGNC">          16 :                 if evt.Type != domain.EventToolResultAdded {</span></span>
+<span id="L881"><span class="lineNum">     881</span>                 :<span class="tlaGNC">          16 :                         continue</span></span>
+<span id="L882"><span class="lineNum">     882</span>                 :             :                 }</span>
+<span id="L883"><span class="lineNum">     883</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 var p domain.MessageEventPayload</span></span>
+<span id="L884"><span class="lineNum">     884</span>                 :<span class="tlaUNC">           0 :                 if json.Unmarshal(evt.Payload, &amp;p) != nil {</span></span>
+<span id="L885"><span class="lineNum">     885</span>                 :<span class="tlaUNC">           0 :                         continue</span></span>
+<span id="L886"><span class="lineNum">     886</span>                 :             :                 }</span>
+<span id="L887"><span class="lineNum">     887</span>                 :<span class="tlaUNC">           0 :                 for _, part := range p.Message.Parts {</span></span>
+<span id="L888"><span class="lineNum">     888</span>                 :<span class="tlaUNC">           0 :                         if part.Kind != domain.PartToolResult || part.ToolResult == nil {</span></span>
+<span id="L889"><span class="lineNum">     889</span>                 :<span class="tlaUNC">           0 :                                 continue</span></span>
+<span id="L890"><span class="lineNum">     890</span>                 :             :                         }</span>
+<span id="L891"><span class="lineNum">     891</span>                 :<span class="tlaUNC">           0 :                         cid := part.ToolResult.Metadata[&quot;child_session_id&quot;]</span></span>
+<span id="L892"><span class="lineNum">     892</span>                 :<span class="tlaUNC">           0 :                         if cid == &quot;&quot; {</span></span>
+<span id="L893"><span class="lineNum">     893</span>                 :<span class="tlaUNC">           0 :                                 continue</span></span>
+<span id="L894"><span class="lineNum">     894</span>                 :             :                         }</span>
+<span id="L895"><span class="lineNum">     895</span>                 :<span class="tlaUNC">           0 :                         childID, err := domain.ParseSessionID(cid)</span></span>
+<span id="L896"><span class="lineNum">     896</span>                 :<span class="tlaUNC">           0 :                         if err != nil || seen[childID] {</span></span>
+<span id="L897"><span class="lineNum">     897</span>                 :<span class="tlaUNC">           0 :                                 continue</span></span>
+<span id="L898"><span class="lineNum">     898</span>                 :             :                         }</span>
+<span id="L899"><span class="lineNum">     899</span>                 :<span class="tlaUNC">           0 :                         seen[childID] = true</span></span>
+<span id="L900"><span class="lineNum">     900</span>                 :<span class="tlaUNC">           0 :                         if len(children) &gt;= mazeMaxChildren {</span></span>
+<span id="L901"><span class="lineNum">     901</span>                 :<span class="tlaUNC">           0 :                                 return children</span></span>
+<span id="L902"><span class="lineNum">     902</span>                 :<span class="tlaUNC">           0 :                         }</span></span>
+<span id="L903"><span class="lineNum">     903</span>                 :<span class="tlaUNC">           0 :                         insp, err := sqlite.InspectSession(ctx, childID)</span></span>
+<span id="L904"><span class="lineNum">     904</span>                 :<span class="tlaUNC">           0 :                         if err != nil || len(insp.Events) == 0 {</span></span>
+<span id="L905"><span class="lineNum">     905</span>                 :<span class="tlaUNC">           0 :                                 continue</span></span>
+<span id="L906"><span class="lineNum">     906</span>                 :             :                         }</span>
+<span id="L907"><span class="lineNum">     907</span>                 :<span class="tlaUNC">           0 :                         children = append(children, mazeChild{</span></span>
+<span id="L908"><span class="lineNum">     908</span>                 :<span class="tlaUNC">           0 :                                 Label:   childMazeLabel(ctx, sqlite, childID),</span></span>
+<span id="L909"><span class="lineNum">     909</span>                 :<span class="tlaUNC">           0 :                                 Running: mazeChildRunning(insp.Events),</span></span>
+<span id="L910"><span class="lineNum">     910</span>                 :<span class="tlaUNC">           0 :                                 Events:  insp.Events,</span></span>
+<span id="L911"><span class="lineNum">     911</span>                 :<span class="tlaUNC">           0 :                         })</span></span>
+<span id="L912"><span class="lineNum">     912</span>                 :             :                 }</span>
+<span id="L913"><span class="lineNum">     913</span>                 :             :         }</span>
+<span id="L914"><span class="lineNum">     914</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         return children</span></span>
+<span id="L915"><span class="lineNum">     915</span>                 :             : }</span>
+<span id="L916"><span class="lineNum">     916</span>                 :             : </span>
+<span id="L917"><span class="lineNum">     917</span>                 :             : // childMazeLabel summarizes the child session's first user message as the</span>
+<span id="L918"><span class="lineNum">     918</span>                 :             : // branch label (best-effort: falls back to the short session id).</span>
+<span id="L919"><span class="lineNum">     919</span>                 :<span class="tlaUNC tlaBgUNC">           0 : func childMazeLabel(ctx context.Context, sqlite *session.SQLiteStore, id domain.SessionID) string {</span></span>
+<span id="L920"><span class="lineNum">     920</span>                 :<span class="tlaUNC">           0 :         if titles, err := sqlite.FirstUserMessageTexts(ctx, []domain.SessionID{id}); err == nil {</span></span>
+<span id="L921"><span class="lineNum">     921</span>                 :<span class="tlaUNC">           0 :                 if t := summarizeSessionTitle(titles[id]); t != &quot;&quot; {</span></span>
+<span id="L922"><span class="lineNum">     922</span>                 :<span class="tlaUNC">           0 :                         return t</span></span>
+<span id="L923"><span class="lineNum">     923</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L924"><span class="lineNum">     924</span>                 :             :         }</span>
+<span id="L925"><span class="lineNum">     925</span>                 :<span class="tlaUNC">           0 :         short := id.String()</span></span>
+<span id="L926"><span class="lineNum">     926</span>                 :<span class="tlaUNC">           0 :         if len(short) &gt; 12 {</span></span>
+<span id="L927"><span class="lineNum">     927</span>                 :<span class="tlaUNC">           0 :                 short = short[:12]</span></span>
+<span id="L928"><span class="lineNum">     928</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L929"><span class="lineNum">     929</span>                 :<span class="tlaUNC">           0 :         return short</span></span>
+<span id="L930"><span class="lineNum">     930</span>                 :             : }</span>
+<span id="L931"><span class="lineNum">     931</span>                 :             : </span>
+<span id="L932"><span class="lineNum">     932</span>                 :             : // mazeChildRunning reports whether the child session's latest run never</span>
+<span id="L933"><span class="lineNum">     933</span>                 :             : // reached a terminal event.</span>
+<span id="L934"><span class="lineNum">     934</span>                 :<span class="tlaUNC">           0 : func mazeChildRunning(events []domain.Event) bool {</span></span>
+<span id="L935"><span class="lineNum">     935</span>                 :<span class="tlaUNC">           0 :         for i := len(events) - 1; i &gt;= 0; i-- {</span></span>
+<span id="L936"><span class="lineNum">     936</span>                 :<span class="tlaUNC">           0 :                 switch events[i].Type {</span></span>
+<span id="L937"><span class="lineNum">     937</span>                 :<span class="tlaUNC">           0 :                 case domain.EventRunCompleted, domain.EventRunFailed, domain.EventRunCancelled, domain.EventRunInterrupted:</span></span>
+<span id="L938"><span class="lineNum">     938</span>                 :<span class="tlaUNC">           0 :                         return false</span></span>
+<span id="L939"><span class="lineNum">     939</span>                 :<span class="tlaUNC">           0 :                 case domain.EventRunCreated:</span></span>
+<span id="L940"><span class="lineNum">     940</span>                 :<span class="tlaUNC">           0 :                         return true</span></span>
+<span id="L941"><span class="lineNum">     941</span>                 :             :                 }</span>
+<span id="L942"><span class="lineNum">     942</span>                 :             :         }</span>
+<span id="L943"><span class="lineNum">     943</span>                 :<span class="tlaUNC">           0 :         return false</span></span>
+<span id="L944"><span class="lineNum">     944</span>                 :             : }</span>
+<span id="L945"><span class="lineNum">     945</span>                 :             : </span>
+<span id="L946"><span class="lineNum">     946</span>                 :             : // mazeForSession inspects the session and builds its maze, sub-agent</span>
+<span id="L947"><span class="lineNum">     947</span>                 :             : // children folded in. running gates in-flight extension: it is true only</span>
+<span id="L948"><span class="lineNum">     948</span>                 :             : // while the session's in-process controller is actively executing.</span>
+<span id="L949"><span class="lineNum">     949</span>                 :<span class="tlaGNC tlaBgGNC">           3 : func (s *SessionService) mazeForSession(ctx context.Context, sqlite *session.SQLiteStore, id domain.SessionID) (*MazeData, error) {</span></span>
+<span id="L950"><span class="lineNum">     950</span>                 :<span class="tlaGNC">           3 :         inspection, err := sqlite.InspectSession(ctx, id)</span></span>
+<span id="L951"><span class="lineNum">     951</span>                 :<span class="tlaGNC">           3 :         if err != nil {</span></span>
+<span id="L952"><span class="lineNum">     952</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
+<span id="L953"><span class="lineNum">     953</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L954"><span class="lineNum">     954</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         title := &quot;&quot;</span></span>
+<span id="L955"><span class="lineNum">     955</span>                 :<span class="tlaGNC">           3 :         if titles, err := sqlite.FirstUserMessageTexts(ctx, []domain.SessionID{id}); err == nil {</span></span>
+<span id="L956"><span class="lineNum">     956</span>                 :<span class="tlaGNC">           3 :                 title = summarizeSessionTitle(titles[id])</span></span>
+<span id="L957"><span class="lineNum">     957</span>                 :<span class="tlaGNC">           3 :         }</span></span>
+<span id="L958"><span class="lineNum">     958</span>                 :<span class="tlaGNC">           3 :         running := false</span></span>
+<span id="L959"><span class="lineNum">     959</span>                 :<span class="tlaGNC">           3 :         if h, ok := s.Get(id); ok {</span></span>
+<span id="L960"><span class="lineNum">     960</span>                 :<span class="tlaGNC">           3 :                 switch h.Controller.State() {</span></span>
+<span id="L961"><span class="lineNum">     961</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 case ControllerStateRunning, ControllerStateCancelling, ControllerStateBooting:</span></span>
+<span id="L962"><span class="lineNum">     962</span>                 :<span class="tlaUNC">           0 :                         running = true</span></span>
+<span id="L963"><span class="lineNum">     963</span>                 :             :                 }</span>
+<span id="L964"><span class="lineNum">     964</span>                 :             :         }</span>
+<span id="L965"><span class="lineNum">     965</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         children := s.mazeChildrenFor(ctx, sqlite, inspection.Events)</span></span>
+<span id="L966"><span class="lineNum">     966</span>                 :<span class="tlaGNC">           3 :         return BuildMaze(id, title, inspection.Events, children, time.Now().UTC(), running), nil</span></span>
+<span id="L967"><span class="lineNum">     967</span>                 :             : }</span>
+<span id="L968"><span class="lineNum">     968</span>                 :             : </span>
+<span id="L969"><span class="lineNum">     969</span>                 :<span class="tlaGNC">           3 : func (s *SessionService) mazeStore() (*session.SQLiteStore, error) {</span></span>
+<span id="L970"><span class="lineNum">     970</span>                 :<span class="tlaGNC">           3 :         sqlite, ok := s.proc.Store.(*session.SQLiteStore)</span></span>
+<span id="L971"><span class="lineNum">     971</span>                 :<span class="tlaGNC">           3 :         if !ok {</span></span>
+<span id="L972"><span class="lineNum">     972</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, fmt.Errorf(&quot;maze is unavailable for this store&quot;)</span></span>
+<span id="L973"><span class="lineNum">     973</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L974"><span class="lineNum">     974</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         return sqlite, nil</span></span>
+<span id="L975"><span class="lineNum">     975</span>                 :             : }</span>
+<span id="L976"><span class="lineNum">     976</span>                 :             : </span>
+<span id="L977"><span class="lineNum">     977</span>                 :             : // Maze builds the trace-maze payload for a session (authenticated path).</span>
+<span id="L978"><span class="lineNum">     978</span>                 :<span class="tlaGNC">           2 : func (s *SessionService) Maze(ctx context.Context, id domain.SessionID) (*MazeData, error) {</span></span>
+<span id="L979"><span class="lineNum">     979</span>                 :<span class="tlaGNC">           2 :         sqlite, err := s.mazeStore()</span></span>
+<span id="L980"><span class="lineNum">     980</span>                 :<span class="tlaGNC">           2 :         if err != nil {</span></span>
+<span id="L981"><span class="lineNum">     981</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
+<span id="L982"><span class="lineNum">     982</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L983"><span class="lineNum">     983</span>                 :<span class="tlaGNC tlaBgGNC">           2 :         return s.mazeForSession(ctx, sqlite, id)</span></span>
+<span id="L984"><span class="lineNum">     984</span>                 :             : }</span>
+<span id="L985"><span class="lineNum">     985</span>                 :             : </span>
+<span id="L986"><span class="lineNum">     986</span>                 :             : // SharedMaze builds the trace-maze payload through a public share token.</span>
+<span id="L987"><span class="lineNum">     987</span>                 :             : // The data is a timing/verdict projection of the same transcript the share</span>
+<span id="L988"><span class="lineNum">     988</span>                 :             : // view already exposes — no privilege is widened.</span>
+<span id="L989"><span class="lineNum">     989</span>                 :<span class="tlaGNC">           2 : func (s *SessionService) SharedMaze(ctx context.Context, token string) (*MazeData, error) {</span></span>
+<span id="L990"><span class="lineNum">     990</span>                 :<span class="tlaGNC">           2 :         store, err := s.shareStore()</span></span>
+<span id="L991"><span class="lineNum">     991</span>                 :<span class="tlaGNC">           2 :         if err != nil {</span></span>
+<span id="L992"><span class="lineNum">     992</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
+<span id="L993"><span class="lineNum">     993</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L994"><span class="lineNum">     994</span>                 :<span class="tlaGNC tlaBgGNC">           2 :         sessionID, err := s.resolveShare(ctx, store, token)</span></span>
+<span id="L995"><span class="lineNum">     995</span>                 :<span class="tlaGNC">           2 :         if err != nil {</span></span>
+<span id="L996"><span class="lineNum">     996</span>                 :<span class="tlaGNC">           1 :                 return nil, err</span></span>
+<span id="L997"><span class="lineNum">     997</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L998"><span class="lineNum">     998</span>                 :<span class="tlaGNC">           1 :         sqlite, err := s.mazeStore()</span></span>
+<span id="L999"><span class="lineNum">     999</span>                 :<span class="tlaGNC">           1 :         if err != nil {</span></span>
+<span id="L1000"><span class="lineNum">    1000</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
+<span id="L1001"><span class="lineNum">    1001</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L1002"><span class="lineNum">    1002</span>                 :<span class="tlaGNC tlaBgGNC">           1 :         return s.mazeForSession(ctx, sqlite, sessionID)</span></span>
+<span id="L1003"><span class="lineNum">    1003</span>                 :             : }</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

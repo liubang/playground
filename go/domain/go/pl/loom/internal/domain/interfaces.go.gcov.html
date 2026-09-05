@@ -1,0 +1,425 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - domain/go/pl/loom/internal/domain/interfaces.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">domain/go/pl/loom/internal/domain</a> - interfaces.go<span style="font-size: 80%;"> (source / <a href="interfaces.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryMed">88.9&nbsp;%</td>
+            <td class="headerCovTableEntry">18</td>
+            <td class="headerCovTableEntry">16</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-09-05 12:00:02</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/07/22 21:10</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : package domain</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : import (</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             :         &quot;context&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             :         &quot;fmt&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             :         &quot;io&quot;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             :         &quot;time&quot;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : )</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : </span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : // --- Tool interface (§9.1) ---</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : </span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : // Tool is the core tool abstraction. Prepare must be side-effect-free.</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : type Tool interface {</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             :         Definition() ToolDefinition</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             :         Prepare(ctx context.Context, call ToolCall) (PreparedCall, error)</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             :         Execute(ctx context.Context, prepared PreparedCall) ToolResult</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : }</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             : </span>
+<span id="L36"><span class="lineNum">      36</span>                 :             : // ConcurrentSafely is an optional opt-in interface: the tool's Execute</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : // is safe to run concurrently with other tool executions in the same</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : // batch (docs/SUBAGENT_DESIGN.md §11). Eligibility is a property of the</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             : // implementation, not of a single call: the tool must share no mutable</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             : // state across executions except mutex-protected infrastructure</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             : // (file-state book, artifact store, response caches), and its side</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             : // effects must be confined to its own call (reads, or — delegate_task —</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             : // a brand-new isolated session). Tools that write the workspace, spawn</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             : // foreground processes, or interact with the user must not opt in.</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             : type ConcurrentSafely interface {</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :         ConcurrentSafe() bool</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : }</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : </span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : // ToolConcurrentSafe reports whether the tool opted into concurrent</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             : // batch execution. Missing opt-in means serial — the safe default.</span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC tlaBgGNC">         240 : func ToolConcurrentSafe(t Tool) bool {</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">         240 :         cs, ok := t.(ConcurrentSafely)</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">         240 :         return ok &amp;&amp; cs.ConcurrentSafe()</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">         240 : }</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :             : </span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : // --- Model interface (§7) ---</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : </span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : // ReasoningEffort expresses how much reasoning (&quot;thinking&quot;) the model should</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             : // perform before answering, in vendor-neutral levels. The empty value means</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             : // &quot;provider default&quot; — the request carries no opinion and the provider</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             : // behaves as if reasoning were never mentioned.</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             : type ReasoningEffort string</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             : </span>
+<span id="L64"><span class="lineNum">      64</span>                 :             : const (</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :         // ReasoningEffortOff explicitly disables reasoning. Providers without a</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             :         // portable off switch treat it as &quot;no reasoning requested&quot;.</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             :         ReasoningEffortOff    ReasoningEffort = &quot;off&quot;</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             :         ReasoningEffortLow    ReasoningEffort = &quot;low&quot;</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             :         ReasoningEffortMedium ReasoningEffort = &quot;medium&quot;</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :         ReasoningEffortHigh   ReasoningEffort = &quot;high&quot;</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             : )</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             : </span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : // ReasoningSpec is the vendor-neutral reasoning request carried by every</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : // model call. Each provider maps it onto its own wire representation:</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             : // Anthropic derives thinking.budget_tokens from Effort (BudgetTokens wins</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             : // when explicit); OpenAI-compatible providers map Effort onto</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             : // reasoning_effort and ignore BudgetTokens.</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             : type ReasoningSpec struct {</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             :         Effort       ReasoningEffort `json:&quot;effort,omitempty&quot;`</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             :         BudgetTokens int64           `json:&quot;budget_tokens,omitempty&quot;`</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : }</span>
+<span id="L82"><span class="lineNum">      82</span>                 :             : </span>
+<span id="L83"><span class="lineNum">      83</span>                 :             : // IsZero reports whether the spec carries any opinion at all.</span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">           2 : func (s ReasoningSpec) IsZero() bool {</span></span>
+<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">           2 :         return s.Effort == &quot;&quot; &amp;&amp; s.BudgetTokens == 0</span></span>
+<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">           2 : }</span></span>
+<span id="L87"><span class="lineNum">      87</span>                 :             : </span>
+<span id="L88"><span class="lineNum">      88</span>                 :             : // Label renders the spec for compact status display; &quot;&quot; means the provider</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             : // decides. Single home for what used to be duplicated in app and ui</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             : // (REVIEW R8).</span>
+<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">          91 : func (s ReasoningSpec) Label() string {</span></span>
+<span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaGNC">          91 :         if s.Effort != &quot;&quot; {</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">          11 :                 return string(s.Effort)</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">          11 :         }</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">          80 :         if s.BudgetTokens &gt; 0 {</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return fmt.Sprintf(&quot;budget:%d&quot;, s.BudgetTokens)</span></span>
+<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC tlaBgGNC">          80 :         return &quot;&quot;</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :             : }</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             : </span>
+<span id="L101"><span class="lineNum">     101</span>                 :             : // Enabled reports whether reasoning should be turned on for this call.</span>
+<span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaGNC">          28 : func (s ReasoningSpec) Enabled() bool {</span></span>
+<span id="L103"><span class="lineNum">     103</span>                 :<span class="tlaGNC">          28 :         return s.BudgetTokens &gt; 0 || (s.Effort != &quot;&quot; &amp;&amp; s.Effort != ReasoningEffortOff)</span></span>
+<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaGNC">          28 : }</span></span>
+<span id="L105"><span class="lineNum">     105</span>                 :             : </span>
+<span id="L106"><span class="lineNum">     106</span>                 :             : // ResponseFormat constrains the model response to a JSON schema. Only</span>
+<span id="L107"><span class="lineNum">     107</span>                 :             : // providers whose wire API supports structured outputs honor it; the rest</span>
+<span id="L108"><span class="lineNum">     108</span>                 :             : // silently ignore it, so callers must keep a prompt-level description of</span>
+<span id="L109"><span class="lineNum">     109</span>                 :             : // the format and a lenient parse fallback.</span>
+<span id="L110"><span class="lineNum">     110</span>                 :             : type ResponseFormat struct {</span>
+<span id="L111"><span class="lineNum">     111</span>                 :             :         // Name is a short identifier for the schema (provider-side bookkeeping).</span>
+<span id="L112"><span class="lineNum">     112</span>                 :             :         Name string</span>
+<span id="L113"><span class="lineNum">     113</span>                 :             :         // Schema is a JSON Schema document (already decoded for easy building).</span>
+<span id="L114"><span class="lineNum">     114</span>                 :             :         Schema map[string]any</span>
+<span id="L115"><span class="lineNum">     115</span>                 :             :         // Strict requests exact schema conformance where the wire API supports it.</span>
+<span id="L116"><span class="lineNum">     116</span>                 :             :         Strict bool</span>
+<span id="L117"><span class="lineNum">     117</span>                 :             : }</span>
+<span id="L118"><span class="lineNum">     118</span>                 :             : </span>
+<span id="L119"><span class="lineNum">     119</span>                 :             : // ModelRequest is the unified input to a model provider.</span>
+<span id="L120"><span class="lineNum">     120</span>                 :             : type ModelRequest struct {</span>
+<span id="L121"><span class="lineNum">     121</span>                 :             :         ID              EventID</span>
+<span id="L122"><span class="lineNum">     122</span>                 :             :         ModelName       string</span>
+<span id="L123"><span class="lineNum">     123</span>                 :             :         Messages        []Message</span>
+<span id="L124"><span class="lineNum">     124</span>                 :             :         Tools           []ToolDefinition</span>
+<span id="L125"><span class="lineNum">     125</span>                 :             :         MaxTokens       int64</span>
+<span id="L126"><span class="lineNum">     126</span>                 :             :         Temperature     float64</span>
+<span id="L127"><span class="lineNum">     127</span>                 :             :         Reasoning       ReasoningSpec</span>
+<span id="L128"><span class="lineNum">     128</span>                 :             :         ContextManifest ContextManifest</span>
+<span id="L129"><span class="lineNum">     129</span>                 :             :         // ResponseFormat optionally requests schema-constrained JSON output.</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             :         ResponseFormat *ResponseFormat</span>
+<span id="L131"><span class="lineNum">     131</span>                 :             : }</span>
+<span id="L132"><span class="lineNum">     132</span>                 :             : </span>
+<span id="L133"><span class="lineNum">     133</span>                 :             : // StopReason classifies why the model stopped generating.</span>
+<span id="L134"><span class="lineNum">     134</span>                 :             : type StopReason string</span>
+<span id="L135"><span class="lineNum">     135</span>                 :             : </span>
+<span id="L136"><span class="lineNum">     136</span>                 :             : const (</span>
+<span id="L137"><span class="lineNum">     137</span>                 :             :         StopEndTurn       StopReason = &quot;end_turn&quot;</span>
+<span id="L138"><span class="lineNum">     138</span>                 :             :         StopToolUse       StopReason = &quot;tool_use&quot;</span>
+<span id="L139"><span class="lineNum">     139</span>                 :             :         StopMaxOutput     StopReason = &quot;max_output&quot;</span>
+<span id="L140"><span class="lineNum">     140</span>                 :             :         StopContentFilter StopReason = &quot;content_filter&quot;</span>
+<span id="L141"><span class="lineNum">     141</span>                 :             :         StopCancelled     StopReason = &quot;cancelled&quot;</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             :         StopProviderError StopReason = &quot;provider_error&quot;</span>
+<span id="L143"><span class="lineNum">     143</span>                 :             :         StopUnknown       StopReason = &quot;unknown&quot;</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             : )</span>
+<span id="L145"><span class="lineNum">     145</span>                 :             : </span>
+<span id="L146"><span class="lineNum">     146</span>                 :             : // ModelEventKind identifies the type of a streaming event from the model.</span>
+<span id="L147"><span class="lineNum">     147</span>                 :             : type ModelEventKind string</span>
+<span id="L148"><span class="lineNum">     148</span>                 :             : </span>
+<span id="L149"><span class="lineNum">     149</span>                 :             : const (</span>
+<span id="L150"><span class="lineNum">     150</span>                 :             :         ModelEventResponseStart   ModelEventKind = &quot;response_start&quot;</span>
+<span id="L151"><span class="lineNum">     151</span>                 :             :         ModelEventTextStart       ModelEventKind = &quot;text_start&quot;</span>
+<span id="L152"><span class="lineNum">     152</span>                 :             :         ModelEventTextDelta       ModelEventKind = &quot;text_delta&quot;</span>
+<span id="L153"><span class="lineNum">     153</span>                 :             :         ModelEventTextEnd         ModelEventKind = &quot;text_end&quot;</span>
+<span id="L154"><span class="lineNum">     154</span>                 :             :         ModelEventReasoningStart  ModelEventKind = &quot;reasoning_start&quot;</span>
+<span id="L155"><span class="lineNum">     155</span>                 :             :         ModelEventReasoningDelta  ModelEventKind = &quot;reasoning_delta&quot;</span>
+<span id="L156"><span class="lineNum">     156</span>                 :             :         ModelEventReasoningEnd    ModelEventKind = &quot;reasoning_end&quot;</span>
+<span id="L157"><span class="lineNum">     157</span>                 :             :         ModelEventToolCallStart   ModelEventKind = &quot;tool_call_start&quot;</span>
+<span id="L158"><span class="lineNum">     158</span>                 :             :         ModelEventToolArgsDelta   ModelEventKind = &quot;tool_arguments_delta&quot;</span>
+<span id="L159"><span class="lineNum">     159</span>                 :             :         ModelEventToolCallEnd     ModelEventKind = &quot;tool_call_end&quot;</span>
+<span id="L160"><span class="lineNum">     160</span>                 :             :         ModelEventUsage           ModelEventKind = &quot;usage&quot;</span>
+<span id="L161"><span class="lineNum">     161</span>                 :             :         ModelEventResponseEnd     ModelEventKind = &quot;response_end&quot;</span>
+<span id="L162"><span class="lineNum">     162</span>                 :             :         ModelEventProviderWarning ModelEventKind = &quot;provider_warning&quot;</span>
+<span id="L163"><span class="lineNum">     163</span>                 :             :         ModelEventStreamError     ModelEventKind = &quot;stream_error&quot;</span>
+<span id="L164"><span class="lineNum">     164</span>                 :             : )</span>
+<span id="L165"><span class="lineNum">     165</span>                 :             : </span>
+<span id="L166"><span class="lineNum">     166</span>                 :             : // ModelEvent is a tagged union for streaming model events.</span>
+<span id="L167"><span class="lineNum">     167</span>                 :             : type ModelEvent struct {</span>
+<span id="L168"><span class="lineNum">     168</span>                 :             :         Kind           ModelEventKind `json:&quot;kind&quot;`</span>
+<span id="L169"><span class="lineNum">     169</span>                 :             :         TextDelta      string         `json:&quot;text_delta,omitempty&quot;`</span>
+<span id="L170"><span class="lineNum">     170</span>                 :             :         ReasoningDelta string         `json:&quot;reasoning_delta,omitempty&quot;`</span>
+<span id="L171"><span class="lineNum">     171</span>                 :             :         // ReasoningSignature rides on the reasoning_end event: the provider proof</span>
+<span id="L172"><span class="lineNum">     172</span>                 :             :         // (Anthropic thinking signature / redacted payload) needed to replay the</span>
+<span id="L173"><span class="lineNum">     173</span>                 :             :         // reasoning block in later tool-use turns. ReasoningRedacted marks the</span>
+<span id="L174"><span class="lineNum">     174</span>                 :             :         // block as provider-redacted (no visible text, opaque payload only).</span>
+<span id="L175"><span class="lineNum">     175</span>                 :             :         ReasoningSignature string `json:&quot;reasoning_signature,omitempty&quot;`</span>
+<span id="L176"><span class="lineNum">     176</span>                 :             :         ReasoningRedacted  bool   `json:&quot;reasoning_redacted,omitempty&quot;`</span>
+<span id="L177"><span class="lineNum">     177</span>                 :             :         ToolIndex          int    `json:&quot;tool_index,omitempty&quot;`</span>
+<span id="L178"><span class="lineNum">     178</span>                 :             :         ToolID             string `json:&quot;tool_id,omitempty&quot;`</span>
+<span id="L179"><span class="lineNum">     179</span>                 :             :         ToolName           string `json:&quot;tool_name,omitempty&quot;`</span>
+<span id="L180"><span class="lineNum">     180</span>                 :             :         ToolArgs           string `json:&quot;tool_args,omitempty&quot;`</span>
+<span id="L181"><span class="lineNum">     181</span>                 :             :         InputTokens        int64  `json:&quot;input_tokens,omitempty&quot;`</span>
+<span id="L182"><span class="lineNum">     182</span>                 :             :         OutputTokens       int64  `json:&quot;output_tokens,omitempty&quot;`</span>
+<span id="L183"><span class="lineNum">     183</span>                 :             :         // CachedInputTokens reports provider-side prompt-cache hits (Anthropic</span>
+<span id="L184"><span class="lineNum">     184</span>                 :             :         // cache_read_input_tokens, OpenAI prompt_tokens_details.cached_tokens).</span>
+<span id="L185"><span class="lineNum">     185</span>                 :             :         // Observability only. Caveat: OpenAI's InputTokens already includes cached</span>
+<span id="L186"><span class="lineNum">     186</span>                 :             :         // tokens, Anthropic's does not — see Usage.CachedInputTokens.</span>
+<span id="L187"><span class="lineNum">     187</span>                 :             :         CachedInputTokens int64 `json:&quot;cached_input_tokens,omitempty&quot;`</span>
+<span id="L188"><span class="lineNum">     188</span>                 :             :         // CacheCreationInputTokens reports provider-side prompt-cache writes</span>
+<span id="L189"><span class="lineNum">     189</span>                 :             :         // (Anthropic cache_creation_input_tokens). Zero when the provider</span>
+<span id="L190"><span class="lineNum">     190</span>                 :             :         // does not split cache writes out (OpenAI folds them into</span>
+<span id="L191"><span class="lineNum">     191</span>                 :             :         // prompt_tokens). Observability only.</span>
+<span id="L192"><span class="lineNum">     192</span>                 :             :         CacheCreationInputTokens int64 `json:&quot;cache_creation_input_tokens,omitempty&quot;`</span>
+<span id="L193"><span class="lineNum">     193</span>                 :             :         // ContextTokens is the provider-metered total footprint the request</span>
+<span id="L194"><span class="lineNum">     194</span>                 :             :         // occupied in the model's context window — the ground truth for</span>
+<span id="L195"><span class="lineNum">     195</span>                 :             :         // occupancy: Anthropic input_tokens + cache_read_input_tokens +</span>
+<span id="L196"><span class="lineNum">     196</span>                 :             :         // cache_creation_input_tokens, OpenAI prompt_tokens (already</span>
+<span id="L197"><span class="lineNum">     197</span>                 :             :         // cache-inclusive). Zero means the provider does not distinguish it</span>
+<span id="L198"><span class="lineNum">     198</span>                 :             :         // from InputTokens, which is then the occupancy measure.</span>
+<span id="L199"><span class="lineNum">     199</span>                 :             :         ContextTokens int64 `json:&quot;context_tokens,omitempty&quot;`</span>
+<span id="L200"><span class="lineNum">     200</span>                 :             :         // ReasoningTokens reports the share of OutputTokens the provider</span>
+<span id="L201"><span class="lineNum">     201</span>                 :             :         // metered as reasoning/thinking (OpenAI</span>
+<span id="L202"><span class="lineNum">     202</span>                 :             :         // completion_tokens_details.reasoning_tokens, Responses API</span>
+<span id="L203"><span class="lineNum">     203</span>                 :             :         // output_tokens_details.reasoning_tokens). Zero when the provider</span>
+<span id="L204"><span class="lineNum">     204</span>                 :             :         // does not split it out (Anthropic folds thinking into output_tokens).</span>
+<span id="L205"><span class="lineNum">     205</span>                 :             :         // Observability only.</span>
+<span id="L206"><span class="lineNum">     206</span>                 :             :         ReasoningTokens int64      `json:&quot;reasoning_tokens,omitempty&quot;`</span>
+<span id="L207"><span class="lineNum">     207</span>                 :             :         StopReason      StopReason `json:&quot;stop_reason,omitempty&quot;`</span>
+<span id="L208"><span class="lineNum">     208</span>                 :             :         Error           string     `json:&quot;error,omitempty&quot;`</span>
+<span id="L209"><span class="lineNum">     209</span>                 :             :         // Retryable marks a stream_error as transient (truncated body, transport</span>
+<span id="L210"><span class="lineNum">     210</span>                 :             :         // drop): re-issuing the request is safe while nothing was delivered</span>
+<span id="L211"><span class="lineNum">     211</span>                 :             :         // yet. The agent loop only honors it for streams with no activity.</span>
+<span id="L212"><span class="lineNum">     212</span>                 :             :         Retryable bool `json:&quot;retryable,omitempty&quot;`</span>
+<span id="L213"><span class="lineNum">     213</span>                 :             : }</span>
+<span id="L214"><span class="lineNum">     214</span>                 :             : </span>
+<span id="L215"><span class="lineNum">     215</span>                 :             : // ModelStream is a pull-based stream of model events.</span>
+<span id="L216"><span class="lineNum">     216</span>                 :             : type ModelStream interface {</span>
+<span id="L217"><span class="lineNum">     217</span>                 :             :         Recv() (ModelEvent, error)</span>
+<span id="L218"><span class="lineNum">     218</span>                 :             :         Close() error</span>
+<span id="L219"><span class="lineNum">     219</span>                 :             : }</span>
+<span id="L220"><span class="lineNum">     220</span>                 :             : </span>
+<span id="L221"><span class="lineNum">     221</span>                 :             : // Model is the provider-agnostic model interface.</span>
+<span id="L222"><span class="lineNum">     222</span>                 :             : type Model interface {</span>
+<span id="L223"><span class="lineNum">     223</span>                 :             :         Stream(ctx context.Context, req ModelRequest) (ModelStream, error)</span>
+<span id="L224"><span class="lineNum">     224</span>                 :             : }</span>
+<span id="L225"><span class="lineNum">     225</span>                 :             : </span>
+<span id="L226"><span class="lineNum">     226</span>                 :             : // --- Artifact interfaces (§8.4, §13.2) ---</span>
+<span id="L227"><span class="lineNum">     227</span>                 :             : </span>
+<span id="L228"><span class="lineNum">     228</span>                 :             : // StagedArtifact incrementally captures a bounded immutable blob.</span>
+<span id="L229"><span class="lineNum">     229</span>                 :             : type StagedArtifact interface {</span>
+<span id="L230"><span class="lineNum">     230</span>                 :             :         io.Writer</span>
+<span id="L231"><span class="lineNum">     231</span>                 :             :         TotalBytes() int64</span>
+<span id="L232"><span class="lineNum">     232</span>                 :             :         StoredBytes() int64</span>
+<span id="L233"><span class="lineNum">     233</span>                 :             :         Truncated() bool</span>
+<span id="L234"><span class="lineNum">     234</span>                 :             :         Commit(context.Context) (ArtifactRef, error)</span>
+<span id="L235"><span class="lineNum">     235</span>                 :             :         Abort() error</span>
+<span id="L236"><span class="lineNum">     236</span>                 :             : }</span>
+<span id="L237"><span class="lineNum">     237</span>                 :             : </span>
+<span id="L238"><span class="lineNum">     238</span>                 :             : // ArtifactStore starts independent staged artifact writes and reads back</span>
+<span id="L239"><span class="lineNum">     239</span>                 :             : // committed blobs by content-derived reference.</span>
+<span id="L240"><span class="lineNum">     240</span>                 :             : type ArtifactStore interface {</span>
+<span id="L241"><span class="lineNum">     241</span>                 :             :         Begin(context.Context) (StagedArtifact, error)</span>
+<span id="L242"><span class="lineNum">     242</span>                 :             :         // Read returns the full content of a committed artifact, verifying</span>
+<span id="L243"><span class="lineNum">     243</span>                 :             :         // its content hash against the reference. It is used by transport</span>
+<span id="L244"><span class="lineNum">     244</span>                 :             :         // adapters to serve artifact bytes to clients (e.g. inline images</span>
+<span id="L245"><span class="lineNum">     245</span>                 :             :         // stored during tool execution).</span>
+<span id="L246"><span class="lineNum">     246</span>                 :             :         Read(ctx context.Context, ref ArtifactRef) ([]byte, error)</span>
+<span id="L247"><span class="lineNum">     247</span>                 :             : }</span>
+<span id="L248"><span class="lineNum">     248</span>                 :             : </span>
+<span id="L249"><span class="lineNum">     249</span>                 :             : // --- Session store types (§13.2) ---</span>
+<span id="L250"><span class="lineNum">     250</span>                 :             : </span>
+<span id="L251"><span class="lineNum">     251</span>                 :             : // SessionSummary is a lightweight persisted session view for listing sessions.</span>
+<span id="L252"><span class="lineNum">     252</span>                 :             : type SessionSummary struct {</span>
+<span id="L253"><span class="lineNum">     253</span>                 :             :         ID        SessionID `json:&quot;id&quot;`</span>
+<span id="L254"><span class="lineNum">     254</span>                 :             :         Version   int64     `json:&quot;version&quot;`</span>
+<span id="L255"><span class="lineNum">     255</span>                 :             :         CreatedAt time.Time `json:&quot;created_at&quot;`</span>
+<span id="L256"><span class="lineNum">     256</span>                 :             :         UpdatedAt time.Time `json:&quot;updated_at&quot;`</span>
+<span id="L257"><span class="lineNum">     257</span>                 :             :         // WorkspaceID is the owning workspace (docs/WORKSPACE_DESIGN.md W1);</span>
+<span id="L258"><span class="lineNum">     258</span>                 :             :         // zero only for pre-v5 rows not yet backfilled.</span>
+<span id="L259"><span class="lineNum">     259</span>                 :             :         WorkspaceID WorkspaceID `json:&quot;workspace_id&quot;`</span>
+<span id="L260"><span class="lineNum">     260</span>                 :             :         // ParentSessionID is non-zero for delegated sub-agent sessions: the</span>
+<span id="L261"><span class="lineNum">     261</span>                 :             :         // delegation edge persisted in the child's run.created event</span>
+<span id="L262"><span class="lineNum">     262</span>                 :             :         // (docs/SUBAGENT_DESIGN.md §6.1), surfaced for hierarchical pickers.</span>
+<span id="L263"><span class="lineNum">     263</span>                 :             :         ParentSessionID SessionID `json:&quot;parent_session_id&quot;`</span>
+<span id="L264"><span class="lineNum">     264</span>                 :             : }</span>
+<span id="L265"><span class="lineNum">     265</span>                 :             : </span>
+<span id="L266"><span class="lineNum">     266</span>                 :             : // SessionTranscript is the recovered message history of a session.</span>
+<span id="L267"><span class="lineNum">     267</span>                 :             : type SessionTranscript struct {</span>
+<span id="L268"><span class="lineNum">     268</span>                 :             :         SessionID         SessionID `json:&quot;session_id&quot;`</span>
+<span id="L269"><span class="lineNum">     269</span>                 :             :         Messages          []Message `json:&quot;messages&quot;`</span>
+<span id="L270"><span class="lineNum">     270</span>                 :             :         LastEventSequence int64     `json:&quot;last_event_sequence&quot;`</span>
+<span id="L271"><span class="lineNum">     271</span>                 :             : }</span>
+<span id="L272"><span class="lineNum">     272</span>                 :             : </span>
+<span id="L273"><span class="lineNum">     273</span>                 :             : // SessionInspection is a consistent read-only view of persisted session data.</span>
+<span id="L274"><span class="lineNum">     274</span>                 :             : type SessionInspection struct {</span>
+<span id="L275"><span class="lineNum">     275</span>                 :             :         Session    SessionSummary    `json:&quot;session&quot;`</span>
+<span id="L276"><span class="lineNum">     276</span>                 :             :         Checkpoint *Checkpoint       `json:&quot;checkpoint,omitempty&quot;`</span>
+<span id="L277"><span class="lineNum">     277</span>                 :             :         Transcript SessionTranscript `json:&quot;transcript&quot;`</span>
+<span id="L278"><span class="lineNum">     278</span>                 :             :         Events     []Event           `json:&quot;events&quot;`</span>
+<span id="L279"><span class="lineNum">     279</span>                 :             : }</span>
+<span id="L280"><span class="lineNum">     280</span>                 :             : </span>
+<span id="L281"><span class="lineNum">     281</span>                 :             : // --- SessionStore interface (§13.2) ---</span>
+<span id="L282"><span class="lineNum">     282</span>                 :             : </span>
+<span id="L283"><span class="lineNum">     283</span>                 :             : // Checkpoint is a snapshot of a session's state for efficient recovery.</span>
+<span id="L284"><span class="lineNum">     284</span>                 :             : type Checkpoint struct {</span>
+<span id="L285"><span class="lineNum">     285</span>                 :             :         ID        CheckpointID `json:&quot;id&quot;`</span>
+<span id="L286"><span class="lineNum">     286</span>                 :             :         SessionID SessionID    `json:&quot;session_id&quot;`</span>
+<span id="L287"><span class="lineNum">     287</span>                 :             :         Sequence  int64        `json:&quot;sequence&quot;` // last event sequence covered</span>
+<span id="L288"><span class="lineNum">     288</span>                 :             :         State     RunState     `json:&quot;state&quot;`</span>
+<span id="L289"><span class="lineNum">     289</span>                 :             :         Messages  []Message    `json:&quot;messages&quot;`</span>
+<span id="L290"><span class="lineNum">     290</span>                 :             :         Plan      Plan         `json:&quot;plan&quot;`</span>
+<span id="L291"><span class="lineNum">     291</span>                 :             :         Usage     Usage        `json:&quot;usage&quot;`</span>
+<span id="L292"><span class="lineNum">     292</span>                 :             :         // Goal carries the cross-turn objective (nil when none is active); it</span>
+<span id="L293"><span class="lineNum">     293</span>                 :             :         // survives prompt boundaries through the checkpoint like Plan does.</span>
+<span id="L294"><span class="lineNum">     294</span>                 :             :         Goal      *Goal     `json:&quot;goal,omitempty&quot;`</span>
+<span id="L295"><span class="lineNum">     295</span>                 :             :         CreatedAt time.Time `json:&quot;created_at&quot;`</span>
+<span id="L296"><span class="lineNum">     296</span>                 :             : }</span>
+<span id="L297"><span class="lineNum">     297</span>                 :             : </span>
+<span id="L298"><span class="lineNum">     298</span>                 :             : // SessionStore persists events and checkpoints.</span>
+<span id="L299"><span class="lineNum">     299</span>                 :             : type SessionStore interface {</span>
+<span id="L300"><span class="lineNum">     300</span>                 :             :         // CreateSession creates an empty session bound to workspaceID</span>
+<span id="L301"><span class="lineNum">     301</span>                 :             :         // (docs/WORKSPACE_DESIGN.md W1); workspaceID must be non-zero.</span>
+<span id="L302"><span class="lineNum">     302</span>                 :             :         CreateSession(ctx context.Context, sessionID SessionID, workspaceID WorkspaceID) error</span>
+<span id="L303"><span class="lineNum">     303</span>                 :             :         AppendEvents(ctx context.Context, sessionID SessionID, expectedVersion int64, events []Event) error</span>
+<span id="L304"><span class="lineNum">     304</span>                 :             :         AppendEventsAndCheckpoint(ctx context.Context, sessionID SessionID, expectedVersion int64, events []Event, checkpoint Checkpoint) error</span>
+<span id="L305"><span class="lineNum">     305</span>                 :             :         LoadEvents(ctx context.Context, sessionID SessionID, after int64) ([]Event, error)</span>
+<span id="L306"><span class="lineNum">     306</span>                 :             :         SaveCheckpoint(ctx context.Context, ckpt Checkpoint) error</span>
+<span id="L307"><span class="lineNum">     307</span>                 :             :         LoadLatestCheckpoint(ctx context.Context, sessionID SessionID) (Checkpoint, error)</span>
+<span id="L308"><span class="lineNum">     308</span>                 :             :         // RecordFileChange appends one file mutation to the session's change</span>
+<span id="L309"><span class="lineNum">     309</span>                 :             :         // ledger for checkpoint/rewind support. beforeContent may be nil (file</span>
+<span id="L310"><span class="lineNum">     310</span>                 :             :         // did not exist, or was not captured); beforeExisted distinguishes the</span>
+<span id="L311"><span class="lineNum">     311</span>                 :             :         // two cases.</span>
+<span id="L312"><span class="lineNum">     312</span>                 :             :         RecordFileChange(ctx context.Context, sessionID SessionID, path string, beforeExisted bool, beforeHash string, beforeContent []byte, afterHash string) error</span>
+<span id="L313"><span class="lineNum">     313</span>                 :             :         // InspectSession returns session metadata, its latest checkpoint, the</span>
+<span id="L314"><span class="lineNum">     314</span>                 :             :         // recovered transcript, and the complete event timeline from one</span>
+<span id="L315"><span class="lineNum">     315</span>                 :             :         // consistent read snapshot.</span>
+<span id="L316"><span class="lineNum">     316</span>                 :             :         InspectSession(ctx context.Context, sessionID SessionID) (SessionInspection, error)</span>
+<span id="L317"><span class="lineNum">     317</span>                 :             : }</span>
+<span id="L318"><span class="lineNum">     318</span>                 :             : </span>
+<span id="L319"><span class="lineNum">     319</span>                 :             : // --- Approver interface (§12.2) ---</span>
+<span id="L320"><span class="lineNum">     320</span>                 :             : </span>
+<span id="L321"><span class="lineNum">     321</span>                 :             : // Decision represents the outcome of an approval request.</span>
+<span id="L322"><span class="lineNum">     322</span>                 :             : type Decision string</span>
+<span id="L323"><span class="lineNum">     323</span>                 :             : </span>
+<span id="L324"><span class="lineNum">     324</span>                 :             : const (</span>
+<span id="L325"><span class="lineNum">     325</span>                 :             :         DecisionAllow Decision = &quot;allow&quot;</span>
+<span id="L326"><span class="lineNum">     326</span>                 :             :         DecisionDeny  Decision = &quot;deny&quot;</span>
+<span id="L327"><span class="lineNum">     327</span>                 :             :         DecisionAsk   Decision = &quot;ask&quot;</span>
+<span id="L328"><span class="lineNum">     328</span>                 :             : )</span>
+<span id="L329"><span class="lineNum">     329</span>                 :             : </span>
+<span id="L330"><span class="lineNum">     330</span>                 :             : // ApprovalRequest represents a request for user approval.</span>
+<span id="L331"><span class="lineNum">     331</span>                 :             : type ApprovalRequest struct {</span>
+<span id="L332"><span class="lineNum">     332</span>                 :             :         ID          EventID</span>
+<span id="L333"><span class="lineNum">     333</span>                 :             :         Call        PreparedCall</span>
+<span id="L334"><span class="lineNum">     334</span>                 :             :         Description string</span>
+<span id="L335"><span class="lineNum">     335</span>                 :             : }</span>
+<span id="L336"><span class="lineNum">     336</span>                 :             : </span>
+<span id="L337"><span class="lineNum">     337</span>                 :             : // Approver handles permission decisions.</span>
+<span id="L338"><span class="lineNum">     338</span>                 :             : type Approver interface {</span>
+<span id="L339"><span class="lineNum">     339</span>                 :             :         RequestApproval(ctx context.Context, req ApprovalRequest) (Decision, error)</span>
+<span id="L340"><span class="lineNum">     340</span>                 :             : }</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

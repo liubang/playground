@@ -1,0 +1,171 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - domain/go/pl/loom/internal/domain/permission.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">domain/go/pl/loom/internal/domain</a> - permission.go<span style="font-size: 80%;"> (source / <a href="permission.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryLo">13.6&nbsp;%</td>
+            <td class="headerCovTableEntry">22</td>
+            <td class="headerCovTableEntry">3</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-09-05 12:00:02</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/07/27</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : package domain</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : // ExecGrant describes the execution capabilities a policy verdict grants to</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : // one tool call (docs/PERMISSION_DESIGN.md §3.2). It is the single contract</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : // between the policy layer and the execution layer: the zero value is the</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : // default sandbox (loopback-only network, workspace+tmp writes), and grants</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : // only ever widen it, never narrow it.</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : type ExecGrant struct {</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             :         // Unsandboxed runs the call outside the sandbox entirely (L2 trust):</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             :         // full user environment, network, and credentials. The remaining</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             :         // fields are meaningless when this is set.</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             :         Unsandboxed bool `json:&quot;unsandboxed,omitempty&quot;`</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             :         // NetworkFull allows outbound network and DNS inside the sandbox (L1).</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             :         NetworkFull bool `json:&quot;network_full,omitempty&quot;`</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             :         // WritablePaths are additional absolute paths writable inside the</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             :         // sandbox (L1). Protected subpaths (.git/hooks, .loom) stay excluded.</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             :         WritablePaths []string `json:&quot;writable_paths,omitempty&quot;`</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :         // GUIOpen lets sandboxed commands drive macOS GUI applications via</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :         // `open` (LaunchServices + Apple Events; docs/BROWSER_DESIGN.md §4).</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             :         // Unlike network, this asks in EVERY approval mode: Apple Events are</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :         // TCC-attributed to the loom process itself, so loom-level approval is</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :         // the only per-call gate.</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :         GUIOpen bool `json:&quot;gui_open,omitempty&quot;`</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             : }</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             : </span>
+<span id="L43"><span class="lineNum">      43</span>                 :             : // IsZero reports whether the grant is the default sandbox (no widenings).</span>
+<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC tlaBgGNC">           2 : func (g ExecGrant) IsZero() bool {</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">           2 :         return !g.Unsandboxed &amp;&amp; !g.NetworkFull &amp;&amp; len(g.WritablePaths) == 0 &amp;&amp; !g.GUIOpen</span></span>
+<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">           2 : }</span></span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : </span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : // Summary renders the grant for approval prompts and audit logs, e.g.</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : // &quot;+网络, +写 ~/.myapp&quot; or &quot;出沙箱&quot;. Empty for the zero grant.</span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaUNC tlaBgUNC">           0 : func (g ExecGrant) Summary() string {</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaUNC">           0 :         if g.Unsandboxed {</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaUNC">           0 :                 return &quot;出沙箱（完整权限）&quot;</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaUNC">           0 :         out := &quot;&quot;</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaUNC">           0 :         if g.NetworkFull {</span></span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaUNC">           0 :                 out += &quot;+网络&quot;</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaUNC">           0 :         if g.GUIOpen {</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaUNC">           0 :                 if out != &quot;&quot; {</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaUNC">           0 :                         out += &quot;, &quot;</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaUNC">           0 :                 out += &quot;+GUI 打开&quot;</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :         }</span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaUNC">           0 :         for _, p := range g.WritablePaths {</span></span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaUNC">           0 :                 if out != &quot;&quot; {</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaUNC">           0 :                         out += &quot;, &quot;</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaUNC">           0 :                 out += &quot;+写 &quot; + p</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :             :         }</span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaUNC">           0 :         return out</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :             : }</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             : </span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : // Verdict is the policy layer's judgment on a prepared call. Deciders that</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : // have no opinion return nil inside a chain; a resolved verdict always</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             : // carries a valid Decision.</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             : type Verdict struct {</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :         Decision Decision</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             :         // Grant is meaningful only when Decision == DecisionAllow.</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             :         Grant ExecGrant</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             :         // Source identifies the producing layer for audits and UI:</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             :         // &quot;rule&quot;, &quot;session&quot;, &quot;danger&quot;, or &quot;baseline&quot;.</span>
+<span id="L82"><span class="lineNum">      82</span>                 :             :         Source string</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             :         // Reason is the human-readable provenance (rule justification, danger</span>
+<span id="L84"><span class="lineNum">      84</span>                 :             :         // explanation, baseline mode).</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             :         Reason string</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             : }</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

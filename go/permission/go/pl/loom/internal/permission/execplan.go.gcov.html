@@ -1,0 +1,239 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - permission/go/pl/loom/internal/permission/execplan.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">permission/go/pl/loom/internal/permission</a> - execplan.go<span style="font-size: 80%;"> (source / <a href="execplan.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryMed">81.7&nbsp;%</td>
+            <td class="headerCovTableEntry">60</td>
+            <td class="headerCovTableEntry">49</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-09-05 12:00:02</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/08/23</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : // ExecPlan is the normalized intermediate representation every exec-shape</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : // call is lowered to before effect derivation. All shell-form knowledge</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : // lives HERE and only here: -c flag variants, heredocs, pipes, wrapper</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : // programs, dynamic words. Downstream layers (semantic tables,</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : // indicators, package binding, memory derivation) never parse shell</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : // syntax again — the drift class of bugs where four hand-rolled parsers</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : // each understood a different subset of shell is designed out.</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : package permission</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : </span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : import (</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             :         &quot;github.com/liubang/playground/go/pl/loom/internal/process&quot;</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : )</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : </span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : // ExecStep is one execution unit of a plan: a simple command with its</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : // stdin shape. A nil Argv marks a step whose words contain dynamic</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : // expansions — its program cannot be proven statically.</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : type ExecStep struct {</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :         Argv          []string</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :         Stdin         process.StdinSource</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             :         Heredoc       string // static heredoc body (Stdin == StdinHeredoc)</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :         HeredocStatic bool</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             : }</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             : </span>
+<span id="L41"><span class="lineNum">      41</span>                 :             : // ExecPlan is the normalized execution shape of one call.</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             : type ExecPlan struct {</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :         // Steps are the plan's commands in execution order, already</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :         // flattened out of pipes, substitutions, subshells, and (for shell</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :         // consumers) heredoc bodies.</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :         Steps []ExecStep</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             :         // Unanalyzable explains why the plan is incomplete: a script that</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             :         // failed to parse, an unanalyzable shell invocation form, dynamic</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :         // words. Empty means every step's argv is exact. Consumers must</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :         // treat a non-empty value as &quot;unproven&quot;, NEVER as &quot;safe&quot;.</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :         Unanalyzable string</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             :         // WriteRedirects lists the static targets of the script's</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             :         // file-writing redirects (they are effects of the plan as a whole,</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :         // not of any single step's argv).</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             :         WriteRedirects []string</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             :         // Pipes lists the producer→consumer edges of every pipeline</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             :         // (cross-command indicator input).</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             :         Pipes []process.PipeEdge</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             :         // DynamicWrites reports a file-writing redirect with a dynamic</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :         // target.</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :         DynamicWrites bool</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             :         // Raw is the original argv (exact bindings, display).</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :         Raw []string</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             : }</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             : </span>
+<span id="L66"><span class="lineNum">      66</span>                 :             : // maxHeredocDepth bounds recursive heredoc-body analysis so a</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             : // self-embedding script cannot recurse the normalizer forever.</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             : const maxHeredocDepth = 4</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             : </span>
+<span id="L70"><span class="lineNum">      70</span>                 :             : // NormalizeExec lowers a run_cmd/exec_session argv to its ExecPlan:</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             : //</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             : //   - a plain argv is a single step;</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : //   - a shell -c invocation (ANY flag form: -c, -lc, -ec, sh -cSCRIPT,</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : //     trailing arg0/args) is parsed and flattened;</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             : //   - heredoc bodies feeding a SHELL are recursively analyzed as scripts</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             : //     (the body IS code for that consumer); heredocs feeding anything</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             : //     else stay attached to their step for the interpreter check;</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             : //   - any other shell form (script file, bare stdin, --) degrades to a</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             : //     single unanalyzable step.</span>
+<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC tlaBgGNC">         129 : func NormalizeExec(argv []string) ExecPlan {</span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">         129 :         plan := ExecPlan{Raw: append([]string(nil), argv...)}</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">         129 :         if len(argv) == 0 {</span></span>
+<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 plan.Unanalyzable = &quot;empty argv&quot;</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaUNC">           0 :                 return plan</span></span>
+<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC tlaBgGNC">         129 :         script, isShellC := process.ShellScriptForm(argv)</span></span>
+<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC">         129 :         if !isShellC {</span></span>
+<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">          67 :                 if process.IsShellProgram(argv[0]) {</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         plan.Steps = []ExecStep{{Argv: append([]string(nil), argv...)}}</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaUNC">           0 :                         plan.Unanalyzable = &quot;shell invocation is not an analyzable -c form (script file, bare stdin, or unrecognized options)&quot;</span></span>
+<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaUNC">           0 :                         return plan</span></span>
+<span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC tlaBgGNC">          67 :                 plan.Steps = []ExecStep{{Argv: append([]string(nil), argv...)}}</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">          67 :                 return plan</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :             :         }</span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">          62 :         return normalizeShellScript(script, argv, 0)</span></span>
+<span id="L97"><span class="lineNum">      97</span>                 :             : }</span>
+<span id="L98"><span class="lineNum">      98</span>                 :             : </span>
+<span id="L99"><span class="lineNum">      99</span>                 :             : // normalizeShellScript parses one script and flattens it into a plan.</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             : // raw is the outermost argv (kept for exact binding); depth bounds</span>
+<span id="L101"><span class="lineNum">     101</span>                 :             : // heredoc recursion.</span>
+<span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaGNC">          64 : func normalizeShellScript(script string, raw []string, depth int) ExecPlan {</span></span>
+<span id="L103"><span class="lineNum">     103</span>                 :<span class="tlaGNC">          64 :         plan := ExecPlan{Raw: raw}</span></span>
+<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaGNC">          64 :         analysis, ok := process.AnalyzeShellScript(script)</span></span>
+<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC">          64 :         if !ok {</span></span>
+<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 plan.Steps = []ExecStep{{Argv: append([]string(nil), raw...)}}</span></span>
+<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaUNC">           0 :                 plan.Unanalyzable = &quot;shell script failed to parse&quot;</span></span>
+<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaUNC">           0 :                 return plan</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC tlaBgGNC">          64 :         plan.WriteRedirects = analysis.WriteRedirects</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">          64 :         plan.Pipes = analysis.Pipes</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">          64 :         plan.DynamicWrites = analysis.DynamicWrites</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">          64 :         if !analysis.Static {</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">           7 :                 plan.Unanalyzable = &quot;script contains dynamic constructs (variables, substitutions, control flow)&quot;</span></span>
+<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">           7 :         }</span></span>
+<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">          86 :         for _, cmd := range analysis.Commands {</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">          86 :                 step := ExecStep{</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">          86 :                         Argv:          cmd.Argv,</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">          86 :                         Stdin:         cmd.Stdin,</span></span>
+<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">          86 :                         Heredoc:       cmd.Heredoc,</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">          86 :                         HeredocStatic: cmd.HeredocStatic,</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">          86 :                 }</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">          86 :                 if len(cmd.Argv) &gt; 0 &amp;&amp; cmd.Stdin == process.StdinHeredoc &amp;&amp; cmd.HeredocStatic &amp;&amp;</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">          86 :                         process.IsShellProgram(cmd.Argv[0]) &amp;&amp; depth &lt; maxHeredocDepth {</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">           2 :                         // sh &lt;&lt;EOF ... EOF — the heredoc body is shell code:</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">           2 :                         // analyze it recursively instead of treating the step as</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">           2 :                         // an opaque interpreter-stdin execution.</span></span>
+<span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaGNC">           2 :                         sub := normalizeShellScript(cmd.Heredoc, raw, depth+1)</span></span>
+<span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC">           2 :                         plan.Steps = append(plan.Steps, sub.Steps...)</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">           2 :                         if plan.Unanalyzable == &quot;&quot; {</span></span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">           2 :                                 plan.Unanalyzable = sub.Unanalyzable</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">           2 :                         }</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">           2 :                         plan.WriteRedirects = unionStrings(plan.WriteRedirects, sub.WriteRedirects)</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">           2 :                         plan.Pipes = append(plan.Pipes, sub.Pipes...)</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">           2 :                         plan.DynamicWrites = plan.DynamicWrites || sub.DynamicWrites</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">           2 :                         continue</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :             :                 }</span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">          84 :                 plan.Steps = append(plan.Steps, step)</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :             :         }</span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          64 :         return plan</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :             : }</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             : </span>
+<span id="L143"><span class="lineNum">     143</span>                 :             : // Argvs returns the step argvs that resolved statically (binding and</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             : // memory matching consume these); dynamic steps are skipped — callers</span>
+<span id="L145"><span class="lineNum">     145</span>                 :             : // needing full-static matching check Unanalyzable first.</span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">         129 : func (p ExecPlan) Argvs() [][]string {</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">         129 :         out := make([][]string, 0, len(p.Steps))</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">         151 :         for _, s := range p.Steps {</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">         151 :                 if len(s.Argv) &gt; 0 {</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">         148 :                         out = append(out, s.Argv)</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">         148 :                 }</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :             :         }</span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">         129 :         return out</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :             : }</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

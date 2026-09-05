@@ -1,0 +1,246 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - agent/go/pl/loom/internal/agent/ask.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">agent/go/pl/loom/internal/agent</a> - ask.go<span style="font-size: 80%;"> (source / <a href="ask.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryMed">89.5&nbsp;%</td>
+            <td class="headerCovTableEntry">95</td>
+            <td class="headerCovTableEntry">85</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-09-05 12:00:02</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/07/27</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : package agent</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : import (</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             :         &quot;context&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             :         &quot;encoding/json&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             :         &quot;fmt&quot;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             :         &quot;strings&quot;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : </span>
+<span id="L26"><span class="lineNum">      26</span>                 :             :         &quot;github.com/liubang/playground/go/pl/loom/internal/domain&quot;</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             :         &quot;github.com/liubang/playground/go/pl/loom/internal/tool/toolkit&quot;</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : )</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : </span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : type askUserArgsOption struct {</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             :         Label       string `json:&quot;label&quot;`</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             :         Description string `json:&quot;description&quot;`</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : }</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : </span>
+<span id="L35"><span class="lineNum">      35</span>                 :             : type askUserArgs struct {</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :         Question      string              `json:&quot;question&quot;`</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             :         Options       []askUserArgsOption `json:&quot;options&quot;`</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :         AllowMultiple bool                `json:&quot;allow_multiple&quot;`</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             : }</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             : </span>
+<span id="L41"><span class="lineNum">      41</span>                 :             : // AskUserTool lets the model ask the user a multiple-choice question when</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             : // it is uncertain between reasonable directions, instead of guessing. The</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             : // tool blocks on the injected Questioner; the answer (or a skip) comes back</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             : // as the tool result.</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             : type AskUserTool struct {</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :         def        domain.ToolDefinition</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             :         questioner domain.Questioner</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : }</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : </span>
+<span id="L50"><span class="lineNum">      50</span>                 :             : // NewAskUserTool creates the tool bound to the given questioner.</span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC tlaBgGNC">         188 : func NewAskUserTool(questioner domain.Questioner) (*AskUserTool, error) {</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">         188 :         if questioner == nil {</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, domain.NewError(domain.ErrInvalidInput, &quot;questioner is required&quot;)</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC tlaBgGNC">         188 :         def := domain.ToolDefinition{</span></span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">         188 :                 Name: &quot;ask_user&quot;,</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">         188 :                 Description: &quot;Ask the user a multiple-choice question when you are uncertain between several reasonable &quot; +</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">         188 :                         &quot;directions (requirements, scope, trade-offs) and guessing wrong would be costly. &quot; +</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">         188 :                         &quot;Rules: ask sparingly — at most when the answer genuinely changes what you will do; prefer 2-4 concrete, &quot; +</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">         188 :                         &quot;mutually distinct options with a one-line description each; never ask about things you can determine &quot; +</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">         188 :                         &quot;yourself by reading code or running commands. &quot; +</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">         188 :                         &quot;The user may pick from your options, answer in free text, or skip the question entirely — a skip means &quot; +</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">         188 :                         &quot;'proceed with your best judgment', never treat it as an error or ask the same question again.&quot;,</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">         188 :                 InputSchema:  json.RawMessage(`{&quot;type&quot;:&quot;object&quot;,&quot;additionalProperties&quot;:false,&quot;properties&quot;:{&quot;question&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:1024},&quot;options&quot;:{&quot;type&quot;:&quot;array&quot;,&quot;minItems&quot;:1,&quot;maxItems&quot;:8,&quot;items&quot;:{&quot;type&quot;:&quot;object&quot;,&quot;additionalProperties&quot;:false,&quot;properties&quot;:{&quot;label&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:120},&quot;description&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;maxLength&quot;:512}},&quot;required&quot;:[&quot;label&quot;]}},&quot;allow_multiple&quot;:{&quot;type&quot;:&quot;boolean&quot;}},&quot;required&quot;:[&quot;question&quot;,&quot;options&quot;]}`),</span></span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">         188 :                 Capabilities: []domain.Capability{domain.CapUserInteract},</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">         188 :                 Source:       domain.ToolSourceBuiltin,</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">         188 :         }</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">         188 :         if err := def.Validate(); err != nil {</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, domain.NewError(domain.ErrInternal, &quot;invalid tool definition&quot;, domain.WithCause(err))</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC tlaBgGNC">         188 :         return &amp;AskUserTool{def: def, questioner: questioner}, nil</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :             : }</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : </span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : // Definition returns the tool definition.</span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">         425 : func (t *AskUserTool) Definition() domain.ToolDefinition { return t.def }</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :             : </span>
+<span id="L77"><span class="lineNum">      77</span>                 :             : // Prepare validates and canonicalizes the call; it is side-effect-free.</span>
+<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">          12 : func (t *AskUserTool) Prepare(_ context.Context, call domain.ToolCall) (domain.PreparedCall, error) {</span></span>
+<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">          12 :         question, canonical, err := decodeAskUserArgs(call.Arguments)</span></span>
+<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">          12 :         if err != nil {</span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">           7 :                 return domain.PreparedCall{}, err</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">           7 :         }</span></span>
+<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">           5 :         call.Arguments = canonical</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">           5 :         return domain.PreparedCall{</span></span>
+<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">           5 :                 Call:         call,</span></span>
+<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">           5 :                 Definition:   t.def,</span></span>
+<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC">           5 :                 Risk:         domain.R0,</span></span>
+<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">           5 :                 ApprovalDesc: fmt.Sprintf(&quot;Ask user: %s&quot;, toolkit.Ellipsize(question.Text, 60)),</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">           5 :                 ArgsHash:     toolkit.ArgsFingerprint(canonical),</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">           5 :         }, nil</span></span>
+<span id="L91"><span class="lineNum">      91</span>                 :             : }</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             : </span>
+<span id="L93"><span class="lineNum">      93</span>                 :             : // Execute asks the question and blocks for the answer.</span>
+<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">           4 : func (t *AskUserTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">           4 :         startedAt := domain.RealClock{}.Now()</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">           4 :         question, _, err := decodeAskUserArgs(prepared.Call.Arguments)</span></span>
+<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">           4 :         if err != nil {</span></span>
+<span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return toolErrorResult(prepared.Call.ID, startedAt, err)</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L100"><span class="lineNum">     100</span>                 :<span class="tlaGNC tlaBgGNC">           4 :         question.ID = domain.NewEventID()</span></span>
+<span id="L101"><span class="lineNum">     101</span>                 :<span class="tlaGNC">           4 : </span></span>
+<span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaGNC">           4 :         answer, err := t.questioner.Ask(ctx, question)</span></span>
+<span id="L103"><span class="lineNum">     103</span>                 :<span class="tlaGNC">           4 :         if err != nil {</span></span>
+<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaGNC">           1 :                 return toolErrorResult(prepared.Call.ID, startedAt, err)</span></span>
+<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L106"><span class="lineNum">     106</span>                 :             : </span>
+<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">           3 :         payload := map[string]any{&quot;answered&quot;: !answer.Skipped}</span></span>
+<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">           3 :         switch {</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">           1 :         case answer.Skipped:</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">           1 :                 payload[&quot;note&quot;] = &quot;the user skipped this question (or no interactive frontend is attached); proceed with your best judgment and do not re-ask&quot;</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">           2 :         default:</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">           2 :                 payload[&quot;note&quot;] = &quot;the user answered&quot;</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">           2 :                 if len(answer.Selected) &gt; 0 {</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">           2 :                         payload[&quot;selected&quot;] = answer.Selected</span></span>
+<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">           2 :                 }</span></span>
+<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">           2 :                 if answer.CustomText != &quot;&quot; {</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">           1 :                         payload[&quot;custom_text&quot;] = answer.CustomText</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :             :         }</span>
+<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">           3 :         raw, err := json.Marshal(payload)</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">           3 :         if err != nil {</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return toolErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal, &quot;failed to encode result&quot;, domain.WithCause(err)))</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         return domain.ToolResult{</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">           3 :                 CallID:     prepared.Call.ID,</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">           3 :                 Status:     domain.ToolStatusSuccess,</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">           3 :                 Content:    []domain.ContentPart{{Kind: domain.PartText, Text: string(raw)}},</span></span>
+<span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaGNC">           3 :                 StartedAt:  startedAt,</span></span>
+<span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC">           3 :                 FinishedAt: domain.RealClock{}.Now(),</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">           3 :         }</span></span>
+<span id="L131"><span class="lineNum">     131</span>                 :             : }</span>
+<span id="L132"><span class="lineNum">     132</span>                 :             : </span>
+<span id="L133"><span class="lineNum">     133</span>                 :             : // decodeAskUserArgs parses, normalizes, and validates the call arguments</span>
+<span id="L134"><span class="lineNum">     134</span>                 :             : // into a domain question; unknown fields are rejected. The question ID is</span>
+<span id="L135"><span class="lineNum">     135</span>                 :             : // assigned by the caller at ask time.</span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">          16 : func decodeAskUserArgs(raw json.RawMessage) (domain.Question, json.RawMessage, error) {</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">          16 :         var args askUserArgs</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">          16 :         dec := json.NewDecoder(strings.NewReader(string(raw)))</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">          16 :         dec.DisallowUnknownFields()</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          16 :         if err := dec.Decode(&amp;args); err != nil {</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">           2 :                 return domain.Question{}, nil, domain.NewError(domain.ErrInvalidInput, &quot;invalid ask_user arguments&quot;, domain.WithCause(err))</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">          14 :         question := domain.Question{</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">          14 :                 Text:          args.Question,</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">          14 :                 AllowMultiple: args.AllowMultiple,</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">          14 :         }</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">          17 :         for _, opt := range args.Options {</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">          17 :                 question.Options = append(question.Options, domain.QuestionOption{</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">          17 :                         Label:       opt.Label,</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">          17 :                         Description: opt.Description,</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">          17 :                 })</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">          17 :         }</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">          14 :         if err := question.Validate(); err != nil {</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">           5 :                 return domain.Question{}, nil, domain.NewError(domain.ErrInvalidInput, err.Error())</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">           5 :         }</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">           9 :         canonical, err := json.Marshal(args)</span></span>
+<span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC">           9 :         if err != nil {</span></span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.Question{}, nil, domain.NewError(domain.ErrInternal, &quot;failed to encode canonical arguments&quot;, domain.WithCause(err))</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         return question, canonical, nil</span></span>
+<span id="L161"><span class="lineNum">     161</span>                 :             : }</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

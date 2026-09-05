@@ -1,0 +1,524 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - mcp/go/pl/loom/internal/mcp/manager.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">mcp/go/pl/loom/internal/mcp</a> - manager.go<span style="font-size: 80%;"> (source / <a href="manager.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryMed">87.3&nbsp;%</td>
+            <td class="headerCovTableEntry">267</td>
+            <td class="headerCovTableEntry">233</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-09-05 12:00:02</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/08/01</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : package mcp</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : import (</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             :         &quot;context&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             :         &quot;fmt&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             :         &quot;log/slog&quot;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             :         &quot;reflect&quot;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             :         &quot;sort&quot;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             :         &quot;sync&quot;</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             :         &quot;time&quot;</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : </span>
+<span id="L29"><span class="lineNum">      29</span>                 :             :         &quot;github.com/liubang/playground/go/pl/loom/internal/domain&quot;</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : )</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : </span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : // ServerConfig is one configured MCP server (from mcp_servers in the</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : // config file). Command selects the stdio transport, URL the streamable</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : // HTTP transport; exactly one is set (the config loader enforces this).</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             : type ServerConfig struct {</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :         Command string            `yaml:&quot;command,omitempty&quot;`</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             :         Args    []string          `yaml:&quot;args,omitempty&quot;`</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :         Env     map[string]string `yaml:&quot;env,omitempty&quot;`</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :         Cwd     string            `yaml:&quot;cwd,omitempty&quot;`</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :         // URL/Headers configure the streamable HTTP transport; Headers</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :         // carries static per-request headers such as Authorization.</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             :         URL     string            `yaml:&quot;url,omitempty&quot;`</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :         Headers map[string]string `yaml:&quot;headers,omitempty&quot;`</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :         // StartupTimeoutSec bounds spawn+initialize (default 30s);</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :         // ToolTimeoutSec bounds one tools/call (default 300s).</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :         StartupTimeoutSec float64 `yaml:&quot;startup_timeout_sec,omitempty&quot;`</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             :         ToolTimeoutSec    float64 `yaml:&quot;tool_timeout_sec,omitempty&quot;`</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             :         // EnabledTools/DisabledTools filter the discovered catalog by the</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :         // server-local tool names. EnabledTools nil means &quot;all&quot;.</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :         EnabledTools  []string `yaml:&quot;enabled_tools,omitempty&quot;`</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :         DisabledTools []string `yaml:&quot;disabled_tools,omitempty&quot;`</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             : }</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             : </span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC tlaBgGNC">          15 : func (c ServerConfig) clientConfig(name string, logger *slog.Logger) ClientConfig {</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">          15 :         return ClientConfig{</span></span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">          15 :                 Command: c.Command,</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">          15 :                 Args:    append([]string(nil), c.Args...),</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">          15 :                 // Env/Headers are shared with the config map by design: nothing</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">          15 :                 // mutates them after load (reconnects read, never write).</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">          15 :                 Env:            c.Env,</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">          15 :                 Cwd:            c.Cwd,</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">          15 :                 URL:            c.URL,</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">          15 :                 Headers:        c.Headers,</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">          15 :                 StartupTimeout: secondsOr(c.StartupTimeoutSec, defaultStartupTimeout),</span></span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">          15 :                 ToolTimeout:    secondsOr(c.ToolTimeoutSec, defaultToolTimeout),</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">          15 :                 Logger:         logger,</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">          15 :                 name:           name,</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">          15 :         }</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">          15 : }</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :             : </span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">          30 : func secondsOr(sec float64, fallback time.Duration) time.Duration {</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">          30 :         if sec &lt;= 0 {</span></span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">          26 :                 return fallback</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">          26 :         }</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">           4 :         return time.Duration(sec * float64(time.Second))</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :             : }</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             : </span>
+<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">          11 : func (c ServerConfig) allows(tool string) bool {</span></span>
+<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">          11 :         if len(c.EnabledTools) &gt; 0 {</span></span>
+<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">           1 :                 found := false</span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">           1 :                 for _, name := range c.EnabledTools {</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">           1 :                         if name == tool {</span></span>
+<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 found = true</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaUNC">           0 :                                 break</span></span>
+<span id="L85"><span class="lineNum">      85</span>                 :             :                         }</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             :                 }</span>
+<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                 if !found {</span></span>
+<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">           1 :                         return false</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :             :         }</span>
+<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">          10 :         for _, name := range c.DisabledTools {</span></span>
+<span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 if name == tool {</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaUNC">           0 :                         return false</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :             :         }</span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC tlaBgGNC">          10 :         return true</span></span>
+<span id="L97"><span class="lineNum">      97</span>                 :             : }</span>
+<span id="L98"><span class="lineNum">      98</span>                 :             : </span>
+<span id="L99"><span class="lineNum">      99</span>                 :             : // ToolInfo is one exposed tool's qualified name and its description as</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             : // advertised by the server's tools/list response.</span>
+<span id="L101"><span class="lineNum">     101</span>                 :             : type ToolInfo struct {</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             :         Name        string `json:&quot;name&quot;`</span>
+<span id="L103"><span class="lineNum">     103</span>                 :             :         Description string `json:&quot;description,omitempty&quot;`</span>
+<span id="L104"><span class="lineNum">     104</span>                 :             : }</span>
+<span id="L105"><span class="lineNum">     105</span>                 :             : </span>
+<span id="L106"><span class="lineNum">     106</span>                 :             : // ServerStatus is the read-only projection of one configured MCP server,</span>
+<span id="L107"><span class="lineNum">     107</span>                 :             : // backing frontend listings (/mcp). A server that failed to start or to</span>
+<span id="L108"><span class="lineNum">     108</span>                 :             : // answer tools/list is reported with Connected=false and the failure</span>
+<span id="L109"><span class="lineNum">     109</span>                 :             : // reason, so the listing can explain why its tools are absent.</span>
+<span id="L110"><span class="lineNum">     110</span>                 :             : type ServerStatus struct {</span>
+<span id="L111"><span class="lineNum">     111</span>                 :             :         Name      string `json:&quot;name&quot;`</span>
+<span id="L112"><span class="lineNum">     112</span>                 :             :         Connected bool   `json:&quot;connected&quot;`</span>
+<span id="L113"><span class="lineNum">     113</span>                 :             :         // Error carries the startup/tools-list failure when Connected is false.</span>
+<span id="L114"><span class="lineNum">     114</span>                 :             :         Error string `json:&quot;error,omitempty&quot;`</span>
+<span id="L115"><span class="lineNum">     115</span>                 :             :         // Tools lists the exposed (filter-passing, collision-surviving)</span>
+<span id="L116"><span class="lineNum">     116</span>                 :             :         // tools with their qualified names when Connected is true.</span>
+<span id="L117"><span class="lineNum">     117</span>                 :             :         Tools []ToolInfo `json:&quot;tools,omitempty&quot;`</span>
+<span id="L118"><span class="lineNum">     118</span>                 :             : }</span>
+<span id="L119"><span class="lineNum">     119</span>                 :             : </span>
+<span id="L120"><span class="lineNum">     120</span>                 :             : // serverEntry is one configured server's live state.</span>
+<span id="L121"><span class="lineNum">     121</span>                 :             : type serverEntry struct {</span>
+<span id="L122"><span class="lineNum">     122</span>                 :             :         cfg    ServerConfig</span>
+<span id="L123"><span class="lineNum">     123</span>                 :             :         client *Client       // nil when the last connect attempt failed</span>
+<span id="L124"><span class="lineNum">     124</span>                 :             :         tools  []domain.Tool // adapted, filter-passing tools</span>
+<span id="L125"><span class="lineNum">     125</span>                 :             :         err    string        // last startup/discovery failure (&quot;&quot; when connected)</span>
+<span id="L126"><span class="lineNum">     126</span>                 :             : }</span>
+<span id="L127"><span class="lineNum">     127</span>                 :             : </span>
+<span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaGNC">          18 : func (e *serverEntry) status(name string) ServerStatus {</span></span>
+<span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC">          18 :         s := ServerStatus{Name: name, Connected: e.client != nil, Error: e.err}</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">          18 :         for _, t := range e.tools {</span></span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">          12 :                 def := t.Definition()</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">          12 :                 s.Tools = append(s.Tools, ToolInfo{Name: def.Name, Description: def.Description})</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">          12 :         }</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">          18 :         sort.Slice(s.Tools, func(i, j int) bool { return s.Tools[i].Name &lt; s.Tools[j].Name })</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">          18 :         return s</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :             : }</span>
+<span id="L137"><span class="lineNum">     137</span>                 :             : </span>
+<span id="L138"><span class="lineNum">     138</span>                 :             : // Manager owns every running MCP server and the tools adapted from them.</span>
+<span id="L139"><span class="lineNum">     139</span>                 :             : // It is safe for concurrent use: lifecycle operations (Add/Remove/</span>
+<span id="L140"><span class="lineNum">     140</span>                 :             : // Reconcile/Close) are serialized (they are rare and may block for the</span>
+<span id="L141"><span class="lineNum">     141</span>                 :             : // startup timeout), while readers take consistent snapshots.</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             : type Manager struct {</span>
+<span id="L143"><span class="lineNum">     143</span>                 :             :         logger *slog.Logger</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             : </span>
+<span id="L145"><span class="lineNum">     145</span>                 :             :         mgmtMu  sync.Mutex</span>
+<span id="L146"><span class="lineNum">     146</span>                 :             :         mu      sync.RWMutex</span>
+<span id="L147"><span class="lineNum">     147</span>                 :             :         entries map[string]*serverEntry</span>
+<span id="L148"><span class="lineNum">     148</span>                 :             :         closed  bool</span>
+<span id="L149"><span class="lineNum">     149</span>                 :             : }</span>
+<span id="L150"><span class="lineNum">     150</span>                 :             : </span>
+<span id="L151"><span class="lineNum">     151</span>                 :             : // NewManager returns an empty manager; servers join via Add/Reconcile.</span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">          11 : func NewManager(logger *slog.Logger) *Manager {</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">          11 :         if logger == nil {</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">           4 :                 logger = slog.Default()</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">           4 :         }</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">          11 :         return &amp;Manager{logger: logger, entries: make(map[string]*serverEntry)}</span></span>
+<span id="L157"><span class="lineNum">     157</span>                 :             : }</span>
+<span id="L158"><span class="lineNum">     158</span>                 :             : </span>
+<span id="L159"><span class="lineNum">     159</span>                 :             : // StartServers launches every configured server concurrently, mirroring</span>
+<span id="L160"><span class="lineNum">     160</span>                 :             : // codex's McpConnectionSet: one server's failure never blocks the others —</span>
+<span id="L161"><span class="lineNum">     161</span>                 :             : // it is logged and its tools are simply absent. Returns (nil, nil) when no</span>
+<span id="L162"><span class="lineNum">     162</span>                 :             : // servers are configured. When EVERY server fails it returns a non-nil</span>
+<span id="L163"><span class="lineNum">     163</span>                 :             : // Manager alongside the error so callers can still inspect Servers() for</span>
+<span id="L164"><span class="lineNum">     164</span>                 :             : // the per-server failure reasons.</span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">           8 : func StartServers(ctx context.Context, cfgs map[string]ServerConfig, logger *slog.Logger) (*Manager, error) {</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">           8 :         if len(cfgs) == 0 {</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, nil</span></span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC tlaBgGNC">           8 :         manager := NewManager(logger)</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">           8 : </span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">           8 :         names := make([]string, 0, len(cfgs))</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">           8 :         for name := range cfgs {</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">           8 :                 names = append(names, name)</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">           8 :         }</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">           8 :         sort.Strings(names)</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">           8 : </span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">           8 :         type outcome struct {</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">           8 :                 name  string</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">           8 :                 entry *serverEntry</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">           8 :         }</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">           8 :         results := make(chan outcome)</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">           8 :         var wg sync.WaitGroup</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">           8 :         for _, name := range names {</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">           8 :                 name, cfg := name, cfgs[name]</span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">           8 :                 wg.Add(1)</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">           8 :                 go func() {</span></span>
+<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">           8 :                         defer wg.Done()</span></span>
+<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">           8 :                         results &lt;- outcome{name: name, entry: manager.connect(ctx, name, cfg)}</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">           8 :                 }()</span></span>
+<span id="L190"><span class="lineNum">     190</span>                 :             :         }</span>
+<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">           8 :         go func() {</span></span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">           8 :                 wg.Wait()</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">           8 :                 close(results)</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">           8 :         }()</span></span>
+<span id="L195"><span class="lineNum">     195</span>                 :             : </span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">           8 :         connected := 0</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">           8 :         for out := range results {</span></span>
+<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC">           8 :                 if out.entry.client != nil {</span></span>
+<span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaGNC">           5 :                         connected++</span></span>
+<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaGNC">           5 :                 }</span></span>
+<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC">           8 :                 manager.entries[out.name] = out.entry</span></span>
+<span id="L202"><span class="lineNum">     202</span>                 :             :         }</span>
+<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">           8 :         if connected == 0 {</span></span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">           3 :                 return manager, fmt.Errorf(&quot;no mcp server could be started&quot;)</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">           3 :         }</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">           5 :         return manager, nil</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :             : }</span>
+<span id="L208"><span class="lineNum">     208</span>                 :             : </span>
+<span id="L209"><span class="lineNum">     209</span>                 :             : // connect starts one server and adapts its tools; the failure modes are</span>
+<span id="L210"><span class="lineNum">     210</span>                 :             : // recorded on the returned entry, never thrown away silently.</span>
+<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">          15 : func (m *Manager) connect(ctx context.Context, name string, cfg ServerConfig) *serverEntry {</span></span>
+<span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaGNC">          15 :         entry := &amp;serverEntry{cfg: cfg}</span></span>
+<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaGNC">          15 :         client, err := Start(ctx, cfg.clientConfig(name, m.logger))</span></span>
+<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">          15 :         if err != nil {</span></span>
+<span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaGNC">           4 :                 m.logger.Warn(&quot;mcp server failed to start; its tools are unavailable&quot;, &quot;server&quot;, name, &quot;error&quot;, err)</span></span>
+<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">           4 :                 entry.err = fmt.Errorf(&quot;start: %w&quot;, err).Error()</span></span>
+<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">           4 :                 return entry</span></span>
+<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaGNC">           4 :         }</span></span>
+<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaGNC">          11 :         specs, err := client.ListTools(ctx)</span></span>
+<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC">          11 :         if err != nil {</span></span>
+<span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 m.logger.Warn(&quot;mcp server tools/list failed; its tools are unavailable&quot;, &quot;server&quot;, name, &quot;error&quot;, err)</span></span>
+<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaUNC">           0 :                 _ = client.Close()</span></span>
+<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaUNC">           0 :                 entry.err = fmt.Errorf(&quot;tools/list: %w&quot;, err).Error()</span></span>
+<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaUNC">           0 :                 return entry</span></span>
+<span id="L225"><span class="lineNum">     225</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC tlaBgGNC">          11 :         entry.client = client</span></span>
+<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">          11 :         for _, spec := range specs {</span></span>
+<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">          11 :                 if !cfg.allows(spec.Name) {</span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">           1 :                         continue</span></span>
+<span id="L230"><span class="lineNum">     230</span>                 :             :                 }</span>
+<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">          10 :                 tool, err := NewToolAdapter(client, name, spec)</span></span>
+<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">          10 :                 if err != nil {</span></span>
+<span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         m.logger.Warn(&quot;mcp tool rejected&quot;, &quot;server&quot;, name, &quot;tool&quot;, spec.Name, &quot;error&quot;, err)</span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaUNC">           0 :                         continue</span></span>
+<span id="L235"><span class="lineNum">     235</span>                 :             :                 }</span>
+<span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaGNC tlaBgGNC">          10 :                 entry.tools = append(entry.tools, tool)</span></span>
+<span id="L237"><span class="lineNum">     237</span>                 :             :         }</span>
+<span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">          11 :         sort.Slice(entry.tools, func(i, j int) bool {</span></span>
+<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return entry.tools[i].Definition().Name &lt; entry.tools[j].Definition().Name</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaUNC">           0 :         })</span></span>
+<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC tlaBgGNC">          11 :         return entry</span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :             : }</span>
+<span id="L243"><span class="lineNum">     243</span>                 :             : </span>
+<span id="L244"><span class="lineNum">     244</span>                 :             : // Add (re)connects one server: an existing entry with the same name is</span>
+<span id="L245"><span class="lineNum">     245</span>                 :             : // shut down first. The outcome is reported through the returned status —</span>
+<span id="L246"><span class="lineNum">     246</span>                 :             : // a failed connect leaves an entry recording the error, so frontends can</span>
+<span id="L247"><span class="lineNum">     247</span>                 :             : // explain why its tools are absent. Add on a closed manager is an error</span>
+<span id="L248"><span class="lineNum">     248</span>                 :             : // status, never a respawn.</span>
+<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">           5 : func (m *Manager) Add(ctx context.Context, name string, cfg ServerConfig) ServerStatus {</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">           5 :         m.mgmtMu.Lock()</span></span>
+<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">           5 :         defer m.mgmtMu.Unlock()</span></span>
+<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">           5 :         m.mu.Lock()</span></span>
+<span id="L253"><span class="lineNum">     253</span>                 :<span class="tlaGNC">           5 :         if m.closed {</span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 m.mu.Unlock()</span></span>
+<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaUNC">           0 :                 return ServerStatus{Name: name, Error: &quot;mcp manager is closed&quot;}</span></span>
+<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaGNC tlaBgGNC">           5 :         if old, ok := m.entries[name]; ok &amp;&amp; old.client != nil {</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 _ = old.client.Close()</span></span>
+<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaGNC tlaBgGNC">           5 :         m.mu.Unlock()</span></span>
+<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">           5 :         entry := m.connect(ctx, name, cfg)</span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">           5 :         m.mu.Lock()</span></span>
+<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC">           5 :         m.entries[name] = entry</span></span>
+<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">           5 :         m.mu.Unlock()</span></span>
+<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaGNC">           5 :         return entry.status(name)</span></span>
+<span id="L266"><span class="lineNum">     266</span>                 :             : }</span>
+<span id="L267"><span class="lineNum">     267</span>                 :             : </span>
+<span id="L268"><span class="lineNum">     268</span>                 :             : // Remove shuts down and forgets one server; unknown names are no-ops,</span>
+<span id="L269"><span class="lineNum">     269</span>                 :             : // and so is a closed manager.</span>
+<span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaGNC">           2 : func (m *Manager) Remove(name string) {</span></span>
+<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">           2 :         m.mgmtMu.Lock()</span></span>
+<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">           2 :         defer m.mgmtMu.Unlock()</span></span>
+<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">           2 :         m.mu.Lock()</span></span>
+<span id="L274"><span class="lineNum">     274</span>                 :<span class="tlaGNC">           2 :         defer m.mu.Unlock()</span></span>
+<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaGNC">           2 :         if m.closed {</span></span>
+<span id="L276"><span class="lineNum">     276</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return</span></span>
+<span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaGNC tlaBgGNC">           2 :         if e, ok := m.entries[name]; ok {</span></span>
+<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">           1 :                 if e.client != nil {</span></span>
+<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC">           1 :                         _ = e.client.Close()</span></span>
+<span id="L281"><span class="lineNum">     281</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaGNC">           1 :                 delete(m.entries, name)</span></span>
+<span id="L283"><span class="lineNum">     283</span>                 :             :         }</span>
+<span id="L284"><span class="lineNum">     284</span>                 :             : }</span>
+<span id="L285"><span class="lineNum">     285</span>                 :             : </span>
+<span id="L286"><span class="lineNum">     286</span>                 :             : // Reconcile diffs the manager against the desired configuration: removed</span>
+<span id="L287"><span class="lineNum">     287</span>                 :             : // servers shut down, added servers connect, servers whose configuration</span>
+<span id="L288"><span class="lineNum">     288</span>                 :             : // changed reconnect. Unchanged servers keep their live connection. New</span>
+<span id="L289"><span class="lineNum">     289</span>                 :             : // and changed servers connect concurrently (a slow server never stalls</span>
+<span id="L290"><span class="lineNum">     290</span>                 :             : // the others). Reconcile on a closed manager is a no-op.</span>
+<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaGNC">           1 : func (m *Manager) Reconcile(ctx context.Context, cfgs map[string]ServerConfig) {</span></span>
+<span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaGNC">           1 :         m.mgmtMu.Lock()</span></span>
+<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC">           1 :         defer m.mgmtMu.Unlock()</span></span>
+<span id="L294"><span class="lineNum">     294</span>                 :<span class="tlaGNC">           1 :         m.mu.Lock()</span></span>
+<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">           1 :         if m.closed {</span></span>
+<span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 m.mu.Unlock()</span></span>
+<span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaUNC">           0 :                 return</span></span>
+<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L299"><span class="lineNum">     299</span>                 :<span class="tlaGNC tlaBgGNC">           1 :         var removed []string</span></span>
+<span id="L300"><span class="lineNum">     300</span>                 :<span class="tlaGNC">           1 :         toConnect := make(map[string]ServerConfig)</span></span>
+<span id="L301"><span class="lineNum">     301</span>                 :<span class="tlaGNC">           3 :         for name, e := range m.entries {</span></span>
+<span id="L302"><span class="lineNum">     302</span>                 :<span class="tlaGNC">           3 :                 if _, ok := cfgs[name]; !ok {</span></span>
+<span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaGNC">           1 :                         removed = append(removed, name)</span></span>
+<span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaGNC">           1 :                         if e.client != nil {</span></span>
+<span id="L305"><span class="lineNum">     305</span>                 :<span class="tlaGNC">           1 :                                 _ = e.client.Close()</span></span>
+<span id="L306"><span class="lineNum">     306</span>                 :<span class="tlaGNC">           1 :                         }</span></span>
+<span id="L307"><span class="lineNum">     307</span>                 :<span class="tlaGNC">           1 :                         delete(m.entries, name)</span></span>
+<span id="L308"><span class="lineNum">     308</span>                 :             :                 }</span>
+<span id="L309"><span class="lineNum">     309</span>                 :             :         }</span>
+<span id="L310"><span class="lineNum">     310</span>                 :<span class="tlaGNC">           3 :         for name, cfg := range cfgs {</span></span>
+<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC">           3 :                 e, ok := m.entries[name]</span></span>
+<span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC">           3 :                 switch {</span></span>
+<span id="L313"><span class="lineNum">     313</span>                 :<span class="tlaGNC">           1 :                 case !ok:</span></span>
+<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">           1 :                         toConnect[name] = cfg</span></span>
+<span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaGNC">           1 :                 case !serverConfigEqual(e.cfg, cfg):</span></span>
+<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaGNC">           1 :                         if e.client != nil {</span></span>
+<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaGNC">           1 :                                 _ = e.client.Close()</span></span>
+<span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaGNC">           1 :                         }</span></span>
+<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">           1 :                         toConnect[name] = cfg</span></span>
+<span id="L320"><span class="lineNum">     320</span>                 :             :                 }</span>
+<span id="L321"><span class="lineNum">     321</span>                 :             :         }</span>
+<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC">           1 :         m.mu.Unlock()</span></span>
+<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">           1 : </span></span>
+<span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaGNC">           1 :         type outcome struct {</span></span>
+<span id="L325"><span class="lineNum">     325</span>                 :<span class="tlaGNC">           1 :                 name  string</span></span>
+<span id="L326"><span class="lineNum">     326</span>                 :<span class="tlaGNC">           1 :                 entry *serverEntry</span></span>
+<span id="L327"><span class="lineNum">     327</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaGNC">           1 :         results := make(chan outcome, len(toConnect))</span></span>
+<span id="L329"><span class="lineNum">     329</span>                 :<span class="tlaGNC">           1 :         var wg sync.WaitGroup</span></span>
+<span id="L330"><span class="lineNum">     330</span>                 :<span class="tlaGNC">           2 :         for name, cfg := range toConnect {</span></span>
+<span id="L331"><span class="lineNum">     331</span>                 :<span class="tlaGNC">           2 :                 name, cfg := name, cfg</span></span>
+<span id="L332"><span class="lineNum">     332</span>                 :<span class="tlaGNC">           2 :                 wg.Add(1)</span></span>
+<span id="L333"><span class="lineNum">     333</span>                 :<span class="tlaGNC">           2 :                 go func() {</span></span>
+<span id="L334"><span class="lineNum">     334</span>                 :<span class="tlaGNC">           2 :                         defer wg.Done()</span></span>
+<span id="L335"><span class="lineNum">     335</span>                 :<span class="tlaGNC">           2 :                         results &lt;- outcome{name: name, entry: m.connect(ctx, name, cfg)}</span></span>
+<span id="L336"><span class="lineNum">     336</span>                 :<span class="tlaGNC">           2 :                 }()</span></span>
+<span id="L337"><span class="lineNum">     337</span>                 :             :         }</span>
+<span id="L338"><span class="lineNum">     338</span>                 :<span class="tlaGNC">           1 :         wg.Wait()</span></span>
+<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaGNC">           1 :         close(results)</span></span>
+<span id="L340"><span class="lineNum">     340</span>                 :<span class="tlaGNC">           1 :         m.mu.Lock()</span></span>
+<span id="L341"><span class="lineNum">     341</span>                 :<span class="tlaGNC">           2 :         for out := range results {</span></span>
+<span id="L342"><span class="lineNum">     342</span>                 :<span class="tlaGNC">           2 :                 m.entries[out.name] = out.entry</span></span>
+<span id="L343"><span class="lineNum">     343</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L344"><span class="lineNum">     344</span>                 :<span class="tlaGNC">           1 :         m.mu.Unlock()</span></span>
+<span id="L345"><span class="lineNum">     345</span>                 :<span class="tlaGNC">           1 :         if len(toConnect)+len(removed) &gt; 0 {</span></span>
+<span id="L346"><span class="lineNum">     346</span>                 :<span class="tlaGNC">           1 :                 names := make([]string, 0, len(toConnect))</span></span>
+<span id="L347"><span class="lineNum">     347</span>                 :<span class="tlaGNC">           2 :                 for name := range toConnect {</span></span>
+<span id="L348"><span class="lineNum">     348</span>                 :<span class="tlaGNC">           2 :                         names = append(names, name)</span></span>
+<span id="L349"><span class="lineNum">     349</span>                 :<span class="tlaGNC">           2 :                 }</span></span>
+<span id="L350"><span class="lineNum">     350</span>                 :<span class="tlaGNC">           1 :                 sort.Strings(names)</span></span>
+<span id="L351"><span class="lineNum">     351</span>                 :<span class="tlaGNC">           1 :                 m.logger.Info(&quot;mcp servers reconciled&quot;, &quot;connected&quot;, names, &quot;removed&quot;, removed)</span></span>
+<span id="L352"><span class="lineNum">     352</span>                 :             :         }</span>
+<span id="L353"><span class="lineNum">     353</span>                 :             : }</span>
+<span id="L354"><span class="lineNum">     354</span>                 :             : </span>
+<span id="L355"><span class="lineNum">     355</span>                 :             : // serverConfigEqual compares two server configs semantically: nil and</span>
+<span id="L356"><span class="lineNum">     356</span>                 :             : // empty slices/maps are equivalent (a hand-written `args: []` must not</span>
+<span id="L357"><span class="lineNum">     357</span>                 :             : // trigger a needless reconnect against a UI-saved omission).</span>
+<span id="L358"><span class="lineNum">     358</span>                 :<span class="tlaGNC">           2 : func serverConfigEqual(a, b ServerConfig) bool {</span></span>
+<span id="L359"><span class="lineNum">     359</span>                 :<span class="tlaGNC">           4 :         norm := func(c ServerConfig) ServerConfig {</span></span>
+<span id="L360"><span class="lineNum">     360</span>                 :<span class="tlaGNC">           4 :                 if len(c.Args) == 0 {</span></span>
+<span id="L361"><span class="lineNum">     361</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         c.Args = nil</span></span>
+<span id="L362"><span class="lineNum">     362</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L363"><span class="lineNum">     363</span>                 :<span class="tlaGNC tlaBgGNC">           4 :                 if len(c.Env) == 0 {</span></span>
+<span id="L364"><span class="lineNum">     364</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         c.Env = nil</span></span>
+<span id="L365"><span class="lineNum">     365</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L366"><span class="lineNum">     366</span>                 :<span class="tlaGNC tlaBgGNC">           4 :                 if len(c.Headers) == 0 {</span></span>
+<span id="L367"><span class="lineNum">     367</span>                 :<span class="tlaGNC">           4 :                         c.Headers = nil</span></span>
+<span id="L368"><span class="lineNum">     368</span>                 :<span class="tlaGNC">           4 :                 }</span></span>
+<span id="L369"><span class="lineNum">     369</span>                 :<span class="tlaGNC">           4 :                 if len(c.EnabledTools) == 0 {</span></span>
+<span id="L370"><span class="lineNum">     370</span>                 :<span class="tlaGNC">           4 :                         c.EnabledTools = nil</span></span>
+<span id="L371"><span class="lineNum">     371</span>                 :<span class="tlaGNC">           4 :                 }</span></span>
+<span id="L372"><span class="lineNum">     372</span>                 :<span class="tlaGNC">           4 :                 if len(c.DisabledTools) == 0 {</span></span>
+<span id="L373"><span class="lineNum">     373</span>                 :<span class="tlaGNC">           4 :                         c.DisabledTools = nil</span></span>
+<span id="L374"><span class="lineNum">     374</span>                 :<span class="tlaGNC">           4 :                 }</span></span>
+<span id="L375"><span class="lineNum">     375</span>                 :<span class="tlaGNC">           4 :                 return c</span></span>
+<span id="L376"><span class="lineNum">     376</span>                 :             :         }</span>
+<span id="L377"><span class="lineNum">     377</span>                 :<span class="tlaGNC">           2 :         return reflect.DeepEqual(norm(a), norm(b))</span></span>
+<span id="L378"><span class="lineNum">     378</span>                 :             : }</span>
+<span id="L379"><span class="lineNum">     379</span>                 :             : </span>
+<span id="L380"><span class="lineNum">     380</span>                 :             : // Servers returns every configured server's status, ordered by server name.</span>
+<span id="L381"><span class="lineNum">     381</span>                 :<span class="tlaGNC">          11 : func (m *Manager) Servers() []ServerStatus {</span></span>
+<span id="L382"><span class="lineNum">     382</span>                 :<span class="tlaGNC">          11 :         m.mu.RLock()</span></span>
+<span id="L383"><span class="lineNum">     383</span>                 :<span class="tlaGNC">          11 :         defer m.mu.RUnlock()</span></span>
+<span id="L384"><span class="lineNum">     384</span>                 :<span class="tlaGNC">          11 :         names := make([]string, 0, len(m.entries))</span></span>
+<span id="L385"><span class="lineNum">     385</span>                 :<span class="tlaGNC">          12 :         for name := range m.entries {</span></span>
+<span id="L386"><span class="lineNum">     386</span>                 :<span class="tlaGNC">          12 :                 names = append(names, name)</span></span>
+<span id="L387"><span class="lineNum">     387</span>                 :<span class="tlaGNC">          12 :         }</span></span>
+<span id="L388"><span class="lineNum">     388</span>                 :<span class="tlaGNC">          11 :         sort.Strings(names)</span></span>
+<span id="L389"><span class="lineNum">     389</span>                 :<span class="tlaGNC">          11 :         out := make([]ServerStatus, 0, len(names))</span></span>
+<span id="L390"><span class="lineNum">     390</span>                 :<span class="tlaGNC">          12 :         for _, name := range names {</span></span>
+<span id="L391"><span class="lineNum">     391</span>                 :<span class="tlaGNC">          12 :                 out = append(out, m.entries[name].status(name))</span></span>
+<span id="L392"><span class="lineNum">     392</span>                 :<span class="tlaGNC">          12 :         }</span></span>
+<span id="L393"><span class="lineNum">     393</span>                 :<span class="tlaGNC">          11 :         return out</span></span>
+<span id="L394"><span class="lineNum">     394</span>                 :             : }</span>
+<span id="L395"><span class="lineNum">     395</span>                 :             : </span>
+<span id="L396"><span class="lineNum">     396</span>                 :             : // Status returns one server's status; ok=false when the name is unknown.</span>
+<span id="L397"><span class="lineNum">     397</span>                 :<span class="tlaGNC">           1 : func (m *Manager) Status(name string) (ServerStatus, bool) {</span></span>
+<span id="L398"><span class="lineNum">     398</span>                 :<span class="tlaGNC">           1 :         m.mu.RLock()</span></span>
+<span id="L399"><span class="lineNum">     399</span>                 :<span class="tlaGNC">           1 :         defer m.mu.RUnlock()</span></span>
+<span id="L400"><span class="lineNum">     400</span>                 :<span class="tlaGNC">           1 :         e, ok := m.entries[name]</span></span>
+<span id="L401"><span class="lineNum">     401</span>                 :<span class="tlaGNC">           1 :         if !ok {</span></span>
+<span id="L402"><span class="lineNum">     402</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return ServerStatus{}, false</span></span>
+<span id="L403"><span class="lineNum">     403</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L404"><span class="lineNum">     404</span>                 :<span class="tlaGNC tlaBgGNC">           1 :         return e.status(name), true</span></span>
+<span id="L405"><span class="lineNum">     405</span>                 :             : }</span>
+<span id="L406"><span class="lineNum">     406</span>                 :             : </span>
+<span id="L407"><span class="lineNum">     407</span>                 :             : // Tools returns the adapted tools from every connected server, ordered by</span>
+<span id="L408"><span class="lineNum">     408</span>                 :             : // qualified name.</span>
+<span id="L409"><span class="lineNum">     409</span>                 :<span class="tlaGNC">          17 : func (m *Manager) Tools() []domain.Tool {</span></span>
+<span id="L410"><span class="lineNum">     410</span>                 :<span class="tlaGNC">          17 :         m.mu.RLock()</span></span>
+<span id="L411"><span class="lineNum">     411</span>                 :<span class="tlaGNC">          17 :         defer m.mu.RUnlock()</span></span>
+<span id="L412"><span class="lineNum">     412</span>                 :<span class="tlaGNC">          17 :         var out []domain.Tool</span></span>
+<span id="L413"><span class="lineNum">     413</span>                 :<span class="tlaGNC">          18 :         for _, e := range m.entries {</span></span>
+<span id="L414"><span class="lineNum">     414</span>                 :<span class="tlaGNC">          18 :                 out = append(out, e.tools...)</span></span>
+<span id="L415"><span class="lineNum">     415</span>                 :<span class="tlaGNC">          18 :         }</span></span>
+<span id="L416"><span class="lineNum">     416</span>                 :<span class="tlaGNC">          17 :         sort.Slice(out, func(i, j int) bool {</span></span>
+<span id="L417"><span class="lineNum">     417</span>                 :<span class="tlaGNC">           3 :                 return out[i].Definition().Name &lt; out[j].Definition().Name</span></span>
+<span id="L418"><span class="lineNum">     418</span>                 :<span class="tlaGNC">           3 :         })</span></span>
+<span id="L419"><span class="lineNum">     419</span>                 :<span class="tlaGNC">          17 :         return out</span></span>
+<span id="L420"><span class="lineNum">     420</span>                 :             : }</span>
+<span id="L421"><span class="lineNum">     421</span>                 :             : </span>
+<span id="L422"><span class="lineNum">     422</span>                 :             : // Close shuts down every server, last-writer-wins on errors.</span>
+<span id="L423"><span class="lineNum">     423</span>                 :<span class="tlaGNC">          11 : func (m *Manager) Close() error {</span></span>
+<span id="L424"><span class="lineNum">     424</span>                 :<span class="tlaGNC">          11 :         m.mgmtMu.Lock()</span></span>
+<span id="L425"><span class="lineNum">     425</span>                 :<span class="tlaGNC">          11 :         defer m.mgmtMu.Unlock()</span></span>
+<span id="L426"><span class="lineNum">     426</span>                 :<span class="tlaGNC">          11 :         m.mu.Lock()</span></span>
+<span id="L427"><span class="lineNum">     427</span>                 :<span class="tlaGNC">          11 :         defer m.mu.Unlock()</span></span>
+<span id="L428"><span class="lineNum">     428</span>                 :<span class="tlaGNC">          11 :         var firstErr error</span></span>
+<span id="L429"><span class="lineNum">     429</span>                 :<span class="tlaGNC">          12 :         for _, e := range m.entries {</span></span>
+<span id="L430"><span class="lineNum">     430</span>                 :<span class="tlaGNC">          12 :                 if e.client != nil {</span></span>
+<span id="L431"><span class="lineNum">     431</span>                 :<span class="tlaGNC">           8 :                         if err := e.client.Close(); err != nil &amp;&amp; firstErr == nil {</span></span>
+<span id="L432"><span class="lineNum">     432</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 firstErr = err</span></span>
+<span id="L433"><span class="lineNum">     433</span>                 :<span class="tlaUNC">           0 :                         }</span></span>
+<span id="L434"><span class="lineNum">     434</span>                 :             :                 }</span>
+<span id="L435"><span class="lineNum">     435</span>                 :             :         }</span>
+<span id="L436"><span class="lineNum">     436</span>                 :<span class="tlaGNC tlaBgGNC">          11 :         m.entries = make(map[string]*serverEntry)</span></span>
+<span id="L437"><span class="lineNum">     437</span>                 :<span class="tlaGNC">          11 :         m.closed = true</span></span>
+<span id="L438"><span class="lineNum">     438</span>                 :<span class="tlaGNC">          11 :         return firstErr</span></span>
+<span id="L439"><span class="lineNum">     439</span>                 :             : }</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

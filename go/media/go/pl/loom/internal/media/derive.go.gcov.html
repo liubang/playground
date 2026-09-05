@@ -1,0 +1,166 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - media/go/pl/loom/internal/media/derive.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">media/go/pl/loom/internal/media</a> - derive.go<span style="font-size: 80%;"> (source / <a href="derive.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryMed">75.8&nbsp;%</td>
+            <td class="headerCovTableEntry">33</td>
+            <td class="headerCovTableEntry">25</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-09-05 12:00:02</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/08/12</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : package media</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : import (</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             :         &quot;bytes&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             :         &quot;encoding/base64&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             :         &quot;image&quot;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             :         &quot;image/jpeg&quot;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             :         &quot;image/png&quot;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : </span>
+<span id="L27"><span class="lineNum">      27</span>                 :             :         xdraw &quot;golang.org/x/image/draw&quot;</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : </span>
+<span id="L29"><span class="lineNum">      29</span>                 :             :         &quot;github.com/liubang/playground/go/pl/loom/internal/domain&quot;</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : )</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : </span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : // downscale proportionally shrinks img so both dimensions fit maxDim,</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : // returning img unchanged when it already fits. CatmullRom is a good</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : // quality/speed trade-off for photographic content (codex uses the</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             : // equivalent Triangle filter; the difference is invisible at this scale).</span>
+<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC tlaBgGNC">           6 : func downscale(img image.Image, maxDim int) image.Image {</span></span>
+<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">           6 :         bounds := img.Bounds()</span></span>
+<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">           6 :         w, h := bounds.Dx(), bounds.Dy()</span></span>
+<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">           6 :         if w &lt;= maxDim &amp;&amp; h &lt;= maxDim {</span></span>
+<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">           4 :                 return img</span></span>
+<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">           4 :         }</span></span>
+<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">           2 :         var nw, nh int</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">           2 :         if w &gt;= h {</span></span>
+<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC">           2 :                 nw = maxDim</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">           2 :                 nh = max(1, h*maxDim/w)</span></span>
+<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">           2 :         } else {</span></span>
+<span id="L47"><span class="lineNum">      47</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 nh = maxDim</span></span>
+<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaUNC">           0 :                 nw = max(1, w*maxDim/h)</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC tlaBgGNC">           2 :         dst := image.NewNRGBA(image.Rect(0, 0, nw, nh))</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">           2 :         xdraw.CatmullRom.Scale(dst, dst.Bounds(), img, bounds, xdraw.Over, nil)</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">           2 :         return dst</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :             : }</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             : </span>
+<span id="L55"><span class="lineNum">      55</span>                 :             : // isOpaque reports whether img has no transparent pixels. Opaque is not on</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : // the image.Image interface but is implemented by every concrete type the</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : // supported decoders (and downscale) produce; unknown types conservatively</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : // report non-opaque so alpha is never silently flattened to jpeg.</span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">           6 : func isOpaque(img image.Image) bool {</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">           6 :         if o, ok := img.(interface{ Opaque() bool }); ok {</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">           6 :                 return o.Opaque()</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">           6 :         }</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return false</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :             : }</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             : </span>
+<span id="L66"><span class="lineNum">      66</span>                 :             : // encode re-encodes img for the wire: jpeg for opaque images (smaller,</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             : // matches the photographic majority), png when an alpha channel is present</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             : // (jpeg cannot represent transparency).</span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC tlaBgGNC">           6 : func encode(img image.Image) (domain.ImageContent, error) {</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">           6 :         var buf bytes.Buffer</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">           6 :         if isOpaque(img) {</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">           4 :                 if err := jpeg.Encode(&amp;buf, img, &amp;jpeg.Options{Quality: jpegQuality}); err != nil {</span></span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return domain.ImageContent{}, domain.NewError(domain.ErrInternal, &quot;media: encode jpeg&quot;, domain.WithCause(err))</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC tlaBgGNC">           4 :                 return domain.ImageContent{MediaType: &quot;image/jpeg&quot;, Data: base64.StdEncoding.EncodeToString(buf.Bytes())}, nil</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :             :         }</span>
+<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">           2 :         if err := png.Encode(&amp;buf, img); err != nil {</span></span>
+<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.ImageContent{}, domain.NewError(domain.ErrInternal, &quot;media: encode png&quot;, domain.WithCause(err))</span></span>
+<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC tlaBgGNC">           2 :         return domain.ImageContent{MediaType: &quot;image/png&quot;, Data: base64.StdEncoding.EncodeToString(buf.Bytes())}, nil</span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : }</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>
