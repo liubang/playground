@@ -427,6 +427,10 @@ textarea.set-input {
   z-index: calc(var(--z-toasts) + 1);
   max-width: 300px;
   white-space: pre-line;
+  /* pre-line only breaks on \n; a single unbreakable token (e.g. a long fetch
+     URL in a tool title) is min-content-sized wider than max-width and would
+     stretch the bubble across the pane — allow breaking inside tokens too. */
+  overflow-wrap: anywhere;
   pointer-events: none;
   background: var(--bg2);
   color: var(--fg);
