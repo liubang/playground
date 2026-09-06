@@ -266,6 +266,20 @@ export class AppController {
           return ''
         }
       },
+      // Per-turn revert: restores the run's before-content server-side; the
+      // git panel must refetch afterwards (restored files still show as
+      // modified — against the pre-turn content, not HEAD)
+      revertRun: async (runId) => {
+        const outcome = await this.api.revertRun(this.store.get().sessionId || '', runId)
+        this.bumpGitStamp()
+        return outcome
+      },
+      // Per-turn review projection (git-free; the turn-summary block's
+      // +/− stats and inline diffs). Cached/invalidated in TranscriptController.
+      runChanges: async (runId) => {
+        const response = await this.api.runChanges(this.store.get().sessionId || '', runId)
+        return response.entries || []
+      },
       // Approval/question/feedback failures: error toasts stay sticky, leaving time to read and copy
       onError: (e) => toast(e.message, false, true),
     })

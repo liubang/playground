@@ -85,15 +85,16 @@
   flex: 1;
   text-align: right;
 }
-/* Git changed-file cards */
+/* Git changed-file rows: borderless compact list — a card frame per file
+   read as sparse; separation is just a hairline, hover gives affordance,
+   and the expanded diff carries the same frameless stripe style as the
+   turn-summary inline diff. */
 .gf {
-  border: 1px solid var(--bg2);
-  border-radius: var(--radius-md);
-  margin-bottom: 6px;
-  overflow: hidden;
+  margin: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--fg) 7%, transparent);
 }
-.gf.is-open {
-  border-color: var(--muted);
+.gf:last-child {
+  border-bottom: none;
 }
 .gf-row {
   display: flex;
@@ -109,7 +110,7 @@
   font-size: var(--text-sm);
 }
 .gf-row:hover {
-  background: var(--bg2);
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
 }
 .gf-badge {
   flex: none;
@@ -171,7 +172,14 @@
   color: var(--error);
 }
 .gf-diff {
-  border-top: 1px solid var(--bg2);
+  border-top: 1px solid color-mix(in srgb, var(--fg) 7%, transparent);
+}
+/* In the borderless list the inner DiffView frame is one box too many —
+   the +/- stripes alone mark the region. */
+.gf-diff .diff {
+  border: none;
+  border-radius: 0;
+  margin-top: 0;
 }
 .gf-diff .diff .d-body {
   max-height: 320px;

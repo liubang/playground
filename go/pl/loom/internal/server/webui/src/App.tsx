@@ -74,6 +74,17 @@ export function App({ controller }: { controller: AppController }) {
         void controller.transcript.answerQuestion(questionId, answer, answer.skipped),
       onFeedback: (runId, value) => controller.transcript.sendFeedback(runId, value),
       fetchToolOutput: controller.fetchToolOutput,
+      // Turn-summary block actions: the per-turn revert flows through the
+      // transcript controller (in-place note state); changes entry jumps the
+      // right panel to its changes tab
+      onRevertRun: (blockId, runId) => void controller.transcript.revertRun(blockId, runId),
+      onShowChanges: () => {
+        controller.setRightPanelTab('changes')
+        if (!controller.store.get().rightPanelOpen) controller.toggleRightPanel()
+      },
+      // Per-turn review projection (git-free +/− stats and inline diffs);
+      // caching/invalidation lives in the transcript controller
+      fetchRunChanges: (runId) => controller.transcript.fetchRunChanges(runId),
     }),
     [controller],
   )

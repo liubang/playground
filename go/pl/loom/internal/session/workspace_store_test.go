@@ -195,7 +195,7 @@ func TestDeleteWorkspace(t *testing.T) {
 	if err := store.AppendEventsAndCheckpoint(ctx, sid, 0, events, ckpt); err != nil {
 		t.Fatalf("AppendEventsAndCheckpoint: %v", err)
 	}
-	if err := store.RecordFileChange(ctx, sid, "a.go", true, "h1", []byte("v1"), "h2"); err != nil {
+	if err := store.RecordFileChange(ctx, sid, domain.RunID{}, "a.go", true, "h1", []byte("v1"), "h2"); err != nil {
 		t.Fatalf("RecordFileChange: %v", err)
 	}
 	if err := store.EnqueueMemoryJob(ctx, sid, ws.RootPath); err != nil {

@@ -168,3 +168,78 @@ func TestDiffForToolCallUnboundedWrite(t *testing.T) {
 		t.Fatalf("unbounded write diff must not carry a truncation marker")
 	}
 }
+
+// UnifiedTexts is the review format (turn-change summaries): real @@
+// headers with correct 1-based line numbers and zero-count conventions.
+func TestUnifiedTextsHunkHeadersAndContents(t *testing.T) {
+	oldText := "a\nb\nc\nd\n"
+	newText := "a\nb\nX\nd\n"
+	got := UnifiedTexts(oldText, newText, 1, 0)
+	// ctx=1 → hunk covers lines 2..4: @@ -2,3 +2,3 @@
+	if !strings.Contains(got, "@@ -2,3 +2,3 @@") {
+		t.Fatalf("diff =\n%s\nwant header @@ -2,3 +2,3 @@", got)
+	}
+	for _, line := range []string{" b", "-c", "+X", " d"} {
+		if !strings.Contains(got, line+"\n") && !strings.HasSuffix(got, line) {
+			t.Fatalf("diff =\n%s\nmissing line %q", got, line)
+		}
+	}
+}
+
+func TestUnifiedTextsCreatedFileStartsAtZero(t *testing.T) {
+	got := UnifiedTexts("", "one\ntwo\n", 1, 0)
+	if !strings.Contains(got, "@@ -0,0 +1,2 @@") {
+		t.Fatalf("diff =\n%s\nwant header @@ -0,0 +1,2 @@", got)
+	}
+	if !strings.Contains(got, "+one") || !strings.Contains(got, "+two") {
+		t.Fatalf("diff =\n%s\nwant all-addition lines", got)
+	}
+}
+
+func TestUnifiedTextsDeletedFileZeroNewSide(t *testing.T) {
+	got := UnifiedTexts("one\ntwo\n", "", 1, 0)
+	if !strings.Contains(got, "@@ -1,2 +0,0 @@") {
+		t.Fatalf("diff =\n%s\nwant header @@ -1,2 +0,0 @@", got)
+	}
+}
+
+func TestUnifiedTextsMergeNearbyChangesIntoOneHunk(t *testing.T) {
+	// Two changes separated by a single unchanged line merge into ONE hunk
+	// when ctx=1 (the gap fits inside the colliding context windows).
+	oldText := "a\nb\nc\n"
+	newText := "A\nb\nC\n"
+	got := UnifiedTexts(oldText, newText, 1, 0)
+	if strings.Count(got, "@@") != 2 { // one header = two '@@' tokens
+		t.Fatalf("diff =\n%s\nwant a single hunk", got)
+	}
+	if !strings.Contains(got, "@@ -1,3 +1,3 @@") {
+		t.Fatalf("diff =\n%s\nwant header @@ -1,3 +1,3 @@", got)
+	}
+}
+
+func TestUnifiedTextsSeparateHunksForDistantChanges(t *testing.T) {
+	oldText := "a\nb\nc\nd\ne\nf\ng\n"
+	newText := "A\nb\nc\nd\ne\nf\nG\n"
+	got := UnifiedTexts(oldText, newText, 0, 0)
+	if strings.Count(got, "@@") != 4 { // two headers
+		t.Fatalf("diff =\n%s\nwant two separate hunks", got)
+	}
+}
+
+func TestUnifiedTextsIdenticalIsEmpty(t *testing.T) {
+	if got := UnifiedTexts("same\n", "same\n", 1, 10); got != "" {
+		t.Fatalf("identical input must render empty, got %q", got)
+	}
+}
+
+func TestUnifiedTextsTruncationMarksCap(t *testing.T) {
+	var oldLines, newLines []string
+	for i := 0; i < 20; i++ {
+		oldLines = append(oldLines, "o"+strconv.Itoa(i))
+		newLines = append(newLines, "n"+strconv.Itoa(i))
+	}
+	got := UnifiedTexts(strings.Join(oldLines, "\n"), strings.Join(newLines, "\n"), 0, 5)
+	if !strings.HasSuffix(got, "…") {
+		t.Fatalf("truncated diff must end with the … marker, got %q", got)
+	}
+}

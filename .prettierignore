@@ -1,6 +1,10 @@
 # Bazel 输出目录（软链）
 bazel-*
 
+# 第三方依赖（本地 install 产物；不受版本控制，但 format runner 按目录收集时会扫到）
+node_modules
+**/node_modules/**
+
 # WebUI 构建产物（Vite 输出的压缩包，提交入库供 embed.FS 内嵌）
 go/pl/loom/internal/server/web/dist/
 

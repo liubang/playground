@@ -3404,8 +3404,8 @@ func (s *contextCheckingStore) LoadLatestCheckpoint(ctx context.Context, id doma
 	return s.base.LoadLatestCheckpoint(ctx, id)
 }
 
-func (s *contextCheckingStore) RecordFileChange(ctx context.Context, sessionID domain.SessionID, path string, beforeExisted bool, beforeHash string, beforeContent []byte, afterHash string) error {
-	return s.base.RecordFileChange(ctx, sessionID, path, beforeExisted, beforeHash, beforeContent, afterHash)
+func (s *contextCheckingStore) RecordFileChange(ctx context.Context, sessionID domain.SessionID, runID domain.RunID, path string, beforeExisted bool, beforeHash string, beforeContent []byte, afterHash string) error {
+	return s.base.RecordFileChange(ctx, sessionID, runID, path, beforeExisted, beforeHash, beforeContent, afterHash)
 }
 
 func (s *contextCheckingStore) InspectSession(ctx context.Context, sessionID domain.SessionID) (domain.SessionInspection, error) {
@@ -3452,8 +3452,8 @@ func (s *failingStore) LoadLatestCheckpoint(ctx context.Context, sessionID domai
 	return s.base.LoadLatestCheckpoint(ctx, sessionID)
 }
 
-func (s *failingStore) RecordFileChange(ctx context.Context, sessionID domain.SessionID, path string, beforeExisted bool, beforeHash string, beforeContent []byte, afterHash string) error {
-	return s.base.RecordFileChange(ctx, sessionID, path, beforeExisted, beforeHash, beforeContent, afterHash)
+func (s *failingStore) RecordFileChange(ctx context.Context, sessionID domain.SessionID, runID domain.RunID, path string, beforeExisted bool, beforeHash string, beforeContent []byte, afterHash string) error {
+	return s.base.RecordFileChange(ctx, sessionID, runID, path, beforeExisted, beforeHash, beforeContent, afterHash)
 }
 
 func (s *failingStore) InspectSession(ctx context.Context, sessionID domain.SessionID) (domain.SessionInspection, error) {

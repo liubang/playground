@@ -102,6 +102,12 @@ type Snapshot struct {
 	// (re)connecting client can render the plan panel from the snapshot
 	// alone instead of waiting for the next plan.updated event.
 	Plan *domain.Plan `json:"plan,omitempty"`
+	// TurnSummaries projects each finished turn's file changes (the
+	// per-turn review card) so a (re)connecting client can render the
+	// closing "本轮变更" blocks from the snapshot alone. Derived state:
+	// rebuilt from the event log on resume, appended live on each
+	// turn.finished; oldest entries fall off past turnSummariesCap.
+	TurnSummaries []TurnSummary `json:"turn_summaries,omitempty"`
 	// Delegated marks a sub-agent child session: read-only for frontends —
 	// prompts are rejected; approvals/questions stay resolvable.
 	Delegated bool `json:"delegated,omitempty"`
@@ -207,7 +213,12 @@ type Controller struct {
 	sessionID   domain.SessionID
 	runID       domain.RunID
 	turnCounter int
-	questioner  *ChannelQuestioner
+	// turnChanges accumulates the in-flight turn's file mutations (fed by
+	// file.changed events through publishingStore); finishTurnChanges
+	// consumes it at the turn boundary into the turnSummaries projection.
+	turnChanges   []runtimeevent.TurnFileChange
+	turnSummaries []TurnSummary
+	questioner    *ChannelQuestioner
 	// runtime holds the per-session mutable state (cells, questioner,
 	// registry overlay). It is the controller's ONLY source of session
 	// state (docs/SERVE_DESIGN.md §4.2, single-construction-path rule).
@@ -1122,6 +1133,8 @@ func (c *Controller) dispatch(cmd controllerCommand) {
 		c.handleListCheckpoints(cmd)
 	case cmdRewind:
 		c.handleRewind(cmd)
+	case cmdRevertRunChanges:
+		c.handleRevertRunChanges(cmd)
 	case cmdShutdown:
 		c.handleShutdown()
 		if cmd.ResultCh != nil {
@@ -1458,6 +1471,10 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, imageRefs []dom
 	// Update controller state and its recoverable transcript projection.
 	c.mu.Lock()
 	c.runID = run.ID
+	// A new turn starts an empty change accumulator; leftovers from a
+	// crashed predecessor were either flushed by its own onTurnFinished
+	// or belong to history rebuilt on resume.
+	c.turnChanges = nil
 	c.messages = append([]domain.Message(nil), run.Messages...)
 	c.lastUsage = run.Usage
 	c.noteProjectionLocked()
@@ -1655,12 +1672,22 @@ func (c *Controller) onTurnFinished(turnID uint64, turn int, err error) {
 	c.noteProjectionLocked()
 	c.mu.Unlock()
 
+	// Consume the turn's accumulated file mutations: they ride the
+	// turn.finished payload (live clients) and the turnSummaries
+	// projection (snapshot rebuilds) alike. Cancelled turns report their
+	// partial changes too — half-applied edits are exactly what a user
+	// wants to review (and possibly revert).
+	cancelled := errors.Is(err, context.Canceled)
+	changes := c.finishTurnChanges(runID, turn, cancelled, err != nil && !cancelled)
 	var payload any
-	if err != nil && !errors.Is(err, context.Canceled) {
+	switch {
+	case err != nil && !cancelled:
 		// Surface turn failures the domain log could not represent (for example
 		// a persistence error before the loop emitted any run-failed event).
 		// Cancellation is a user action already carried by run.cancelled.
-		payload = runtimeevent.TurnFinishedPayload{Error: err.Error()}
+		payload = runtimeevent.TurnFinishedPayload{Error: err.Error(), Changes: changes}
+	case len(changes) > 0:
+		payload = runtimeevent.TurnFinishedPayload{Changes: changes}
 	}
 	c.publishDurable(sessionID, runID, turn, runtimeevent.KindTurnFinished, payload)
 
@@ -1975,6 +2002,10 @@ func (c *Controller) handleResumeSession(cmd controllerCommand) {
 	c.turnCounter = 0
 	c.messages = append([]domain.Message(nil), inspection.Transcript.Messages...)
 	c.lastError = lastErrorFromEvents(inspection.Events)
+	// Rebuild the per-turn change projection from the same timeline (the
+	// projection is derived state — see TurnSummary).
+	c.turnChanges = nil
+	c.turnSummaries = turnSummariesFromEvents(inspection.Events)
 	c.lastUsage = run.Usage
 	// Seed the plan projection from the checkpoint: the plan survives prompt
 	// boundaries like the goal does, and no EventPlanRevised is re-emitted
@@ -2089,6 +2120,7 @@ func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
 		PendingSteers:       c.steerCellPeek(),
 		PendingFollowups:    c.followupCellPeek(),
 		LastError:           c.lastError,
+		TurnSummaries:       append([]TurnSummary(nil), c.turnSummaries...),
 		EventSeq:            c.appliedSeq,
 		Timestamp:           c.clock.Now(),
 	}
@@ -2251,6 +2283,7 @@ const (
 	cmdRequestSnapshot   = "request_snapshot"
 	cmdListCheckpoints   = "list_checkpoints"
 	cmdRewind            = "rewind"
+	cmdRevertRunChanges  = "revert_run_changes"
 	cmdSubmitFeedback    = "submit_feedback"
 	cmdShutdown          = "shutdown"
 )
@@ -2282,6 +2315,8 @@ type controllerCommand struct {
 	Limit              int
 	// Actor identifies who resolved an approval (cmdResolveApproval).
 	Actor string
+	// RunID targets one turn's ledger entries (cmdRevertRunChanges).
+	RunID string
 	// Feedback carries the user-feedback vote (cmdSubmitFeedback): the
 	// target run, the 0/1 vote, and an optional free-text comment.
 	FeedbackRunID   string
@@ -2362,8 +2397,8 @@ func (s *publishingStore) LoadLatestCheckpoint(ctx context.Context, sessionID do
 	return s.inner.LoadLatestCheckpoint(ctx, sessionID)
 }
 
-func (s *publishingStore) RecordFileChange(ctx context.Context, sessionID domain.SessionID, path string, beforeExisted bool, beforeHash string, beforeContent []byte, afterHash string) error {
-	return s.inner.RecordFileChange(ctx, sessionID, path, beforeExisted, beforeHash, beforeContent, afterHash)
+func (s *publishingStore) RecordFileChange(ctx context.Context, sessionID domain.SessionID, runID domain.RunID, path string, beforeExisted bool, beforeHash string, beforeContent []byte, afterHash string) error {
+	return s.inner.RecordFileChange(ctx, sessionID, runID, path, beforeExisted, beforeHash, beforeContent, afterHash)
 }
 
 func (s *publishingStore) InspectSession(ctx context.Context, sessionID domain.SessionID) (domain.SessionInspection, error) {
@@ -2665,6 +2700,12 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 		s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindRuntimeFatal, runtimeevent.RuntimeFatalPayload{
 			Message: message,
 		})
+	case domain.EventFileChanged:
+		// Accumulate the turn's write-tool mutations for the closing
+		// turn-summary projection (see Controller.noteFileChange).
+		if change, ok := decodeFileChange(ev); ok {
+			s.controller.noteFileChange(change.Path, change.OldHash, change.Size)
+		}
 	case domain.EventRunCancelled:
 		s.controller.publishDurable(sessionID, s.runID, 0, runtimeevent.KindRunCancelled, nil)
 	}

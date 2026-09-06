@@ -147,7 +147,7 @@ func (s *FakeStore) Version(id domain.SessionID) (int64, bool) {
 // RecordFileChange is a no-op stub that satisfies the extended SessionStore
 // interface. The fake store does not support rewind; all file changes are
 // silently accepted.
-func (s *FakeStore) RecordFileChange(_ context.Context, _ domain.SessionID, _ string, _ bool, _ string, _ []byte, _ string) error {
+func (s *FakeStore) RecordFileChange(_ context.Context, _ domain.SessionID, _ domain.RunID, _ string, _ bool, _ string, _ []byte, _ string) error {
 	return nil
 }
 

@@ -2443,7 +2443,7 @@ func (l *Loop) recordToolOutcome(ctx context.Context, item preparedExec, result 
 			if item.prepared.Recovery != nil {
 				beforeContent = item.prepared.Recovery.BeforeContent
 			}
-			if err := l.Store.RecordFileChange(ctx, l.Run.SessionID, changed.Path, beforeExisted, changed.OldHash, beforeContent, changed.NewHash); err != nil {
+			if err := l.Store.RecordFileChange(ctx, l.Run.SessionID, l.Run.ID, changed.Path, beforeExisted, changed.OldHash, beforeContent, changed.NewHash); err != nil {
 				if l.Logger != nil {
 					l.Logger.Warn("record file change in ledger", "path", changed.Path, "error", err)
 				}

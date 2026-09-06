@@ -37,6 +37,7 @@ go_library(
         "session_service.go",
         "skills.go",
         "subagent_bridge.go",
+        "turn_summary.go",
         "user_intent_policy.go",
         "workspace_registry.go",
     ],

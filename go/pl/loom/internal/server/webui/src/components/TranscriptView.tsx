@@ -18,6 +18,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { BlockModel, TranscriptController } from '../app/transcript'
+import type { RunChangeStat } from '../protocol/types'
 import { useStore } from '../store/store'
 import { Icon } from '../lib/icons'
 import {
@@ -30,6 +31,7 @@ import {
   ResolvedNotice,
   StreamBlock,
   ThinkingBlock,
+  TurnSummaryBlock,
   UserBlock,
 } from './blocks/blocks'
 import { ToolBlock } from './blocks/ToolBlock'
@@ -84,6 +86,8 @@ function estimateHeight(b: BlockModel): number {
     case 'image':
     case 'artifact':
       return 340
+    case 'turn_summary':
+      return 64 // collapsed head + action row; expansion is measured once rendered
     default:
       return 48 // notice / resolved / compact / fatal / interrupted
   }
@@ -104,6 +108,14 @@ export interface TranscriptViewIO {
   ) => void
   onFeedback?: (runId: string, value: 0 | 1) => Promise<unknown>
   fetchToolOutput?: (callId: string) => Promise<string>
+  // Per-turn revert (turn-summary block): resolves through the transcript
+  // controller so the block's own note state updates in place
+  onRevertRun?: (blockId: string, runId: string) => void
+  // Jump the right workspace panel to its changes tab (turn-summary block)
+  onShowChanges?: () => void
+  // Per-turn review projection (per-path +/− stats and inline diffs,
+  // git-free). Absent on the share page, where the block shows static rows.
+  fetchRunChanges?: (runId: string) => Promise<RunChangeStat[]>
 }
 
 const BlockView = memo(
@@ -178,6 +190,22 @@ const BlockView = memo(
           <div className="block block-image">
             <InlineImage mediaType={block.mediaType} data={block.data} />
           </div>
+        )
+      case 'turn_summary':
+        return (
+          <TurnSummaryBlock
+            changes={block.changes}
+            cancelled={block.cancelled}
+            failed={block.failed}
+            reverting={block.reverting}
+            revertNote={block.revertNote}
+            revertWarn={block.revertWarn}
+            onRevert={io.onRevertRun ? () => io.onRevertRun!(block.id, block.runId) : undefined}
+            onShowChanges={io.onShowChanges}
+            fetchRunChanges={
+              io.fetchRunChanges && block.runId ? () => io.fetchRunChanges!(block.runId) : undefined
+            }
+          />
         )
       case 'artifact':
         return <ArtifactBlock artifact={block.artifact} />

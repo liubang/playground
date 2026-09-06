@@ -461,10 +461,28 @@ type RunCancelledPayload struct {
 	Reason string `json:"reason"`
 }
 
+// TurnFileChange is one file touched by this turn's write tools,
+// deduplicated by path (a file edited twice appears once, with Edits
+// counting the mutations). Created marks a file that did not exist
+// before the turn. The list is the review-oriented projection of the
+// turn's file.changed events — display-safe (paths only, no content).
+type TurnFileChange struct {
+	Path    string `json:"path"`
+	Created bool   `json:"created,omitempty"`
+	Edits   int    `json:"edits"`
+	// Size is the post-mutation size of the LAST change (0 for
+	// events written before the size field existed).
+	Size int64 `json:"size,omitempty"`
+}
+
 // TurnFinishedPayload describes the end of a turn. Error is empty for a clean
-// finish and otherwise carries the user-visible failure summary.
+// finish and otherwise carries the user-visible failure summary. Changes is
+// the per-path projection of the turn's file mutations (empty when the turn
+// wrote no files): frontends render it as the turn's closing review summary
+// without a second round-trip.
 type TurnFinishedPayload struct {
-	Error string `json:"error,omitempty"`
+	Error   string           `json:"error,omitempty"`
+	Changes []TurnFileChange `json:"changes,omitempty"`
 }
 
 // RuntimeWarningPayload describes a non-fatal runtime warning.

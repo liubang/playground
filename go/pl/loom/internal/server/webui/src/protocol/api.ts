@@ -12,7 +12,9 @@ import type {
   McpServerStatus,
   ModelCatalog,
   PutConfigResult,
+  RevertOutcome,
   RulePack,
+  RunChangeStatsResponse,
   SecretRef,
   SessionSummary,
   SetModelResult,
@@ -223,6 +225,21 @@ export function createApi({ getToken, onUnauthorized }: ApiOptions) {
         { 'Idempotency-Key': idemKey },
       ),
     cancelTurn: (id: string) => req('POST', `/v1/sessions/${id}/cancel`, {}),
+    // Per-turn file revert (the turn-summary block's 撤销 action): restores
+    // the files one run mutated; conflicts report external modifications
+    // that were overwritten (never silently clobbered)
+    revertRun: (id: string, runId: string) =>
+      req<RevertOutcome>('POST', `/v1/sessions/${id}/runs/${encodeURIComponent(runId)}/revert`, {}),
+    /**
+     * Per-turn review projection: per-path +/− stats and inline diffs of
+     * ledger-before vs CURRENT workspace content (git-free). Stale after a
+     * revert — call again (or let the controller invalidate its cache).
+     */
+    runChanges: (id: string, runId: string) =>
+      req<RunChangeStatsResponse>(
+        'GET',
+        `/v1/sessions/${id}/runs/${encodeURIComponent(runId)}/changes`,
+      ),
     setModel: (id: string, ref: string) => {
       const [provider, ...rest] = ref.split('/')
       return req<SetModelResult>('POST', `/v1/sessions/${id}/model`, {

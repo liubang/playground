@@ -35,7 +35,21 @@ export interface TurnStartedPayload {
 }
 
 export interface TurnFinishedPayload {
+  // User-visible failure summary; empty for a clean finish
   error?: string
+  // Per-path projection of the turn's write-tool file mutations (deduped;
+  // empty when the turn wrote no files) — the closing review summary
+  changes?: TurnFileChange[]
+}
+
+// One file touched by a turn's write tools (deduped by path; created marks
+// a file that did not exist before the turn)
+export interface TurnFileChange {
+  path: string
+  created?: boolean
+  edits?: number
+  // post-mutation byte size of the last change (0 when unknown)
+  size?: number
 }
 
 export interface TextDeltaPayload {

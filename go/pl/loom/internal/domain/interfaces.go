@@ -308,8 +308,10 @@ type SessionStore interface {
 	// RecordFileChange appends one file mutation to the session's change
 	// ledger for checkpoint/rewind support. beforeContent may be nil (file
 	// did not exist, or was not captured); beforeExisted distinguishes the
-	// two cases.
-	RecordFileChange(ctx context.Context, sessionID SessionID, path string, beforeExisted bool, beforeHash string, beforeContent []byte, afterHash string) error
+	// two cases. runID attributes the mutation to a turn: rewind ranges over
+	// ledger positions regardless, while per-turn revert
+	// (ListFileChangesForRun) selects by it.
+	RecordFileChange(ctx context.Context, sessionID SessionID, runID RunID, path string, beforeExisted bool, beforeHash string, beforeContent []byte, afterHash string) error
 	// InspectSession returns session metadata, its latest checkpoint, the
 	// recovered transcript, and the complete event timeline from one
 	// consistent read snapshot.

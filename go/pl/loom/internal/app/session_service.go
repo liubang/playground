@@ -859,6 +859,29 @@ func (s *SessionService) Snapshot(ctx context.Context, id domain.SessionID) (Sna
 	return h.Controller.RequestSnapshot(ctx)
 }
 
+// RevertRunChanges undoes one turn's recorded file mutations (the closing
+// summary block's revert action; see Controller.RevertRunChanges).
+func (s *SessionService) RevertRunChanges(ctx context.Context, id domain.SessionID, runID string) (RewindOutcome, error) {
+	h, err := s.handle(id)
+	if err != nil {
+		return RewindOutcome{}, err
+	}
+	h.touch()
+	return h.Controller.RevertRunChanges(ctx, runID)
+}
+
+// RunChangeStats renders the per-path review data of one run (stats +
+// inline diffs against the CURRENT workspace content — no git involved; see
+// Controller.RunChangeStats).
+func (s *SessionService) RunChangeStats(ctx context.Context, id domain.SessionID, runID string) ([]RunFileStat, error) {
+	h, err := s.handle(id)
+	if err != nil {
+		return nil, err
+	}
+	h.touch()
+	return h.Controller.RunChangeStats(ctx, runID)
+}
+
 // SetModel switches the session's model from the next turn on. The choice
 // also becomes the process-level preference (persisted), so sessions
 // created afterwards start from it.
@@ -974,6 +997,10 @@ type SharedSessionView struct {
 	CreatedAt time.Time        `json:"created_at"`
 	UpdatedAt time.Time        `json:"updated_at"`
 	Messages  []domain.Message `json:"messages"`
+	// TurnSummaries carries the per-turn file-change projection so the
+	// public read-only transcript renders the same closing review blocks
+	// as the authenticated UI (derived from the event log — TurnSummary).
+	TurnSummaries []TurnSummary `json:"turn_summaries,omitempty"`
 }
 
 // shareStore narrows the persisted-store capabilities the share flow needs.
@@ -1045,10 +1072,11 @@ func (s *SessionService) SharedView(ctx context.Context, token string) (SharedSe
 		return SharedSessionView{}, err
 	}
 	view := SharedSessionView{
-		SessionID: sessionID,
-		CreatedAt: inspection.Session.CreatedAt,
-		UpdatedAt: inspection.Session.UpdatedAt,
-		Messages:  inspection.Transcript.Messages,
+		SessionID:     sessionID,
+		CreatedAt:     inspection.Session.CreatedAt,
+		UpdatedAt:     inspection.Session.UpdatedAt,
+		Messages:      inspection.Transcript.Messages,
+		TurnSummaries: turnSummariesFromEvents(inspection.Events),
 	}
 	// Title enrichment mirrors the session listing: first user prompt,
 	// best-effort (failure must not fail the view).

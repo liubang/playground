@@ -3,11 +3,14 @@
 // Iron rule: all model/tool text goes through textContent only; MarkdownView
 // (marked → DOMPurify) is the sole markdown rendering entry.
 
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { useRafScroll } from '../../lib/rafScroll'
 import type { AssistantActionContext, UserImage } from '../../app/transcript'
 import { isInlineImage } from '../../app/transcript'
-import type { ContextCompactedPayload } from '../../protocol/events'
+import type { ContextCompactedPayload, TurnFileChange } from '../../protocol/events'
+import type { RunChangeStat } from '../../protocol/types'
+import { parseDiff } from '../../lib/diff'
+import { highlightToHtml } from '../../lib/markdown'
 import { fmtBytes, fmtDuration, fmtTokens } from '../../lib/format'
 import { Icon } from '../../lib/icons'
 import {
@@ -325,6 +328,314 @@ export function FatalBlock({ text }: { text: string }) {
 export function InterruptedBlock({ text }: { text: string }) {
   return <div className="block block-interrupted">{text}</div>
 }
+
+// --- turn summary (closing review card of a finished turn) ---
+
+// InlineDiff renders the compact review diff (prefixed +/- lines, "..."
+// separators) WITHOUT DiffView's own frame/head — the turn-summary card
+// supplies that chrome itself (diff rows sit directly under the file row,
+// on one shared dark box). Rows reuse the d-add/d-del stripe palette;
+// hljs highlighting comes from the "+++ b/<path>" header prepended for
+// parseDiff (its file/lang inference only). Overlong diffs cap at
+// INLINE_DIFF_MAX_LINES with a fold note — the changes panel stays the
+// canonical full view.
+const INLINE_DIFF_MAX_LINES = 80
+
+const InlineDiff = memo(function InlineDiff({
+  path,
+  diffText,
+}: {
+  path: string
+  diffText: string
+}) {
+  const parsed = useMemo(() => parseDiff('+++ b/' + path + '\n' + diffText), [path, diffText])
+  const lines = parsed.lines
+  const shown = lines.length > INLINE_DIFF_MAX_LINES ? lines.slice(0, INLINE_DIFF_MAX_LINES) : lines
+  return (
+    // .tsm-diff clips the stripes to the rounded box; the inner scroller
+    // keeps long lines horizontally reachable without breaking the clip.
+    <div className="tsm-diff mono">
+      <div className="tsm-diff-scroll">
+        {shown.map((l, i) => {
+          // Unified-hunk header: a full-width strip with no sign column.
+          if (l.kind === 'hunk') {
+            return (
+              <div key={i} className="tsm-dline d-hunk">
+                {l.text}
+              </div>
+            )
+          }
+          // The compact format's region separator (kept for compatibility;
+          // the review endpoint now emits real @@ hunks) — a subtle
+          // ellipsis row rather than code content.
+          if (l.kind === 'ctx' && l.text === '...') {
+            return (
+              <div key={i} className="tsm-dline d-sep">
+                ⋯
+              </div>
+            )
+          }
+          const kind = l.kind === 'add' ? 'd-add' : l.kind === 'del' ? 'd-del' : 'd-ctx'
+          // sanitized by markdown.ts's whitelist (same path as DiffView)
+          const html = highlightToHtml(l.text, parsed.lang)
+          return (
+            <div key={i} className={'tsm-dline ' + kind}>
+              <span className="d-sign">{l.sign}</span>
+              {html ? <code dangerouslySetInnerHTML={{ __html: html }} /> : <code>{l.text}</code>}
+            </div>
+          )
+        })}
+        {lines.length > shown.length && (
+          <div className="tsm-dline d-ctx tsm-diff-folded">
+            ⋯ 其余 {lines.length - shown.length} 行已折叠，点右上角「在变更面板查看全部」看完整内容
+          </div>
+        )}
+      </div>
+    </div>
+  )
+})
+
+// The turn's write-tool file projection, appended as the last block of a
+// finished turn (live: turn.finished payload; rebuild: snapshot
+// turn_summaries). The file LIST is expanded by default; per-file diffs
+// start collapsed and are reset whenever the card itself is collapsed.
+//
+// Stat +/− and the per-file inline diff come from the per-turn review
+// endpoint (fetchRunChanges): ledger-before vs CURRENT workspace content —
+// no git involved, so the affordance also works in non-git workspaces (the
+// honest cost: any edits made after the turn are part of the comparison;
+// after a revert the numbers drop to 0 — "一致"). Blocks built before the
+// ledger existed, and the share page, leave stats null and keep static
+// rows. The 撤销 button restores the recorded before-content (conflicts
+// are overwritten and then reported).
+export const TurnSummaryBlock = memo(function TurnSummaryBlock({
+  changes,
+  cancelled,
+  failed,
+  reverting,
+  revertNote,
+  revertWarn,
+  onRevert,
+  onShowChanges,
+  fetchRunChanges,
+}: {
+  changes: TurnFileChange[]
+  cancelled?: boolean
+  failed?: boolean
+  reverting?: boolean
+  revertNote?: string
+  revertWarn?: boolean
+  onRevert?: () => void
+  onShowChanges?: () => void
+  // Review-projection fetch (one call per run; the controller caches and
+  // invalidates it after a revert). Absent on the share page: rows stay
+  // static (no chevron, no diff).
+  fetchRunChanges?: () => Promise<RunChangeStat[]>
+}) {
+  // The card opens with its file LIST expanded by default; per-file diffs
+  // start collapsed. Multiple diffs may be open at once (prototype
+  // behavior); re-collapsing the card resets them all (see toggleCard).
+  const [open, setOpen] = useState(true)
+  const [openFiles, setOpenFiles] = useState<string[]>([])
+  const [stats, setStats] = useState<RunChangeStat[] | null>(null)
+  const [statsReady, setStatsReady] = useState(false)
+
+  // Mount-time fetch (the header shows +/− totals even collapsed). The
+  // promise is controller-cached, so virtualization re-mounts cost nothing.
+  // An empty entry list (turns predating the ledger) or a missing endpoint
+  // leaves stats null: the card keeps its static rows with no chevron.
+  useEffect(() => {
+    if (!fetchRunChanges) return
+    let alive = true
+    fetchRunChanges()
+      .then((entries) => {
+        if (!alive) return
+        setStats(entries.length ? entries : null)
+        setStatsReady(true)
+      })
+      .catch(() => {
+        if (!alive) return
+        setStatsReady(true)
+      })
+    return () => {
+      alive = false
+    }
+  }, [fetchRunChanges])
+
+  const statByPath = useMemo(() => {
+    const m = new Map<string, RunChangeStat>()
+    for (const s of stats || []) m.set(s.path, s)
+    return m
+  }, [stats])
+
+  const n = changes.length
+  const expandable = !!fetchRunChanges
+
+  // Re-collapsing the card resets per-file diff expansion: reopening shows
+  // the file list again, not the previous diff selection.
+  const toggleCard = () => {
+    const next = !open
+    setOpen(next)
+    if (!next) setOpenFiles([])
+  }
+  const toggleFile = (p: string) =>
+    setOpenFiles((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]))
+  const comparable = stats ? stats.filter((s) => !s.not_comparable) : []
+  const totals = comparable.length
+    ? {
+        added: comparable.reduce((n, s) => n + s.added, 0),
+        removed: comparable.reduce((n, s) => n + s.removed, 0),
+      }
+    : null
+
+  return (
+    <div className="block block-turn-summary">
+      <div
+        role="button"
+        tabIndex={0}
+        className={'tsm-head' + (open ? ' open' : '')}
+        onClick={toggleCard}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            toggleCard()
+          }
+        }}
+        aria-expanded={open}
+      >
+        <Icon name={open ? 'caret-down' : 'caret-right'} />
+        <span className="tsm-title">
+          本轮变更 <b>{n}</b> 个文件
+        </span>
+        {totals && (
+          <span className="tsm-total mono">
+            <i>+{totals.added}</i> <b>−{totals.removed}</b>
+          </span>
+        )}
+        {cancelled && (
+          <span className="tsm-tag" title="本轮被用户取消，文件改动是取消前的部分写入">
+            <Icon name="ban" /> 已取消
+          </span>
+        )}
+        {failed && !cancelled && <span className="tsm-tag warn">失败</span>}
+        {onShowChanges && (
+          <button
+            type="button"
+            className="tsm-viewall"
+            title="打开右侧变更面板（git 工作区视图）"
+            onClick={(e) => {
+              e.stopPropagation()
+              onShowChanges()
+            }}
+          >
+            在变更面板查看全部 ↗
+          </button>
+        )}
+      </div>
+      {open && (
+        <ul className="tsm-list">
+          {changes.map((c, i) => {
+            const stat = statByPath.get(c.path)
+            const slash = c.path.lastIndexOf('/')
+            const base = slash >= 0 ? c.path.slice(slash + 1) : c.path
+            const dir = slash >= 0 ? c.path.slice(0, slash) : ''
+            const fileOpen = openFiles.includes(c.path)
+            const deleted = !!stat && stat.after_size === -1 && !stat.not_comparable
+            const editCount = stat?.edits ?? c.edits ?? 0
+            const edits = editCount > 1 ? editCount : 0
+            return (
+              <li key={c.path || i} className={fileOpen ? 'open' : ''}>
+                <button
+                  type="button"
+                  className="tsm-row"
+                  disabled={!expandable}
+                  aria-expanded={fileOpen}
+                  title={expandable ? `${c.path}（点击展开与当前工作区的 diff）` : c.path}
+                  onClick={() => toggleFile(c.path)}
+                >
+                  <span
+                    className={'tsm-badge ' + (c.created ? 'added' : 'modified')}
+                    title={c.created ? '本轮新建' : '本轮修改'}
+                  >
+                    {c.created ? 'A' : 'M'}
+                  </span>
+                  <span className="tsm-names">
+                    <code className="tsm-base mono">{base}</code>
+                    {dir && <span className="tsm-dir mono">{dir}</span>}
+                  </span>
+                  <span className="tsm-right mono">
+                    {deleted && <span className="tsm-deleted">已删除</span>}
+                    {edits > 0 && <span className="tsm-edits">{edits} 次编辑</span>}
+                    {stat && !stat.not_comparable && (stat.added > 0 || stat.removed > 0) && (
+                      <span className="tsm-stat">
+                        {stat.added > 0 && <i>+{stat.added}</i>}
+                        {stat.removed > 0 && <b>−{stat.removed}</b>}
+                      </span>
+                    )}
+                    {expandable && (
+                      <span className="tsm-chev">
+                        <Icon name={fileOpen ? 'caret-down' : 'caret-right'} />
+                      </span>
+                    )}
+                  </span>
+                </button>
+                {fileOpen && (
+                  <div className="tsm-file-diff">
+                    {!statsReady ? (
+                      <div className="tsm-diff-note">加载中…</div>
+                    ) : stat?.not_comparable ? (
+                      <div className="tsm-diff-note">{stat.not_comparable}</div>
+                    ) : stat?.diff ? (
+                      <>
+                        {stat.diff_truncated && (
+                          <div className="tsm-diff-note">diff 已截断，统计仅覆盖文件头部内容</div>
+                        )}
+                        <InlineDiff path={c.path} diffText={stat.diff} />
+                      </>
+                    ) : stat ? (
+                      <div className="tsm-diff-note">
+                        文件当前内容与本轮写入前一致（差异可能已被后续操作回滚）
+                      </div>
+                    ) : (
+                      <div className="tsm-diff-note">
+                        本轮对该文件的改动没有台账记录，无法生成 diff
+                      </div>
+                    )}
+                  </div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      {revertNote ? (
+        <div className={'tsm-note' + (revertWarn ? ' warn' : '')}>
+          <Icon name={revertWarn ? 'triangle-exclamation' : 'check'} /> {revertNote}
+        </div>
+      ) : (
+        <div className="tsm-foot">
+          {onRevert && (
+            <button
+              type="button"
+              className="tsm-btn danger"
+              disabled={reverting}
+              title="将本轮写入的文件恢复到轮次前内容（覆盖之后的外部改动时会逐项提示）"
+              onClick={onRevert}
+            >
+              <Icon name="rotate-left" /> {reverting ? '撤销中…' : '撤销本轮改动'}
+            </button>
+          )}
+          <span className="tsm-footnote">
+            仅统计 loom 写工具的改动；run_cmd 内直接写文件（如 sed）不计入。
+            {fetchRunChanges
+              ? 'diff 为轮次前内容与当前工作区的对比。'
+              : '共享视图不展示内联 diff。'}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+})
 
 // context.compacted detail card: before/after estimates + trigger reason +
 // per-level action details.

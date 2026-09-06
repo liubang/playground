@@ -199,6 +199,10 @@ func (c *Controller) handleRewind(cmd controllerCommand) {
 	c.runID = domain.RunID{}
 	c.turnCounter = 0
 	c.messages = append([]domain.Message(nil), inspection.Transcript.Messages...)
+	// The rewind truncated the timeline: drop the stale turn projections
+	// and rebuild from the surviving events (derived state — TurnSummary).
+	c.turnChanges = nil
+	c.turnSummaries = turnSummariesFromEvents(inspection.Events)
 	c.lastUsage = run.Usage
 	c.resumedRun = run
 	c.resumed = true

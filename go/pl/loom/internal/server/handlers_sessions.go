@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -334,6 +335,81 @@ func (s *Server) handleCancelTurn(w http.ResponseWriter, r *http.Request) {
 	}
 	s.auditf("turn.cancel", id)
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "cancelling"})
+}
+
+// revertRunChangesResponse is the wire shape of the per-turn revert
+// endpoint: which paths were restored to their pre-turn content, which
+// turn-created files were removed, which paths hit a conflict (an
+// external modification after the turn was overwritten — reported, never
+// silent), and which were unrestorable (snapshot content never captured,
+// e.g. an oversized file).
+type revertRunChangesResponse struct {
+	Restored  []string `json:"restored,omitempty"`
+	Deleted   []string `json:"deleted,omitempty"`
+	Conflicts []string `json:"conflicts,omitempty"`
+	Skipped   []string `json:"skipped,omitempty"`
+}
+
+// handleRevertRunChanges serves POST /v1/sessions/{id}/runs/{runID}/revert —
+// undo one turn's file mutations. The session must be idle (a write racing a
+// running turn's edits is a state error, matching rewind's guard); the
+// event log and the change ledger stay untouched, so the mutation remains
+// auditable and the transcript keeps showing the turn's summary.
+func (s *Server) handleRevertRunChanges(w http.ResponseWriter, r *http.Request) {
+	id, err := parseSessionParam(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	runID := strings.TrimSpace(r.PathValue("runID"))
+	if runID == "" {
+		writeError(w, invalidInput("run id is required"))
+		return
+	}
+	outcome, err := s.svc.RevertRunChanges(r.Context(), id, runID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	s.auditf("turn.revert", id, "run_id", runID,
+		"restored", len(outcome.Restored), "deleted", len(outcome.Deleted),
+		"conflicts", len(outcome.Conflicts), "skipped", len(outcome.Skipped))
+	writeJSON(w, http.StatusOK, revertRunChangesResponse{
+		Restored:  outcome.Restored,
+		Deleted:   outcome.Deleted,
+		Conflicts: outcome.Conflicts,
+		Skipped:   outcome.Skipped,
+	})
+}
+
+type runChangeStatsResponse struct {
+	RunID   string            `json:"run_id"`
+	Entries []app.RunFileStat `json:"entries"`
+}
+
+// handleRunChangeStats serves GET /v1/sessions/{id}/runs/{runID}/changes —
+// the per-path review data of one turn (sizes, +/− counts, inline diffs)
+// for the turn-summary block's diff affordances. The comparison is
+// ledger-before vs CURRENT workspace content (no git involved), so clients
+// refetch after a revert. A run with no recorded file changes answers an
+// empty list rather than an error, so the UI can fall back to static rows.
+func (s *Server) handleRunChangeStats(w http.ResponseWriter, r *http.Request) {
+	id, err := parseSessionParam(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	runID := strings.TrimSpace(r.PathValue("runID"))
+	if runID == "" {
+		writeError(w, invalidInput("run id is required"))
+		return
+	}
+	entries, err := s.svc.RunChangeStats(r.Context(), id, runID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, runChangeStatsResponse{RunID: runID, Entries: entries})
 }
 
 // --- feedback ---

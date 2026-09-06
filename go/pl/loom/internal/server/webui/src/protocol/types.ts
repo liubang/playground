@@ -1,7 +1,14 @@
 // types.ts — wire types for REST/snapshot (one-to-one with the JSON responses
 // of the Go-side internal/server; field names keep the wire's snake_case).
 
-import type { ArtifactRef, FailurePayload, Plan, SessionState, TokenUsage } from './events'
+import type {
+  ArtifactRef,
+  FailurePayload,
+  Plan,
+  SessionState,
+  TokenUsage,
+  TurnFileChange,
+} from './events'
 
 // --- snapshot message history ---
 
@@ -59,10 +66,60 @@ export interface ContextWindow {
   compact_target?: number
 }
 
+// Per-turn file-change projection (GET /v1/sessions/{id}/snapshot and the
+// shared view): the closing review card of one finished turn, keyed to
+// the turn via run_id (assistant messages carry the same run_id metadata).
+export interface TurnSummary {
+  run_id?: string
+  turn?: number
+  cancelled?: boolean
+  failed?: boolean
+  changes?: TurnFileChange[]
+}
+
+/**
+ * Per-path review data of one run, served by
+ * GET /v1/sessions/{id}/runs/{runID}/changes: the ledger's before-content
+ * compared against the file's CURRENT workspace content — no git involved,
+ * so the review affordance works in non-git workspaces too (at the honest
+ * cost of including any edits made after the turn, by anyone).
+ */
+export interface RunChangeStat {
+  path: string
+  created?: boolean
+  edits?: number
+  before_size: number // -1 when the ledger never captured the content
+  after_size: number // -1 when the file no longer exists or is unreadable
+  added: number
+  removed: number
+  /** Compact rendered diff (prefixed lines, "..." separators) — empty when identical. */
+  diff?: string
+  diff_truncated?: boolean
+  /** Reason the diff is unavailable (never captured / oversized / binary / unreadable). */
+  not_comparable?: string
+}
+
+export interface RunChangeStatsResponse {
+  run_id: string
+  entries: RunChangeStat[]
+}
+
+// Per-turn revert outcome (POST /v1/sessions/{id}/runs/{runID}/revert):
+// restored files got their pre-turn content back, deleted files were
+// created by the turn; conflicts report external modifications that were
+// overwritten, skipped paths were never captured (e.g. oversized files).
+export interface RevertOutcome {
+  restored?: string[]
+  deleted?: string[]
+  conflicts?: string[]
+  skipped?: string[]
+}
+
 export interface Snapshot {
   state?: SessionState
   event_seq?: number
   messages?: Message[]
+  turn_summaries?: TurnSummary[]
   pending_requests?: PendingRequest[]
   pending_steers?: string[]
   pending_followups?: string[]
@@ -308,6 +365,7 @@ export interface SharedView {
   session_id?: string
   updated_at?: string
   messages?: Message[]
+  turn_summaries?: TurnSummary[]
 }
 
 // --- other responses ---

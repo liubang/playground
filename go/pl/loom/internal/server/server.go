@@ -298,6 +298,13 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/sessions/{id}/prompts", s.handleSubmitPrompt)
 	mux.HandleFunc("POST /v1/sessions/{id}/cancel", s.handleCancelTurn)
 	mux.HandleFunc("POST /v1/sessions/{id}/feedback", s.handleSubmitFeedback)
+	// Per-turn file revert (the turn-summary block's 撤销 action): restores
+	// the workspace files one run mutated, without truncating the session.
+	mux.HandleFunc("POST /v1/sessions/{id}/runs/{runID}/revert", s.handleRevertRunChanges)
+	// Per-turn review projection: per-path sizes, +/− counts and inline
+	// diffs of ledger-before vs CURRENT workspace content (git-free, so the
+	// turn-summary card works in non-git workspaces).
+	mux.HandleFunc("GET /v1/sessions/{id}/runs/{runID}/changes", s.handleRunChangeStats)
 	mux.HandleFunc("POST /v1/sessions/{id}/approvals/{approvalID}", s.handleResolveApproval)
 	mux.HandleFunc("POST /v1/sessions/{id}/questions/{questionID}", s.handleAnswerQuestion)
 	mux.HandleFunc("POST /v1/sessions/{id}/model", s.handleSetModel)

@@ -19,6 +19,7 @@ package render
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"unicode/utf8"
 )
@@ -77,16 +78,7 @@ func DiffTexts(oldText, newText string, maxLines int) string {
 		return ""
 	}
 	bounded := maxLines > 0
-	var ops []diffOp
-	if oldText == "" || newText == "" {
-		// Pure addition/removal (e.g. write creating a file): the diff is
-		// trivial and needs neither the LCS nor its input bound.
-		ops = trivialDiff(splitDiffLines(oldText), splitDiffLines(newText))
-	} else {
-		oldLines := capLines(splitDiffLines(oldText), diffMaxInputLines)
-		newLines := capLines(splitDiffLines(newText), diffMaxInputLines)
-		ops = lcsDiff(oldLines, newLines)
-	}
+	ops := computeDiffOps(oldText, newText)
 
 	// Keep changed rows plus one context row around each change.
 	show := make([]bool, len(ops))
@@ -130,6 +122,180 @@ func DiffTexts(oldText, newText string, maxLines int) string {
 			out = append(out, "…")
 			break
 		}
+	}
+	return strings.Join(out, "\n")
+}
+
+// computeDiffOps runs the shared capped-LCS pipeline behind DiffTexts:
+// empty-side inputs take the trivial pure add/remove path, two-sided
+// inputs are capped per side before the O(n·m) dynamic program.
+func computeDiffOps(oldText, newText string) []diffOp {
+	if oldText == "" || newText == "" {
+		// Pure addition/removal (e.g. write creating a file): the diff is
+		// trivial and needs neither the LCS nor its input bound.
+		return trivialDiff(splitDiffLines(oldText), splitDiffLines(newText))
+	}
+	oldLines := capLines(splitDiffLines(oldText), diffMaxInputLines)
+	newLines := capLines(splitDiffLines(newText), diffMaxInputLines)
+	return lcsDiff(oldLines, newLines)
+}
+
+// CountLineDiff is the counting sibling of DiffTexts: same capped-LCS
+// pipeline, returning addition/removal counts instead of rendered text.
+// Counts are exact within the per-side input cap (diffMaxInputLines).
+func CountLineDiff(oldText, newText string) (added, removed int) {
+	for _, op := range computeDiffOps(oldText, newText) {
+		switch op.kind {
+		case '+':
+			added++
+		case '-':
+			removed++
+		}
+	}
+	return added, removed
+}
+
+// DiffInputCapped reports whether either side exceeds the LCS input cap —
+// rendered diffs and counts past this point describe only the leading
+// portion of the text.
+func DiffInputCapped(oldText, newText string) bool {
+	oldLines := 0
+	if oldText != "" {
+		oldLines = strings.Count(oldText, "\n") + 1
+	}
+	newLines := 0
+	if newText != "" {
+		newLines = strings.Count(newText, "\n") + 1
+	}
+	return oldLines > diffMaxInputLines || newLines > diffMaxInputLines
+}
+
+// UnifiedTexts renders old→new as unified-diff hunks:
+// "@@ -oldStart,oldCount +newStart,newCount @@" headers with ctxLines of
+// context around each change run (runs within 2·ctxLines merge into one
+// hunk). Zero-count sides follow the unified convention (a created file
+// starts at "@@ -0,0 +1,N @@"). maxLines caps emitted lines including
+// headers; truncation appends a trailing "…" line. Identical inputs
+// produce "". Unlike DiffTexts this is for REAL reviews (turn-change
+// summaries): line numbers make hunks clickable in review tooling.
+func UnifiedTexts(oldText, newText string, ctxLines, maxLines int) string {
+	if oldText == newText {
+		return ""
+	}
+	if ctxLines < 0 {
+		ctxLines = 0
+	}
+	ops := computeDiffOps(oldText, newText)
+
+	// Annotate each op with its 1-based line number on BOTH sides (0 when
+	// the op does not consume that side).
+	type numberedOp struct {
+		diffOp
+		oldLine, newLine int
+	}
+	nops := make([]numberedOp, len(ops))
+	o, n := 1, 1
+	for k, op := range ops {
+		switch op.kind {
+		case ' ':
+			nops[k] = numberedOp{op, o, n}
+			o++
+			n++
+		case '-':
+			nops[k] = numberedOp{op, o, 0}
+			o++
+		case '+':
+			nops[k] = numberedOp{op, 0, n}
+			n++
+		}
+	}
+
+	// show[]: change ops plus ctxLines of context on each side.
+	show := make([]bool, len(nops))
+	for k, op := range nops {
+		if op.kind == ' ' {
+			continue
+		}
+		for d := -ctxLines; d <= ctxLines; d++ {
+			if k+d >= 0 && k+d < len(show) {
+				show[k+d] = true
+			}
+		}
+	}
+
+	bounded := maxLines > 0
+	out := make([]string, 0, len(ops))
+	truncated := false
+emit:
+	for k := 0; k < len(nops); {
+		if !show[k] {
+			k++
+			continue
+		}
+		// hunk: maximal run of shown ops
+		s := k
+		for k < len(nops) && show[k] {
+			k++
+		}
+		e := k
+
+		oldStart, newStart, oldCount, newCount := 0, 0, 0, 0
+		for _, op := range nops[s:e] {
+			switch op.kind {
+			case ' ':
+				if oldStart == 0 {
+					oldStart = op.oldLine
+				}
+				if newStart == 0 {
+					newStart = op.newLine
+				}
+				oldCount++
+				newCount++
+			case '-':
+				if oldStart == 0 {
+					oldStart = op.oldLine
+				}
+				oldCount++
+			case '+':
+				if newStart == 0 {
+					newStart = op.newLine
+				}
+				newCount++
+			}
+		}
+		if oldCount == 0 {
+			oldStart = max(0, oldStart-1)
+		}
+		if newCount == 0 {
+			newStart = max(0, newStart-1)
+		}
+		out = append(out, fmt.Sprintf("@@ -%d,%d +%d,%d @@", oldStart, oldCount, newStart, newCount))
+		if bounded && len(out) >= maxLines {
+			truncated = true
+			break emit
+		}
+		for _, op := range nops[s:e] {
+			var line string
+			switch op.kind {
+			case ' ':
+				line = " " + op.line
+			case '-':
+				line = "-" + op.line
+			case '+':
+				line = "+" + op.line
+			}
+			if bounded {
+				line = truncateDiffLine(line)
+			}
+			out = append(out, line)
+			if bounded && len(out) >= maxLines {
+				truncated = true
+				break emit
+			}
+		}
+	}
+	if truncated {
+		out = append(out, "…")
 	}
 	return strings.Join(out, "\n")
 }

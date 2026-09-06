@@ -821,7 +821,7 @@ func TestSQLiteStoreDeleteExpiredArchivedSessions(t *testing.T) {
 	if err := store.AppendEventsAndCheckpoint(ctx, expired, 0, events, ckpt); err != nil {
 		t.Fatalf("AppendEventsAndCheckpoint: %v", err)
 	}
-	if err := store.RecordFileChange(ctx, expired, "a.go", true, "h1", []byte("v1"), "h2"); err != nil {
+	if err := store.RecordFileChange(ctx, expired, domain.RunID{}, "a.go", true, "h1", []byte("v1"), "h2"); err != nil {
 		t.Fatalf("RecordFileChange: %v", err)
 	}
 	if err := store.EnqueueMemoryJob(ctx, expired, "/ws"); err != nil {
@@ -1235,16 +1235,16 @@ func TestSQLiteStoreRecordFileChangePersistsLedger(t *testing.T) {
 	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if err := store.RecordFileChange(ctx, sessionID, "a.txt", true, "h1", []byte("old-a"), "h2"); err != nil {
+	if err := store.RecordFileChange(ctx, sessionID, domain.RunID{}, "a.txt", true, "h1", []byte("old-a"), "h2"); err != nil {
 		t.Fatalf("RecordFileChange: %v", err)
 	}
-	if err := store.RecordFileChange(ctx, sessionID, "b.txt", false, "", nil, "h3"); err != nil {
+	if err := store.RecordFileChange(ctx, sessionID, domain.RunID{}, "b.txt", false, "", nil, "h3"); err != nil {
 		t.Fatalf("RecordFileChange new file: %v", err)
 	}
-	if err := store.RecordFileChange(ctx, sessionID, "", true, "h1", nil, "h2"); errorCode(err) != domain.ErrInvalidInput {
+	if err := store.RecordFileChange(ctx, sessionID, domain.RunID{}, "", true, "h1", nil, "h2"); errorCode(err) != domain.ErrInvalidInput {
 		t.Fatalf("empty path error = %v, want invalid_input", err)
 	}
-	if err := store.RecordFileChange(ctx, domain.SessionID{}, "a.txt", true, "h1", nil, "h2"); errorCode(err) != domain.ErrInvalidInput {
+	if err := store.RecordFileChange(ctx, domain.SessionID{}, domain.RunID{}, "a.txt", true, "h1", nil, "h2"); errorCode(err) != domain.ErrInvalidInput {
 		t.Fatalf("zero session error = %v, want invalid_input", err)
 	}
 }
@@ -1267,7 +1267,7 @@ func TestSQLiteStoreRecordFileChangeCapsOversizedContent(t *testing.T) {
 		t.Fatalf("AppendEventsAndCheckpoint 1: %v", err)
 	}
 	// Record oversized file change AFTER checkpoint 1.
-	if err := store.RecordFileChange(ctx, sessionID, "big.txt", true, "h1", oversized, "h2"); err != nil {
+	if err := store.RecordFileChange(ctx, sessionID, domain.RunID{}, "big.txt", true, "h1", oversized, "h2"); err != nil {
 		t.Fatalf("RecordFileChange oversized: %v", err)
 	}
 	// Second checkpoint at seq 2 (captures the ledger position after the file change).
@@ -1306,7 +1306,7 @@ func TestSQLiteStoreRewindSessionRestoresFilesAndTruncatesEvents(t *testing.T) {
 	}
 
 	// Record a file change AFTER checkpoint 1
-	if err := store.RecordFileChange(ctx, sessionID, "hello.go", true, "hash1", []byte("package main\n"), "hash2"); err != nil {
+	if err := store.RecordFileChange(ctx, sessionID, domain.RunID{}, "hello.go", true, "hash1", []byte("package main\n"), "hash2"); err != nil {
 		t.Fatalf("RecordFileChange: %v", err)
 	}
 
@@ -1366,13 +1366,13 @@ func TestSQLiteStoreRewindSessionDeduplicatesByPath(t *testing.T) {
 	}
 
 	// Multiple edits to the same file AFTER checkpoint 1
-	if err := store.RecordFileChange(ctx, sessionID, "a.go", true, "h1", []byte("v1"), "h2"); err != nil {
+	if err := store.RecordFileChange(ctx, sessionID, domain.RunID{}, "a.go", true, "h1", []byte("v1"), "h2"); err != nil {
 		t.Fatalf("RecordFileChange 1: %v", err)
 	}
-	if err := store.RecordFileChange(ctx, sessionID, "a.go", true, "h2", []byte("v2"), "h3"); err != nil {
+	if err := store.RecordFileChange(ctx, sessionID, domain.RunID{}, "a.go", true, "h2", []byte("v2"), "h3"); err != nil {
 		t.Fatalf("RecordFileChange 2: %v", err)
 	}
-	if err := store.RecordFileChange(ctx, sessionID, "b.go", true, "h4", []byte("v3"), "h5"); err != nil {
+	if err := store.RecordFileChange(ctx, sessionID, domain.RunID{}, "b.go", true, "h4", []byte("v3"), "h5"); err != nil {
 		t.Fatalf("RecordFileChange 3: %v", err)
 	}
 
@@ -1532,7 +1532,7 @@ func TestSQLiteStoreDeleteSessionRemovesAllSessionData(t *testing.T) {
 	if err := store.AppendEventsAndCheckpoint(ctx, sessionID, 0, events, ckpt); err != nil {
 		t.Fatalf("AppendEventsAndCheckpoint: %v", err)
 	}
-	if err := store.RecordFileChange(ctx, sessionID, "a.go", true, "h1", []byte("v1"), "h2"); err != nil {
+	if err := store.RecordFileChange(ctx, sessionID, domain.RunID{}, "a.go", true, "h1", []byte("v1"), "h2"); err != nil {
 		t.Fatalf("RecordFileChange: %v", err)
 	}
 	if err := store.EnqueueMemoryJob(ctx, sessionID, "/ws"); err != nil {

@@ -512,7 +512,7 @@ func TestE2ERewindSessionTruncation(t *testing.T) {
 	}
 
 	// Record a file change AFTER checkpoint 1.
-	if err := store.RecordFileChange(ctx, sessionID, "main.go", true, "h1", []byte("original"), "h2"); err != nil {
+	if err := store.RecordFileChange(ctx, sessionID, domain.RunID{}, "main.go", true, "h1", []byte("original"), "h2"); err != nil {
 		t.Fatalf("RecordFileChange: %v", err)
 	}
 

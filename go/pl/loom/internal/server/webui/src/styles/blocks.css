@@ -764,3 +764,302 @@ body.lightbox-open {
 .resolved .no {
   color: var(--error);
 }
+
+/* --- turn summary (closing review card of a finished turn) --- */
+.block-turn-summary {
+  align-self: stretch;
+  background: var(--bg1);
+  border: 1px solid color-mix(in srgb, var(--fg) 12%, transparent);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  font-size: var(--text-md);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.block-turn-summary .tsm-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--fg);
+  font-size: inherit;
+  text-align: left;
+}
+.block-turn-summary .tsm-head .icon {
+  color: var(--muted);
+  flex: none;
+}
+.block-turn-summary .tsm-title b {
+  font-style: normal;
+  color: var(--primary);
+}
+.block-turn-summary .tsm-total {
+  font-size: 11px;
+  flex: none;
+}
+.block-turn-summary .tsm-total i,
+.block-turn-summary .tsm-total b {
+  font-style: normal;
+  font-weight: inherit;
+}
+.block-turn-summary .tsm-total i {
+  color: var(--success);
+}
+.block-turn-summary .tsm-total b {
+  color: var(--error);
+}
+.block-turn-summary .tsm-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent);
+  border-radius: 10px;
+  padding: 0 8px;
+}
+.block-turn-summary .tsm-tag.warn {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 40%, transparent);
+}
+.block-turn-summary .tsm-viewall {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: auto;
+  color: var(--primary);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.block-turn-summary .tsm-viewall:hover {
+  text-decoration: underline;
+}
+.block-turn-summary .tsm-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 8px 0 2px;
+  border-top: 1px solid color-mix(in srgb, var(--fg) 9%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.block-turn-summary .tsm-list li {
+  min-width: 0;
+}
+.block-turn-summary .tsm-row {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 3px 4px;
+  margin: 0;
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--fg);
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.block-turn-summary .tsm-row:not(:disabled):hover {
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+}
+.block-turn-summary .tsm-row:disabled {
+  cursor: default;
+}
+/* A/M state chip: tinted filled square, aligned to the prototype. */
+.block-turn-summary .tsm-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  font-weight: 700;
+  font-size: 11px;
+  align-self: center;
+}
+.block-turn-summary .tsm-badge.added {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+}
+.block-turn-summary .tsm-badge.modified {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
+}
+.block-turn-summary .tsm-names {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.block-turn-summary .tsm-base {
+  flex: none;
+}
+.block-turn-summary .tsm-dir {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.block-turn-summary .tsm-right {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.block-turn-summary .tsm-deleted {
+  color: var(--error);
+}
+.block-turn-summary .tsm-stat {
+  display: inline-flex;
+  gap: 7px;
+}
+.block-turn-summary .tsm-stat i,
+.block-turn-summary .tsm-stat b {
+  font-style: normal;
+  font-weight: inherit;
+}
+.block-turn-summary .tsm-stat i {
+  color: var(--success);
+}
+.block-turn-summary .tsm-stat b {
+  color: var(--error);
+}
+.block-turn-summary .tsm-chev {
+  display: inline-flex;
+  color: var(--muted);
+}
+/* Inline diff region: sits directly under its file row — no extra frame
+   around the pair (prototype); the dark box carries the rounding. The left
+   indent aligns the box with the filename column (row padding 4 + badge
+   20 + names gap 8), like the prototype. */
+.block-turn-summary .tsm-file-diff {
+  margin: 3px 0 5px 32px;
+  font-size: var(--text-sm);
+}
+/* No vertical padding: the +/- stripes must run edge-to-edge inside the
+   rounded box (padding read as dark bars above/below the changed rows). */
+.block-turn-summary .tsm-diff {
+  background: var(--bg0);
+  border-radius: 8px;
+  overflow: hidden;
+  line-height: 1.55;
+}
+.block-turn-summary .tsm-diff-scroll {
+  overflow-x: auto;
+}
+.block-turn-summary .tsm-dline {
+  display: flex;
+  padding-right: 12px;
+  white-space: pre;
+  min-width: 0;
+}
+.block-turn-summary .tsm-dline code {
+  min-width: 0;
+}
+.block-turn-summary .tsm-dline .d-sign {
+  width: 28px;
+  flex: none;
+  text-align: center;
+  user-select: none;
+}
+.block-turn-summary .tsm-dline.d-add {
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+.block-turn-summary .tsm-dline.d-add .d-sign {
+  color: var(--success);
+}
+.block-turn-summary .tsm-dline.d-del {
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+}
+.block-turn-summary .tsm-dline.d-del .d-sign {
+  color: var(--error);
+}
+.block-turn-summary .tsm-dline.d-ctx .d-sign {
+  color: var(--muted);
+}
+.block-turn-summary .tsm-dline.d-hunk {
+  color: var(--purple);
+  background: var(--bg1);
+  padding: 1px 12px;
+}
+/* Region separator + overlong-diff fold note: quiet, centered. */
+.block-turn-summary .tsm-dline.d-sep {
+  justify-content: center;
+  color: var(--muted);
+  user-select: none;
+}
+.block-turn-summary .tsm-dline.tsm-diff-folded {
+  padding: 4px 12px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: normal;
+}
+.block-turn-summary .tsm-diff-note {
+  padding: 6px 12px;
+  color: var(--muted);
+  font-size: 11px;
+  background: var(--bg0);
+  border-radius: 8px;
+}
+.block-turn-summary .tsm-note {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--success);
+  font-size: 12px;
+}
+.block-turn-summary .tsm-note.warn {
+  color: var(--warning);
+}
+.block-turn-summary .tsm-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+  padding-top: 7px;
+  border-top: 1px solid color-mix(in srgb, var(--fg) 9%, transparent);
+}
+.block-turn-summary .tsm-footnote {
+  color: var(--muted);
+  font-size: 11px;
+  flex: 1;
+  min-width: 200px;
+}
+.block-turn-summary .tsm-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg2);
+  color: var(--fg);
+  border: 1px solid color-mix(in srgb, var(--fg) 16%, transparent);
+  border-radius: var(--radius-md);
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.block-turn-summary .tsm-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.block-turn-summary .tsm-btn.danger:hover:not(:disabled) {
+  border-color: var(--error);
+  color: var(--error);
+}
+.block-turn-summary .tsm-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

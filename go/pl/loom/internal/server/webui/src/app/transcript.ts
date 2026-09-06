@@ -17,8 +17,16 @@ import type {
   QuestionPayload,
   RuntimeEvent,
   ToolCompletedPayload,
+  TurnFileChange,
 } from '../protocol/events'
-import type { Message, Snapshot, ToolResult } from '../protocol/types'
+import type {
+  Message,
+  RevertOutcome,
+  RunChangeStat,
+  Snapshot,
+  ToolResult,
+  TurnSummary,
+} from '../protocol/types'
 import { diffForToolCall } from '../lib/diff'
 import { Store } from '../store/store'
 
@@ -88,6 +96,21 @@ export type BlockModel = Base &
     | { kind: 'compact'; payload: ContextCompactedPayload }
     | { kind: 'image'; mediaType: string; data: string }
     | { kind: 'artifact'; artifact: ArtifactRef }
+    // Closing review summary of a finished turn: the per-path write-tool
+    // projection (server: TurnFinishedPayload.changes live, snapshot
+    // turn_summaries on rebuild). Live only when the turn wrote files.
+    // revertNote appears after a per-turn revert; revertWarn marks partial
+    // outcomes (conflicts / uncapturable paths).
+    | {
+        kind: 'turn_summary'
+        runId: string
+        cancelled?: boolean
+        failed?: boolean
+        changes: TurnFileChange[]
+        reverting?: boolean
+        revertNote?: string
+        revertWarn?: boolean
+      }
   )
 
 // State of in-session full-text search: the view layer (TranscriptSearch) holds a
@@ -125,6 +148,14 @@ export interface TranscriptIO {
   answerQuestion: (questionId: string, answer: unknown) => Promise<unknown>
   sendFeedback?: (runId: string, value: 0 | 1) => Promise<unknown>
   getFeedback?: (runId: string) => string
+  // Per-turn file revert (the turn-summary block's 撤销本轮改动 action):
+  // restores the workspace files one run mutated; absent in read-only
+  // surfaces (share page) where the button must not render.
+  revertRun?: (runId: string) => Promise<RevertOutcome>
+  // Per-turn review projection (per-path +/− stats and inline diffs,
+  // ledger-before vs current workspace content — git-free). Absent on the
+  // share page, where blocks must fall back to their static rows.
+  runChanges?: (runId: string) => Promise<RunChangeStat[]>
   onError: (e: Error & { code?: string }) => void
 }
 
@@ -146,6 +177,9 @@ export class TranscriptController {
   private streamScheduled = false
   private streamDestroyed = false
   private streamLastRender = 0
+  // Per-run review stats, cached: the block refetches after a revert
+  // (revertRun invalidates), otherwise disk drift is accepted lazily.
+  private runChangesCache = new Map<string, Promise<RunChangeStat[]>>()
   private reasoningId: string | null = null
   private reasoningStartTs = '' // first delta's event time, for the thinking duration
   // Merged-frame rendering for reasoning, symmetric to streamBuf: high-frequency reasoning_delta
@@ -163,7 +197,8 @@ export class TranscriptController {
   private pendingStreamTs = '' // first text_delta event time, stamped into the action row at finalize
   private turnAssistantId: string | null = null // latest assistant block of this turn (action row attaches at turn end)
   private turnAssistantTs = ''
-  private turnRunID = '' // run id of this turn (feedback vote target)
+  private turnRunID = '' // run id of this turn (feedback vote + turn summary target)
+  private turnCancelled = false // run.cancelled seen for the current turn
   private turnErrorShown = false
   // Staging during applySnapshot rebuild: the whole snapshot's blocks pile up in a
   // local array, committed in a single store.update (avoids per-block O(N) array copies and render ticks).
@@ -265,6 +300,7 @@ export class TranscriptController {
     this.turnAssistantId = null
     this.turnAssistantTs = ''
     this.turnRunID = ''
+    this.turnCancelled = false
     this.turnErrorShown = false
     this.store.update((s) => {
       s.blocks = []
@@ -392,6 +428,28 @@ export class TranscriptController {
     let lastTs = ''
     let lastRunId = ''
 
+    // Per-turn file-change projection (server-derived, keyed by run_id — the
+    // same run_id stamped into assistant message metadata): each becomes a
+    // closing turn_summary block appended at its turn boundary.
+    const summariesByRun = new Map<string, TurnSummary>()
+    for (const ts of snap.turn_summaries || []) {
+      if (ts.run_id && (ts.changes?.length ?? 0) > 0) summariesByRun.set(ts.run_id, ts)
+    }
+    const emittedSummaries = new Set<string>()
+    const emitTurnSummary = (runId: string) => {
+      if (!runId || emittedSummaries.has(runId)) return
+      const ts = summariesByRun.get(runId)
+      if (!ts) return
+      emittedSummaries.add(runId)
+      this.append({
+        kind: 'turn_summary',
+        runId,
+        cancelled: ts.cancelled,
+        failed: ts.failed,
+        changes: ts.changes || [],
+      })
+    }
+
     const closeTurn = () => {
       if (!lastAssistantId) return
       const createdAt = lastTs
@@ -425,6 +483,9 @@ export class TranscriptController {
         userImages = []
         if (m.role === 'user') {
           closeTurn()
+          // Turn boundary: close out the previous turn's file summary before
+          // opening the next bubble (no-op when the run wrote no files).
+          emitTurnSummary(lastRunId)
           this.append({ kind: 'user', text, createdAt, images })
         } else {
           // Feedback target: the agent loop has stamped run_id metadata when
@@ -559,6 +620,7 @@ export class TranscriptController {
       void lastAssistantText
     } else {
       closeTurn()
+      emitTurnSummary(lastRunId)
     }
   }
 
@@ -618,6 +680,26 @@ export class TranscriptController {
             text: `本轮失败 — ${String(p.error || '').slice(0, 300)}`,
           })
           this.turnErrorShown = true
+        }
+        // Closing review block: the turn's write-tool file projection (backend
+        // aggregates per path over the run's tool.changed events). Cancelled
+        // and failed turns show it too — partial writes are exactly the ones
+        // the user may want to revert. No run id (untrusted turn.started
+        // envelope aside, every in-turn event carries one) ⇒ no revertable
+        // identity ⇒ block skipped.
+        {
+          const changes = (p.changes as TurnFileChange[]) || []
+          const runId = this.turnRunID || evt.run_id || ''
+          if (runId && changes.length > 0) {
+            this.append({
+              kind: 'turn_summary',
+              runId,
+              cancelled: this.turnCancelled,
+              failed: !!p.error,
+              changes,
+            })
+          }
+          this.turnCancelled = false
         }
         break
       }
@@ -759,6 +841,7 @@ export class TranscriptController {
       case 'run.cancelled':
         this.hideThinking()
         this.append({ kind: 'notice', text: '本轮已取消', warn: true })
+        this.turnCancelled = true // the turn.finished summary marks 已取消
         this.finalizeStream()
         this.finalizeReasoning(evt.time || '')
         this.attachTurnActions()
@@ -1200,6 +1283,62 @@ export class TranscriptController {
     })
   }
 
+  // Per-turn file revert (invoked by the turn_summary block): restores the
+  // run's recorded before-content. Conflicts (external edits since the turn)
+  // are overwritten and reported in the note; overall one-click actions stay
+  // single-request with no confirm spam, matching the conflict-warn copy.
+  async revertRun(blockId: string, runId: string) {
+    if (!this.io.revertRun) return
+    const block = this.blocksNow().find((b) => b.id === blockId)
+    if (!block || block.kind !== 'turn_summary' || block.reverting || block.revertNote) return
+    this.patchBlock(blockId, { reverting: true })
+    try {
+      const outcome = await this.io.revertRun(runId)
+      const restored = outcome.restored?.length || 0
+      const deleted = outcome.deleted?.length || 0
+      const conflicts = outcome.conflicts || []
+      const skipped = outcome.skipped || []
+      const parts: string[] = []
+      if (restored) parts.push(`恢复 ${restored} 个文件`)
+      if (deleted) parts.push(`移除新建 ${deleted} 个文件`)
+      if (conflicts.length)
+        parts.push(
+          `${conflicts.length} 个文件在轮次后有外部改动（已覆盖）：${conflicts.slice(0, 3).join('、')}${conflicts.length > 3 ? ' 等' : ''}`,
+        )
+      if (skipped.length)
+        parts.push(
+          `${skipped.length} 个文件无法回滚（原始内容未记录）：${skipped.slice(0, 3).join('、')}${skipped.length > 3 ? ' 等' : ''}`,
+        )
+      this.patchBlock(blockId, {
+        reverting: false,
+        revertNote: parts.length ? parts.join('；') : '没有可回滚的改动',
+        revertWarn: conflicts.length > 0 || skipped.length > 0,
+      })
+      // The review projection compares against the CURRENT workspace
+      // content, which the revert just changed: drop the cached stats for
+      // this run so an expanded diff refetches.
+      this.runChangesCache.delete(runId)
+    } catch (e) {
+      this.patchBlock(blockId, { reverting: false })
+      this.io.onError(e as Error & { code?: string })
+    }
+  }
+
+  // Per-turn review projection for the turn_summary block's diff
+  // affordances: promise-cached per run so re-mounts of a virtualized block
+  // (and header/row consumers) share one request. Revert invalidates the
+  // entry (see revertRun). Failures surface silently to the block — it
+  // keeps its static rows; the caller clears the cache so a later expand
+  // retries.
+  fetchRunChanges(runId: string): Promise<RunChangeStat[]> {
+    let cached = this.runChangesCache.get(runId)
+    if (cached) return cached
+    cached = this.io.runChanges ? this.io.runChanges(runId) : Promise.resolve([])
+    this.runChangesCache.set(runId, cached)
+    cached.catch(() => this.runChangesCache.delete(runId))
+    return cached
+  }
+
   // Feedback vote (invoked by the view layer): failures are rethrown so the
   // view layer rolls back the selection state.
   async sendFeedback(runId: string, value: 0 | 1) {
@@ -1235,6 +1374,8 @@ export function blockSearchText(b: BlockModel): string {
       )
     case 'question':
       return b.payload.text || ''
+    case 'turn_summary':
+      return (b.changes || []).map((c) => c.path).join('\n')
     default:
       return ''
   }

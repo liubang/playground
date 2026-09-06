@@ -23,3 +23,6 @@ maven_install.json linguist-generated=true
 # 这些是手工维护/上游同步的样例，不交给 yamlfmt 重排
 .clang-format rules-lint-ignored=true
 .clang-tidy rules-lint-ignored=true
+# 第三方依赖目录（本地 install 产物，未入库）：format 收集器会扫到但没有
+# 必要送格式化（且 bazel 沙箱内路径不存在，prettier 直接报错）
+**/node_modules/** rules-lint-ignored=true

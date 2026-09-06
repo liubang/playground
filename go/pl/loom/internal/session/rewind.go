@@ -86,8 +86,11 @@ type RewindResult struct {
 
 // RecordFileChange appends one file mutation to the session's change
 // ledger. beforeContent may be nil (file did not exist, or was not
-// captured); beforeExisted distinguishes the two cases.
-func (s *SQLiteStore) RecordFileChange(ctx context.Context, sessionID domain.SessionID, path string, beforeExisted bool, beforeHash string, beforeContent []byte, afterHash string) error {
+// captured); beforeExisted distinguishes the two cases. runID attributes
+// the mutation to a turn (a zero runID records without attribution: the
+// entry still participates in checkpoint rewind but cannot be reverted
+// per-turn).
+func (s *SQLiteStore) RecordFileChange(ctx context.Context, sessionID domain.SessionID, runID domain.RunID, path string, beforeExisted bool, beforeHash string, beforeContent []byte, afterHash string) error {
 	if sessionID.IsZero() {
 		return domain.NewError(domain.ErrInvalidInput, "session ID is required")
 	}
@@ -108,14 +111,72 @@ func (s *SQLiteStore) RecordFileChange(ctx context.Context, sessionID domain.Ses
 		beforeContent = []byte{}
 	}
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO file_changes(session_id, path, before_existed, before_hash, before_content, after_hash, restorable, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		sessionID.String(), path, beforeExisted, beforeHash, beforeContent, afterHash, restorable,
+INSERT INTO file_changes(session_id, run_id, path, before_existed, before_hash, before_content, after_hash, restorable, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		sessionID.String(), runID.String(), path, beforeExisted, beforeHash, beforeContent, afterHash, restorable,
 		formatTime(time.Now().UTC()))
 	if err != nil {
 		return storeError("record file change", err)
 	}
 	return nil
+}
+
+// ListFileChangesForRun returns ONE turn's recorded mutations, deduplicated
+// by path keeping the EARLIEST pre-mutation state per path — the content a
+// per-turn revert restores — annotated with the turn's latest post-mutation
+// hash for external-modification conflict detection (same semantics as the
+// rewind range projection, see RewindSession). The ledger is never mutated
+// here: revert stays auditable and repeatable.
+func (s *SQLiteStore) ListFileChangesForRun(ctx context.Context, sessionID domain.SessionID, runID domain.RunID) ([]FileChange, error) {
+	if sessionID.IsZero() {
+		return nil, domain.NewError(domain.ErrInvalidInput, "session ID is required")
+	}
+	if runID.IsZero() {
+		return nil, domain.NewError(domain.ErrInvalidInput, "run ID is required")
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT rowid, path, before_existed, before_hash, before_content, after_hash, restorable
+FROM file_changes WHERE session_id = ? AND run_id = ? ORDER BY rowid ASC`,
+		sessionID.String(), runID.String())
+	if err != nil {
+		return nil, storeError("list file changes for run", err)
+	}
+	defer rows.Close()
+	var all []FileChange
+	for rows.Next() {
+		var change FileChange
+		if err := rows.Scan(&change.ID, &change.Path, &change.BeforeExisted, &change.BeforeHash,
+			&change.BeforeContent, &change.AfterHash, &change.Restorable); err != nil {
+			return nil, storeError("scan file change for run", err)
+		}
+		all = append(all, change)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, storeError("iterate file changes for run", err)
+	}
+	return dedupeFileChangesForRestore(all), nil
+}
+
+// dedupeFileChangesForRestore reduces a change list (append-ordered) to
+// the earliest-before state per path, annotated with the path's latest
+// after-hash — the projection restoration applies and conflict detection
+// compares against.
+func dedupeFileChangesForRestore(all []FileChange) []FileChange {
+	latestAfter := make(map[string]string, len(all))
+	for _, change := range all {
+		latestAfter[change.Path] = change.AfterHash
+	}
+	seen := make(map[string]bool, len(all))
+	changes := make([]FileChange, 0, len(all))
+	for _, change := range all {
+		if seen[change.Path] {
+			continue
+		}
+		seen[change.Path] = true
+		change.LatestAfterHash = latestAfter[change.Path]
+		changes = append(changes, change)
+	}
+	return changes
 }
 
 // ledgerPositionTx returns the current change-ledger position (max rowid)
@@ -371,20 +432,7 @@ WHERE session_id = ? AND version = ?`,
 	// path — its before-state is the content the checkpoint observed —
 	// annotated with the LATEST after-hash so the restore can detect
 	// modifications that happened outside the recorded history.
-	latestAfter := make(map[string]string, len(all))
-	for _, change := range all {
-		latestAfter[change.Path] = change.AfterHash
-	}
-	seen := make(map[string]bool, len(all))
-	changes := make([]FileChange, 0, len(all))
-	for _, change := range all {
-		if seen[change.Path] {
-			continue
-		}
-		seen[change.Path] = true
-		change.LatestAfterHash = latestAfter[change.Path]
-		changes = append(changes, change)
-	}
+	changes := dedupeFileChangesForRestore(all)
 
 	parsedID, err := domain.ParseCheckpointID(checkpointID)
 	if err != nil {

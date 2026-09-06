@@ -34,7 +34,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const sqliteSchemaVersion = 9
+const sqliteSchemaVersion = 10
 
 // SQLiteStore persists session events and checkpoints in a SQLite database.
 // A store serializes writes through one connection; optimistic versions still
@@ -199,9 +199,15 @@ CREATE TABLE IF NOT EXISTS artifact_refs (
 );
 CREATE INDEX IF NOT EXISTS idx_artifact_refs_artifact
     ON artifact_refs(artifact_id);
+-- file_changes: the per-session write ledger (schema v10 added run_id,
+-- attributing each mutation to a turn for per-turn revert; rows written
+-- before v10 — there are none, the version bump recreates the dev
+-- database — would query as run-less and be ineligible for per-turn
+-- revert, which is the correct conservative answer).
 CREATE TABLE IF NOT EXISTS file_changes (
     rowid INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,
+    run_id TEXT NOT NULL DEFAULT '',
     path TEXT NOT NULL,
     before_existed INTEGER NOT NULL,
     before_hash TEXT NOT NULL DEFAULT '',

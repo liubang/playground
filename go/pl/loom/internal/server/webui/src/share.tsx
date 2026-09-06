@@ -127,7 +127,11 @@ function ShareApp() {
       }
       setView(v)
       document.title = `${v.title || 'shared session'} · loom`
-      transcript.applySnapshot({ messages: v.messages || [], state: 'closed' })
+      transcript.applySnapshot({
+        turn_summaries: v.turn_summaries || [],
+        messages: v.messages || [],
+        state: 'closed',
+      })
     })()
   }, [token, transcript])
 
