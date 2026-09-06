@@ -6,6 +6,19 @@ import SwiftUI
 /// closes its own, so at most one popover is open at a time.
 extension Notification.Name {
     static let statusItemPopoverWillShow = Notification.Name("AuraBar.statusItemPopoverWillShow")
+    /// Posted when a controller's popover closes (any path). userInfo
+    /// carries the controller's autosaveName under
+    /// `statusItemAutosaveNameKey`, so popover content can react to its
+    /// own dismissal specifically — NSWindow.didResignKeyNotification
+    /// fires for *any* window (e.g. the settings window) and can't do
+    /// this filtering.
+    static let statusItemPopoverDidClose = Notification.Name("AuraBar.statusItemPopoverDidClose")
+    /// userInfo key (String) for statusItemPopoverDidClose.
+    static let statusItemAutosaveNameKey = "autosaveName"
+    /// Posted by popover content asking for its own popover to close
+    /// (e.g. after opening an external app). Every controller closes
+    /// its popover — at most one is open at a time per willShow.
+    static let statusItemPopoverCloseRequest = Notification.Name("AuraBar.statusItemPopoverCloseRequest")
 }
 
 /// Hosts one module's presence in the menu bar: an AppKit NSStatusItem
@@ -94,6 +107,15 @@ final class StatusItemController: NSObject {
             guard let sender = note.object as? StatusItemController, sender !== self else { return }
             Task { @MainActor in self?.closePopover() }
         }
+        // Content asked for dismissal (e.g. it opened an external app
+        // and a popover left floating above it would be in the way).
+        center.addObserver(
+            forName: .statusItemPopoverCloseRequest,
+            object: nil,
+            queue: .main,
+        ) { [weak self] _ in
+            Task { @MainActor in self?.closePopover() }
+        }
         // Popover closed by any path (transient behavior, toggle, monitor)
         // — drop the monitors and report with it.
         center.addObserver(
@@ -102,8 +124,14 @@ final class StatusItemController: NSObject {
             queue: .main,
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.stopMonitors()
-                self?.reportVisibility(false)
+                guard let self else { return }
+                self.stopMonitors()
+                self.reportVisibility(false)
+                center.post(
+                    name: .statusItemPopoverDidClose,
+                    object: self,
+                    userInfo: [Notification.Name.statusItemAutosaveNameKey: self.autosaveName],
+                )
             }
         }
         applyVisibility()

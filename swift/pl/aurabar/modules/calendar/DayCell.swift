@@ -52,6 +52,25 @@ struct DayCell: View, Equatable {
         return theme.textPrimary
     }
 
+    /// VoiceOver label, e.g. "9月6日，白露，休，今天，有日程".
+    private var accessibilityText: String {
+        let cal = CalendarModel.calendar
+        var parts = ["\(cal.component(.month, from: data.date))月\(data.day)日"]
+        if !data.subtitle.isEmpty {
+            parts.append(data.subtitle)
+        }
+        if let badge = data.badge {
+            parts.append(badge == .rest ? "休" : "补班")
+        }
+        if data.isToday {
+            parts.append("今天")
+        }
+        if data.hasEvent {
+            parts.append("有日程")
+        }
+        return parts.joined(separator: "，")
+    }
+
     private var subtitleColor: Color {
         if !data.isInDisplayedMonth {
             return theme.textSecondary.opacity(0.4)
@@ -121,5 +140,7 @@ struct DayCell: View, Equatable {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityText)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

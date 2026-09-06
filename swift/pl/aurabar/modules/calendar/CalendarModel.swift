@@ -57,14 +57,45 @@ struct CalendarDay: Identifiable, Equatable, Sendable {
     }
 }
 
-/// Pure date math for the month grid. China has no DST, so adding whole
-/// days to start-of-day dates is safe here.
+/// Pure date math for the month grid. `Calendar.date(byAdding:)` is
+/// DST-safe, and the calendar follows the system time zone live
+/// (`autoupdatingCurrent`), so traveling users get correct day
+/// boundaries without a restart — the popover rebuilds its grid on
+/// `NSSystemTimeZoneDidChangeNotification`.
 enum CalendarModel {
     static let calendar: Calendar = {
         var c = Calendar(identifier: .gregorian)
         c.locale = Locale(identifier: "zh_CN")
+        c.timeZone = .autoupdatingCurrent
         return c
     }()
+
+    // MARK: - Day keys
+
+    /// Timezone-agnostic `yyyymmdd` key for a date — the identity used
+    /// by the holiday tables (immune to time zone travel).
+    static func dayKey(for date: Date) -> Int {
+        let comps = calendar.dateComponents([.year, .month, .day], from: date)
+        return (comps.year ?? 0) * 10000 + (comps.month ?? 0) * 100 + (comps.day ?? 0)
+    }
+
+    /// Local start-of-day date for a day key.
+    static func date(forDayKey key: Int) -> Date? {
+        calendar.date(from: DateComponents(
+            year: key / 10000,
+            month: key / 100 % 100,
+            day: key % 100,
+        ))
+    }
+
+    /// Day key of `key + days` calendar days (handles month/year
+    /// rollovers), nil if the date can't be represented.
+    static func dayKeyShifted(from key: Int, by days: Int) -> Int? {
+        guard let date = date(forDayKey: key),
+              let shifted = calendar.date(byAdding: .day, value: days, to: date)
+        else { return nil }
+        return dayKey(for: shifted)
+    }
 
     /// 42 cells (6 rows × 7 columns) covering the displayed month, padded
     /// with trailing/leading days of the adjacent months.

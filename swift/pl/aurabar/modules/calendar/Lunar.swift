@@ -7,6 +7,7 @@ enum Lunar {
     private static let chinese: Calendar = {
         var c = Calendar(identifier: .chinese)
         c.locale = Locale(identifier: "zh_CN")
+        c.timeZone = .autoupdatingCurrent
         return c
     }()
 
@@ -24,9 +25,13 @@ enum Lunar {
     /// Short text for the calendar cell subtitle: solar term > lunar month
     /// name (on day 1) > lunar day name.
     static func text(for date: Date) -> String {
-        if let term = SolarTerms.term(for: date) {
-            return term
-        }
+        SolarTerms.term(for: date) ?? dayText(for: date)
+    }
+
+    /// Lunar month name (on day 1) or lunar day name only — no solar
+    /// term. The grid computes terms itself (one lookup per day it
+    /// would otherwise perform twice).
+    static func dayText(for date: Date) -> String {
         let comps = chinese.dateComponents([.month, .day], from: date)
         let day = comps.day ?? 1
         if day == 1 {

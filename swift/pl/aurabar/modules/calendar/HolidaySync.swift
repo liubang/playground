@@ -68,22 +68,20 @@ final class HolidaySync: ObservableObject {
 
     // MARK: - Decoding
 
-    private static func makeTable(_ days: [RemoteDay]) -> [Date: Holidays.Entry] {
-        var table: [Date: Holidays.Entry] = [:]
+    private static func makeTable(_ days: [RemoteDay]) -> [Int: Holidays.Entry] {
+        var table: [Int: Holidays.Entry] = [:]
         for day in days {
-            guard let date = parse(day.date) else { continue }
-            table[date] = Holidays.Entry(name: day.name, kind: day.isOffDay ? .rest : .work)
+            guard let key = parseDayKey(day.date) else { continue }
+            table[key] = Holidays.Entry(name: day.name, kind: day.isOffDay ? .rest : .work)
         }
         return table
     }
 
-    /// "2026-01-01" → local start of day.
-    private static func parse(_ ymd: String) -> Date? {
+    /// "2026-01-01" → 20260101 (timezone-free yyyymmdd day key).
+    private static func parseDayKey(_ ymd: String) -> Int? {
         let parts = ymd.split(separator: "-").compactMap { Int($0) }
         guard parts.count == 3 else { return nil }
-        return CalendarModel.calendar
-            .date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
-            .map { CalendarModel.calendar.startOfDay(for: $0) }
+        return parts[0] * 10000 + parts[1] * 100 + parts[2]
     }
 
     /// One entry in the holiday-cn dataset; also the UserDefaults cache

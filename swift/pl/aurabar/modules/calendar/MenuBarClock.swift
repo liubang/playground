@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 
 /// Menu bar clock label styles. The DateFormatter template is persisted
@@ -84,9 +85,16 @@ enum SecondTimeZone: String, CaseIterable, Sendable {
 final class MenuBarClock: ObservableObject {
     @Published private(set) var labelText = ""
 
+    /// Fires once per local-day rollover while ticking (and on the first
+    /// update after a wake/format change that crosses midnight). The
+    /// calendar popover rebuilds its grid from this instead of observing
+    /// `labelText`, which changes every second in the withSeconds format.
+    let dayChanged = PassthroughSubject<Date, Never>()
+
     @Published var format: ClockFormat {
         didSet {
             UserDefaults.standard.set(format.rawValue, forKey: Self.formatKey)
+            formatter.dateFormat = format.rawValue
             restart()
         }
     }
@@ -105,6 +113,9 @@ final class MenuBarClock: ObservableObject {
     /// Ticking only matters while the calendar status item is inserted;
     /// a hidden clock doesn't need a minute-aligned timer.
     private var samplingActive = false
+    /// Day the current label was computed for; compared on every update
+    /// to fire `dayChanged` exactly once per rollover.
+    private var lastDay = CalendarModel.calendar.startOfDay(for: Date())
 
     /// Feed from the status item's insertion state.
     func setActive(_ active: Bool) {
@@ -136,6 +147,7 @@ final class MenuBarClock: ObservableObject {
         secondTimeZone = SecondTimeZone(
             rawValue: UserDefaults.standard.string(forKey: Self.secondTimeZoneKey) ?? "",
         ) ?? .off
+        formatter.dateFormat = format.rawValue
 
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main,
@@ -170,12 +182,16 @@ final class MenuBarClock: ObservableObject {
     }
 
     private func update() {
-        formatter.dateFormat = format.rawValue
         var text = formatter.string(from: Date())
         if let timeZone = secondTimeZone.timeZone {
             secondFormatter.timeZone = timeZone
             text += " \(secondTimeZone.code) \(secondFormatter.string(from: Date()))"
         }
         labelText = text
+        let today = CalendarModel.calendar.startOfDay(for: Date())
+        if today != lastDay {
+            lastDay = today
+            dayChanged.send(today)
+        }
     }
 }

@@ -1,8 +1,11 @@
 import Foundation
 
 /// Chinese statutory holidays and shifted workdays (调休), maintained
-/// manually per the State Council's annual announcement. Dates are local
-/// start-of-day; entries outside covered years simply render nothing.
+/// manually per the State Council's annual announcement. Entries are
+/// keyed by `yyyymmdd` day keys (see CalendarModel.dayKey), not Dates —
+/// day keys are timezone-agnostic, so the embedded and remote-synced
+/// tables stay valid when the user crosses time zones mid-session.
+/// Dates outside covered years simply render nothing.
 enum Holidays {
     enum Kind: Sendable, Equatable {
         /// Statutory holiday or weekend merged into a holiday block — red "休".
@@ -21,21 +24,56 @@ enum Holidays {
     struct Entry: Sendable, Equatable {
         let name: String
         let kind: Kind
+
+        /// A statutory festival day (元旦 / 春节 / X节) — the grid shows
+        /// the festival name in rest red as the day's headline annotation.
+        var isStatutoryFestival: Bool {
+            kind == .rest && (name.hasSuffix("节") || ["元旦", "春节", "除夕"].contains(name))
+        }
     }
 
-    /// Lookup by local start-of-day date. Remote-synced entries (see
-    /// HolidaySync) win over the embedded table.
-    static func entry(for date: Date) -> Entry? {
-        let day = CalendarModel.calendar.startOfDay(for: date)
-        return remoteTable[day] ?? table[day]
-    }
+    // MARK: - Remote override layer
+
+    /// Guards every mutable static below (remote table + derived caches).
+    /// Lookups run on background rebuilds while installs happen on main.
+    private static let lock = NSLock()
 
     /// Override layer installed by HolidaySync; empty until the first
     /// successful sync (cache or network).
-    private static var remoteTable: [Date: Entry] = [:]
+    private static var remoteTable: [Int: Entry] = [:]
 
-    static func installRemote(_ entries: [Date: Entry]) {
+    /// Merged view (remote wins) plus the sorted rest-day key list used
+    /// by nextHoliday; rebuilt lazily after each install.
+    private static var mergedCache: (table: [Int: Entry], restDays: [Int])?
+
+    static func installRemote(_ entries: [Int: Entry]) {
+        lock.lock()
         remoteTable = entries
+        mergedCache = nil
+        lock.unlock()
+    }
+
+    /// Caller must hold `lock`.
+    private static func merged() -> (table: [Int: Entry], restDays: [Int]) {
+        if let mergedCache {
+            return mergedCache
+        }
+        var merged = table
+        merged.merge(remoteTable) { _, remote in remote }
+        let result = (merged, merged.filter { $0.value.kind == .rest }.keys.sorted())
+        mergedCache = result
+        return result
+    }
+
+    // MARK: - Lookups
+
+    /// Lookup by date (any time of day); remote-synced entries win over
+    /// the embedded table.
+    static func entry(for date: Date) -> Entry? {
+        let key = CalendarModel.dayKey(for: date)
+        lock.lock()
+        defer { lock.unlock() }
+        return merged().table[key]
     }
 
     /// A consecutive run of rest days sharing one name.
@@ -53,48 +91,53 @@ enum Holidays {
     /// it. Rest-kind entries only — shifted workdays are ignored.
     static func nextHoliday(from date: Date) -> HolidayBlock? {
         let cal = CalendarModel.calendar
-        let today = cal.startOfDay(for: date)
-        var merged = table
-        merged.merge(remoteTable) { _, remote in remote }
-        let restDays = merged.filter { $0.value.kind == .rest }.keys.sorted()
-        guard let first = restDays.first(where: { $0 >= today }) else { return nil }
+        let today = CalendarModel.dayKey(for: cal.startOfDay(for: date))
+        lock.lock()
+        defer { lock.unlock() }
+        let merged = merged()
+        guard let first = merged.restDays.first(where: { $0 >= today }) else { return nil }
 
-        let name = merged[first]?.name ?? ""
+        let name = merged.table[first]?.name ?? ""
         // If today sits inside a block, walk back to its first day.
-        var start = first
-        while let prev = cal.date(byAdding: .day, value: -1, to: start),
-              merged[prev]?.name == name, merged[prev]?.kind == .rest
+        var startKey = first
+        while let prev = CalendarModel.dayKeyShifted(from: startKey, by: -1),
+              merged.table[prev]?.name == name, merged.table[prev]?.kind == .rest
         {
-            start = prev
+            startKey = prev
         }
-        var end = first
-        while let next = cal.date(byAdding: .day, value: 1, to: end),
-              merged[next]?.name == name, merged[next]?.kind == .rest
+        var endKey = first
+        while let next = CalendarModel.dayKeyShifted(from: endKey, by: 1),
+              merged.table[next]?.name == name, merged.table[next]?.kind == .rest
         {
-            end = next
+            endKey = next
         }
+        guard let start = CalendarModel.date(forDayKey: startKey),
+              let end = CalendarModel.date(forDayKey: endKey) else { return nil }
         return HolidayBlock(name: name, start: start, end: end)
     }
+}
 
-    private static let table: [Date: Entry] = buildTable()
+// MARK: - Embedded table
 
-    private static func buildTable() -> [Date: Entry] {
-        var table: [Date: Entry] = [:]
-        var cal = Calendar(identifier: .gregorian)
-        cal.locale = Locale(identifier: "zh_CN")
+extension Holidays {
+    private static let table: [Int: Entry] = buildTable()
 
+    private static func buildTable() -> [Int: Entry] {
+        var table: [Int: Entry] = [:]
+
+        func key(_ y: Int, _ m: Int, _ d: Int) -> Int {
+            y * 10000 + m * 100 + d
+        }
         func put(_ y: Int, _ m: Int, _ d: Int, _ name: String, _ kind: Kind) {
-            guard let date = cal.date(from: DateComponents(year: y, month: m, day: d)) else { return }
-            table[cal.startOfDay(for: date)] = Entry(name: name, kind: kind)
+            table[key(y, m, d)] = Entry(name: name, kind: kind)
         }
         func range(_ y1: Int, _ m1: Int, _ d1: Int, _ y2: Int, _ m2: Int, _ d2: Int, _ name: String) {
-            guard let start = cal.date(from: DateComponents(year: y1, month: m1, day: d1)),
-                  let end = cal.date(from: DateComponents(year: y2, month: m2, day: d2)) else { return }
-            var date = start
-            while date <= end {
-                table[cal.startOfDay(for: date)] = Entry(name: name, kind: .rest)
-                guard let next = cal.date(byAdding: .day, value: 1, to: date) else { break }
-                date = next
+            var current = key(y1, m1, d1)
+            let end = key(y2, m2, d2)
+            while current <= end {
+                table[current] = Entry(name: name, kind: .rest)
+                guard let next = CalendarModel.dayKeyShifted(from: current, by: 1) else { break }
+                current = next
             }
         }
 

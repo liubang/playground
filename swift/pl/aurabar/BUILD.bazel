@@ -34,6 +34,27 @@ swift_library(
     target_compatible_with = ["@platforms//os:macos"],
 )
 
+# Sources recompiled with -enable-testing by //swift/pl/aurabar/ut so
+# swift_test targets there can `@testable import AuraBar`. Excludes the
+# @main entry point: its _main symbol would collide with the generated
+# test-runner main.
+filegroup(
+    name = "sources_for_tests",
+    srcs = glob(
+        [
+            "app/*.swift",
+            "core/*.swift",
+            "modules/calendar/*.swift",
+            "modules/disk/*.swift",
+            "modules/gpu/*.swift",
+            "modules/stats/*.swift",
+            "modules/weather/*.swift",
+        ],
+        exclude = ["app/MenuBarApp.swift"],
+    ),
+    visibility = ["//visibility:public"],
+)
+
 # com.apple.weatherkit needs a provisioning profile (paid developer
 # account); self-signed local builds must use the empty dev set or the
 # kernel refuses to spawn the app. Enable with:

@@ -2,11 +2,21 @@ import AppKit
 import EventKit
 import SwiftUI
 
+/// Autosave name of the status item hosting this popover; the close
+/// signal (`Notification.Name.statusItemPopoverDidClose`) is filtered
+/// on it so only this popover's dismissal — not another module's —
+/// triggers a reset.
+let calendarModuleAutosaveName = "AuraBar.calendar"
+
 /// The popover shown when the calendar menu bar item is clicked: a month
 /// grid with lunar / holiday annotations, the selected day's system
 /// calendar events, and a compact footer with a settings menu.
 struct CalendarPopover: View {
-    @ObservedObject var clock: MenuBarClock
+    /// Plain reference, not @ObservedObject: the popover rebuilds on
+    /// `clock.dayChanged` (once per midnight rollover) instead of
+    /// re-rendering with every label tick (every second in the
+    /// withSeconds format).
+    let clock: MenuBarClock
     @ObservedObject var eventStore: EventStore
     @ObservedObject var holidaySync: HolidaySync
 
@@ -20,16 +30,23 @@ struct CalendarPopover: View {
 
     @State private var displayed = YearMonth.containing(Date())
     @State private var selected = CalendarModel.calendar.startOfDay(for: Date())
-    /// Precomputed cell view models; rebuilt only when an input changes
-    /// (month, week start, lunar toggle) — never on routine re-renders
-    /// like selection or the menu bar clock tick.
+    /// Precomputed cell view models; rebuilt off the main thread only
+    /// when an input changes (month, week start, lunar toggle, event or
+    /// holiday revision, midnight) — never on routine re-renders like
+    /// selection changes.
     @State private var cells: [DayCellData] = []
     /// Year/month quick picker state; replaces the grid while active.
     @State private var picking = false
     @State private var pickerYear = YearMonth.containing(Date()).year
-    /// Day the current grid was built for; compared against the clock to
-    /// rebuild at midnight.
-    @State private var lastGridDay = Date.distantPast
+    /// In-flight grid rebuild; superseded rebuilds are cancelled so a
+    /// slow stale build (EventKit daemon round-trip) never overwrites
+    /// a newer grid.
+    @State private var rebuildTask: Task<Void, Never>?
+    /// Events listed for the selected day; loaded asynchronously.
+    @State private var selectedDayEvents: [EKEvent] = []
+    @State private var eventsTask: Task<Void, Never>?
+    /// Arrow-key grid navigation needs the container focused.
+    @FocusState private var gridFocused: Bool
 
     private var theme: Theme {
         (ThemePreference(rawValue: themePreference) ?? .system).theme(
@@ -46,38 +63,45 @@ struct CalendarPopover: View {
         WeekStart(rawValue: weekStartRaw) ?? .monday
     }
 
-    /// Rebuild the precomputed cell models from all inputs. Lunar text is
-    /// the expensive part (Chinese calendar conversion), so it happens
-    /// exactly here — 42 conversions per input change, not per render.
+    /// Rebuild the precomputed cell models from all inputs off the main
+    /// thread: 42 days of lunar conversion + solar terms + holiday
+    /// lookups, plus one EventKit range query for the dot markers.
+    /// Lunar text is the expensive part, and the store query talks to
+    /// the calendar daemon — neither belongs on the main thread.
     private func rebuildCells() {
-        lastGridDay = CalendarModel.calendar.startOfDay(for: Date())
-        let grid = CalendarModel.monthGrid(displayed, weekStart: weekStart)
-        // Dot markers need one range query covering the whole grid.
-        let eventDays: Set<Date> = {
-            guard let first = grid.first?.date, let last = grid.last?.date,
-                  let end = CalendarModel.calendar.date(byAdding: .day, value: 1, to: last)
-            else { return [] }
-            return eventStore.eventDays(from: first, to: end)
-        }()
-        cells = grid.map { day in
-            let entry = Holidays.entry(for: day.date)
-            let isFestival = entry.map {
-                $0.kind == .rest && ($0.name.hasSuffix("节") || ["元旦", "春节", "除夕"].contains($0.name))
-            } ?? false
-            let term = SolarTerms.term(for: day.date)
-            let isRestColored = entry?.kind == .work ? false : (entry?.kind == .rest || day.isWeekend)
-            return DayCellData(
-                date: day.date,
-                day: day.day,
-                isToday: day.isToday,
-                isInDisplayedMonth: day.isInDisplayedMonth,
-                isRestColored: isRestColored,
-                subtitle: isFestival ? (entry?.name ?? "") : (showLunar ? Lunar.text(for: day.date) : ""),
-                isFestival: isFestival,
-                isTerm: !isFestival && showLunar && term != nil,
-                badge: entry?.kind,
-                hasEvent: eventDays.contains(day.date),
+        rebuildTask?.cancel()
+        let month = displayed
+        let weekStart = weekStart
+        let showLunar = showLunar
+        let store = eventStore
+        // Capture the @State binding explicitly so the detached task
+        // can write the result back on the main actor.
+        rebuildTask = Task.detached { [binding = $cells] in
+            let built = buildCalendarCells(
+                month: month,
+                weekStart: weekStart,
+                showLunar: showLunar,
+                eventStore: store,
             )
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                binding.wrappedValue = built
+            }
+        }
+    }
+
+    /// Load the selected day's events off the main thread (the query
+    /// round-trips to the calendar daemon).
+    private func reloadSelectedDayEvents() {
+        eventsTask?.cancel()
+        let day = selected
+        let store = eventStore
+        eventsTask = Task.detached { [binding = $selectedDayEvents] in
+            let events = store.events(on: day)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                binding.wrappedValue = events
+            }
         }
     }
 
@@ -102,24 +126,56 @@ struct CalendarPopover: View {
         .background(theme.background)
         .environment(\.theme, theme)
         .preferredColorScheme(pinnedColorScheme)
-        .onAppear { rebuildCells() }
-        .onChange(of: displayed) { rebuildCells() }
-        .onChange(of: weekStartRaw) { rebuildCells() }
-        .onChange(of: showLunar) { rebuildCells() }
-        .onChange(of: eventStore.revision) { rebuildCells() }
-        .onChange(of: holidaySync.revision) { rebuildCells() }
-        // Midnight rollover: move the today marker with the clock tick.
-        .onChange(of: clock.labelText) {
-            let today = CalendarModel.calendar.startOfDay(for: Date())
-            if today != lastGridDay {
-                rebuildCells()
+        // Arrow-key day navigation handled at the container; the focus
+        // ring itself is suppressed (selection highlight is enough).
+        .focusable()
+        .focused($gridFocused)
+        .focusEffectDisabled()
+        .onKeyPress { press in
+            guard !picking else { return .ignored }
+            switch press.key {
+            case .leftArrow: moveSelection(by: -1)
+            case .rightArrow: moveSelection(by: 1)
+            case .upArrow: moveSelection(by: -7)
+            case .downArrow: moveSelection(by: 7)
+            default: return .ignored
             }
+            return .handled
         }
-        // The MenuBarExtra window is kept alive between opens, so @State
-        // survives dismissal. Reset to today's view whenever the popover
-        // loses key status (= it was dismissed), so every reopen starts
-        // at the current month with today selected.
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in
+        .onAppear {
+            gridFocused = true
+            rebuildCells()
+            reloadSelectedDayEvents()
+        }
+        .onChange(of: displayed) { _, _ in rebuildCells() }
+        .onChange(of: weekStartRaw) { _, _ in rebuildCells() }
+        .onChange(of: showLunar) { _, _ in rebuildCells() }
+        .onChange(of: eventStore.revision) { _, _ in
+            rebuildCells()
+            reloadSelectedDayEvents()
+        }
+        .onChange(of: eventStore.status) { _, _ in reloadSelectedDayEvents() }
+        .onChange(of: holidaySync.revision) { _, _ in rebuildCells() }
+        .onChange(of: selected) { _, _ in reloadSelectedDayEvents() }
+        // Midnight rollover, fired exactly once per local-day change.
+        .onReceive(clock.dayChanged) { _ in rebuildCells() }
+        // The popover window is kept alive between opens, so @State
+        // survives dismissal. Reset to today's view whenever this
+        // popover (identified by its status item's autosave name) is
+        // dismissed, so every reopen starts at the current month with
+        // today selected. NSWindow.didResignKeyNotification would fire
+        // for *any* window — e.g. opening settings from the gear menu —
+        // and reset the calendar while it's still visible.
+        .onReceive(NotificationCenter.default.publisher(for: .statusItemPopoverDidClose)) { note in
+            guard note.userInfo?[Notification.Name.statusItemAutosaveNameKey] as? String
+                == calendarModuleAutosaveName else { return }
+            resetToToday()
+        }
+        // Time zone changes shift day boundaries; rebuild for the new
+        // local "today".
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSNotification.Name.NSSystemTimeZoneDidChange,
+        )) { _ in
             resetToToday()
         }
     }
@@ -130,6 +186,26 @@ struct CalendarPopover: View {
         selected = today
         picking = false
         rebuildCells()
+        reloadSelectedDayEvents()
+    }
+
+    /// Select a day; when it lies outside the displayed month (a dimmed
+    /// leading/trailing cell), jump the grid to its month as well.
+    private func select(date: Date) {
+        let day = CalendarModel.calendar.startOfDay(for: date)
+        selected = day
+        let month = YearMonth.containing(day)
+        if month != displayed {
+            displayed = month
+        }
+    }
+
+    /// Arrow-key navigation: ±1 day (left/right) or ±1 week (up/down),
+    /// crossing months via `select`.
+    private func moveSelection(by days: Int) {
+        guard let next = CalendarModel.calendar.date(byAdding: .day, value: days, to: selected)
+        else { return }
+        select(date: next)
     }
 
     // MARK: - Header
@@ -193,14 +269,10 @@ struct CalendarPopover: View {
                     .buttonStyle(.plain)
                 }
             }
-            Button("回到今天") {
-                displayed = todayYM
-                selected = CalendarModel.calendar.startOfDay(for: Date())
-                picking = false
-            }
-            .font(.callout)
-            .buttonStyle(.plain)
-            .foregroundStyle(theme.accent)
+            Button("回到今天", action: resetToToday)
+                .font(.callout)
+                .buttonStyle(.plain)
+                .foregroundStyle(theme.accent)
         }
         .frame(height: 266)
     }
@@ -242,7 +314,7 @@ struct CalendarPopover: View {
         LazyVGrid(columns: gridColumns, spacing: 0) {
             ForEach(cells) { data in
                 DayCell(data: data, isSelected: selected == data.date) {
-                    selected = data.date
+                    select(date: data.date)
                 }
                 .equatable()
             }
@@ -324,17 +396,20 @@ struct CalendarPopover: View {
                     string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars",
                 ) {
                     NSWorkspace.shared.open(url)
+                    NotificationCenter.default.post(name: .statusItemPopoverCloseRequest, object: nil)
                 }
             }
         case .fullAccess:
-            let dayEvents = eventStore.events(on: selected)
-            if !dayEvents.isEmpty {
-                VStack(alignment: .leading, spacing: 5) {
-                    ForEach(Array(dayEvents.prefix(4).enumerated()), id: \.offset) { _, event in
-                        eventRow(event)
+            if !selectedDayEvents.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(Array(selectedDayEvents.prefix(4).enumerated()), id: \.offset) { _, event in
+                        EventRow(event: event) {
+                            Self.openCalendarApp()
+                            NotificationCenter.default.post(name: .statusItemPopoverCloseRequest, object: nil)
+                        }
                     }
-                    if dayEvents.count > 4 {
-                        Text("还有 \(dayEvents.count - 4) 个日程…")
+                    if selectedDayEvents.count > 4 {
+                        Text("还有 \(selectedDayEvents.count - 4) 个日程…")
                             .font(.caption2)
                             .foregroundStyle(theme.textSecondary)
                     }
@@ -366,42 +441,33 @@ struct CalendarPopover: View {
         .padding(.horizontal, 2)
     }
 
-    /// One event: calendar color bar, time range, title.
-    private func eventRow(_ event: EKEvent) -> some View {
-        HStack(spacing: 6) {
-            RoundedRectangle(cornerRadius: 1.5)
-                .fill(Color(nsColor: event.calendar.color))
-                .frame(width: 3, height: 12)
-            Text(timeLabel(event))
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(theme.textSecondary)
-                .frame(width: 62, alignment: .leading)
-            Text(event.title ?? "")
-                .font(.caption)
-                .lineLimit(1)
-            Spacer(minLength: 0)
-        }
-    }
-
-    private func timeLabel(_ event: EKEvent) -> String {
-        if event.isAllDay {
-            return "全天"
-        }
-        let cal = CalendarModel.calendar
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        var label = formatter.string(from: event.startDate)
-        // Append the end time only for same-day events.
-        if cal.startOfDay(for: event.endDate) == cal.startOfDay(for: event.startDate) {
-            label += "-" + formatter.string(from: event.endDate)
-        }
-        return label
+    /// Activate the system Calendar app. (Deep-linking to a specific
+    /// event needs a calendaritem:// URL whose identifiers don't map
+    /// reliably to EventKit's opaque IDs; activation is the robust
+    /// affordance.)
+    private static func openCalendarApp() {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.iCal")
+        else { return }
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 
     // MARK: - Footer
 
+    private var isViewingToday: Bool {
+        let today = CalendarModel.calendar.startOfDay(for: Date())
+        return !picking && selected == today && displayed == YearMonth.containing(today)
+    }
+
     private var footer: some View {
         HStack {
+            // Always laid out (invisible while viewing today) so the
+            // footer height doesn't jump when the button appears.
+            Button("回到今天", action: resetToToday)
+                .font(.caption)
+                .buttonStyle(.plain)
+                .foregroundStyle(theme.accent)
+                .opacity(isViewingToday ? 0 : 1)
+                .disabled(isViewingToday)
             Spacer()
             settingsMenu
         }
@@ -422,5 +488,112 @@ struct CalendarPopover: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+    }
+}
+
+/// Pure grid construction: 42 cells with lunar / solar-term /
+/// festival subtitles plus event dots from a single range query.
+/// File-scope (not a CalendarPopover member) so it stays free of the
+/// MainActor isolation SwiftUI infers for View types — it's called
+/// from detached rebuild tasks.
+private func buildCalendarCells(
+    month: YearMonth,
+    weekStart: WeekStart,
+    showLunar: Bool,
+    eventStore: EventStore,
+) -> [DayCellData] {
+    let grid = CalendarModel.monthGrid(month, weekStart: weekStart)
+    // Dot markers need one range query covering the whole grid.
+    let eventDays: Set<Date> = {
+        guard let first = grid.first?.date, let last = grid.last?.date,
+              let end = CalendarModel.calendar.date(byAdding: .day, value: 1, to: last)
+        else { return [] }
+        return eventStore.eventDays(from: first, to: end)
+    }()
+    return grid.map { day in
+        let entry = Holidays.entry(for: day.date)
+        let isFestival = entry?.isStatutoryFestival ?? false
+        // One lookup per day serves both the subtitle and its color.
+        let term = SolarTerms.term(for: day.date)
+        let isRestColored = entry?.kind == .work ? false : (entry?.kind == .rest || day.isWeekend)
+        return DayCellData(
+            date: day.date,
+            day: day.day,
+            isToday: day.isToday,
+            isInDisplayedMonth: day.isInDisplayedMonth,
+            isRestColored: isRestColored,
+            subtitle: isFestival ? (entry?.name ?? "") : (showLunar ? term ?? Lunar.dayText(for: day.date) : ""),
+            isFestival: isFestival,
+            isTerm: !isFestival && showLunar && term != nil,
+            badge: entry?.kind,
+            hasEvent: eventDays.contains(day.date),
+        )
+    }
+}
+
+/// "HH:mm" formatter shared by event rows — DateFormatter creation is
+/// expensive, don't make one per row per render.
+private let eventTimeFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "HH:mm"
+    return f
+}()
+
+/// Compact time range for an event row, e.g. "14:00-15:00" (end time
+/// appended for same-day events only) or "全天".
+private func eventTimeLabel(_ event: EKEvent) -> String {
+    if event.isAllDay {
+        return "全天"
+    }
+    let cal = CalendarModel.calendar
+    var label = eventTimeFormatter.string(from: event.startDate)
+    if cal.startOfDay(for: event.endDate) == cal.startOfDay(for: event.startDate) {
+        label += "-" + eventTimeFormatter.string(from: event.endDate)
+    }
+    return label
+}
+
+/// One event row: calendar color bar, time range, title. Clicking runs
+/// `action` (open in Calendar); a subtle hover background signals
+/// clickability — plain buttons give no feedback on macOS.
+private struct EventRow: View {
+    let event: EKEvent
+    let action: () -> Void
+
+    @Environment(\.theme) private var theme
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(Color(nsColor: event.calendar.color))
+                    .frame(width: 3, height: 12)
+                Text(eventTimeLabel(event))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(theme.textSecondary)
+                    .frame(width: 62, alignment: .leading)
+                Text(event.title ?? "")
+                    .font(.caption)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background {
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(theme.cardBackground)
+                    .opacity(hovering ? 1 : 0)
+            }
+            // The hover background bleeds 4pt past the text edge; take
+            // it back so the column stays aligned with the rows around
+            // it.
+            .padding(.horizontal, -4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("在日历 App 中查看")
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
     }
 }

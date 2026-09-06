@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let eventStore = EventStore()
         let holidaySync = HolidaySync()
         let calendar = StatusItemController(
-            autosaveName: "AuraBar.calendar",
+            autosaveName: calendarModuleAutosaveName,
             visibilityKey: ModuleVisibility.calendarKey,
             content: CalendarPopover(clock: clock, eventStore: eventStore, holidaySync: holidaySync),
         )

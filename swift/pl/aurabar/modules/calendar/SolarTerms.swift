@@ -6,11 +6,7 @@ import Foundation
 /// Dates outside the range simply render the plain lunar day.
 enum SolarTerms {
     static func term(for date: Date) -> String? {
-        let cal = CalendarModel.calendar
-        let key = cal.component(.year, from: date) * 10000
-            + cal.component(.month, from: date) * 100
-            + cal.component(.day, from: date)
-        return table[key]
+        table[CalendarModel.dayKey(for: date)]
     }
 
     private static let table: [Int: String] = [
