@@ -93,7 +93,7 @@ tqdm==4.67.3
     # via
     #   huggingface-hub
     #   transformers
-transformers==5.8.1
+transformers==5.10.1
     # via -r cpp/pl/minisearch/embedding_server/requirements.in
 typer==0.25.1
     # via
