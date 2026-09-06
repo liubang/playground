@@ -140,18 +140,58 @@ export function sanitizeHtml(html: string): string {
 // returns sanitized HTML; callers fall back to textContent when it returns "".
 export function highlightToHtml(text: string, language: string): string {
   if (!text || !language || !hljs.getLanguage(language)) return ''
+  const key = text.length >= HL_CACHE_MIN_LEN ? language + '\n' + text : ''
+  if (key) {
+    const hit = lruGet(hlCache, key)
+    if (hit !== undefined) return hit
+  }
   try {
-    return sanitizeHtml(hljs.highlight(text, { language }).value)
+    const out = sanitizeHtml(hljs.highlight(text, { language }).value)
+    if (key) lruSet(hlCache, key, out, HL_CACHE_CAP)
+    return out
   } catch {
     return ''
   }
 }
 
+// Bounded LRU shared by renderMarkdown/highlightToHtml: component-level useMemo
+// caches die with their component, so a session switch re-parses every message in
+// history (large messages: tens of ms each — a visible hitch on re-entry). Small
+// texts are cheap to re-render; only strings at/above the threshold are cached,
+// which also keeps streaming tails from constantly flooding the cache.
+const MD_CACHE_CAP = 200
+const MD_CACHE_MIN_LEN = 4096
+const HL_CACHE_CAP = 200
+const HL_CACHE_MIN_LEN = 1024
+
+function lruGet<K, V>(cache: Map<K, V>, key: K): V | undefined {
+  const v = cache.get(key)
+  if (v !== undefined) {
+    cache.delete(key)
+    cache.set(key, v) // refresh recency
+  }
+  return v
+}
+function lruSet<K, V>(cache: Map<K, V>, key: K, value: V, cap: number) {
+  if (cache.has(key)) cache.delete(key)
+  cache.set(key, value)
+  if (cache.size > cap) cache.delete(cache.keys().next().value!)
+}
+
+const mdCache = new Map<string, string>()
+const hlCache = new Map<string, string>()
+
 // renderMarkdown renders markdown text to sanitized HTML.
 // The React side mounts it via dangerouslySetInnerHTML (the app's only entry point, same constraint as the legacy version).
 export function renderMarkdown(text: string): string {
+  if (text.length >= MD_CACHE_MIN_LEN) {
+    const hit = lruGet(mdCache, text)
+    if (hit !== undefined) return hit
+  }
   const html = marked.parse(text || '', { async: false })
-  return DOMPurify.sanitize(html, PURIFY_OPTS)
+  const out = DOMPurify.sanitize(html, PURIFY_OPTS)
+  if (text.length >= MD_CACHE_MIN_LEN) lruSet(mdCache, text, out, MD_CACHE_CAP)
+  return out
 }
 
 // renderStreamTail renders the LIVE, still-growing tail of a streaming message
@@ -211,11 +251,58 @@ export function renderStreamTail(tail: string): string {
 // conservative direction is the safe one. The final turn-end render is still a
 // full parse, which is the correctness backstop.
 export function markdownStableBoundary(text: string): number {
-  if (!text) return 0
-  let inFence = false
-  let lastBoundary = 0
-  let i = 0
+  return scanBoundary(text, 0, false, 0).boundary
+}
+
+// Incremental variant for the streaming hot path. A full re-scan of the whole
+// buffer on every tick is O(n) per tick (O(n²) over a long message) — wasteful
+// for an append-only stream where the boundary can only move forward.
+//
+// The cache commits scan state only at a LINE START position: every line that
+// ended with "\n" in the previous text has final content, so its fence/boundary
+// decision can never change under append-only growth. The final UNTERMINATED
+// line is deliberately left uncommitted (e.g. an empty-looking partial line may
+// still grow into a fence opener), which is what makes the incremental snapshot
+// provably equivalent to a full re-scan: a scan resumed at any line start with
+// the (inFence, lastBoundary) pair a full scan would have had there is a suffix
+// of that full scan. Non-prefix input (edited/rewound text) falls back to a full
+// scan transparently.
+export interface BoundaryCache {
+  text: string // the text this snapshot was computed from
+  resumePos: number // line-start offset; all lines before it are committed
+  fenceAtResume: boolean // fence state a full scan would have at resumePos
+  boundaryAtResume: number // lastBoundary committed before resumePos
+}
+
+export function markdownStableBoundaryCached(
+  text: string,
+  cache: BoundaryCache | undefined,
+): { end: number; cache: BoundaryCache } {
+  let out
+  if (cache && text.startsWith(cache.text)) {
+    out = scanBoundary(text, cache.resumePos, cache.fenceAtResume, cache.boundaryAtResume)
+  } else {
+    out = scanBoundary(text, 0, false, 0)
+  }
+  return { end: out.boundary, cache: out.cache(text) }
+}
+
+// Shared line-scan core. `start` must be 0 or a line-start offset, with
+// (inFence0, boundary0) the committed state a scan of the prefix would yield.
+function scanBoundary(
+  text: string,
+  start: number,
+  inFence0: boolean,
+  boundary0: number,
+): { boundary: number; cache: (fullText: string) => BoundaryCache } {
+  let inFence = inFence0
+  let lastBoundary = boundary0
+  // State at the start of the currently-scanned line (the snapshot point).
+  let lineStart = start
+  let fenceAtLine = inFence0
+  let boundaryAtLine = boundary0
   const n = text.length
+  let i = start
   while (i <= n) {
     const nl = text.indexOf('\n', i)
     const lineEnd = nl < 0 ? n : nl
@@ -234,8 +321,35 @@ export function markdownStableBoundary(text: string): number {
       // A blank line outside a code fence is a block boundary.
       lastBoundary = nl < 0 ? n : nl + 1
     }
-    if (nl < 0) break
+    if (nl < 0) {
+      // Final unterminated line: commit state from BEFORE it (the line may
+      // still grow and change classification on the next append).
+      const cacheFence = fenceAtLine
+      const cacheBoundary = boundaryAtLine
+      const cacheLine = lineStart
+      return {
+        boundary: lastBoundary,
+        cache: (fullText) => ({
+          text: fullText,
+          resumePos: cacheLine,
+          fenceAtResume: cacheFence,
+          boundaryAtResume: cacheBoundary,
+        }),
+      }
+    }
     i = nl + 1
+    lineStart = i
+    fenceAtLine = inFence
+    boundaryAtLine = lastBoundary
   }
-  return lastBoundary
+  // Unreachable (the loop always breaks at nl<0); keep the compiler honest.
+  return {
+    boundary: lastBoundary,
+    cache: (fullText) => ({
+      text: fullText,
+      resumePos: lineStart,
+      fenceAtResume: fenceAtLine,
+      boundaryAtResume: boundaryAtLine,
+    }),
+  }
 }

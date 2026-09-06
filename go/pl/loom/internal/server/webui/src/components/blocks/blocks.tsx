@@ -10,7 +10,12 @@ import { isInlineImage } from '../../app/transcript'
 import type { ContextCompactedPayload } from '../../protocol/events'
 import { fmtBytes, fmtDuration, fmtTokens } from '../../lib/format'
 import { Icon } from '../../lib/icons'
-import { markdownStableBoundary, renderMarkdown, renderStreamTail } from '../../lib/markdown'
+import {
+  markdownStableBoundaryCached,
+  renderMarkdown,
+  renderStreamTail,
+  type BoundaryCache,
+} from '../../lib/markdown'
 import { MarkdownView } from './MarkdownView'
 import { MessageActions } from './MessageActions'
 import { ArtifactImage, InlineImage } from './images'
@@ -118,11 +123,19 @@ export const StreamBlock = memo(function StreamBlock({ text }: { text: string })
   // HTML string is cached; React's dangerouslySetInnerHTML diff skips the
   // innerHTML write when the string is unchanged, so the prefix DOM is not
   // rebuilt. Only the live tail is re-rendered each tick (it is short).
-  const cacheRef = useRef({ stableText: '', stableHtml: '' })
+  const cacheRef = useRef<{
+    stableText: string
+    stableHtml: string
+    // Boundary scan cache: append-only streaming makes the full re-scan
+    // incremental — see markdownStableBoundaryCached in lib/markdown.
+    boundary: BoundaryCache | undefined
+  }>({ stableText: '', stableHtml: '', boundary: undefined })
 
-  const end = markdownStableBoundary(text)
-  const stableText = text.slice(0, end)
+  const scanned = markdownStableBoundaryCached(text, cacheRef.current.boundary)
   const cache = cacheRef.current
+  cache.boundary = scanned.cache
+  const end = scanned.end
+  const stableText = text.slice(0, end)
   let stableHtml: string
   if (stableText === cache.stableText) {
     stableHtml = cache.stableHtml

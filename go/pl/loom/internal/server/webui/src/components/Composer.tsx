@@ -250,7 +250,9 @@ export function Composer({ controller }: { controller: AppController }) {
 
   const onError = useCallback((msg: string) => toast(msg), [])
   const attachmentsRef = useRef<Attachment[]>([])
-  attachmentsRef.current = attachments
+  useEffect(() => {
+    attachmentsRef.current = attachments
+  }, [attachments])
 
   const addFiles = useCallback(
     async (files: File[]) => {

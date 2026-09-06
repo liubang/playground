@@ -103,6 +103,11 @@
   padding: 6px 10px;
   border-radius: var(--radius-md);
   color: var(--fg);
+  /* A workspace group can hold hundreds of session rows; rows outside the
+     sidebar viewport skip layout/paint entirely. `auto` remembers the measured
+     size so the group height (and scrollbar) stays steady while scrolling. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 32px;
 }
 .sess-item:hover {
   background: var(--bg2);

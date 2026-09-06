@@ -100,6 +100,16 @@ button {
   cursor: not-allowed;
 }
 
+/* Chromium/WebKit suppress mouse events on disabled form controls, which makes
+   titles on disabled buttons unreachable (e.g. the attach button's "model
+   doesn't support image input" reason hint). Re-enabling pointer-events
+   restores hover (so our tooltip takeover works) while the disabled attribute
+   itself still suppresses click activation. */
+button:disabled {
+  pointer-events: auto;
+  cursor: not-allowed;
+}
+
 /* ============================== Disclosure blocks (generic details) ============================== */
 /* Shared by reasoning / user-ctx / tool-output; components only add incremental styles like font size. */
 .disclosure summary {
