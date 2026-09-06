@@ -264,6 +264,10 @@ func (c *inprocClient) SubagentView(ctx context.Context, sessionID domain.Sessio
 	return h.Controller.SubagentView(ctx, sessionID)
 }
 
+func (c *inprocClient) ReadArtifact(ctx context.Context, ref domain.ArtifactRef) ([]byte, error) {
+	return c.service.ReadArtifact(ctx, ref)
+}
+
 func (c *inprocClient) ListSkills(ctx context.Context) (SkillsListing, error) {
 	h, err := c.bound()
 	if err != nil {

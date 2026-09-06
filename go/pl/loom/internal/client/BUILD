@@ -40,6 +40,7 @@ go_test(
     srcs = [
         "client_test.go",
         "contract_test.go",
+        "http_artifact_test.go",
     ],
     embed = [":client"],
     deps = [

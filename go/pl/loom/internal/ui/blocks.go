@@ -37,6 +37,11 @@ const (
 	BlockKindTool        BlockKind = "tool"
 	BlockKindNotice      BlockKind = "notice"
 	BlockKindInterrupted BlockKind = "interrupted"
+	// BlockKindImage carries an inline image produced by a tool
+	// (generate_image/present_image). ImageLines holds the terminal
+	// placeholder cells once the artifact bytes are rendered; before that
+	// the block shows its pending/error state.
+	BlockKindImage BlockKind = "image"
 )
 
 // TranscriptBlock is a stable-ID unit in the transcript view.
@@ -80,6 +85,15 @@ type TranscriptBlock struct {
 	// progress line beneath the summary, and the drill-in target for the
 	// read-only overlay (Ctrl+G). Nil for non-delegate tools.
 	Subagent *SubagentBlockState
+
+	// Inline image (BlockKindImage). ImageRef is the pending artifact; the
+	// bytes are fetched asynchronously and rendered into ImageLines once
+	// the terminal supports inline images. ImageErr explains a failed
+	// load/render so the block degrades to readable text instead of
+	// disappearing.
+	ImageRef   domain.ArtifactRef
+	ImageLines []string
+	ImageErr   string
 }
 
 // SubagentBlockState is the UI-side projection of a delegated child run,
@@ -126,6 +140,26 @@ func (idx *BlockIndex) Add(b *TranscriptBlock) {
 		idx.Order = append(idx.Order, b.ID)
 	}
 	idx.ByID[b.ID] = b
+	idx.touch()
+}
+
+// InsertAfter adds b right after the block identified by anchor, keeping
+// dependent content (an image under its tool call) in chronological order.
+// Unknown anchors fall back to appending at the end. Re-adding an existing
+// ID is a no-op.
+func (idx *BlockIndex) InsertAfter(anchor string, b *TranscriptBlock) {
+	if _, exists := idx.ByID[b.ID]; exists {
+		return
+	}
+	idx.ByID[b.ID] = b
+	for i, id := range idx.Order {
+		if id == anchor {
+			idx.Order = append(idx.Order[:i+1], append([]string{b.ID}, idx.Order[i+1:]...)...)
+			idx.touch()
+			return
+		}
+	}
+	idx.Order = append(idx.Order, b.ID)
 	idx.touch()
 }
 
@@ -777,6 +811,27 @@ func RebuildTranscript(messages []domain.Message) *BlockIndex {
 			toolBlock.Detail = strings.Join(details, " · ")
 			toolBlock.Preview = render.SanitizeText(toolResultPreviewText(result))
 			idx.Add(toolBlock)
+			// Displayable artifacts (present_image / generate_image output)
+			// become image blocks under their tool call; the bytes are
+			// fetched and rendered asynchronously by the model. Chained
+			// anchors keep several images in their original order.
+			anchor := toolBlock.ID
+			for _, cp := range result.Content {
+				if cp.Kind != domain.PartArtifact || cp.Artifact == nil || cp.ModelOnly {
+					continue
+				}
+				if !isImageMediaType(cp.Artifact.MediaType) {
+					continue
+				}
+				img := &TranscriptBlock{
+					ID:       fmt.Sprintf("img-%s", cp.Artifact.ID),
+					Kind:     BlockKindImage,
+					ImageRef: *cp.Artifact,
+					Done:     true,
+				}
+				idx.InsertAfter(anchor, img)
+				anchor = img.ID
+			}
 		}
 	}
 	return idx

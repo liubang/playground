@@ -545,6 +545,10 @@ func (m Model) renderBlock(block *TranscriptBlock) string {
 		return m.theme.ToolBlock.Render(out)
 	case BlockKindNotice:
 		return m.theme.NoticeBlock.Render(content)
+	case BlockKindImage:
+		// Inline image: the placeholder cells are already styled; the
+		// pending/failure states are dim text.
+		return m.renderImage(block)
 	default:
 		return content
 	}

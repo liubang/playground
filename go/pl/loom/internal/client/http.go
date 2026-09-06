@@ -27,6 +27,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -620,4 +621,35 @@ func (c *httpClient) ListPackages(ctx context.Context) ([]permission.Package, er
 
 func (c *httpClient) ForgetPackage(ctx context.Context, bind permission.Binding) error {
 	return ErrUnsupported
+}
+
+// ReadArtifact fetches a committed artifact blob (raw bytes, not JSON).
+// Unlike the JSON endpoints the size is a required query parameter: the
+// server verifies the content hash against the full reference.
+func (c *httpClient) ReadArtifact(ctx context.Context, ref domain.ArtifactRef) ([]byte, error) {
+	req, err := c.newRequest(ctx, http.MethodGet,
+		"/v1/artifacts/"+ref.ID.String()+"?size="+strconv.FormatInt(ref.Size, 10), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return nil, decodeWireError(resp)
+	}
+	// Guard against an oversized (or lying) body: no image the TUI renders
+	// exceeds 12MiB (termimage.maxImageBytes), so read one byte past that
+	// and treat overflow as an error instead of silently truncating.
+	const maxBody = 12 << 20
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxBody {
+		return nil, fmt.Errorf("artifact %s exceeds %d bytes", ref.ID, maxBody)
+	}
+	return data, nil
 }

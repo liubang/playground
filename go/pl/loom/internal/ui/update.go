@@ -258,6 +258,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next = m
 	case imageAttachedMsg:
 		next, cmd = m.handleImageAttached(msg)
+	case imageBytesMsg:
+		// An inline image artifact arrived: transmit it to the terminal and
+		// fill the image block (no follow-up cmd — rendering is fire-once).
+		m = m.handleImageBytesMsg(msg)
+		next = m
 	case clipboardImageMsg:
 		next, cmd = m.handleClipboardImage(msg)
 	case clipboardCopiedMsg:
@@ -482,6 +487,11 @@ func (m Model) blockRenderKey(block *TranscriptBlock) string {
 	if state := block.Subagent; state != nil {
 		fmt.Fprintf(&sb, "|%s|%d|%d|%s", state.ChildID, state.ToolCalls,
 			state.InputTokens+state.OutputTokens, state.Outcome)
+	}
+	// Image blocks mutate once (pending -> lines or error); fold the state
+	// into the key so the render cache invalidates at that exact moment.
+	if block.Kind == BlockKindImage {
+		fmt.Fprintf(&sb, "|img:%d:%s", len(block.ImageLines), block.ImageErr)
 	}
 	return sb.String()
 }
@@ -2189,7 +2199,13 @@ func (m Model) handleSnapshot(msg snapshotMsg) (tea.Model, tea.Cmd) {
 	// no prompt at all and its run blocks forever.
 	m.reconcilePendingRequests(msg.snapshot.PendingRequests)
 	m.resumeFollowTail()
-	return m, nil
+	// A fresh (or resynced) transcript may carry image blocks whose bytes
+	// still need fetching; schedule those loads now.
+	cmds := m.imageLoadCmds()
+	if len(cmds) == 0 {
+		return m, nil
+	}
+	return m, tea.Batch(cmds...)
 }
 
 // reconcilePendingRequests aligns the approval/question overlays with the
@@ -2289,6 +2305,16 @@ func (m *Model) mergeSnapshot(messages []domain.Message) {
 }
 
 func hasEquivalentBlock(idx *BlockIndex, candidate *TranscriptBlock) bool {
+	if candidate.Kind == BlockKindImage {
+		// Image blocks have empty Content/Tool; equivalence is by artifact.
+		for _, id := range idx.Order {
+			block := idx.ByID[id]
+			if block.Kind == BlockKindImage && block.ImageRef.ID == candidate.ImageRef.ID {
+				return true
+			}
+		}
+		return false
+	}
 	for _, id := range idx.Order {
 		block := idx.ByID[id]
 		if block.Kind == candidate.Kind && block.Content == candidate.Content && block.Tool == candidate.Tool {
@@ -2564,7 +2590,30 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 			m.newEvents++
 		}
 	}
+	// Tool completions may carry displayable image artifacts (present_image /
+	// generate_image). The tool block itself is created above; attach image
+	// blocks under it and fetch their bytes when the terminal can show them.
+	// Chained anchors keep several images in their original order.
+	var imgCmds []tea.Cmd
+	if m.images != nil && evt.Kind == runtimeevent.KindToolCompleted {
+		var payload runtimeevent.ToolCompletedPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
+			anchor := fmt.Sprintf("tool-%s", payload.CallID)
+			for _, ref := range payload.Artifacts {
+				if !isImageMediaType(ref.MediaType) {
+					continue
+				}
+				if id := m.insertImageBlock(anchor, ref); id != "" {
+					imgCmds = append(imgCmds, m.loadImageBytesCmd(id, ref))
+					anchor = id
+				}
+			}
+		}
+	}
 	cmds := []tea.Cmd{m.waitForEvent()}
+	if len(imgCmds) > 0 {
+		cmds = append(cmds, imgCmds...)
+	}
 	if m.isBusy() && !m.spinning {
 		m.spinning = true
 		cmds = append(cmds, m.spinner.Tick)

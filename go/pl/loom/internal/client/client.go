@@ -168,6 +168,13 @@ type Client interface {
 	// child run.
 	SubagentView(ctx context.Context, sessionID domain.SessionID) (SubagentView, error)
 
+	// --- artifacts ---
+
+	// ReadArtifact returns a committed artifact's bytes (image payloads for
+	// inline terminal/web rendering). It is session-independent: the blob is
+	// content-addressed.
+	ReadArtifact(ctx context.Context, ref domain.ArtifactRef) ([]byte, error)
+
 	// --- environment ---
 
 	// ListSkills returns the discovered skills.

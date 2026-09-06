@@ -22,9 +22,11 @@ package ui
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -35,8 +37,37 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
+	"github.com/liubang/playground/go/pl/loom/internal/ui/termimage"
 	"golang.org/x/term"
 )
+
+// lockedTermWriter serializes the two writers that share the terminal fd:
+// bubbletea's frame renderer and kitty image transmissions. Frame bytes
+// interleaved into a multi-chunk graphics escape sequence would corrupt it
+// (the terminal silently drops the broken APC), so a transmission holds the
+// lock across all its chunks. The embedded *os.File keeps the term.File
+// interface (Read/Close/Fd) that bubbletea asserts on for TTY detection.
+type lockedTermWriter struct {
+	*os.File
+	mu sync.Mutex
+}
+
+func newLockedTermWriter(w *os.File) *lockedTermWriter { return &lockedTermWriter{File: w} }
+
+func (l *lockedTermWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.File.Write(p)
+}
+
+// Lock/Unlock satisfy sync.Locker so long-lived sequences (kitty chunked
+// transmissions) can exclude frame writes entirely.
+func (l *lockedTermWriter) Lock()   { l.mu.Lock() }
+func (l *lockedTermWriter) Unlock() { l.mu.Unlock() }
+
+// UnlockedWriter exposes the raw file for writers holding the lock (kitty
+// transmissions) so they don't re-enter the mutex on every chunk.
+func (l *lockedTermWriter) UnlockedWriter() io.Writer { return l.File }
 
 // Mode represents the top-level UI mode.
 type Mode string
@@ -81,6 +112,12 @@ type Model struct {
 	// lastEventSeq is the highest applied event sequence; re-subscriptions
 	// resume from it so a reconnect never replays already-applied deltas.
 	lastEventSeq uint64
+	// images renders inline images (kitty graphics protocol). Nil when the
+	// terminal does not support it — image blocks then degrade to text.
+	images *termimage.Kitty
+	// termOut is the shared, lock-serialized terminal output (frames +
+	// kitty transmissions). Nil in unit-test models.
+	termOut *lockedTermWriter
 
 	// UI state
 	mode      Mode
@@ -335,12 +372,23 @@ func NewModel(controller client.Client, modelName, workspace string) Model {
 		spinner.WithStyle(theme.SpinnerStyle),
 	)
 
+	// Inline image rendering is opt-in per terminal: detect once at
+	// startup; unsupported terminals simply never see image blocks.
+	termOut := newLockedTermWriter(os.Stdout)
+	var images *termimage.Kitty
+	if termimage.DetectEnv() == termimage.ProtocolKitty {
+		images = termimage.NewKitty(termOut)
+		images.SetDebugLogger(imageDebugLog)
+	}
+
 	return Model{
 		theme:                  theme,
 		icons:                  NerdIcons(),
 		markdown:               newMarkdownRenderer(),
 		spinner:                sp,
 		controller:             controller,
+		images:                 images,
+		termOut:                termOut,
 		mode:                   ModeChat,
 		modelName:              modelName,
 		workspace:              workspace,
@@ -565,6 +613,11 @@ func StartTUI(controller client.Client, modelName, workspace string, opts InitOp
 	// The ANSI compressor shrinks the byte stream to the terminal,
 	// narrowing the tearing window of the v1 line-diff renderer.
 	programOptions := []tea.ProgramOption{tea.WithMouseCellMotion(), tea.WithANSICompressor()}
+	// Route frames through the shared locked writer so they can never
+	// interleave into a kitty image transmission.
+	if m.termOut != nil {
+		programOptions = append(programOptions, tea.WithOutput(m.termOut))
+	}
 	if opts.AltScreen {
 		programOptions = append(programOptions, tea.WithAltScreen())
 	}
