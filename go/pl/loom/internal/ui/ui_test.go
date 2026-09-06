@@ -2504,16 +2504,84 @@ func TestEscDismissesCompletionUntilDraftChanges(t *testing.T) {
 
 func TestHelpOverlayListsAllCommands(t *testing.T) {
 	m := Model{theme: NoColorTheme(), width: 100}
-	view := m.renderHelpOverlay()
-	for _, want := range []string{"Loom TUI Help", "Keyboard", "Commands", "Enter", "Ctrl+R"} {
-		if !strings.Contains(view, want) {
-			t.Fatalf("help overlay missing %q:\n%s", want, view)
+	// The full content is the source of truth; the overlay windows it.
+	content := strings.Join(m.helpContentLines(), "\n")
+	for _, want := range []string{"Loom TUI Help", "Keyboard", "Commands", "Enter", "Ctrl+R", "Ctrl+N"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("help content missing %q:\n%s", want, content)
 		}
 	}
 	for _, c := range slashCommands {
-		if !strings.Contains(view, c.usage) {
-			t.Fatalf("help overlay missing command %q:\n%s", c.usage, view)
+		if !strings.Contains(content, c.usage) {
+			t.Fatalf("help content missing command %q:\n%s", c.usage, content)
 		}
+	}
+}
+
+// The keyboard section renders key names from the live keymap, so a user
+// override can never leave the help text documenting the wrong binding.
+func TestHelpOverlayReflectsKeymapOverrides(t *testing.T) {
+	m := Model{theme: NoColorTheme(), width: 100}
+	overrides := map[string]map[string]string{
+		string(ContextChat): {string(ActionSearchTranscript): "ctrl+s"},
+	}
+	var warnings []string
+	m.keymap, warnings = DefaultKeymap().WithOverrides(overrides)
+	if len(warnings) != 0 {
+		t.Fatalf("unexpected keymap warnings: %v", warnings)
+	}
+	content := strings.Join(m.helpContentLines(), "\n")
+	if !strings.Contains(content, "Ctrl+S") {
+		t.Fatalf("help does not reflect the overridden binding:\n%s", content)
+	}
+	if strings.Contains(content, "Ctrl+F") {
+		t.Fatalf("help still shows the overridden default binding:\n%s", content)
+	}
+}
+
+// Scrolling makes the off-screen tail of the help reachable; the frame
+// stays windowed at the reserved height while scrolling.
+func TestHelpOverlayWindowedAndScrollable(t *testing.T) {
+	m := Model{theme: NoColorTheme(), width: 100, height: 24}
+	total := len(m.helpContentLines())
+	if total <= m.helpVisibleRows() {
+		t.Fatalf("total rows %d must exceed the window %d for this test", total, m.helpVisibleRows())
+	}
+	top := m.renderHelpOverlay()
+	if strings.Contains(top, "/doctor") {
+		t.Fatal("/doctor should be off-screen at the top of the help window")
+	}
+	// Scroll to the bottom via the key handler.
+	for i := 0; i < total; i++ {
+		updated, _ := m.handleHelpKey(tea.KeyMsg{Type: tea.KeyPgDown})
+		m = updated.(Model)
+	}
+	bottom := m.renderHelpOverlay()
+	if !strings.Contains(bottom, "/doctor") {
+		t.Fatalf("scrolled help window missing command tail:\n%s", bottom)
+	}
+	// The reservation consumes the very lines the renderer emits — the
+	// inline frame can never over- or under-reserve.
+	if got, want := lipgloss.Height(bottom), len(m.helpBandLines()); got != want {
+		t.Fatalf("rendered help height = %d, reserved lines %d", got, want)
+	}
+	// Closing keys still dismiss the dialog.
+	updated, _ := m.handleHelpKey(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+	if m.mode != ModeChat {
+		t.Fatal("Esc did not close the help dialog")
+	}
+	// Reopening starts at the top, matching how listings reset their scroll.
+	ctrl := newTestController(t)
+	m = NewModel(ctrl, "model", "/ws")
+	m.helpScroll = 4 // stale scroll left over from the previous open
+	updatedModel, _ := m.handleSlashCommand("/help")
+	m = updatedModel.(Model)
+	if m.mode != ModeHelp {
+		t.Fatal("/help did not reopen the dialog")
+	}
+	if m.helpScroll != 0 {
+		t.Fatalf("reopened help keeps stale scroll %d", m.helpScroll)
 	}
 }
 
@@ -2983,5 +3051,236 @@ func TestSteeredSubmissionWarnsAboutDroppedImages(t *testing.T) {
 	}).(Model)
 	if strings.Contains(m.statusMessage, "dropped") || m.statusIsError {
 		t.Fatalf("text-only steer should not warn: %q err=%v", m.statusMessage, m.statusIsError)
+	}
+}
+
+// --- regression tests for the 2026/09 UI review fixes ---
+
+// /doctor's env listing must report its true content height; without the
+// listingEnv case the dialog rendered a single (useless) window row and
+// could not scroll.
+func TestDoctorListingContentRowsAndScrolls(t *testing.T) {
+	process.AugmentProcessPATH(nil)
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "model-a", "/ws")
+	updated, cmd := m.handleSlashCommand("/doctor")
+	m = updated.(Model)
+	msg, ok := cmd().(envLoadedMsg)
+	if !ok {
+		t.Fatalf("cmd returned %T, want envLoadedMsg", msg)
+	}
+	updatedModel, _ := m.Update(msg)
+	m = updatedModel.(Model)
+	if m.listing.kind != listingEnv {
+		t.Fatalf("listing kind = %v, want listingEnv", m.listing.kind)
+	}
+	rows := m.listingContentRows()
+	want := len(m.listingEnvRows(72))
+	if rows != want {
+		t.Fatalf("listingContentRows = %d, want %d (rendered env rows)", rows, want)
+	}
+	if rows <= listingMaxVisibleRows {
+		t.Fatalf("env listing has only %d rows; the scroll behavior is untestable", rows)
+	}
+	updatedModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	m = updatedModel.(Model)
+	if m.listingScroll == 0 {
+		t.Fatal("PgDown did not scroll the env listing (the old one-row bug)")
+	}
+}
+
+// The idle Ctrl+C quit confirm expires after quitConfirmWindow; a stale
+// confirm must re-arm, never quit.
+func TestQuitConfirmWindowExpires(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "model", "/ws")
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = updated.(Model)
+	if isQuitCmd(cmd) {
+		t.Fatal("first Ctrl+C must not quit")
+	}
+	if !m.quitConfirm {
+		t.Fatal("first Ctrl+C should arm the quit confirm")
+	}
+	if !strings.Contains(m.statusMessage, "2s") {
+		t.Fatalf("confirm hint must state the window, got %q", m.statusMessage)
+	}
+
+	m.lastCancelTime = time.Now().Add(-quitConfirmWindow - time.Second)
+	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = updated.(Model)
+	if isQuitCmd(cmd) {
+		t.Fatal("stale confirm must not quit")
+	}
+	if !m.quitConfirm {
+		t.Fatal("stale confirm should re-arm instead of quitting")
+	}
+
+	m.lastCancelTime = time.Now()
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if !isQuitCmd(cmd) {
+		t.Fatal("second Ctrl+C within the window must quit")
+	}
+}
+
+// Esc dismisses an armed quit confirm instead of quitting: the hint never
+// advertised Esc as an exit key, and "close/cancel" reflexes must not kill
+// the session.
+func TestEscDismissesQuitConfirm(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "model", "/ws")
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = updated.(Model)
+	if !m.quitConfirm {
+		t.Fatal("confirm should be armed for this test")
+	}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+	if isQuitCmd(cmd) {
+		t.Fatal("Esc must not quit")
+	}
+	if m.quitConfirm {
+		t.Fatal("Esc should dismiss the armed confirm")
+	}
+}
+
+// The status message (errors, acks) joins the bar right after the phase
+// badge, so narrow terminals drop usage/context/plan segments first.
+func TestStatusBarKeepsStatusMessageOnNarrowTerminals(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "model", "/ws")
+	m.width = 26
+	m.setStatus("boom", true)
+	bar := stripANSI(m.renderStatusBar())
+	if !strings.Contains(bar, "boom") {
+		t.Fatalf("narrow status bar dropped the error message: %q", bar)
+	}
+	if !strings.Contains(bar, "[idle]") {
+		t.Fatalf("narrow status bar missing the phase badge: %q", bar)
+	}
+}
+
+// The completion popup is height-capped; it used to reserve one row per
+// command and squish the transcript to a single line.
+func TestCompletionPopupCapped(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "model", "/ws")
+	m.textArea.SetValue("/")
+	if !m.completionVisible() {
+		t.Fatal("completion should be visible after typing /")
+	}
+	want := min(len(m.completionCandidates()), maxCompletionVisibleRows) + 2
+	if got := m.completionHeight(); got != want {
+		t.Fatalf("completionHeight = %d, want %d", got, want)
+	}
+	if got := lipgloss.Height(m.renderCompletion()); got != want {
+		t.Fatalf("rendered completion height = %d, reserved %d", got, want)
+	}
+}
+
+// Search mode: Shift+Tab retreats to the previous match (wrapping), and
+// the arrows scroll the transcript instead of being dead keys.
+func TestSearchPrevMatchAndScrolling(t *testing.T) {
+	m := newSyncTestModel(30) // tall enough to exceed the viewport height
+	m.mode = ModeSearch
+	m.searchQuery = "answer"
+	m.updateSearch()
+	matches := len(m.searchMatches)
+	if matches != 29 {
+		t.Fatalf("matches = %d, want 29 (the tool block has no content)", matches)
+	}
+
+	updated, _ := m.handleSearchKey(tea.KeyMsg{Type: tea.KeyShiftTab})
+	m = updated.(Model)
+	if m.searchIndex != matches-1 {
+		t.Fatalf("Shift+Tab at match 0 should wrap to match %d, got %d", matches-1, m.searchIndex)
+	}
+	updated, _ = m.handleSearchKey(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if m.searchIndex != 0 {
+		t.Fatalf("Enter at the last match should wrap to 0, got %d", m.searchIndex)
+	}
+
+	y0 := m.viewport.YOffset
+	updated, _ = m.handleSearchKey(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(Model)
+	if m.followTail {
+		t.Fatal("scrolling in search must detach from the tail")
+	}
+	if m.viewport.YOffset != max(0, y0-1) {
+		t.Fatalf("YOffset = %d, want %d after one scroll-up", m.viewport.YOffset, max(0, y0-1))
+	}
+	updated, _ = m.handleSearchKey(tea.KeyMsg{Type: tea.KeyPgDown})
+	m = updated.(Model)
+	if m.viewport.YOffset <= 0 {
+		t.Fatalf("PgDown should advance the view, YOffset = %d", m.viewport.YOffset)
+	}
+}
+
+// The wheel scrolls picker overlays, matching arrow-key navigation.
+func TestPickerWheelScrolls(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "test/model-a", "/ws")
+	var models []ModelOption
+	for _, name := range []string{"model-a", "model-b", "model-c", "model-d", "model-e", "model-f"} {
+		models = append(models, ModelOption{Provider: "test", Name: name, ContextWindow: 128000})
+	}
+	m.SetModels(models)
+
+	updated, _ := m.handleSlashCommand("/model")
+	m = updated.(Model)
+	if m.mode != ModeModelPicker || m.modelFinder == nil {
+		t.Fatalf("model picker did not open (mode=%s)", m.mode)
+	}
+	before := m.modelFinder.Selected().Ref()
+	wheel := func(button tea.MouseButton) {
+		updated, _ = m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: button})
+		m = updated.(Model)
+	}
+	wheel(tea.MouseButtonWheelDown)
+	afterDown := m.modelFinder.Selected().Ref()
+	if afterDown == before {
+		t.Fatal("wheel-down did not move the picker cursor")
+	}
+	wheel(tea.MouseButtonWheelUp)
+	if got := m.modelFinder.Selected().Ref(); got != before {
+		t.Fatalf("wheel-up should return the cursor to %q, got %q", before, got)
+	}
+}
+
+// An isolated resize re-renders immediately; a drag storm defers the
+// transcript re-render until the settle tick.
+func TestResizeDebouncesTranscriptReRender(t *testing.T) {
+	ctrl := newTestController(t)
+	m := NewModel(ctrl, "model", "/ws")
+	m.blocks.Add(&TranscriptBlock{ID: "b1", Kind: BlockKindAssistant, Title: "Assistant", Content: "hi", Done: true})
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = updated.(Model)
+	if m.lastSyncWidth != 100 {
+		t.Fatalf("isolated resize should re-render at once, lastSyncWidth = %d", m.lastSyncWidth)
+	}
+
+	// A second size inside the settle window marks the drag: the expensive
+	// transcript sync is deferred.
+	updated, _ = m.Update(tea.WindowSizeMsg{Width: 90, Height: 40})
+	m = updated.(Model)
+	if !m.resizeDragging {
+		t.Fatal("rapid consecutive resize should be marked dragging")
+	}
+	if m.lastSyncWidth != 100 {
+		t.Fatalf("mid-drag sync width = %d, want deferred at 100", m.lastSyncWidth)
+	}
+
+	// Settled: the tick clears the drag and the deferred re-render runs.
+	m.lastResizeAt = time.Now().Add(-2 * resizeSettleDelay)
+	updated, _ = m.Update(resizeTickMsg{})
+	m = updated.(Model)
+	if m.resizeDragging {
+		t.Fatal("settled tick must clear the dragging flag")
+	}
+	if m.lastSyncWidth != 90 {
+		t.Fatalf("settled resize should re-render, lastSyncWidth = %d", m.lastSyncWidth)
 	}
 }

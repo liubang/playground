@@ -126,11 +126,13 @@ func (m Model) handleImageBytesMsg(msg imageBytesMsg) Model {
 			return m
 		}
 		b.ImageErr = fmt.Sprintf("image unavailable: %v", msg.err)
+		m.blocks.touchBlock(b)
 		m.blocks.touch()
 		return m
 	}
 	if m.images == nil {
 		b.ImageErr = "inline images are not supported by this terminal"
+		m.blocks.touchBlock(b)
 		m.blocks.touch()
 		return m
 	}
@@ -154,6 +156,7 @@ func (m Model) handleImageBytesMsg(msg imageBytesMsg) Model {
 		b.ImageLines = lines
 		b.ImageErr = ""
 	}
+	m.blocks.touchBlock(b)
 	m.blocks.touch()
 	return m
 }

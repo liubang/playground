@@ -69,7 +69,10 @@ func PlainIcons() Icons {
 		PlanCurrent: "[>]", // [>]
 		PlanTodo:    "[ ]", // [ ]
 		Branch:      "",    // bare branch name; no safe plain-text glyph
-		Attachment:  "📎",   // paperclip
+		// "@" matches the file-reference convention users already type in
+		// the composer; the emoji paperclip doubles cell width and breaks
+		// the plain set's no-emoji contract.
+		Attachment: "@",
 	}
 }
 

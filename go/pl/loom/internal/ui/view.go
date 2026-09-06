@@ -33,10 +33,9 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
 
-// Reserved height (including border and padding) for the help panel that
-// replaces the composer. The approval band reserves its actual line count
-// instead (see visibleTranscriptHeight).
-const helpOverlayHeight = 23
+// helpMaxVisibleRows bounds the content window of the help dialog so it
+// always leaves the transcript some room; longer content scrolls.
+const helpMaxVisibleRows = 18
 
 // View renders the complete TUI: the base frame first, then — under the
 // alt-screen renderer only — floating windows composed over it (docs/
@@ -182,7 +181,7 @@ func (m Model) renderBase() string {
 			b.WriteString("\n")
 		}
 	case ModeHelp:
-		b.WriteString(m.renderHelpOverlay())
+		b.WriteString(strings.Join(m.helpBandLines(), "\n"))
 		b.WriteString("\n")
 	case ModeListing:
 		b.WriteString(m.renderListingOverlay())
@@ -438,7 +437,7 @@ func (m Model) renderSearchBar() string {
 	default:
 		count = fmt.Sprintf("match %d/%d", m.searchIndex+1, len(m.searchMatches))
 	}
-	hint := m.theme.Dim.Render(count + " · Enter next · Esc done")
+	hint := m.theme.Dim.Render(count + " · Enter next · Shift+Tab prev · ↑/↓ scroll · Esc done")
 	line := m.theme.DialogLabel.Render("Search") + " " + m.searchQuery + "▏ " + hint
 	return m.theme.Composer.Render(line)
 }
@@ -729,6 +728,18 @@ func (m Model) renderStatusBar() string {
 
 	add(fmt.Sprintf("[%s]", phase), phaseStyle.Render(fmt.Sprintf("[%s]", phase)))
 
+	// The status message joins right after the phase badge: it carries the
+	// direct answer to the user's last action (errors, acks) and must stay
+	// visible on narrow terminals. Segments are dropped from the tail when
+	// the bar overflows, so anything appended earlier outlives it.
+	if m.statusMessage != "" {
+		style := m.theme.Dim
+		if m.statusIsError {
+			style = m.theme.StatusBarError
+		}
+		add(m.statusMessage, style.Render(m.statusMessage))
+	}
+
 	if m.activityLabel != "" && phase != "idle" {
 		activity := m.activityLabel
 		if !m.lastActivityAt.IsZero() {
@@ -774,25 +785,29 @@ func (m Model) renderStatusBar() string {
 		add(hint, lipgloss.NewStyle().Foreground(m.theme.Highlight).Bold(true).Render(hint))
 	}
 
-	if m.statusMessage != "" {
-		style := m.theme.Dim
-		if m.statusIsError {
-			style = m.theme.StatusBarError
-		}
-		add(m.statusMessage, style.Render(m.statusMessage))
+	// The separators and the trailing fill ride the band background, so the
+	// status bar spans the row as one continuous strip, like the header.
+	sep := " · "
+	if m.theme.hasStatusBarFill() {
+		sep = m.theme.StatusBarBg.Render(sep)
 	}
-
-	bar := strings.Join(styledParts, " · ")
+	join := func(parts []string) string { return strings.Join(parts, sep) }
+	bar := join(styledParts)
 	if m.width > 0 {
 		for len(styledParts) > 1 && lipgloss.Width(bar) > m.width {
 			plainParts = plainParts[:len(plainParts)-1]
 			styledParts = styledParts[:len(styledParts)-1]
-			bar = strings.Join(styledParts, " · ")
+			bar = join(styledParts)
 		}
 		if lipgloss.Width(bar) > m.width {
 			// Final fallback on plain text: truncating styled output could cut
 			// an ANSI sequence in half and leak terminal state.
 			bar = truncateDisplayWidth(strings.Join(plainParts, " · "), m.width)
+		}
+		if m.theme.hasStatusBarFill() {
+			if pad := m.width - lipgloss.Width(bar); pad > 0 {
+				bar += m.theme.StatusBarBg.Render(strings.Repeat(" ", pad))
+			}
 		}
 	}
 	return bar
@@ -840,7 +855,9 @@ func (m Model) renderSteerPanel() string {
 	}
 	var b strings.Builder
 	section := func(title string, items []string) {
-		b.WriteString(m.theme.Dim.Render(title))
+		// The title is truncated like the items: it must never wrap, or
+		// the rendered panel outgrows the rows steerPanelHeight reserved.
+		b.WriteString(m.theme.Dim.Render(truncateDisplayWidth(title, width)))
 		for _, text := range items {
 			b.WriteString("\n  " + m.theme.Dim.Render("↳ "+truncateDisplayWidth(strings.ReplaceAll(text, "\n", " "), width-6)))
 		}
@@ -996,13 +1013,24 @@ func humanizeTokens(n int64) string {
 	}
 }
 
+// approvalBandLines returns the band's rendered lines, preferring the
+// per-Update cache layout() maintains (the layout reservation and the
+// renderer would otherwise each build the band on every frame). The
+// fallback keeps View-on-constructed-model paths (tests) correct.
+func (m Model) approvalBandLines() []string {
+	if m.approvalLinesCache != nil {
+		return m.approvalLinesCache
+	}
+	return m.approvalOverlayLines()
+}
+
 // renderApprovalOverlay renders the approval prompt as a full-width band
 // rather than a boxed dialog: a risk-colored bar down the left edge, a
 // title rule, the call summary with structured metadata, and a vertical
 // numbered option list. It shares the full-width language of the header
 // and status bar, and gives long commands and URLs room to breathe.
 func (m Model) renderApprovalOverlay() string {
-	return strings.Join(m.approvalOverlayLines(), "\n")
+	return strings.Join(m.approvalBandLines(), "\n")
 }
 
 // approvalOverlayLines builds the band line by line. The layout reserves
@@ -1291,12 +1319,16 @@ func commandUsageWidth() int {
 	return width + 2
 }
 
-// renderHelpOverlay renders the help dialog with a neutral border (the amber
-// approval frame is reserved for risky actions), highlighted key names and a
-// two-column key section to keep the dialog compact.
-func (m Model) renderHelpOverlay() string {
+// helpContentLines builds the full help content as one styled row per
+// line (title, the two-column keyboard section, the command list). Key
+// names render from the live keymap, so a user override never leaves the
+// help text lying about the bindings.
+func (m Model) helpContentLines() []string {
 	key := m.theme.ApprovalKey
 	dim := m.theme.Dim
+	chatKey := func(action Action, fallback string) string {
+		return m.keymap.FirstKey(ContextChat, action, fallback)
+	}
 
 	var b strings.Builder
 	b.WriteString(m.theme.DialogTitle.Render("Loom TUI Help"))
@@ -1316,11 +1348,12 @@ func (m Model) renderHelpOverlay() string {
 	}
 	keyRow("Enter", "Send prompt", "Alt+Enter", "Newline in draft")
 	keyRow("Up/Down", "Move in draft; scroll at edge", "PgUp/PgDn", "Scroll transcript")
-	keyRow("Ctrl+End", "Jump to bottom (follow)", "Wheel", "Scroll transcript")
-	keyRow("Ctrl+R", "Toggle thought process", "Tab", "Complete /command")
-	keyRow("Ctrl+E", "Toggle tool output", "Ctrl+O", "Expand/collapse all tools")
-	keyRow("Ctrl+F", "Search transcript", "Ctrl+Y", "Copy last reply")
-	keyRow("Ctrl+V", "Paste image from clipboard", "Ctrl+G", "View sub-agent (read-only)")
+	keyRow(chatKey(ActionJumpToBottom, "Ctrl+End"), "Jump to bottom (follow)", "Wheel", "Scroll transcript")
+	keyRow(chatKey(ActionToggleReasoning, "Ctrl+R"), "Toggle thought process", "Tab", "Complete /command")
+	keyRow(chatKey(ActionToggleToolOutput, "Ctrl+E"), "Toggle tool output", chatKey(ActionToggleAllTools, "Ctrl+O"), "Expand/collapse all tools")
+	keyRow(chatKey(ActionSearchTranscript, "Ctrl+F"), "Search transcript", chatKey(ActionCopyLastReply, "Ctrl+Y"), "Copy last reply")
+	keyRow(chatKey(ActionPasteImage, "Ctrl+V"), "Paste image from clipboard", chatKey(ActionViewSubagent, "Ctrl+G"), "View sub-agent (read-only)")
+	keyRow(chatKey(ActionQueueFollowup, "Ctrl+N"), "Queue draft for the next turn", chatKey(ActionTogglePlan, "Ctrl+T"), "Show/hide plan panel")
 	keyRow("Ctrl+C", "Cancel turn / clear (x2 quit)", "Ctrl+D", "Exit (when idle)")
 	keyRow("Esc", "Cancel turn; close dialogs", "", "")
 	b.WriteString("\n")
@@ -1334,11 +1367,64 @@ func (m Model) renderHelpOverlay() string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	b.WriteString(dim.Render("Type / for command completion · press any key to close"))
+	b.WriteString(dim.Render("Type / for command completion"))
+	return strings.Split(b.String(), "\n")
+}
 
-	width := min(m.dialogWidth(), 76)
-	width = max(width, 20)
-	return m.theme.DialogBorder.Width(width).Render(b.String())
+// helpVisibleRows returns how many content rows the help dialog window
+// shows: capped so the transcript keeps some room, and shrunk on short
+// terminals so the dialog never overflows the frame.
+func (m Model) helpVisibleRows() int {
+	rows := min(max(len(m.helpContentLines()), 1), helpMaxVisibleRows)
+	if budget := m.height - 8; budget < rows { // header, status, spacer, footer, border
+		rows = max(4, budget)
+	}
+	return rows
+}
+
+// helpBandLines returns the inline help dialog's rendered lines,
+// preferring the per-Update cache layout() maintains. Both the height
+// reservation and the renderer consume the same lines, so the frame never
+// over- or under-reserves — in bordered and borderless (no-color) themes
+// alike. The fallback keeps View-on-constructed-model paths correct.
+func (m Model) helpBandLines() []string {
+	if m.helpOverlayCache != nil {
+		return m.helpOverlayCache
+	}
+	return strings.Split(m.renderHelpOverlay(), "\n")
+}
+
+// renderHelpOverlay renders the help dialog with a neutral border (the
+// amber approval frame is reserved for risky actions): a fixed-height,
+// scrollable window over the full help content plus a footer with the
+// scroll position, laid out exactly like the listing dialog.
+func (m Model) renderHelpOverlay() string {
+	outer := min(m.dialogWidth(), 76)
+	outer = max(outer, 20)
+	contentWidth := max(outer-2, 10) // dialog border columns
+
+	lines := m.helpContentLines()
+	visible := m.helpVisibleRows()
+	start := min(m.helpScroll, max(0, len(lines)-visible))
+	end := min(start+visible, len(lines))
+
+	var b strings.Builder
+	for _, row := range lines[start:end] {
+		b.WriteString(clampLineANSI(row, contentWidth))
+		b.WriteString("\n")
+	}
+	// Pad short content so the dialog keeps a stable geometry.
+	for i := end - start; i < visible; i++ {
+		b.WriteString("\n")
+	}
+
+	footer := "up/down scroll · esc/q close"
+	if len(lines) > visible {
+		footer = fmt.Sprintf("up/down scroll (%d-%d/%d) · esc/q close", start+1, end, len(lines))
+	}
+	b.WriteString(m.theme.Dim.Render(footer))
+
+	return m.theme.DialogBorder.Width(outer).Render(b.String())
 }
 
 // listingMaxVisibleRows bounds the content window of the listing dialog so
@@ -1546,6 +1632,12 @@ func (m Model) listingContentRows() int {
 			return 3
 		}
 		return n*2 + (n - 1) // 2 rows per server + blank separators
+	case listingEnv:
+		// The env report's row count depends on the payload (tools, PATH
+		// dirs, PATH entries); derive it from the rendered rows — every
+		// row is clipped to one line, so the count is width-independent
+		// like the other listings.
+		return len(m.listingEnvRows(72))
 	}
 	return 0
 }

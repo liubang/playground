@@ -39,11 +39,20 @@ import (
 // stream after the broker disconnects it before locking input.
 const maxEventResubscribes = 3
 
-// maxCompletionRows bounds the visible completion candidates. The command
-// registry is small enough that every candidate fits — the popup shows them
-// all. The cap (and the cursor windowing in renderCompletion) only starts
-// to matter if the registry ever outgrows one screen.
-var maxCompletionRows = len(slashCommands)
+// quitConfirmWindow bounds how long the idle Ctrl+C quit confirmation
+// stays armed: an expired confirm must not exit — a user who pressed
+// Ctrl+C minutes ago no longer remembers (or intends) it. Matches the
+// double-tap cancel window.
+const quitConfirmWindow = 2 * time.Second
+
+// maxCompletionRows bounds the visible completion candidates. An uncapped
+// popup (one row per command) consumed over half a 24-row terminal and
+// collapsed the transcript to a single line whenever the popup opened;
+// a compact window with cursor windowing keeps the popup cheap and the
+// layout calm.
+const maxCompletionVisibleRows = 7
+
+var maxCompletionRows = min(len(slashCommands), maxCompletionVisibleRows)
 
 // slashCommand describes one slash command for help and completion.
 type slashCommand struct {
@@ -162,6 +171,17 @@ type approvalResolvedMsg struct {
 	ruleNote string
 }
 
+// resizeTickMsg arrives resizeSettleDelay after a WindowSizeMsg. While the
+// user keeps dragging (fresh sizes arrive faster than the delay), the
+// handler reschedules; once the drag settles, the Update pass following
+// this tick performs the deferred transcript re-render.
+type resizeTickMsg struct{}
+
+// resizeSettleDelay is the quiet period after the last resize event at
+// which the transcript re-render fires (see resizeTickMsg and the gate in
+// syncTranscript).
+const resizeSettleDelay = 90 * time.Millisecond
+
 // Update is the single-threaded reducer for the TUI.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var next tea.Model
@@ -172,9 +192,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		next, cmd = m.handleMouse(msg)
 	case tea.WindowSizeMsg:
+		// A resize is "dragging" only when sizes keep arriving faster than
+		// the settle delay: an isolated resize (startup, snap-to-side)
+		// re-renders immediately instead of waiting out the timer.
+		m.resizeDragging = !m.lastResizeAt.IsZero() && time.Since(m.lastResizeAt) < resizeSettleDelay
+		m.lastResizeAt = time.Now()
 		m.width = msg.Width
 		m.height = msg.Height
 		next = m
+		// Coalesce a resize storm into one transcript re-render: cheap
+		// chrome (header/status/composer) tracks the live width every
+		// frame; the expensive transcript re-render waits for settle.
+		cmd = tea.Tick(resizeSettleDelay, func(time.Time) tea.Msg { return resizeTickMsg{} })
+	case resizeTickMsg:
+		if time.Since(m.lastResizeAt) < resizeSettleDelay {
+			// Still dragging — wait for the next quiet period.
+			next = m
+			cmd = tea.Tick(resizeSettleDelay, func(time.Time) tea.Msg { return resizeTickMsg{} })
+		} else {
+			m.resizeDragging = false
+			next = m
+		}
 	case runtimeEventMsg:
 		next, cmd = m.handleRuntimeEvent(runtimeevent.RuntimeEvent(msg))
 	case runtimeEventsClosedMsg:
@@ -302,6 +340,19 @@ func (m *Model) layout() {
 	if m.width <= 0 || m.height <= 0 {
 		return
 	}
+	if m.pendingApproval != nil {
+		// The approval band is consumed twice per frame (height reservation
+		// in visibleTranscriptHeight, then the render); build it once per
+		// state change instead — layout() runs after every Update.
+		m.approvalLinesCache = m.approvalOverlayLines()
+	}
+	if m.baseMode() == ModeHelp && !m.altScreen {
+		// The help dialog replaces the composer inline: the reservation and
+		// the renderer must agree on every row, across both bordered and
+		// borderless (no-color) themes — cache the built dialog once per
+		// Update instead of deriving either side arithmetically.
+		m.helpOverlayCache = strings.Split(m.renderHelpOverlay(), "\n")
+	}
 	m.viewport.Width = max(1, m.width)
 	m.textArea.SetWidth(max(1, m.width-4))
 	// The composer grows with the draft (1..8 lines, per the design), capped
@@ -329,6 +380,13 @@ func (m *Model) syncTranscript() {
 	if sameIdx && m.blocks.Version() == m.lastSyncVersion &&
 		m.width == m.lastSyncWidth && m.theme.NoColor == m.lastSyncNoColor &&
 		!m.hasVolatileBlocks() {
+		return
+	}
+	// Width-changed mid-drag: defer the full re-render until the resize
+	// settles (resizeTickMsg drives the retry). The viewport already has
+	// the new dimensions and truncates the old lines to the current
+	// width, so the frame stays correct — just briefly un-wrapped.
+	if m.resizeDragging && m.width != m.lastSyncWidth {
 		return
 	}
 	m.transcriptBuilds++
@@ -468,6 +526,10 @@ type cachedRender struct {
 // blockRenderKey fingerprints every input that affects a block's rendered
 // output. Blocks whose rendering embeds live state (spinners, elapsed
 // timers) return an empty key and are never cached.
+//
+// The key is the block's mutation rev (bumped by touchBlock at every
+// mutation site) plus the frame-level inputs (width, theme): O(1) per
+// check, instead of hashing the full content on every sync cycle.
 func (m Model) blockRenderKey(block *TranscriptBlock) string {
 	// In-progress blocks embed spinner frames and a live elapsed timer;
 	// caching them would freeze the animation between events.
@@ -478,22 +540,7 @@ func (m Model) blockRenderKey(block *TranscriptBlock) string {
 	case "running", "prepared", "approval", "pending":
 		return ""
 	}
-	var sb strings.Builder
-	sb.Grow(len(block.Content) + len(block.Preview) + len(block.Diff) + 160)
-	fmt.Fprintf(&sb, "%s|%s|%s|%s|%s|%s|%t|%t|%s|%s|%d|%t\n%s",
-		block.Kind, block.Status, block.Title, block.Detail, block.Target,
-		block.Diff, block.Expanded, block.ReasoningExpanded, block.StreamReasoning,
-		block.PreparingTool, m.width, m.theme.NoColor, block.Content)
-	if state := block.Subagent; state != nil {
-		fmt.Fprintf(&sb, "|%s|%d|%d|%s", state.ChildID, state.ToolCalls,
-			state.InputTokens+state.OutputTokens, state.Outcome)
-	}
-	// Image blocks mutate once (pending -> lines or error); fold the state
-	// into the key so the render cache invalidates at that exact moment.
-	if block.Kind == BlockKindImage {
-		fmt.Fprintf(&sb, "|img:%d:%s", len(block.ImageLines), block.ImageErr)
-	}
-	return sb.String()
+	return fmt.Sprintf("%d|%d|%t", block.rev, m.width, m.theme.NoColor)
 }
 
 // visibleTranscriptHeight computes available height for the transcript
@@ -518,10 +565,12 @@ func (m Model) visibleTranscriptHeight() int {
 		// variable (metadata, note, paths and diff rows come and go), so a
 		// fixed reservation would strand the status bar above the bottom.
 		reserved++ // spacer row
-		reserved += len(m.approvalOverlayLines())
+		reserved += len(m.approvalBandLines())
 	case ModeHelp:
 		reserved++ // spacer row
-		reserved += helpOverlayHeight
+		// The reservation is the dialog's actual height (cache from
+		// layout; see helpBandLines) — arithmetic drift no longer possible.
+		reserved += len(m.helpBandLines())
 	case ModeListing:
 		// Like the approval band, the listing dialog is line-count variable.
 		reserved++ // spacer row
@@ -624,8 +673,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case ModeApproval:
 		return m.handleApprovalKey(msg)
 	case ModeHelp:
-		m.mode = ModeChat
-		return m, nil
+		return m.handleHelpKey(msg)
 	case ModeListing:
 		return m.handleListingKey(msg)
 	case ModeSessionPicker:
@@ -658,8 +706,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
+		// A pending quit confirm is dismissed by Esc, not executed: the
+		// prompt advertises Ctrl+C/Ctrl+D as the exit keys, so an Esc
+		// habit (close/cancel) must never kill the session.
 		if m.quitConfirm {
-			return m, tea.Quit
+			m.quitConfirm = false
+			m.setStatus("Exit cancelled", false)
+			return m, nil
 		}
 		if m.completionVisible() {
 			m.completionDismissedFor = m.textArea.Value()
@@ -740,18 +793,69 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// wheelFinder scrolls a finder by one wheel notch: several small cursor
+// moves, so the cursor-windowing in Render keeps the scroll continuous.
+func wheelFinder[T any](f *Finder[T], button tea.MouseButton) {
+	if f == nil {
+		return
+	}
+	for i := 0; i < mouseWheelDelta; i++ {
+		switch button {
+		case tea.MouseButtonWheelUp:
+			f.MoveUp()
+		case tea.MouseButtonWheelDown:
+			f.MoveDown()
+		}
+	}
+}
+
 func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	if m.mode == ModeListing {
-		// The wheel scrolls the listing dialog, not the transcript beneath.
-		if msg.Action == tea.MouseActionPress {
+	// Wheel scrolling routes to whichever overlay owns the screen, so the
+	// transcript beneath is never scrolled "through" a dialog.
+	if msg.Action == tea.MouseActionPress {
+		switch m.mode {
+		case ModeListing:
 			switch msg.Button {
 			case tea.MouseButtonWheelUp:
 				m.scrollListing(-mouseWheelDelta)
 			case tea.MouseButtonWheelDown:
 				m.scrollListing(mouseWheelDelta)
 			}
+			return m, nil
+		case ModeHelp:
+			maxScroll := max(0, len(m.helpContentLines())-m.helpVisibleRows())
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.helpScroll = max(0, m.helpScroll-mouseWheelDelta)
+			case tea.MouseButtonWheelDown:
+				m.helpScroll = min(maxScroll, m.helpScroll+mouseWheelDelta)
+			}
+			return m, nil
+		case ModeSessionPicker:
+			wheelFinder(m.sessionFinder, msg.Button)
+			return m, nil
+		case ModeModelPicker:
+			wheelFinder(m.modelFinder, msg.Button)
+			return m, nil
+		case ModeReasoningPicker:
+			wheelFinder(m.reasoningFinder, msg.Button)
+			return m, nil
+		case ModeRules:
+			if m.rulesDeletePending == nil {
+				wheelFinder(m.rulesFinder, msg.Button)
+			}
+			return m, nil
+		case ModeQuestion:
+			if m.choiceList != nil {
+				switch msg.Button {
+				case tea.MouseButtonWheelUp:
+					m.choiceList.MoveUp()
+				case tea.MouseButtonWheelDown:
+					m.choiceList.MoveDown()
+				}
+			}
+			return m, nil
 		}
-		return m, nil
 	}
 	if m.mode != ModeChat {
 		return m, nil
@@ -814,6 +918,8 @@ func (m *Model) toggleReasoningAt(screenY int) bool {
 		return false
 	}
 	hit.ReasoningExpanded = !hit.ReasoningExpanded
+	m.blocks.touchBlock(hit)
+	m.blocks.touch()
 	return true
 }
 
@@ -950,8 +1056,11 @@ func (m Model) handleQuestionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if !m.questionShownAt.IsZero() && time.Since(m.questionShownAt) < approvalDecisionGuard {
+		// Guard only the decision keys: a spilled Enter/Esc/space answers
+		// or toggles a choice the user never read, while a spilled j/k
+		// merely moves a cursor — navigation stays responsive.
 		switch msg.Type {
-		case tea.KeyEnter, tea.KeyRunes, tea.KeyEsc, tea.KeyCtrlC, tea.KeySpace:
+		case tea.KeyEnter, tea.KeyEsc, tea.KeyCtrlC, tea.KeySpace:
 			return m, nil
 		}
 	}
@@ -1477,6 +1586,7 @@ func (m Model) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 	switch fields[0] {
 	case "/help":
 		m.textArea.Reset()
+		m.helpScroll = 0 // reopen at the top, like openListing does
 		m.mode = ModeHelp
 	case "/new":
 		m.textArea.Reset()
@@ -1860,6 +1970,46 @@ func (m Model) openListing(c listingContent) tea.Model {
 	return m
 }
 
+// handleHelpKey routes keys while the help dialog is active: navigation
+// scrolls the (potentially long) content, esc/q/enter closes. The dialog
+// used to close on any key, which rendered the tail of the help
+// unreachable on terminals shorter than the content.
+func (m Model) handleHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	maxScroll := max(0, len(m.helpContentLines())-m.helpVisibleRows())
+	switch msg.Type {
+	case tea.KeyEsc, tea.KeyEnter, tea.KeyCtrlC, tea.KeyCtrlD:
+		m.mode = ModeChat
+		return m, nil
+	case tea.KeyUp:
+		m.helpScroll = max(0, m.helpScroll-1)
+	case tea.KeyDown:
+		m.helpScroll = min(maxScroll, m.helpScroll+1)
+	case tea.KeyPgUp:
+		m.helpScroll = max(0, m.helpScroll-m.helpVisibleRows())
+	case tea.KeyPgDown:
+		m.helpScroll = min(maxScroll, m.helpScroll+m.helpVisibleRows())
+	case tea.KeyHome:
+		m.helpScroll = 0
+	case tea.KeyEnd:
+		m.helpScroll = maxScroll
+	case tea.KeyRunes:
+		switch msg.String() {
+		case "q":
+			m.mode = ModeChat
+			return m, nil
+		case "k":
+			m.helpScroll = max(0, m.helpScroll-1)
+		case "j":
+			m.helpScroll = min(maxScroll, m.helpScroll+1)
+		case "g":
+			m.helpScroll = 0
+		case "G":
+			m.helpScroll = maxScroll
+		}
+	}
+	return m, nil
+}
+
 // handleListingKey routes keys while the read-only listing dialog is
 // active: navigation scrolls, esc/q/enter closes.
 func (m Model) handleListingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -1978,12 +2128,12 @@ func (m Model) handleCtrlC() (tea.Model, tea.Cmd) {
 			m.textArea.Reset()
 			m.quitConfirm = false
 			m.setStatus("Input cleared", false)
-		} else if m.quitConfirm {
+		} else if m.quitConfirm && now.Sub(m.lastCancelTime) < quitConfirmWindow {
 			return m, tea.Quit
 		} else {
 			m.quitConfirm = true
 			m.lastCancelTime = now
-			m.setStatus("Press Ctrl+C again or Ctrl+D to exit", false)
+			m.setStatus("Press Ctrl+C again within 2s to exit (Esc dismisses)", false)
 		}
 	case app.ControllerStateCancelling:
 		if now.Sub(m.lastCancelTime) < 2*time.Second {
@@ -2686,6 +2836,27 @@ func (m Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		m.nextSearchMatch()
 		return m, nil
+	case tea.KeyShiftTab:
+		m.prevSearchMatch()
+		return m, nil
+	case tea.KeyUp:
+		// Browsing around a landed match is the point of searching; the
+		// arrows scroll the transcript instead of being dead keys.
+		m.viewport.LineUp(1)
+		m.followTail = false
+		return m, nil
+	case tea.KeyDown:
+		m.viewport.LineDown(1)
+		m.followTail = false
+		return m, nil
+	case tea.KeyPgUp:
+		m.viewport.LineUp(m.viewport.Height)
+		m.followTail = false
+		return m, nil
+	case tea.KeyPgDown:
+		m.viewport.LineDown(m.viewport.Height)
+		m.followTail = false
+		return m, nil
 	case tea.KeyBackspace:
 		if m.searchQuery != "" {
 			runes := []rune(m.searchQuery)
@@ -2745,6 +2916,15 @@ func (m *Model) nextSearchMatch() {
 		return
 	}
 	m.searchIndex = (m.searchIndex + 1) % len(m.searchMatches)
+	m.jumpToSearchMatch()
+}
+
+// prevSearchMatch retreats to the previous match, wrapping around.
+func (m *Model) prevSearchMatch() {
+	if len(m.searchMatches) == 0 {
+		return
+	}
+	m.searchIndex = (m.searchIndex - 1 + len(m.searchMatches)) % len(m.searchMatches)
 	m.jumpToSearchMatch()
 }
 

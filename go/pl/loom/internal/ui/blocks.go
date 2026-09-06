@@ -94,6 +94,12 @@ type TranscriptBlock struct {
 	ImageRef   domain.ArtifactRef
 	ImageLines []string
 	ImageErr   string
+
+	// rev is the block's mutation counter, assigned by the owning
+	// BlockIndex on every change (including insertion). The render cache
+	// fingerprints a block by rev — O(1) per check instead of hashing the
+	// full content on every transcript sync.
+	rev uint64
 }
 
 // SubagentBlockState is the UI-side projection of a delegated child run,
@@ -118,6 +124,9 @@ type BlockIndex struct {
 	// version increments on every mutation; syncTranscript compares it to
 	// skip full rebuilds when nothing changed (REVIEW M14).
 	version uint64
+	// revClock issues per-block mutation counters; globally monotonic, so
+	// a replaced block (same ID, fresh value) still gets a higher rev.
+	revClock uint64
 }
 
 // Version returns the mutation counter.
@@ -125,6 +134,15 @@ func (idx *BlockIndex) Version() uint64 { return idx.version }
 
 // touch records a mutation of the index or one of its blocks.
 func (idx *BlockIndex) touch() { idx.version++ }
+
+// touchBlock records a mutation of one block: its render fingerprint
+// advances, so the incremental transcript sync re-renders exactly this
+// block (and drops its cache prefix there). Call it at every site that
+// writes a block field after insertion.
+func (idx *BlockIndex) touchBlock(b *TranscriptBlock) {
+	idx.revClock++
+	b.rev = idx.revClock
+}
 
 // NewBlockIndex creates an empty BlockIndex.
 func NewBlockIndex() *BlockIndex {
@@ -139,6 +157,7 @@ func (idx *BlockIndex) Add(b *TranscriptBlock) {
 	if _, exists := idx.ByID[b.ID]; !exists {
 		idx.Order = append(idx.Order, b.ID)
 	}
+	idx.touchBlock(b)
 	idx.ByID[b.ID] = b
 	idx.touch()
 }
@@ -151,6 +170,7 @@ func (idx *BlockIndex) InsertAfter(anchor string, b *TranscriptBlock) {
 	if _, exists := idx.ByID[b.ID]; exists {
 		return
 	}
+	idx.touchBlock(b)
 	idx.ByID[b.ID] = b
 	for i, id := range idx.Order {
 		if id == anchor {
@@ -203,6 +223,7 @@ func (idx *BlockIndex) confirmPendingUserBlock(prompt string) *TranscriptBlock {
 		block := idx.ByID[idx.Order[i]]
 		if block.Kind == BlockKindUser && block.Status == "pending" && block.Content == prompt {
 			block.Status = "success"
+			idx.touchBlock(block)
 			idx.touch()
 			return block
 		}
@@ -258,6 +279,7 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 			block.StreamReasoning += payload.Delta
 		}
 		block.Done = false
+		idx.touchBlock(block)
 		return block.ID
 
 	case runtimeevent.KindModelTextDelta:
@@ -268,6 +290,7 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 			block.Content = block.StreamText
 		}
 		block.Done = false
+		idx.touchBlock(block)
 		return block.ID
 
 	case runtimeevent.KindModelToolCallDelta:
@@ -276,6 +299,7 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 			block := ensureStreamBlock(idx, evt.Turn)
 			block.PreparingTool = payload.ToolName
 			block.Done = false
+			idx.touchBlock(block)
 			return block.ID
 		}
 
@@ -297,6 +321,7 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 					b.Content = render.SanitizeText(b.StreamText)
 				}
 				b.StreamText = ""
+				idx.touchBlock(b)
 				return b.ID
 			}
 		}
@@ -325,6 +350,7 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 				b.Content = render.SanitizeText(b.StreamText) + "\n[interrupted]"
 				b.StreamText = ""
 				b.Status = "error"
+				idx.touchBlock(b)
 				return b.ID
 			}
 		}
@@ -366,6 +392,7 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 					block.Status = "cancelled"
 					block.Detail = "denied"
 				}
+				idx.touchBlock(block)
 				return block.ID
 			}
 		}
@@ -377,6 +404,7 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 			if exists {
 				block.Status = "running"
 				block.StartedAt = payload.StartedAt
+				idx.touchBlock(block)
 				return block.ID
 			}
 		}
@@ -411,6 +439,7 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 				// Error context and duration coexist; neither overwrites the other.
 				block.Detail = strings.Join(details, " · ")
 				block.Preview = render.SanitizeText(payload.Preview)
+				idx.touchBlock(block)
 				return block.ID
 			}
 		}
@@ -493,6 +522,7 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 				if block.Target == "" {
 					block.Target = truncateDisplayWidth(payload.Task, 80)
 				}
+				idx.touchBlock(block)
 				return block.ID
 			}
 		}
@@ -504,6 +534,7 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 				block.Subagent.ToolCalls = payload.ToolCalls
 				block.Subagent.InputTokens = payload.InputTokens
 				block.Subagent.OutputTokens = payload.OutputTokens
+				idx.touchBlock(block)
 				return block.ID
 			}
 		}
@@ -516,6 +547,7 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 				block.Subagent.ToolCalls = payload.ToolCalls
 				block.Subagent.InputTokens = payload.InputTokens
 				block.Subagent.OutputTokens = payload.OutputTokens
+				idx.touchBlock(block)
 				return block.ID
 			}
 		}
@@ -550,6 +582,7 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 			if !b.Done {
 				b.Status = "cancelled"
 				b.Done = true
+				idx.touchBlock(b)
 			}
 		}
 		block := &TranscriptBlock{
@@ -607,6 +640,7 @@ func (idx *BlockIndex) ToggleLatestReasoning() bool {
 		block := idx.ByID[idx.Order[i]]
 		if block.Kind == BlockKindAssistant && block.StreamReasoning != "" {
 			block.ReasoningExpanded = !block.ReasoningExpanded
+			idx.touchBlock(block)
 			idx.touch()
 			return true
 		}
@@ -621,6 +655,7 @@ func (idx *BlockIndex) ToggleLatestToolOutput() bool {
 		block := idx.ByID[idx.Order[i]]
 		if block.Kind == BlockKindTool && block.Preview != "" {
 			block.Expanded = !block.Expanded
+			idx.touchBlock(block)
 			idx.touch()
 			return true
 		}
@@ -647,6 +682,7 @@ func (idx *BlockIndex) ToggleAllToolOutputs() bool {
 		}
 		if b.Expanded != target {
 			b.Expanded = target
+			idx.touchBlock(b)
 			changed = true
 		}
 	}

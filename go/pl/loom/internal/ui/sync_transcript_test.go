@@ -101,6 +101,9 @@ func TestSyncTranscriptMiddleBlockChange(t *testing.T) {
 	middle, _ := m.blocks.Get("c")
 	middle.Expanded = true
 	middle.Preview = "extra line one\nextra line two"
+	// Field writes must go through touchBlock (as every production
+	// mutation site does) so the render cache invalidates on the rev.
+	m.blocks.touchBlock(middle)
 	m.blocks.touch()
 	m.syncTranscript()
 

@@ -154,6 +154,13 @@ type Model struct {
 	initialSnapshotPending bool
 	followTail             bool
 	newEvents              int // count of new events while not following tail
+	// lastResizeAt records the last WindowSizeMsg; resizeDragging marks a
+	// live resize drag (sizes arriving faster than resizeSettleDelay).
+	// syncTranscript defers width-triggered re-renders while dragging so
+	// a drag re-renders once (at settle time) instead of once per
+	// intermediate size.
+	lastResizeAt   time.Time
+	resizeDragging bool
 
 	// renderCache memoizes renderBlock output per block ID so syncTranscript
 	// only re-renders blocks whose inputs changed. Entries are keyed by a
@@ -231,6 +238,10 @@ type Model struct {
 	// Approval overlay
 	pendingApproval *runtimeevent.ApprovalRequestedPayload
 	approvalCursor  int // 0 = allow once, 1 = deny
+	// approvalLinesCache is the band's rendered lines, rebuilt by layout()
+	// after every Update while an approval is pending; both the height
+	// reservation and the renderer consume it (see approvalBandLines).
+	approvalLinesCache []string
 	// approvalShownAt marks when the overlay appeared; decision keys are
 	// ignored briefly so a held/double-tapped key from the previous overlay
 	// cannot spill into a fresh approval the user has not read yet.
@@ -309,6 +320,16 @@ type Model struct {
 	// listingScroll is the top visible content row.
 	listing       listingContent
 	listingScroll int
+
+	// Help overlay (ModeHelp): the top visible content row of the
+	// scrollable help dialog. Scrolling replaced the old "press any key
+	// to close" behavior so the full help stays reachable on short
+	// terminals instead of being silently clipped. helpOverlayCache is the
+	// inline dialog's rendered lines, rebuilt by layout() after every
+	// Update while help is open inline; both the height reservation and
+	// the renderer consume it (see helpBandLines).
+	helpScroll       int
+	helpOverlayCache []string
 }
 
 // listingKind identifies which payload listingContent carries.

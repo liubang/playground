@@ -127,6 +127,36 @@ func (k Keymap) Lookup(ctx KeyContext, msg tea.KeyMsg) (Action, bool) {
 	return action, ok
 }
 
+// FirstKey returns the display name of the (first) key bound to action in
+// ctx, or fallback when the action is unbound. Help and hint texts render
+// from this so a user keymap override never leaves the documentation lying.
+func (k Keymap) FirstKey(ctx KeyContext, action Action, fallback string) string {
+	var keys []string
+	for key, a := range k.bindings[ctx] {
+		if a == action {
+			keys = append(keys, key)
+		}
+	}
+	if len(keys) == 0 {
+		return fallback
+	}
+	sort.Strings(keys)
+	return DisplayKey(keys[0])
+}
+
+// DisplayKey renders a normalized key name for humans: "ctrl+r" becomes
+// "Ctrl+R", "up" becomes "Up".
+func DisplayKey(key string) string {
+	parts := strings.Split(key, "+")
+	for i, p := range parts {
+		if p == "" {
+			continue
+		}
+		parts[i] = strings.ToUpper(p[:1]) + p[1:]
+	}
+	return strings.Join(parts, "+")
+}
+
 // WithOverrides returns a copy of the keymap with user overrides applied
 // (docs/VIM_UI_DESIGN.md §5.2). overrides is keyed by context, then
 // action, with the replacement key as value. Unknown contexts, unknown

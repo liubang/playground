@@ -42,6 +42,11 @@ type Theme struct {
 	StatusBarIdle  lipgloss.Style
 	StatusBarBusy  lipgloss.Style
 	StatusBarError lipgloss.Style
+	// StatusBarBg is the low-saturation fill behind the status bar: the
+	// bar reads as one continuous strip (like the header) without
+	// competing with the accent colors. Zero in NoColorTheme, where the
+	// renderer leaves the terminal's own background alone.
+	StatusBarBg lipgloss.Style
 
 	// Composer
 	Composer lipgloss.Style
@@ -96,6 +101,12 @@ type Theme struct {
 
 	// Dim
 	Dim lipgloss.Style
+}
+
+// hasStatusBarFill reports whether the theme paints a background band
+// behind the status bar (colored themes do; NoColorTheme does not).
+func (t Theme) hasStatusBarFill() bool {
+	return t.StatusBarBg.GetBackground() != nil
 }
 
 // palette carries the per-variant accent colors; every style is derived
@@ -220,6 +231,9 @@ func themeFromPalette(p palette, markdownProfile string) *Theme {
 
 	t.StatusBarError = lipgloss.NewStyle().
 		Foreground(t.Error)
+
+	t.StatusBarBg = lipgloss.NewStyle().
+		Background(p.panel)
 
 	t.Composer = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
