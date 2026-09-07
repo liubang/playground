@@ -771,11 +771,11 @@ body.lightbox-open {
   background: var(--bg1);
   border: 1px solid color-mix(in srgb, var(--fg) 12%, transparent);
   border-radius: var(--radius-md);
-  padding: 8px 12px;
+  padding: 12px 16px;
   font-size: var(--text-md);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 .block-turn-summary .tsm-head {
   display: flex;
@@ -790,12 +790,17 @@ body.lightbox-open {
   color: var(--muted);
   flex: none;
 }
+/* 「本轮变更」白粗体；「3 个文件」整段跟随 muted（原型无 primary 数字）。*/
+.block-turn-summary .tsm-title {
+  font-weight: 600;
+}
 .block-turn-summary .tsm-title b {
   font-style: normal;
-  color: var(--primary);
+  font-weight: inherit;
+  color: var(--fg1);
 }
 .block-turn-summary .tsm-total {
-  font-size: 11px;
+  font-size: 12px;
   flex: none;
 }
 .block-turn-summary .tsm-total i,
@@ -853,7 +858,7 @@ body.lightbox-open {
   appearance: none;
   background: none;
   border: none;
-  padding: 3px 4px;
+  padding: 6px 4px;
   margin: 0;
   width: 100%;
   display: flex;
@@ -904,7 +909,6 @@ body.lightbox-open {
 }
 .block-turn-summary .tsm-dir {
   color: var(--muted);
-  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -976,12 +980,14 @@ body.lightbox-open {
 }
 .block-turn-summary .tsm-dline.d-add {
   background: color-mix(in srgb, var(--success) 12%, transparent);
+  color: var(--success);
 }
 .block-turn-summary .tsm-dline.d-add .d-sign {
   color: var(--success);
 }
 .block-turn-summary .tsm-dline.d-del {
   background: color-mix(in srgb, var(--error) 12%, transparent);
+  color: var(--error);
 }
 .block-turn-summary .tsm-dline.d-del .d-sign {
   color: var(--error);
@@ -991,7 +997,6 @@ body.lightbox-open {
 }
 .block-turn-summary .tsm-dline.d-hunk {
   color: var(--purple);
-  background: var(--bg1);
   padding: 1px 12px;
 }
 /* Region separator + overlong-diff fold note: quiet, centered. */

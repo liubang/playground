@@ -269,7 +269,13 @@ emit:
 		if newCount == 0 {
 			newStart = max(0, newStart-1)
 		}
-		out = append(out, fmt.Sprintf("@@ -%d,%d +%d,%d @@", oldStart, oldCount, newStart, newCount))
+		header := fmt.Sprintf("@@ -%d,%d +%d,%d @@", oldStart, oldCount, newStart, newCount)
+		if ctxText := hunkContextLine(oldText, oldStart); ctxText != "" {
+			// git's hunk-decoration convention: a trailing sample of the
+			// enclosing declaration line (e.g. func …).
+			header += " " + ctxText
+		}
+		out = append(out, header)
 		if bounded && len(out) >= maxLines {
 			truncated = true
 			break emit
@@ -298,6 +304,33 @@ emit:
 		out = append(out, "…")
 	}
 	return strings.Join(out, "\n")
+}
+
+// hunkContextLine mirrors git's function-context scan for hunk headers:
+// from the line BEFORE the hunk in the old text, walk back to the first
+// line starting with a declaration-ish character (letter, '_' or '$'),
+// trimmed and capped. Returns "" when nothing plausible precedes (e.g.
+// JSON, Markdown, or the file head) — the hunk header then stays bare.
+func hunkContextLine(oldText string, oldStart int) string {
+	if oldText == "" || oldStart <= 1 {
+		return ""
+	}
+	lines := splitDiffLines(oldText)
+	for i := min(oldStart-1, len(lines)) - 1; i >= 0; i-- {
+		line := lines[i]
+		if line == "" {
+			continue
+		}
+		c := line[0]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '$' {
+			line = strings.TrimSpace(line)
+			if len(line) > 80 {
+				line = line[:80] + "…"
+			}
+			return line
+		}
+	}
+	return ""
 }
 
 // trivialDiff diffs two texts where at least one side is empty: every line

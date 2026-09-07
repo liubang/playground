@@ -232,6 +232,28 @@ func TestUnifiedTextsIdenticalIsEmpty(t *testing.T) {
 	}
 }
 
+// Hunk headers carry git-style trailing context: the nearest preceding
+// declaration-ish line (starting with a letter/_/$), when one exists.
+func TestUnifiedTextsHunkContextFromDeclLine(t *testing.T) {
+	oldText := "package block\n\nfunc encodeEntry(dst []byte) []byte {\n\treturn append(dst, 1)\n}\n"
+	newText := "package block\n\nfunc encodeEntry(dst []byte) []byte {\n\treturn binary.AppendUvarint(dst, 1)\n}\n"
+	got := UnifiedTexts(oldText, newText, 1, 80)
+	if !strings.HasPrefix(got, "@@ -3,3 +3,3 @@ package block") {
+		t.Fatalf("expected hunk header with package block context, got:\n%s", got)
+	}
+}
+
+func TestUnifiedTextsHunkContextNoneAtFileHead(t *testing.T) {
+	got := UnifiedTexts("{\n  \"a\": 1\n}\n", "{\n  \"a\": 2\n}\n", 1, 80)
+	if !strings.HasPrefix(got, "@@ -1,3 +1,3 @@") {
+		t.Fatalf("expected bare hunk header at file head, got:\n%s", got)
+	}
+	// No trailing context may leak from a JSON key line.
+	if strings.Count(got, "@@") != 2 {
+		t.Fatalf("expected a single hunk header, got:\n%s", got)
+	}
+}
+
 func TestUnifiedTextsTruncationMarksCap(t *testing.T) {
 	var oldLines, newLines []string
 	for i := 0; i < 20; i++ {

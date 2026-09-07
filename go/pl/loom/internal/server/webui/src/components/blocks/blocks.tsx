@@ -10,7 +10,6 @@ import { isInlineImage } from '../../app/transcript'
 import type { ContextCompactedPayload, TurnFileChange } from '../../protocol/events'
 import type { RunChangeStat } from '../../protocol/types'
 import { parseDiff } from '../../lib/diff'
-import { highlightToHtml } from '../../lib/markdown'
 import { fmtBytes, fmtDuration, fmtTokens } from '../../lib/format'
 import { Icon } from '../../lib/icons'
 import {
@@ -331,12 +330,12 @@ export function InterruptedBlock({ text }: { text: string }) {
 
 // --- turn summary (closing review card of a finished turn) ---
 
-// InlineDiff renders the compact review diff (prefixed +/- lines, "..."
-// separators) WITHOUT DiffView's own frame/head — the turn-summary card
-// supplies that chrome itself (diff rows sit directly under the file row,
-// on one shared dark box). Rows reuse the d-add/d-del stripe palette;
-// hljs highlighting comes from the "+++ b/<path>" header prepended for
-// parseDiff (its file/lang inference only). Overlong diffs cap at
+// InlineDiff renders the review diff (real unified hunks: @@ headers,
+// +/-/space lines) WITHOUT DiffView's own frame/head — the turn-summary
+// card supplies that chrome itself (diff rows sit directly under the file
+// row, on one shared dark box). Text is COLORED BY LINE KIND (red/green,
+// like the prototype) rather than syntax-highlighted — the changes panel
+// DiffView stays the hljs surface. Overlong diffs cap at
 // INLINE_DIFF_MAX_LINES with a fold note — the changes panel stays the
 // canonical full view.
 const INLINE_DIFF_MAX_LINES = 80
@@ -376,12 +375,11 @@ const InlineDiff = memo(function InlineDiff({
             )
           }
           const kind = l.kind === 'add' ? 'd-add' : l.kind === 'del' ? 'd-del' : 'd-ctx'
-          // sanitized by markdown.ts's whitelist (same path as DiffView)
-          const html = highlightToHtml(l.text, parsed.lang)
+          // No hljs here: the prototype colors the whole line red/green.
           return (
             <div key={i} className={'tsm-dline ' + kind}>
               <span className="d-sign">{l.sign}</span>
-              {html ? <code dangerouslySetInnerHTML={{ __html: html }} /> : <code>{l.text}</code>}
+              <code>{l.text}</code>
             </div>
           )
         })}
@@ -505,7 +503,7 @@ export const TurnSummaryBlock = memo(function TurnSummaryBlock({
       >
         <Icon name={open ? 'caret-down' : 'caret-right'} />
         <span className="tsm-title">
-          本轮变更 <b>{n}</b> 个文件
+          本轮变更 <b>{n} 个文件</b>
         </span>
         {totals && (
           <span className="tsm-total mono">
@@ -627,9 +625,7 @@ export const TurnSummaryBlock = memo(function TurnSummaryBlock({
           )}
           <span className="tsm-footnote">
             仅统计 loom 写工具的改动；run_cmd 内直接写文件（如 sed）不计入。
-            {fetchRunChanges
-              ? 'diff 为轮次前内容与当前工作区的对比。'
-              : '共享视图不展示内联 diff。'}
+            {fetchRunChanges ? '点击文件行展开当前工作区 diff。' : '共享视图不展示内联 diff。'}
           </span>
         </div>
       )}
