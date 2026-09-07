@@ -145,10 +145,10 @@ const PlanBody = memo(function PlanBody({ title, items }: { title: string; items
         <span className={'pp-now' + (curIdx >= 0 ? ' is-live' : allDone ? ' is-done-all' : '')}>
           {curIdx >= 0 ? (
             <>
-              正在做：<b key={sig}>{items[curIdx].goal || ''}</b>
+              In progress: <b key={sig}>{items[curIdx].goal || ''}</b>
             </>
           ) : (
-            <b key={'s' + (allDone ? '1' : '0')}>{allDone ? '全部完成 ✓' : '等待开始…'}</b>
+            <b key={'s' + (allDone ? '1' : '0')}>{allDone ? 'All done ✓' : 'Not started…'}</b>
           )}
         </span>
       </summary>

@@ -38,7 +38,8 @@ export const DirPicker = memo(function DirPicker({ controller }: { controller: A
         })
       } catch (e) {
         if (seq !== browseSeq.current) return
-        if ((e as ApiError).status !== 401) toast('浏览目录失败: ' + (e as Error).message)
+        if ((e as ApiError).status !== 401)
+          toast('Failed to browse directory: ' + (e as Error).message)
       } finally {
         if (seq === browseSeq.current) setLoading(false)
       }
@@ -118,7 +119,7 @@ export const DirPicker = memo(function DirPicker({ controller }: { controller: A
     >
       <div className="modal dir-modal" role="dialog" aria-modal="true" aria-labelledby="dir-title">
         <div className="modal-title" id="dir-title">
-          选择工作区目录
+          Choose a workspace directory
           {loading && (
             // Visible feedback while a browse request is in flight (previously the old directory kept rendering while in flight, looking like the click had no effect)
             <span className="dir-loading" aria-hidden="true">
@@ -130,7 +131,7 @@ export const DirPicker = memo(function DirPicker({ controller }: { controller: A
           <button
             id="dir-up"
             className="icon-btn"
-            title="上一级"
+            title="Up one level"
             type="button"
             disabled={!state.parent}
             onClick={() => {
@@ -142,7 +143,7 @@ export const DirPicker = memo(function DirPicker({ controller }: { controller: A
           <nav
             id="dir-path"
             className="dir-crumbs"
-            aria-label="当前目录"
+            aria-label="Current directory"
             ref={(nav) => {
               // Scroll the deepest level (the current directory) into view
               if (nav) nav.scrollLeft = nav.scrollWidth
@@ -164,7 +165,7 @@ export const DirPicker = memo(function DirPicker({ controller }: { controller: A
         </div>
         <div id="dir-list" className="dir-list">
           {state.entries.length === 0 ? (
-            <div className="dir-empty">（无子目录）</div>
+            <div className="dir-empty">(no subdirectories)</div>
           ) : (
             state.entries.map((e) => (
               <button
@@ -185,7 +186,7 @@ export const DirPicker = memo(function DirPicker({ controller }: { controller: A
             type="button"
             onClick={() => controller.closeDirPicker()}
           >
-            取消
+            Cancel
           </button>
           <button
             id="dir-select"
@@ -193,7 +194,7 @@ export const DirPicker = memo(function DirPicker({ controller }: { controller: A
             type="button"
             onClick={() => void controller.confirmDirPicker(state.path)}
           >
-            选择此目录
+            Select this directory
           </button>
         </div>
       </div>

@@ -44,7 +44,7 @@ interface Attachment {
 }
 
 const REASONING_OPTIONS = [
-  { value: 'default', label: '默认（跟随模型）' },
+  { value: 'default', label: 'Default (follow model)' },
   { value: 'off', label: 'Off' },
   { value: 'low', label: 'Low' },
   { value: 'medium', label: 'Medium' },
@@ -57,13 +57,21 @@ const REASONING_OPTIONS = [
 // the shield icon — the normal state demands no attention; non-default modes
 // expand a short name with an amber warning.
 const APPROVAL_OPTIONS = [
-  { value: 'on-request', short: 'standard', hint: '默认：工作区内读写免审批，越界/危险才询问' },
+  {
+    value: 'on-request',
+    short: 'standard',
+    hint: 'Default: in-workspace reads/writes are auto-approved; out-of-bounds or dangerous actions ask',
+  },
   {
     value: 'danger-only',
     short: 'dev',
-    hint: '开发模式：仅危险命令/危险站点弹审批，开发命令与正常访问自动放行',
+    hint: 'Dev: only dangerous commands/sites ask; dev commands and normal browsing are auto-approved',
   },
-  { value: 'never', short: 'auto', hint: '无人值守：危险直接拒绝，永不等待审批' },
+  {
+    value: 'never',
+    short: 'auto',
+    hint: 'Unattended: dangerous actions are denied outright; never waits for approval',
+  },
 ]
 
 function fmtCtx(n: number): string {
@@ -257,16 +265,19 @@ export function Composer({ controller }: { controller: AppController }) {
   const addFiles = useCallback(
     async (files: File[]) => {
       if (!imagesEnabled) {
-        if (files.length) onError(imagesDisabledReason || '当前模型不支持图片输入')
+        if (files.length)
+          onError(imagesDisabledReason || 'The current model does not support image input')
         return
       }
       for (const f of files) {
         if (attachmentsRef.current.length >= MAX_ATTACHMENTS) {
-          onError(`最多附带 ${MAX_ATTACHMENTS} 张图片`)
+          onError(`At most ${MAX_ATTACHMENTS} images`)
           return
         }
         if (f.size > MAX_SOURCE_BYTES) {
-          onError(`图片「${f.name || '剪贴板'}」超过 ${MAX_SOURCE_BYTES / 1024 / 1024}MB 上限`)
+          onError(
+            `Image "${f.name || 'clipboard'}" exceeds the ${MAX_SOURCE_BYTES / 1024 / 1024}MB limit`,
+          )
           continue
         }
         try {
@@ -301,7 +312,7 @@ export function Composer({ controller }: { controller: AppController }) {
           attachmentsRef.current = [...attachmentsRef.current, att]
           setAttachments(attachmentsRef.current)
         } catch (err) {
-          onError('图片读取失败: ' + (err as Error).message)
+          onError('Failed to read image: ' + (err as Error).message)
         }
       }
     },
@@ -326,13 +337,13 @@ export function Composer({ controller }: { controller: AppController }) {
   // input area's most valuable real estate is no place for a manual.
   let placeholder: string
   if (locked) {
-    placeholder = readOnlyLabel || '只读'
+    placeholder = readOnlyLabel || 'Read-only'
   } else if (focused) {
     placeholder = busy
-      ? 'Enter 干预本轮 · Ctrl+Enter 排队下一轮 · Shift+Enter 换行'
-      : 'Enter 发送 · Shift+Enter 换行'
+      ? 'Enter to steer this turn · Ctrl+Enter to queue the next · Shift+Enter for newline'
+      : 'Enter to send · Shift+Enter for newline'
   } else {
-    placeholder = busy ? '干预本轮…' : '给 loom 发消息…'
+    placeholder = busy ? 'Steer this turn…' : 'Message loom…'
   }
 
   // Reasoning capsule: default state shows the entry name; non-default shows
@@ -375,7 +386,7 @@ export function Composer({ controller }: { controller: AppController }) {
               <button
                 type="button"
                 className="attach-remove"
-                title="移除"
+                title="Remove"
                 onClick={() => {
                   URL.revokeObjectURL(att.previewUrl)
                   attachmentsRef.current = attachmentsRef.current.filter((_, j) => j !== i)
@@ -467,8 +478,8 @@ export function Composer({ controller }: { controller: AppController }) {
               className="icon-btn"
               title={
                 imagesEnabled
-                  ? '添加图片（支持直接粘贴 / 拖拽）'
-                  : imagesDisabledReason || '当前模型不支持图片输入'
+                  ? 'Add images (paste / drag & drop)'
+                  : imagesDisabledReason || 'The current model does not support image input'
               }
               disabled={locked || !imagesEnabled}
               onClick={() => fileInputRef.current?.click()}
@@ -490,7 +501,7 @@ export function Composer({ controller }: { controller: AppController }) {
             <button
               id="model-btn"
               className={'picker-btn' + (picker === 'model' ? ' is-active' : '')}
-              title="切换模型"
+              title="Switch model"
               disabled={locked}
               onClick={() => setPicker(picker === 'model' ? '' : 'model')}
             >
@@ -506,7 +517,7 @@ export function Composer({ controller }: { controller: AppController }) {
                 (picker === 'reasoning' ? ' is-active' : '') +
                 (curReasoning && curReasoning !== 'default' ? ' is-on' : '')
               }
-              title={`设置 reasoning（当前：${curReasoning || 'default'}）`}
+              title={`Set reasoning (current: ${curReasoning || 'default'})`}
               disabled={locked}
               onClick={() => setPicker(picker === 'reasoning' ? '' : 'reasoning')}
             >
@@ -522,7 +533,7 @@ export function Composer({ controller }: { controller: AppController }) {
                 (picker === 'approval' ? ' is-active' : '') +
                 (approvalMode && approvalMode !== 'on-request' ? ' is-warn' : '')
               }
-              title="切换审批基线模式（工作区级，下一轮生效）"
+              title="Switch approval baseline (workspace-level; takes effect next turn)"
               disabled={locked}
               onClick={() => setPicker(picker === 'approval' ? '' : 'approval')}
             >
@@ -550,7 +561,9 @@ export function Composer({ controller }: { controller: AppController }) {
               id="send-btn"
               className={'send-btn' + (busy ? ' is-stop' : '')}
               title={
-                busy ? '取消当前轮' : '发送（Enter）· Ctrl+Enter 排队下一轮 · Shift+Enter 换行'
+                busy
+                  ? 'Cancel current turn'
+                  : 'Send (Enter) · Ctrl+Enter to queue · Shift+Enter for newline'
               }
               disabled={locked}
               onClick={() => (busy ? controller.cancelTurn() : submit())}
@@ -739,7 +752,7 @@ function ModelMenu({
               >
                 {mo.name}
                 {(mo.modalities || []).includes('image') && (
-                  <span className="mod" title="支持图片输入">
+                  <span className="mod" title="Supports image input">
                     <Icon name="image" />
                   </span>
                 )}

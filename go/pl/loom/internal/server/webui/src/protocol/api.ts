@@ -225,7 +225,7 @@ export function createApi({ getToken, onUnauthorized }: ApiOptions) {
         { 'Idempotency-Key': idemKey },
       ),
     cancelTurn: (id: string) => req('POST', `/v1/sessions/${id}/cancel`, {}),
-    // Per-turn file revert (the turn-summary block's 撤销 action): restores
+    // Per-turn file revert (the turn-summary block's revert action): restores
     // the files one run mutated; conflicts report external modifications
     // that were overwritten (never silently clobbered)
     revertRun: (id: string, runId: string) =>

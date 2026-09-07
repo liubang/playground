@@ -7,9 +7,9 @@ import type { AppController } from '../app/controller'
 import { useStore } from '../store/store'
 
 const TABS = [
-  { key: 'chat', label: '对话' },
-  { key: 'trace', label: '轨迹' },
-  { key: 'maze', label: '迷宫' },
+  { key: 'chat', label: 'Chat' },
+  { key: 'trace', label: 'Trace' },
+  { key: 'maze', label: 'Maze' },
 ] as const
 
 export const SessionTabs = memo(function SessionTabs({

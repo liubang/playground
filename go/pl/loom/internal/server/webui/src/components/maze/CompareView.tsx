@@ -1,4 +1,4 @@
-// CompareView.tsx — entry C: the trace-compare view (sidebar 「对比」button),
+// CompareView.tsx — entry C: the trace-compare view (sidebar Compare button),
 // filling the main area like the single-session maze. Two sessions on a
 // shared axis: each lane's clock starts at its own first user message,
 // turn-alignment lines annotate arrival-time deltas and per-turn
@@ -46,7 +46,7 @@ export function CompareView({ controller }: { controller: AppController }) {
         if (cancelled) return
         const lane1 = a.lanes[0]
         const lane2 = b.lanes[0]
-        if (!lane1 || !lane2) throw new Error('会话还没有执行轨迹')
+        if (!lane1 || !lane2) throw new Error('This session has no execution trace yet')
         // Spread instead of mutating the fetched lane objects: the response
         // belongs to the API layer — writing `key` onto it would leak into
         // any future reuse of the same payload.
@@ -61,7 +61,7 @@ export function CompareView({ controller }: { controller: AppController }) {
       } catch (e) {
         if (!cancelled) {
           setData(null)
-          setError((e as Error).message || '加载失败')
+          setError((e as Error).message || 'Failed to load')
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -91,14 +91,14 @@ export function CompareView({ controller }: { controller: AppController }) {
     <div className="compare-page">
       <div className="compare-head">
         <span className="compare-title">
-          <Icon name="layer-group" /> 轨迹对比
+          <Icon name="layer-group" /> Compare traces
         </span>
         <div className="compare-pickers">
           <span className="compare-picker">
             <i className="lane-dot lane-1" />
             <Select
               className="compare-sel"
-              options={toOptions('选择会话 1…', id2)}
+              options={toOptions('Select session 1…', id2)}
               value={id1}
               onChange={setId1}
             />
@@ -106,7 +106,7 @@ export function CompareView({ controller }: { controller: AppController }) {
           <button
             type="button"
             className="icon-btn compare-swap"
-            title="交换两侧"
+            title="Swap sides"
             onClick={() => {
               setId1(id2)
               setId2(id1)
@@ -118,7 +118,7 @@ export function CompareView({ controller }: { controller: AppController }) {
             <i className="lane-dot lane-2" />
             <Select
               className="compare-sel"
-              options={toOptions('选择会话 2…', id1)}
+              options={toOptions('Select session 2…', id1)}
               value={id2}
               onChange={setId2}
             />
@@ -127,7 +127,7 @@ export function CompareView({ controller }: { controller: AppController }) {
         <button
           type="button"
           className="icon-btn compare-close"
-          title="返回对话（Esc）"
+          title="Back to chat (Esc)"
           onClick={() => controller.closeCompare()}
         >
           <Icon name="xmark" />
@@ -135,12 +135,13 @@ export function CompareView({ controller }: { controller: AppController }) {
       </div>
       <div className="compare-body">
         {error ? (
-          <div className="maze-error">对比加载失败：{error}</div>
+          <div className="maze-error">Failed to load comparison: {error}</div>
         ) : loading ? (
-          <div className="maze-empty">正在构建对比…</div>
+          <div className="maze-empty">Building comparison…</div>
         ) : !data ? (
           <div className="maze-empty">
-            选择两个会话开始同轴对比——比如同一任务在不同模型下的跑法差异
+            Pick two sessions to compare side by side — e.g. how different models handle the same
+            task
           </div>
         ) : (
           <MazeView data={data} compare />

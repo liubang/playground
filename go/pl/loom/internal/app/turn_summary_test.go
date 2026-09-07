@@ -126,7 +126,7 @@ func TestBuildRunFileStat_CreatedThenDeletedIsNotComparable(t *testing.T) {
 	}, 1)
 	// ...and deleted again: the before side is empty and the after side is
 	// gone, so there is no content on either side to compare.
-	if !strings.Contains(stat.NotComparable, "删除") {
+	if !strings.Contains(stat.NotComparable, "deleted") {
 		t.Fatalf("NotComparable = %q, want a deletion reason", stat.NotComparable)
 	}
 }
@@ -184,7 +184,7 @@ func TestBuildRunFileStat_BinaryIsNotComparable(t *testing.T) {
 		BeforeContent: []byte{},
 		Restorable:    true,
 	}, 1)
-	if !strings.Contains(stat.NotComparable, "二进制") {
+	if !strings.Contains(stat.NotComparable, "Binary") {
 		t.Fatalf("NotComparable = %q, want a binary reason", stat.NotComparable)
 	}
 }

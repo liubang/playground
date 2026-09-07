@@ -183,9 +183,10 @@ export function App({ controller }: { controller: AppController }) {
               <div id="no-workspace" className="no-workspace">
                 <div className="no-workspace-card">
                   <div className="brand">◆ loom</div>
-                  <h2>添加你的第一个工作区</h2>
+                  <h2>Add your first workspace</h2>
                   <p className="no-workspace-desc">
-                    工作区是 Loom 的代码上下文根目录——选定一个项目目录，即可开始对话。
+                    A workspace is Loom's code-context root — pick a project directory to start
+                    chatting.
                   </p>
                   <button
                     id="no-ws-add"
@@ -193,7 +194,7 @@ export function App({ controller }: { controller: AppController }) {
                     type="button"
                     onClick={() => controller.openDirPicker()}
                   >
-                    <Icon name="folder-plus" /> 添加工作区
+                    <Icon name="folder-plus" /> Add workspace
                   </button>
                 </div>
               </div>
@@ -259,7 +260,7 @@ export function App({ controller }: { controller: AppController }) {
                 type="button"
                 onClick={() => void controller.resync('manual_retry')}
               >
-                立即重试
+                Retry now
               </button>
             </>
           )}

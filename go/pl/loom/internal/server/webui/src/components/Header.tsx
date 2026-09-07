@@ -60,7 +60,7 @@ export const Header = memo(function Header({
       <button
         id="hdr-sidebar"
         className="icon-btn"
-        title="折叠/展开侧栏"
+        title="Toggle sidebar"
         onClick={() => controller.toggleSidebar()}
       >
         <Icon name="bars" />
@@ -68,7 +68,7 @@ export const Header = memo(function Header({
       <button
         id="hdr-theme"
         className="icon-btn"
-        title={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'}
+        title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
         onClick={() => controller.toggleTheme()}
       >
         <Icon name="circle-half-stroke" />
@@ -76,7 +76,7 @@ export const Header = memo(function Header({
       <button
         id="hdr-settings"
         className="icon-btn"
-        title="设置"
+        title="Settings"
         onClick={() => controller.openSettings()}
       >
         <Icon name="gear" />
@@ -85,7 +85,7 @@ export const Header = memo(function Header({
         id="hdr-ws"
         className="hdr-ws"
         type="button"
-        title={hdrWorkspaceTitle || '定位所属工作区'}
+        title={hdrWorkspaceTitle || 'Locate the owning workspace'}
         hidden={!showSessionChrome || !hdrWorkspace}
         onClick={() => {
           const wsId = controller.revealCurrentWorkspace()
@@ -97,7 +97,7 @@ export const Header = memo(function Header({
       <button
         id="hdr-session"
         className="sess mono"
-        title="复制 session ID"
+        title="Copy session ID"
         hidden={!showSessionChrome}
         onClick={() => void controller.copySessionId()}
       >
@@ -106,7 +106,7 @@ export const Header = memo(function Header({
       <button
         id="hdr-share"
         className="icon-btn"
-        title="分享会话：复制公开只读链接（Shift+点击撤销分享）"
+        title="Share session: copy a public read-only link (Shift+click to unshare)"
         hidden={!showSessionChrome}
         onClick={(e) => void controller.shareSession(e.shiftKey)}
       >
@@ -128,7 +128,9 @@ export const Header = memo(function Header({
       <button
         id="hdr-panel"
         className={'icon-btn' + (rightPanelOpen ? ' is-active' : '')}
-        title={rightPanelOpen ? '收起工作区面板' : '展开工作区面板（变更 / 文件）'}
+        title={
+          rightPanelOpen ? 'Collapse workspace panel' : 'Expand workspace panel (changes / files)'
+        }
         hidden={noWorkspace}
         onClick={() => controller.toggleRightPanel()}
       >

@@ -44,7 +44,7 @@ function ToastRow({ t }: { t: ToastItem }) {
       <button
         type="button"
         className="toast-close"
-        aria-label="关闭提示"
+        aria-label="Dismiss"
         onClick={() => dismiss(t.id)}
       >
         <Icon name="xmark" />

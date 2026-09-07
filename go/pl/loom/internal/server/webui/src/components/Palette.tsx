@@ -13,7 +13,7 @@ const RECENT_LIMIT = 8
 
 interface PaletteItem {
   key: string
-  sect: '会话' | '命令'
+  sect: 'Sessions' | 'Commands'
   label: string
   sub?: string
   icon: IconName
@@ -55,7 +55,7 @@ export const Palette = memo(function Palette({
       .slice(0, q ? sessions.length : RECENT_LIMIT)
       .map((s): PaletteItem => ({
         key: 's:' + s.id,
-        sect: '会话',
+        sect: 'Sessions',
         label: s.title || shortId(s.id),
         sub:
           [wsName(s.workspace_id || ''), s.model_name || ''].filter(Boolean).join(' · ') ||
@@ -71,42 +71,42 @@ export const Palette = memo(function Palette({
       icon: IconName,
       run: () => void,
       sub?: string,
-    ): PaletteItem => ({ key, sect: '命令', label, icon, run, ...(sub ? { sub } : {}) })
+    ): PaletteItem => ({ key, sect: 'Commands', label, icon, run, ...(sub ? { sub } : {}) })
     const commands = [
       cmd(
         'c:new',
-        '新建会话',
+        'New session',
         'file-document-plus',
         exec(() => controller.onNewSession(targetWs)),
         wsName(targetWs) || undefined,
       ),
       cmd(
         'c:chat',
-        '切换到对话',
+        'Back to chat',
         'arrow-left',
         exec(() => controller.setMainView('chat')),
       ),
       cmd(
         'c:trace',
-        '查看执行轨迹',
+        'View trace',
         'bars',
         exec(() => controller.setMainView('trace')),
       ),
       cmd(
         'c:maze',
-        '查看执行迷宫',
+        'View maze',
         'chart-gantt',
         exec(() => controller.setMainView('maze')),
       ),
       cmd(
         'c:compare',
-        '轨迹对比',
+        'Compare traces',
         'layer-group',
         exec(() => controller.openCompare()),
       ),
       cmd(
         'c:settings',
-        '打开设置',
+        'Open settings',
         'gear',
         exec(() => controller.openSettings()),
       ),
@@ -156,14 +156,14 @@ export const Palette = memo(function Palette({
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="palette" role="dialog" aria-modal="true" aria-label="命令面板">
+      <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette">
         <input
           className="palette-input"
           type="text"
-          placeholder="搜索会话或命令…"
+          placeholder="Search sessions or commands…"
           autoFocus
           value={query}
-          aria-label="搜索会话或命令"
+          aria-label="Search sessions or commands"
           aria-activedescendant={items.length ? `palette-item-${sel}` : undefined}
           onChange={(e) => {
             setQuery(e.target.value)
@@ -172,7 +172,7 @@ export const Palette = memo(function Palette({
           onKeyDown={onKeyDown}
         />
         <div className="palette-list" role="listbox" ref={listRef} onKeyDown={onKeyDown}>
-          {items.length === 0 && <div className="palette-empty">无匹配结果</div>}
+          {items.length === 0 && <div className="palette-empty">No matches</div>}
           {items.map((it, i) => {
             const head = it.sect !== lastSect ? (lastSect = it.sect) : ''
             return (
@@ -190,7 +190,7 @@ export const Palette = memo(function Palette({
                 >
                   <Icon name={it.icon} />
                   <span className="pi-label">{it.label}</span>
-                  {it.isActive && <span className="pi-live">当前</span>}
+                  {it.isActive && <span className="pi-live">current</span>}
                   {it.sub && <span className="pi-sub">{it.sub}</span>}
                 </button>
               </div>
@@ -199,13 +199,13 @@ export const Palette = memo(function Palette({
         </div>
         <div className="palette-foot">
           <span>
-            <kbd>↑↓</kbd> 选择
+            <kbd>↑↓</kbd> select
           </span>
           <span>
-            <kbd>Enter</kbd> 执行
+            <kbd>Enter</kbd> run
           </span>
           <span>
-            <kbd>Esc</kbd> 关闭
+            <kbd>Esc</kbd> close
           </span>
         </div>
       </div>

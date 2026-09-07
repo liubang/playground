@@ -35,7 +35,7 @@ import (
 
 // TurnSummary is the review-oriented projection of one finished turn: which
 // files the turn's write tools touched. Frontends render it as the turn's
-// closing block (the "本轮变更" card) so a long conversation can be reviewed
+// closing block (the "turn changes" card) so a long conversation can be reviewed
 // turn by turn without walking scattered tool blocks. It is DERIVED state —
 // rebuilt from the event log on resume (turnSummariesFromEvents); nothing
 // persists it separately.
@@ -364,27 +364,27 @@ func buildRunFileStat(validator *workspace.PathValidator, change session.FileCha
 		case errors.Is(readErr, os.ErrNotExist):
 			// after stays empty: afterStat already -1
 		default:
-			stat.NotComparable = "当前路径无法解析或读取"
+			stat.NotComparable = "Path cannot be resolved or read"
 			afterPresent = true // do not fall into the all-removal interpretation
 		}
 	} else {
-		stat.NotComparable = "文件路径已超出工作区，无法读取"
+		stat.NotComparable = "Path is outside the workspace; cannot read"
 	}
 
 	switch {
 	case stat.NotComparable != "":
 	case !beforeCaptured:
-		stat.NotComparable = "原始内容未记录（文件过大，快照未捕获）"
+		stat.NotComparable = "Original content not recorded (file too large; not captured in snapshot)"
 	case afterOversized:
-		stat.NotComparable = "当前文件过大（>2MB），不支持内联 diff"
+		stat.NotComparable = "File too large (>2MB); inline diff unavailable"
 	case !afterPresent && !change.BeforeExisted:
 		// Turn created a file that no longer exists: full content unknown on
 		// both sides — nothing meaningful to compare beyond the record itself.
-		stat.NotComparable = "文件已被删除（本轮新建）"
+		stat.NotComparable = "File deleted (created this turn)"
 	default:
 		beforeText, afterText := string(before), string(after)
 		if !utf8.ValidString(beforeText) || !utf8.ValidString(afterText) {
-			stat.NotComparable = "二进制文件，不支持内联 diff"
+			stat.NotComparable = "Binary file; inline diff unavailable"
 			break
 		}
 		stat.Added, stat.Removed = render.CountLineDiff(beforeText, afterText)

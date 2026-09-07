@@ -12,9 +12,9 @@ import { ArtifactBlock, InlineImage } from './images'
 
 // st → [icon, label]; className uses English short codes (err/error/canceled), labels are uniformly Chinese
 const TOOL_STATUS: Record<string, ['check' | 'xmark' | 'ban', string]> = {
-  ok: ['check', '成功'],
-  err: ['xmark', '失败'],
-  canceled: ['ban', '已取消'],
+  ok: ['check', 'Succeeded'],
+  err: ['xmark', 'Failed'],
+  canceled: ['ban', 'Cancelled'],
 }
 
 // Tool kind → [icon, plain-language verb]: the header row shows verb + target
@@ -85,7 +85,7 @@ export const ToolBlock = memo(function ToolBlock({
 
   let statusEl
   if (!completion) {
-    statusEl = <span className="tool-status running">执行中</span>
+    statusEl = <span className="tool-status running">Running</span>
   } else {
     const st =
       completion.status === 'success' ? 'ok' : completion.status === 'error' ? 'err' : 'canceled'
@@ -168,39 +168,39 @@ const ToolOutput = memo(function ToolOutput({
   preview: string
   getFullText: () => Promise<string>
 }) {
-  // '复制中…' disables the button while the full-output fetch is in flight — a double
-  // click previously kicked off two fetches; '复制失败' is clickable again so a flaky
+  // 'Copying…' disables the button while the full-output fetch is in flight — a double
+  // click previously kicked off two fetches; 'Copy failed' is clickable again so a flaky
   // request can be retried.
-  const [label, setLabel] = useState<'复制' | '复制中…' | '已复制' | '复制失败'>('复制')
+  const [label, setLabel] = useState<'Copy' | 'Copying…' | 'Copied' | 'Copy failed'>('Copy')
   const truncated = preview.endsWith('\n…')
   return (
     <details className="tool-output disclosure">
       <summary>
         <span className="tool-output-label">
-          {`输出 · ${preview.length} 字符${truncated ? ' · 已截断' : ''}`}
+          {`Output · ${preview.length} chars${truncated ? ' · truncated' : ''}`}
         </span>
         <button
           type="button"
           className="tool-copy"
-          title="复制完整输出"
+          title="Copy full output"
           onClick={async (e) => {
             e.preventDefault() // don't toggle the details disclosure
             e.stopPropagation()
-            if (label === '复制中…') return
-            setLabel('复制中…')
+            if (label === 'Copying…') return
+            setLabel('Copying…')
             try {
               const text = await getFullText()
               if (!(await copyText(text))) throw new Error('clipboard unavailable')
-              setLabel('已复制')
+              setLabel('Copied')
             } catch {
-              setLabel('复制失败')
+              setLabel('Copy failed')
             }
-            setTimeout(() => setLabel('复制'), 1500)
+            setTimeout(() => setLabel('Copy'), 1500)
           }}
         >
-          {label === '已复制' ? (
+          {label === 'Copied' ? (
             <>
-              <Icon name="check" /> 已复制
+              <Icon name="check" /> Copied
             </>
           ) : (
             label

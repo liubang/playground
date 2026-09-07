@@ -558,7 +558,7 @@ export function TranscriptView({
         hidden={following}
         onClick={() => controller.followNow()}
       >
-        <Icon name="arrow-down" /> 回到底部
+        <Icon name="arrow-down" /> Back to bottom
       </button>
     </div>
   )
@@ -596,7 +596,7 @@ export function TranscriptSearch({ controller }: { controller: TranscriptControl
         ref={inputRef}
         className="ts-input"
         type="search"
-        placeholder="搜索本会话…"
+        placeholder="Search this session…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => {
@@ -610,11 +610,11 @@ export function TranscriptSearch({ controller }: { controller: TranscriptControl
           }
         }}
       />
-      <span className="ts-count">{total > 0 ? `${search.index + 1}/${total}` : '无结果'}</span>
+      <span className="ts-count">{total > 0 ? `${search.index + 1}/${total}` : 'No results'}</span>
       <button
         type="button"
         className="icon-btn sm"
-        title="上一个（Shift+Enter）"
+        title="Previous (Shift+Enter)"
         disabled={total === 0}
         onClick={() => controller.searchNav(-1)}
       >
@@ -623,7 +623,7 @@ export function TranscriptSearch({ controller }: { controller: TranscriptControl
       <button
         type="button"
         className="icon-btn sm"
-        title="下一个（Enter）"
+        title="Next (Enter)"
         disabled={total === 0}
         onClick={() => controller.searchNav(1)}
       >
@@ -632,7 +632,7 @@ export function TranscriptSearch({ controller }: { controller: TranscriptControl
       <button
         type="button"
         className="icon-btn sm"
-        title="关闭（Esc）"
+        title="Close (Esc)"
         onClick={() => controller.closeSearch()}
       >
         <Icon name="xmark" />

@@ -46,12 +46,12 @@ const CULL_MARGIN = 320
 const CAN_HOVER = typeof window !== 'undefined' && window.matchMedia('(hover: hover)').matches
 
 const VERDICT_META: Record<MazeVerdict, { cls: string; label: string }> = {
-  ok: { cls: 'v-ok', label: '成功' },
-  answer: { cls: 'v-answer', label: '回答' },
-  error: { cls: 'v-error', label: '失败' },
-  deadend: { cls: 'v-deadend', label: '扑空' },
-  retry: { cls: 'v-retry', label: '无效重试' },
-  pending: { cls: 'v-pending', label: '进行中' },
+  ok: { cls: 'v-ok', label: 'OK' },
+  answer: { cls: 'v-answer', label: 'Answer' },
+  error: { cls: 'v-error', label: 'Error' },
+  deadend: { cls: 'v-deadend', label: 'Dead end' },
+  retry: { cls: 'v-retry', label: 'No-op retry' },
+  pending: { cls: 'v-pending', label: 'Running' },
 }
 
 interface HoverCard {
@@ -150,16 +150,16 @@ function useRafState<S>(initial: S): [S, (v: S) => void] {
 
 function tokLabel(n: MazeNode): string {
   const parts: string[] = []
-  if (n.rz_ms != null && n.rz_ms > 0) parts.push(`推理 ${fmtDuration(n.rz_ms)}`)
+  if (n.rz_ms != null && n.rz_ms > 0) parts.push(`Reasoning ${fmtDuration(n.rz_ms)}`)
   if (n.rz_tok != null) parts.push(`${n.rz_tok} tok`)
-  else if (n.rz > 0) parts.push(`${n.rz} 段推理`)
-  if (n.out_tok != null) parts.push(`输出 ${n.out_tok} tok`)
+  else if (n.rz > 0) parts.push(`${n.rz} reasoning segments`)
+  if (n.out_tok != null) parts.push(`${n.out_tok} tok out`)
   return parts.join(' · ')
 }
 
 function nodeTitle(n: MazeNode): string {
-  if (n.sub) return `⤴ ${n.label || '子代理'}`
-  return `S${n.step} · 第${n.turn}轮`
+  if (n.sub) return `⤴ ${n.label || 'Subagent'}`
+  return `S${n.step} · Turn ${n.turn}`
 }
 
 /** Defensive normalization: tolerate null arrays from JSON (Go nil slices)
@@ -581,7 +581,7 @@ export const MazeView = memo(function MazeView({
     return axis.gaps.map((g) => {
       const x1 = toX(g.dStart, svgW)
       const x2 = toX(g.dEnd, svgW)
-      const label = `⏸ 省略 ${formatDur(g.skipped)}`
+      const label = `⏸ ${formatDur(g.skipped)} skipped`
       if (x2 < 0 || x1 > svgW) return { x1, x2, label, cx: 0, show: false }
       const w = estTextWidth(label)
       const lo = PAD_X + w / 2
@@ -599,12 +599,12 @@ export const MazeView = memo(function MazeView({
     <div className="maze-wrap">
       <div className="maze-toolbar">
         <span className="maze-legend">
-          <i className="lg v-ok" /> 主干
-          <i className="lg v-answer" /> 回答
-          <i className="lg v-error" /> 失败
-          <i className="lg v-deadend" /> 扑空
-          <i className="lg v-retry" /> 重试
-          <i className="lg v-sub" /> 子代理
+          <i className="lg v-ok" /> Main path
+          <i className="lg v-answer" /> Answer
+          <i className="lg v-error" /> Error
+          <i className="lg v-deadend" /> Dead end
+          <i className="lg v-retry" /> Retry
+          <i className="lg v-sub" /> Subagent
         </span>
         <span className="maze-toolbar-right">
           <label className={'maze-filter' + (failOnly ? ' is-on' : '')}>
@@ -613,28 +613,33 @@ export const MazeView = memo(function MazeView({
               checked={failOnly}
               onChange={(e) => setFailOnly(e.target.checked)}
             />
-            只看失败/重试
+            Errors/retries only
           </label>
           <input
             className="maze-search"
             type="search"
-            placeholder="搜索命令/返回内容…"
+            placeholder="Search commands/results…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          {hitCount >= 0 && <span className="maze-hits">{hitCount} 步命中</span>}
+          {hitCount >= 0 && <span className="maze-hits">{hitCount} hits</span>}
           {compare && (
             <button
               type="button"
               className={'maze-btn' + (showAudit ? ' is-on' : '')}
-              title="按轮次盘点两边支路差额"
+              title="Per-turn audit of branch differences between the two lanes"
               onClick={() => setShowAudit((v) => !v)}
             >
-              支路盘点
+              Branch audit
             </button>
           )}
-          <button type="button" className="maze-btn" title="复位缩放" onClick={() => setWin(null)}>
-            ⤢ 整图
+          <button
+            type="button"
+            className="maze-btn"
+            title="Reset zoom"
+            onClick={() => setWin(null)}
+          >
+            ⤢ Full view
           </button>
         </span>
       </div>
@@ -720,9 +725,9 @@ export const MazeView = memo(function MazeView({
                     {lane.title ? ` · ${lane.title}` : ''}
                   </text>
                   <text x={svgW - PAD_X} y={top + 16} textAnchor="end" className="maze-lane-stats">
-                    {st.steps} 步 · {st.tools} 工具 · {st.detours} 支路 · {formatDur(st.t)}
+                    {st.steps} steps · {st.tools} tools · {st.detours} branches · {formatDur(st.t)}
                     {st.out_tok > 0 ? ` · ${st.in_tok + st.out_tok} tok` : ''}
-                    {st.rz_ms ? ` · 推理 ${fmtDuration(st.rz_ms)}` : ''}
+                    {st.rz_ms ? ` · reasoning ${fmtDuration(st.rz_ms)}` : ''}
                   </text>
                   {/* main line */}
                   <line
@@ -799,7 +804,7 @@ export const MazeView = memo(function MazeView({
                         <g key={'al' + al.turn} className="maze-align">
                           <line x1={x1} y1={y1} x2={x2} y2={y2} />
                           <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 4} textAnchor="middle">
-                            第{al.turn}轮 · Δ{formatDur(dt)} · 支路 {al.d1}↔{al.d2}
+                            Turn {al.turn} · Δ{formatDur(dt)} · branches {al.d1}↔{al.d2}
                           </text>
                         </g>
                       )
@@ -911,9 +916,9 @@ const MainNode = memo(function MainNode({
           y: e.clientY - rect.top + 12 + canvas.scrollTop,
           title: `${nodeTitle(n)} · ${meta.label}`,
           lines: [
-            `耗时 ${formatDur(n.e - n.s)}${n.retries ? ` · 重试等待 ×${n.retries}` : ''}`,
+            `Took ${formatDur(n.e - n.s)}${n.retries ? ` · retry waits ×${n.retries}` : ''}`,
             tokLabel(n),
-            n.tools.length > 0 ? `${n.tools.length} 次工具调用` : '无工具调用（回答）',
+            n.tools.length > 0 ? `${n.tools.length} tool calls` : 'No tool calls (answer)',
             n.why || '',
           ].filter(Boolean),
         })
@@ -1014,8 +1019,8 @@ const DetourNode = memo(function DetourNode({
           title: `${nodeTitle(n)} · ${meta.label}`,
           lines: [
             n.sub
-              ? `子代理支路 · ${n.tools.length} 次工具调用 · ${formatDur(n.e - n.s)}`
-              : `耗时 ${formatDur(n.e - n.s)}`,
+              ? `Subagent branch · ${n.tools.length} tool calls · ${formatDur(n.e - n.s)}`
+              : `Took ${formatDur(n.e - n.s)}`,
             tokLabel(n),
             n.why || '',
           ].filter(Boolean),
@@ -1127,34 +1132,35 @@ const DetailPanel = memo(function DetailPanel({
         <span className={`maze-badge ${meta.cls}`}>{meta.label}</span>
         <span className="maze-detail-title">{nodeTitle(node)}</span>
         <span className="spacer" />
-        <button type="button" className="icon-btn" title="关闭" onClick={onClose}>
+        <button type="button" className="icon-btn" title="Close" onClick={onClose}>
           <Icon name="xmark" />
         </button>
       </div>
       <div className="maze-detail-meta">
-        <span>耗时 {formatDur(node.e - node.s)}</span>
-        {node.retries ? <span>模型重试 ×{node.retries}</span> : null}
+        <span>Took {formatDur(node.e - node.s)}</span>
+        {node.retries ? <span>Model retries ×{node.retries}</span> : null}
         {tokLabel(node) && <span>{tokLabel(node)}</span>}
-        {node.in_tok != null && <span>输入 {node.in_tok} tok</span>}
+        {node.in_tok != null && <span>{node.in_tok} tok in</span>}
       </div>
       {node.why && <div className="maze-detail-why">{node.why}</div>}
       {onLocateStep &&
         !node.sub &&
         ((node.msg_seq != null && node.msg_seq > 0) || node.tools.length > 0) && (
           <button type="button" className="maze-btn maze-jump" onClick={() => onLocateStep(node)}>
-            <Icon name="turn-down" /> 在轨迹中定位此步骤
+            <Icon name="turn-down" /> Locate this step in the trace
           </button>
         )}
       {node.rz_txt && (
         <details className="maze-detail-rz">
           <summary>
-            思考摘要（{node.rz} 段{node.rz_ms ? ` · ${fmtDuration(node.rz_ms)}` : ''}）
+            Reasoning summary ({node.rz} segments{node.rz_ms ? ` · ${fmtDuration(node.rz_ms)}` : ''}
+            )
           </summary>
           <p>{node.rz_txt}</p>
         </details>
       )}
       <div className="maze-detail-tools">
-        {node.tools.length === 0 && <div className="maze-detail-empty">无工具调用</div>}
+        {node.tools.length === 0 && <div className="maze-detail-empty">No tool calls</div>}
         {node.tools.map((t, i) => (
           <ToolCard key={t.call_id || i} t={t} />
         ))}
@@ -1169,17 +1175,17 @@ const ToolCard = memo(function ToolCard({ t }: { t: MazeTool }) {
     <div className={`maze-tool ${meta.cls}`}>
       <div className="maze-tool-head">
         <span className="maze-tool-name mono">{t.name}</span>
-        <span className="maze-tool-dur">{t.e === null ? '执行中…' : formatDur(t.dur)}</span>
+        <span className="maze-tool-dur">{t.e === null ? 'Running…' : formatDur(t.dur)}</span>
         <span className={`maze-badge sm ${meta.cls}`}>{meta.label}</span>
       </div>
       {t.args_full && (
         <div className="maze-tool-block">
           <div className="maze-tool-block-head">
-            <span>参数</span>
+            <span>Args</span>
             <button
               type="button"
               className="icon-btn sm"
-              title="复制参数"
+              title="Copy args"
               onClick={() => void copyText(t.args_full!)}
             >
               <Icon name="copy" />
@@ -1191,11 +1197,11 @@ const ToolCard = memo(function ToolCard({ t }: { t: MazeTool }) {
       {(t.res_full || t.res) && (
         <div className="maze-tool-block">
           <div className="maze-tool-block-head">
-            <span>返回</span>
+            <span>Result</span>
             <button
               type="button"
               className="icon-btn sm"
-              title="复制返回内容"
+              title="Copy result"
               onClick={() => void copyText(t.res_full || t.res)}
             >
               <Icon name="copy" />
@@ -1205,7 +1211,7 @@ const ToolCard = memo(function ToolCard({ t }: { t: MazeTool }) {
         </div>
       )}
       {t.why && <div className="maze-detail-why">{t.why}</div>}
-      {t.child_id && <div className="maze-tool-child mono">⤴ 子会话 {t.child_id}</div>}
+      {t.child_id && <div className="maze-tool-child mono">⤴ Child session {t.child_id}</div>}
     </div>
   )
 })
@@ -1246,22 +1252,24 @@ const DetourAudit = memo(function DetourAudit({
       g.by.retry ? `↻${g.by.retry}` : '',
       g.by.deadend ? `·${g.by.deadend}` : '',
     ].filter(Boolean)
-    return `${g.n} 支路 ${formatDur(g.t)}${parts.length ? `（${parts.join(' ')}）` : ''}`
+    return `${g.n} branches ${formatDur(g.t)}${parts.length ? ` (${parts.join(' ')})` : ''}`
   }
   return (
     <div className="maze-audit">
-      <div className="maze-audit-head">按轮次支路盘点（点一行缩放到该轮）</div>
+      <div className="maze-audit-head">
+        Per-turn branch audit (click a row to zoom into that turn)
+      </div>
       <table>
         <thead>
           <tr>
-            <th>轮次</th>
+            <th>Turn</th>
             <th>
-              <i className="lane-dot lane-1" /> {lanes[0].model || '会话 1'}
+              <i className="lane-dot lane-1" /> {lanes[0].model || 'Session 1'}
             </th>
             <th>
-              <i className="lane-dot lane-2" /> {lanes[1].model || '会话 2'}
+              <i className="lane-dot lane-2" /> {lanes[1].model || 'Session 2'}
             </th>
-            <th>差额</th>
+            <th>Δ</th>
           </tr>
         </thead>
         <tbody>
@@ -1272,11 +1280,11 @@ const DetourAudit = memo(function DetourAudit({
             const verdict =
               ga && gb
                 ? dt > 0.5
-                  ? `第 2 会话多耗 ${formatDur(dt)}`
+                  ? `Session 2 took ${formatDur(dt)} longer`
                   : dt < -0.5
-                    ? `第 1 会话多耗 ${formatDur(-dt)}`
-                    : '持平'
-                : '—（缺席本身即信号）'
+                    ? `Session 1 took ${formatDur(-dt)} longer`
+                    : 'Even'
+                : '— (absence is itself a signal)'
             const zs = Math.min(ga?.s ?? Infinity, gb?.s ?? Infinity)
             const ze = Math.max(ga?.e ?? 0, gb?.e ?? 0)
             return (
@@ -1284,7 +1292,7 @@ const DetourAudit = memo(function DetourAudit({
                 key={turn}
                 onClick={() => Number.isFinite(zs) && onZoom(Math.max(0, zs - 5), ze + 5)}
               >
-                <td>第 {turn} 轮</td>
+                <td>Turn {turn}</td>
                 <td>{fmt(ga)}</td>
                 <td>{fmt(gb)}</td>
                 <td>{verdict}</td>

@@ -27,15 +27,15 @@ export function relTime(iso?: string, now: number = Date.now()): string {
   return t.toLocaleDateString()
 }
 
-// Message time display: matches the screenshot style (e.g. "8月6日 14:34").
+// Message time display (e.g. "Aug 6, 14:34"). Hand-rolled month names keep
+// the output locale-independent.
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 export function fmtMsgTime(iso?: string): string {
   const t = new Date(iso || '')
   if (isNaN(t.getTime())) return ''
-  const m = t.getMonth() + 1
-  const d = t.getDate()
   const hh = String(t.getHours()).padStart(2, '0')
   const mm = String(t.getMinutes()).padStart(2, '0')
-  return `${m}月${d}日 ${hh}:${mm}`
+  return `${MONTHS[t.getMonth()]} ${t.getDate()}, ${hh}:${mm}`
 }
 
 // Full timestamp (with year and seconds) for the hover tooltip, for precise pinpointing.

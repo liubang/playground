@@ -123,13 +123,13 @@ function buildGroups(blocks: BlockModel[]): TurnGroup[] {
         push({ id: b.id, kind: 'error', turn, text: b.text })
         break
       case 'approval':
-        push({ id: b.id, kind: 'notice', turn, text: '等待审批…', warn: true })
+        push({ id: b.id, kind: 'notice', turn, text: 'Awaiting approval…', warn: true })
         break
       case 'question':
-        push({ id: b.id, kind: 'notice', turn, text: '等待回答提问…', warn: true })
+        push({ id: b.id, kind: 'notice', turn, text: 'Awaiting answer…', warn: true })
         break
       case 'compact':
-        push({ id: b.id, kind: 'notice', turn, text: '上下文已压缩', warn: false })
+        push({ id: b.id, kind: 'notice', turn, text: 'Context compacted', warn: false })
         break
       default:
         break // thinking / image / artifact: no trace row
@@ -327,26 +327,26 @@ export function TraceView({
     <div className="trace-page">
       <div className="trace-toolbar">
         <span className="trace-metrics">
-          <span title="首条消息到最近一次活动">
+          <span title="From the first message to the latest activity">
             ⏱ {metrics.duration >= 0 ? formatDur(metrics.duration) : '—'}
           </span>
-          <span>⚇ {metrics.turns} 轮</span>
-          <span>⌗ {metrics.calls} 次调用</span>
+          <span>⚇ {metrics.turns} turns</span>
+          <span>⌗ {metrics.calls} calls</span>
         </span>
         <span className="trace-toolbar-right">
           <input
             className="maze-search"
             type="search"
-            placeholder="搜索轨迹…"
+            placeholder="Search trace…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          {visible.hits >= 0 && <span className="maze-hits">{visible.hits} 条命中</span>}
+          {visible.hits >= 0 && <span className="maze-hits">{visible.hits} hits</span>}
           {onExportLog && (
             <button
               type="button"
               className="maze-btn"
-              title="下载原始事件日志（NDJSON）"
+              title="Download raw event log (NDJSON)"
               onClick={onExportLog}
             >
               <Icon name="download" /> Session log
@@ -358,7 +358,9 @@ export function TraceView({
         <RhythmStrip data={maze} inputs={inputs} onSeek={seekTurn} />
       )}
       {rowCount === 0 ? (
-        <div className="maze-empty">暂无轨迹——发起一轮对话后这里会列出完整执行过程</div>
+        <div className="maze-empty">
+          No trace yet — start a conversation and the full execution appears here
+        </div>
       ) : (
         <div
           className="trace-list"
@@ -390,7 +392,7 @@ export function TraceView({
               if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
             }}
           >
-            <Icon name="arrow-down" /> 回到底部
+            <Icon name="arrow-down" /> Back to bottom
           </button>
         </div>
       )}
@@ -427,11 +429,11 @@ export function TracePage({ controller }: { controller: AppController }) {
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) {
-      toast('导出 session log 失败: ' + (e as Error).message)
+      toast('Failed to export session log: ' + (e as Error).message)
     }
   }, [controller, sessionId])
 
-  if (!sessionId) return <div className="maze-empty">未选择会话</div>
+  if (!sessionId) return <div className="maze-empty">No session selected</div>
   // key per session: follow/expand state resets when switching sessions.
   return (
     <TraceView
@@ -480,11 +482,11 @@ const RhythmStrip = memo(function RhythmStrip({
   }
 
   return (
-    <div className="trace-strip" title="点击跳转到对应轮次">
+    <div className="trace-strip" title="Click to jump to the corresponding turn">
       <div className="trace-strip-labels">
-        <span>输入</span>
-        <span>模型</span>
-        <span>工具</span>
+        <span>In</span>
+        <span>Model</span>
+        <span>Tool</span>
       </div>
       <svg
         className="trace-strip-svg"
@@ -576,13 +578,13 @@ const TraceRowView = memo(function TraceRowView({
               ? row.completion.duration_ms != null
                 ? fmtMs(row.completion.duration_ms)
                 : ''
-              : '执行中…'}
+              : 'Running…'}
           </span>
         )}
         {row.kind === 'reasoning' && row.ms != null && row.ms > 0 && (
           <span className="trace-dur">{fmtMs(row.ms)}</span>
         )}
-        {row.kind === 'assistant' && row.live && <span className="trace-dur">生成中…</span>}
+        {row.kind === 'assistant' && row.live && <span className="trace-dur">Generating…</span>}
         <Icon name={expanded ? 'caret-down' : 'caret-right'} className="trace-caret" />
       </div>
       {expanded && <RowDetail row={row} onLocateInChat={onLocateInChat} />}
@@ -605,7 +607,7 @@ const RowText = memo(function RowText({ row }: { row: TraceRow }) {
       </span>
     )
   }
-  return <span className="trace-text">{firstLine(row.text) || '（空）'}</span>
+  return <span className="trace-text">{firstLine(row.text) || '(empty)'}</span>
 })
 
 const RowDetail = memo(function RowDetail({
@@ -622,24 +624,24 @@ const RowDetail = memo(function RowDetail({
         <>
           {row.target && (
             <div className="trace-expand-block">
-              <div className="trace-expand-head">参数</div>
+              <div className="trace-expand-head">Args</div>
               <pre className="mono">{row.target}</pre>
             </div>
           )}
           {row.diff && (
             <div className="trace-expand-block">
-              <div className="trace-expand-head">变更</div>
+              <div className="trace-expand-head">Changes</div>
               <pre className="mono">{row.diff}</pre>
             </div>
           )}
           {row.completion && (
             <div className="trace-expand-block">
-              <div className="trace-expand-head">返回</div>
+              <div className="trace-expand-head">Result</div>
               {row.completion.error_message && (
                 <div className="trace-expand-error">{row.completion.error_message}</div>
               )}
               <pre className="mono">
-                {row.completion.full_text || row.completion.preview || '（无输出）'}
+                {row.completion.full_text || row.completion.preview || '(no output)'}
               </pre>
             </div>
           )}
@@ -649,7 +651,7 @@ const RowDetail = memo(function RowDetail({
               className="maze-btn maze-jump"
               onClick={() => onLocateInChat(row.callId)}
             >
-              <Icon name="turn-down" /> 在对话中定位
+              <Icon name="turn-down" /> Locate in conversation
             </button>
           )}
         </>

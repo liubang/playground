@@ -35,12 +35,12 @@ function LoomContextChip({ ctx }: { ctx: string }) {
     (ctx.match(/<file path=/g) || []).length + (ctx.match(/<directory path=/g) || []).length
   const skills = (ctx.match(/<skill name=/g) || []).length
   const parts: string[] = []
-  if (files) parts.push(`${files} 个文件/目录`)
-  if (skills) parts.push(`${skills} 个技能`)
+  if (files) parts.push(`${files} ${files === 1 ? 'file/dir' : 'files/dirs'}`)
+  if (skills) parts.push(`${skills} ${skills === 1 ? 'skill' : 'skills'}`)
   return (
     <details className="user-ctx disclosure">
       <summary>
-        <Icon name="file" /> 已注入{parts.join(' · ') || '引用内容'}（模型上下文）
+        <Icon name="file" /> Injected {parts.join(' · ') || 'referenced content'} (model context)
       </summary>
       <pre className="user-ctx-body mono">{ctx}</pre>
     </details>
@@ -310,8 +310,8 @@ export function ResolvedNotice({ ok, actor, what }: { ok: boolean; actor: string
         <Icon name={ok ? 'check' : 'xmark'} />
       </span>
       <span>
-        <b>{(ok ? '已允许' : '已拒绝') + ' '}</b>
-        {`（${actor}）· ${what}`}
+        <b>{(ok ? 'Allowed' : 'Denied') + ' '}</b>
+        {`${what} · ${actor}`}
       </span>
     </div>
   )
@@ -385,7 +385,8 @@ const InlineDiff = memo(function InlineDiff({
         })}
         {lines.length > shown.length && (
           <div className="tsm-dline d-ctx tsm-diff-folded">
-            ⋯ 其余 {lines.length - shown.length} 行已折叠，点右上角「在变更面板查看全部」看完整内容
+            ⋯ {lines.length - shown.length} more lines folded — use “View all in Changes” for the
+            full diff
           </div>
         )}
       </div>
@@ -402,9 +403,9 @@ const InlineDiff = memo(function InlineDiff({
 // endpoint (fetchRunChanges): ledger-before vs CURRENT workspace content —
 // no git involved, so the affordance also works in non-git workspaces (the
 // honest cost: any edits made after the turn are part of the comparison;
-// after a revert the numbers drop to 0 — "一致"). Blocks built before the
-// ledger existed, and the share page, leave stats null and keep static
-// rows. The 撤销 button restores the recorded before-content (conflicts
+// after a revert the numbers drop to 0 — "unchanged"). Blocks built before
+// the ledger existed, and the share page, leave stats null and keep static
+// rows. The revert button restores the recorded before-content (conflicts
 // are overwritten and then reported).
 export const TurnSummaryBlock = memo(function TurnSummaryBlock({
   changes,
@@ -503,7 +504,10 @@ export const TurnSummaryBlock = memo(function TurnSummaryBlock({
       >
         <Icon name={open ? 'caret-down' : 'caret-right'} />
         <span className="tsm-title">
-          本轮变更 <b>{n} 个文件</b>
+          Turn changes{' '}
+          <b>
+            {n} {n === 1 ? 'file' : 'files'}
+          </b>
         </span>
         {totals && (
           <span className="tsm-total mono">
@@ -511,22 +515,25 @@ export const TurnSummaryBlock = memo(function TurnSummaryBlock({
           </span>
         )}
         {cancelled && (
-          <span className="tsm-tag" title="本轮被用户取消，文件改动是取消前的部分写入">
-            <Icon name="ban" /> 已取消
+          <span
+            className="tsm-tag"
+            title="Turn cancelled by the user; file changes are partial writes made before cancellation"
+          >
+            <Icon name="ban" /> Cancelled
           </span>
         )}
-        {failed && !cancelled && <span className="tsm-tag warn">失败</span>}
+        {failed && !cancelled && <span className="tsm-tag warn">Failed</span>}
         {onShowChanges && (
           <button
             type="button"
             className="tsm-viewall"
-            title="打开右侧变更面板（git 工作区视图）"
+            title="Open the Changes panel (git workspace view)"
             onClick={(e) => {
               e.stopPropagation()
               onShowChanges()
             }}
           >
-            在变更面板查看全部 ↗
+            View all in Changes ↗
           </button>
         )}
       </div>
@@ -548,12 +555,16 @@ export const TurnSummaryBlock = memo(function TurnSummaryBlock({
                   className="tsm-row"
                   disabled={!expandable}
                   aria-expanded={fileOpen}
-                  title={expandable ? `${c.path}（点击展开与当前工作区的 diff）` : c.path}
+                  title={
+                    expandable
+                      ? `${c.path} — click to expand the diff against the current workspace`
+                      : c.path
+                  }
                   onClick={() => toggleFile(c.path)}
                 >
                   <span
                     className={'tsm-badge ' + (c.created ? 'added' : 'modified')}
-                    title={c.created ? '本轮新建' : '本轮修改'}
+                    title={c.created ? 'Created this turn' : 'Modified this turn'}
                   >
                     {c.created ? 'A' : 'M'}
                   </span>
@@ -562,8 +573,8 @@ export const TurnSummaryBlock = memo(function TurnSummaryBlock({
                     {dir && <span className="tsm-dir mono">{dir}</span>}
                   </span>
                   <span className="tsm-right mono">
-                    {deleted && <span className="tsm-deleted">已删除</span>}
-                    {edits > 0 && <span className="tsm-edits">{edits} 次编辑</span>}
+                    {deleted && <span className="tsm-deleted">Deleted</span>}
+                    {edits > 0 && <span className="tsm-edits">{edits} edits</span>}
                     {stat && !stat.not_comparable && (stat.added > 0 || stat.removed > 0) && (
                       <span className="tsm-stat">
                         {stat.added > 0 && <i>+{stat.added}</i>}
@@ -580,23 +591,26 @@ export const TurnSummaryBlock = memo(function TurnSummaryBlock({
                 {fileOpen && (
                   <div className="tsm-file-diff">
                     {!statsReady ? (
-                      <div className="tsm-diff-note">加载中…</div>
+                      <div className="tsm-diff-note">Loading…</div>
                     ) : stat?.not_comparable ? (
                       <div className="tsm-diff-note">{stat.not_comparable}</div>
                     ) : stat?.diff ? (
                       <>
                         {stat.diff_truncated && (
-                          <div className="tsm-diff-note">diff 已截断，统计仅覆盖文件头部内容</div>
+                          <div className="tsm-diff-note">
+                            Diff truncated; stats cover only the head of the file
+                          </div>
                         )}
                         <InlineDiff path={c.path} diffText={stat.diff} />
                       </>
                     ) : stat ? (
                       <div className="tsm-diff-note">
-                        文件当前内容与本轮写入前一致（差异可能已被后续操作回滚）
+                        Current content matches the pre-turn state (the changes may have been
+                        reverted by later operations)
                       </div>
                     ) : (
                       <div className="tsm-diff-note">
-                        本轮对该文件的改动没有台账记录，无法生成 diff
+                        No ledger record for this file in this turn; diff unavailable
                       </div>
                     )}
                   </div>
@@ -617,15 +631,17 @@ export const TurnSummaryBlock = memo(function TurnSummaryBlock({
               type="button"
               className="tsm-btn danger"
               disabled={reverting}
-              title="将本轮写入的文件恢复到轮次前内容（覆盖之后的外部改动时会逐项提示）"
+              title="Restore files written this turn to their pre-turn contents (external changes made after the turn are confirmed one by one)"
               onClick={onRevert}
             >
-              <Icon name="rotate-left" /> {reverting ? '撤销中…' : '撤销本轮改动'}
+              <Icon name="rotate-left" /> {reverting ? 'Reverting…' : 'Revert this turn'}
             </button>
           )}
           <span className="tsm-footnote">
-            仅统计 loom 写工具的改动；run_cmd 内直接写文件（如 sed）不计入。
-            {fetchRunChanges ? '点击文件行展开当前工作区 diff。' : '共享视图不展示内联 diff。'}
+            Only loom write-tool edits are counted; files written inside run_cmd (e.g. sed) are not.{' '}
+            {fetchRunChanges
+              ? 'Click a file row to expand its workspace diff.'
+              : 'Inline diffs are unavailable in shared views.'}
           </span>
         </div>
       )}
@@ -643,18 +659,19 @@ export const CompactBlock = memo(function CompactBlock({
   const before = fmtTokens(p.est_tokens_before) || '?'
   const after = fmtTokens(p.est_tokens_after) || '?'
   const details: string[] = []
-  if (p.trigger) details.push('触发：' + p.trigger)
+  if (p.trigger) details.push('Trigger: ' + p.trigger)
   if (p.masked_outputs) {
-    const bytes = p.masked_bytes ? `（${fmtBytes(p.masked_bytes)}）` : ''
-    details.push(`裁剪 ${p.masked_outputs} 条输出${bytes}`)
+    const bytes = p.masked_bytes ? ` (${fmtBytes(p.masked_bytes)})` : ''
+    details.push(`Trimmed ${p.masked_outputs} output${p.masked_outputs === 1 ? '' : 's'}${bytes}`)
   }
-  if (p.archived_messages) details.push(`归档 ${p.archived_messages} 条消息`)
-  if (p.summarized) details.push('摘要交接')
+  if (p.archived_messages)
+    details.push(`Archived ${p.archived_messages} message${p.archived_messages === 1 ? '' : 's'}`)
+  if (p.summarized) details.push('Summary handoff')
   return (
     <div className="notice compact">
       <div className="compact-head">
         <Icon name="bolt" />
-        {` 上下文已压缩 · ${before} → ${after}`}
+        {` Context compacted · ${before} → ${after}`}
       </div>
       {details.length > 0 && <div className="compact-detail">{details.join(' · ')}</div>}
     </div>

@@ -126,7 +126,7 @@ export function ConfirmHost() {
             autoFocus
             onClick={() => settle(false)}
           >
-            取消
+            Cancel
           </button>
           <button
             id="confirm-ok"
@@ -134,7 +134,7 @@ export function ConfirmHost() {
             type="button"
             onClick={() => settle(true)}
           >
-            {req.okLabel || '确认'}
+            {req.okLabel || 'OK'}
           </button>
         </div>
       </div>

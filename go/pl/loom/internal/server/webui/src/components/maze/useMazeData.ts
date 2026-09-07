@@ -31,7 +31,7 @@ export function useMazeData(controller: AppController) {
         setError('')
       } catch (e) {
         if (seqRef.current !== seq) return
-        setError((e as Error).message || '加载失败')
+        setError((e as Error).message || 'Failed to load')
       } finally {
         // The latest request always owns the loading flag — not just the one
         // that set it. A showLoading=true initial fetch superseded by a

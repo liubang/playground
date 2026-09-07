@@ -43,15 +43,15 @@ export const CtxGauge = memo(function CtxGauge({ controller }: { controller: App
       : DEFAULT_TRIGGER_RATIO
   const cls = ratio >= triggerRatio ? 'is-hot' : ratio >= WARM_RATIO ? 'is-warm' : ''
 
-  const parts = [`上下文 ${fmtTokens(occupancy)} / ${fmtTokens(win.effective)}（${pct}%）`]
+  const parts = [`Context ${fmtTokens(occupancy)} / ${fmtTokens(win.effective)} (${pct}%)`]
   if (win.compact_trigger && win.compact_trigger > 0) {
-    parts.push(`compact 触发于 ~${fmtTokens(win.compact_trigger)}`)
+    parts.push(`Compacts at ~${fmtTokens(win.compact_trigger)}`)
   }
   if (win.compact_target && win.compact_target > 0) {
-    parts.push(`压缩目标 ${fmtTokens(win.compact_target)}`)
+    parts.push(`Compact target ${fmtTokens(win.compact_target)}`)
   }
   if (win.nominal && win.nominal > 0 && win.nominal !== win.effective) {
-    parts.push(`名义窗口 ${fmtTokens(win.nominal)}`)
+    parts.push(`Nominal window ${fmtTokens(win.nominal)}`)
   }
 
   return (

@@ -180,11 +180,11 @@ export const Sidebar = memo(function Sidebar({
   return (
     <>
       <div className="ws-bar">
-        <span className="ws-bar-title">工作区</span>
+        <span className="ws-bar-title">Workspaces</span>
         <button
           id="ws-add"
           className="icon-btn"
-          title="添加工作区"
+          title="Add workspace"
           onClick={() => controller.openDirPicker()}
         >
           <Icon name="folder-plus" />
@@ -215,7 +215,7 @@ export const Sidebar = memo(function Sidebar({
         })}
         {sessionsLoading && (
           <div className="session-list-more" aria-hidden="true">
-            <span className="spinner" /> 加载更多会话…
+            <span className="spinner" /> Loading more sessions…
           </div>
         )}
       </div>
@@ -223,24 +223,24 @@ export const Sidebar = memo(function Sidebar({
         <button
           id="toggle-archived"
           className={'foot-btn' + (showArchived ? ' is-active' : '')}
-          title={showArchived ? '返回会话列表' : '查看归档会话'}
+          title={showArchived ? 'Back to sessions' : 'View archived sessions'}
           onClick={() => controller.toggleArchivedView()}
         >
           {showArchived ? (
             <>
-              <Icon name="arrow-left" /> 返回
+              <Icon name="arrow-left" /> Back
             </>
           ) : (
-            '归档'
+            'Archive'
           )}
         </button>
         <button
           id="open-compare"
           className={'foot-btn' + (mainView === 'compare' ? ' is-active' : '')}
-          title="轨迹对比：选两个会话同轴对比执行过程"
+          title="Compare traces: pick two sessions to compare side by side"
           onClick={() => controller.openCompare()}
         >
-          <Icon name="layer-group" /> 对比
+          <Icon name="layer-group" /> Compare
         </button>
         <span className="sidebar-foot-brand">◆ loom</span>
       </div>
@@ -274,7 +274,7 @@ const WorkspaceGroup = memo(function WorkspaceGroup({
   // A non-empty wsId with no matching entity = the owning workspace was deleted.
   // Historical data from before cascading deletes shipped may leave such dangling
   // sessions; they still render under the read-only "deleted workspace" group.
-  const name = ws ? ws.name : wsId ? '已删除的工作区' : '默认工作区'
+  const name = ws ? ws.name : wsId ? 'Deleted workspace' : 'Default workspace'
   // Count of sessions awaiting approval in the group (the only distress signal
   // visible while collapsed) and the current-session membership flag.
   const attnCount = sessions.filter((s) => s.state === 'awaiting_approval').length
@@ -332,7 +332,10 @@ const WorkspaceGroup = memo(function WorkspaceGroup({
         </span>
         <span className="ws-count">{String(sessions.length)}</span>
         {attnCount > 0 && (
-          <span className="ws-attn" title={`${attnCount} 个会话等待审批`}>
+          <span
+            className="ws-attn"
+            title={`${attnCount} session${attnCount === 1 ? '' : 's'} awaiting approval`}
+          >
             {String(attnCount)}
           </span>
         )}
@@ -343,7 +346,7 @@ const WorkspaceGroup = memo(function WorkspaceGroup({
             <button
               type="button"
               className="ws-new"
-              title="在该工作区新建会话"
+              title="New session in this workspace"
               onClick={(e) => {
                 e.stopPropagation()
                 controller.onNewSession(wsId)
@@ -355,7 +358,7 @@ const WorkspaceGroup = memo(function WorkspaceGroup({
               <button
                 type="button"
                 className="ws-del"
-                title="删除工作区（其下会话一并删除，磁盘目录保留）"
+                title="Delete workspace (its sessions are deleted too; the on-disk directory is kept)"
                 onClick={(e) => {
                   e.stopPropagation()
                   void controller.onDeleteWorkspace(wsId)
@@ -370,7 +373,7 @@ const WorkspaceGroup = memo(function WorkspaceGroup({
       {!collapsed && (
         <div className="ws-sessions">
           {sessions.length === 0 ? (
-            <div className="ws-empty">无会话</div>
+            <div className="ws-empty">No sessions</div>
           ) : (
             orderedItems.map(({ s, isChild }) => (
               <SessionItem
@@ -416,7 +419,7 @@ const SessionItem = memo(function SessionItem({
       onClick={() => controller.onSelectSession(s.id)}
     >
       {isChild && (
-        <span className="child-mark" title="子智能体会话">
+        <span className="child-mark" title="Subagent session">
           <Icon name="robot" />
         </span>
       )}
@@ -426,7 +429,7 @@ const SessionItem = memo(function SessionItem({
       {showDot && (
         <span
           className={'st-dot ' + (st === 'awaiting_approval' ? 'is-attn' : 'is-run')}
-          title={st === 'awaiting_approval' ? '等待审批' : '运行中'}
+          title={st === 'awaiting_approval' ? 'Awaiting approval' : 'Running'}
         />
       )}
       <span className="t">{s.title || shortId(s.id)}</span>
@@ -437,7 +440,7 @@ const SessionItem = memo(function SessionItem({
         <button
           type="button"
           className="act"
-          title={archivedView ? '取消归档' : '归档'}
+          title={archivedView ? 'Unarchive' : 'Archive'}
           onClick={(e) => {
             e.stopPropagation()
             void controller.onSessionAction(s.id, archivedView ? 'unarchive' : 'archive')
@@ -448,7 +451,7 @@ const SessionItem = memo(function SessionItem({
         <button
           type="button"
           className="act act-del"
-          title="删除会话"
+          title="Delete session"
           onClick={(e) => {
             e.stopPropagation()
             void controller.onSessionAction(s.id, 'delete')

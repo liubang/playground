@@ -72,8 +72,8 @@ export const MessageActions = memo(function MessageActions({
       <button
         type="button"
         className={'msg-action msg-copy' + (copyState ? ' ' + copyState : '')}
-        title="复制该条消息"
-        aria-label="复制该条消息"
+        title="Copy this message"
+        aria-label="Copy this message"
         onClick={onCopy}
       >
         <Icon name={copyState === 'is-done' ? 'check' : 'copy'} />
@@ -83,8 +83,8 @@ export const MessageActions = memo(function MessageActions({
           <button
             type="button"
             className={'msg-action msg-up' + (vote === 'up' ? ' is-active' : '')}
-            title="赞"
-            aria-label="赞"
+            title="Good response"
+            aria-label="Good response"
             onClick={onVote(1)}
           >
             <Icon name="thumbs-up" />
@@ -92,8 +92,8 @@ export const MessageActions = memo(function MessageActions({
           <button
             type="button"
             className={'msg-action msg-down' + (vote === 'down' ? ' is-active' : '')}
-            title="踩"
-            aria-label="踩"
+            title="Bad response"
+            aria-label="Bad response"
             onClick={onVote(0)}
           >
             <Icon name="thumbs-down" />

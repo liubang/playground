@@ -20,9 +20,9 @@ const THEME_KEY = 'loom_theme'
 type ShareTab = 'chat' | 'trace' | 'maze'
 
 const SHARE_TABS: { key: ShareTab; label: string }[] = [
-  { key: 'chat', label: '对话' },
-  { key: 'trace', label: '轨迹' },
-  { key: 'maze', label: '迷宫' },
+  { key: 'chat', label: 'Chat' },
+  { key: 'trace', label: 'Trace' },
+  { key: 'maze', label: 'Maze' },
 ]
 
 const tabFromHash = (): ShareTab =>
@@ -108,7 +108,7 @@ function ShareApp() {
 
   useEffect(() => {
     if (!/^[0-9a-f]{32}$/.test(token)) {
-      setError('链接无效或已撤销。')
+      setError('This link is invalid or has been revoked.')
       return
     }
     void (async () => {
@@ -116,13 +116,13 @@ function ShareApp() {
       try {
         const res = await fetch(`/v1/shared/${encodeURIComponent(token)}`)
         if (res.status === 404) {
-          setError('链接无效或已撤销。')
+          setError('This link is invalid or has been revoked.')
           return
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         v = (await res.json()) as SharedView
       } catch (e) {
-        setError('加载失败：' + (e as Error).message)
+        setError('Failed to load: ' + (e as Error).message)
         return
       }
       setView(v)
@@ -183,7 +183,7 @@ function ShareApp() {
         </span>
         <span className="spacer" />
         <span id="share-meta" className="share-meta">
-          {!error && view?.updated_at ? `更新于 ${fmtTime(view.updated_at)}` : ''}
+          {!error && view?.updated_at ? `Updated ${fmtTime(view.updated_at)}` : ''}
         </span>
       </header>
 
@@ -217,7 +217,7 @@ function ShareApp() {
             >
               <div id="share-error" className="share-error" hidden={!error}>
                 <div className="brand">◆ loom</div>
-                <p id="share-error-text">{error || '链接无效或已撤销。'}</p>
+                <p id="share-error-text">{error || 'This link is invalid or has been revoked.'}</p>
               </div>
             </TranscriptView>
           </BlocksIOContext.Provider>
@@ -237,11 +237,11 @@ function ShareApp() {
         {effTab === 'maze' && (
           <div className="maze-page">
             {mazeError ? (
-              <div className="maze-error">轨迹加载失败：{mazeError}</div>
+              <div className="maze-error">Failed to load trace: {mazeError}</div>
             ) : !maze ? (
-              <div className="maze-empty">正在构建轨迹…</div>
+              <div className="maze-empty">Building trace…</div>
             ) : maze.lanes.length === 0 || maze.lanes[0].stats.steps === 0 ? (
-              <div className="maze-empty">该会话暂无执行轨迹</div>
+              <div className="maze-empty">No execution trace for this session yet</div>
             ) : (
               <MazeView data={maze} onLocateStep={locateInTrace} />
             )}
@@ -253,7 +253,7 @@ function ShareApp() {
         id="share-top"
         className="share-top"
         type="button"
-        title="回到顶部"
+        title="Back to top"
         hidden={!showTop}
         onClick={() => scrollerRef.current.el?.scrollTo({ top: 0, behavior: 'smooth' })}
       >

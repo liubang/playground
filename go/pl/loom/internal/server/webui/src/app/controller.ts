@@ -132,7 +132,7 @@ function initialState(): AppState {
     sessionLoading: false,
     workspaces: [],
     noWorkspace: false,
-    landingHint: '未选择会话：新建一个，或从左侧列表挑选。',
+    landingHint: 'No session selected — create one, or pick from the list on the left.',
     landingShowAddWs: false,
     landingVisible: true,
     models: [],
@@ -289,7 +289,9 @@ export class AppController {
       onResync: (reason) => void this.resync(reason),
       onDraining: () => {
         this.setConn('draining')
-        this.store.set({ banner: { text: '服务重启中，恢复后将自动重连…', draining: true } })
+        this.store.set({
+          banner: { text: "Server restarting — will reconnect once it's back…", draining: true },
+        })
         this.startDrainRecovery()
       },
       onConn: (state, detail, attempt) => {
@@ -453,7 +455,7 @@ export class AppController {
   async pickApprovalMode(mode: string) {
     const wsId = this.currentWorkspaceId()
     if (!wsId) {
-      toast('先添加一个工作区')
+      toast('Add a workspace first')
       return
     }
     try {
@@ -461,9 +463,10 @@ export class AppController {
       this.store.set({ approvalMode: mode })
       // Policy is captured at run construction: no effect on the currently
       // running turn
-      toast(`审批模式：${mode}（下一轮生效，不写入配置）`, true)
+      toast(`Approval mode: ${mode} (takes effect next turn; not persisted)`, true)
     } catch (e) {
-      if ((e as ApiError).status !== 401) toast('切换审批模式失败: ' + (e as Error).message)
+      if ((e as ApiError).status !== 401)
+        toast('Failed to switch approval mode: ' + (e as Error).message)
     }
   }
 
@@ -483,12 +486,12 @@ export class AppController {
       // recourse is restarting the app (docs/DESKTOP_DESIGN.md §4.2).
       this.store.set({
         view: 'gate',
-        gateError: '桌面端鉴权状态丢失，请重启应用',
+        gateError: 'Desktop auth state lost — please restart the app',
         gateLocked: true,
       })
       return
     }
-    this.showGate('token 无效或已过期——请粘贴当前 serve token')
+    this.showGate('Token invalid or expired — paste the current serve token')
   }
 
   submitGateToken(token: string) {
@@ -594,9 +597,9 @@ export class AppController {
     }
     if (state === 'draining') return // onDraining already raised the banner
     if (state === 'dead') {
-      this.showConnBanner(`连接已断开：${detail || 'disconnected'}`)
+      this.showConnBanner(`Connection lost: ${detail || 'disconnected'}`)
     } else if (typeof attempt === 'number' && attempt >= CONN_WARN_ATTEMPTS) {
-      this.showConnBanner('连接已断开，正在自动重连…')
+      this.showConnBanner('Connection lost; reconnecting…')
     }
   }
 
@@ -642,9 +645,9 @@ export class AppController {
     const locked = s.readOnly || s.archived
     this.store.set({
       readOnlyLabel: s.readOnly
-        ? '子 agent 会话 · 只读'
+        ? 'Subagent session · read-only'
         : s.archived
-          ? '会话已归档 · 只读（在侧栏归档视图中取消归档后可继续）'
+          ? "Archived session · read-only (unarchive it from the sidebar's Archive view to continue)"
           : '',
     })
     void locked // readOnlyLabel === '' means unlocked (the view keys off this)
@@ -727,7 +730,7 @@ export class AppController {
   // preview; the full content comes from the snapshot message history by call_id.
   fetchToolOutput = async (callId: string): Promise<string> => {
     const sid = this.store.get().sessionId
-    if (!sid || !callId) throw new Error('当前没有活跃会话')
+    if (!sid || !callId) throw new Error('No active session')
     const snap = await this.api.snapshot(sid)
     for (const m of snap.messages || []) {
       for (const part of m.parts || []) {
@@ -739,10 +742,10 @@ export class AppController {
         const out = texts.join('\n')
         if (out) return out
         if (r.error && r.error.message) return r.error.message
-        throw new Error('工具输出不可用（为空或已被压缩）')
+        throw new Error('Tool output unavailable (empty or compacted away)')
       }
     }
-    throw new Error('未在会话历史中找到该工具结果')
+    throw new Error('Tool result not found in session history')
   }
 
   // ---------- model / reasoning state sync ----------
@@ -781,7 +784,7 @@ export class AppController {
       imagesEnabled: ok,
       imagesDisabledReason: ok
         ? ''
-        : `模型 ${entry.name} 未声明图片输入（modalities）；请切换多模态模型，或在设置 → 模型中勾选「图片输入」`,
+        : `Model ${entry.name} does not declare image input (modalities); switch to a multimodal model, or enable image input under 设置 → 模型`,
     })
   }
 
@@ -804,7 +807,7 @@ export class AppController {
   async pickModel(ref: string) {
     const sid = this.store.get().sessionId
     if (!sid) {
-      toast('先创建或选择一个会话')
+      toast('Create or select a session first')
       return
     }
     try {
@@ -819,16 +822,16 @@ export class AppController {
       // from the server-derived new window projection; occupancy itself
       // refreshes on the next context.usage / snapshot
       this.store.set({ window: r.Window || r.window || null })
-      toast('模型已切换为 ' + this.modelLabel(ref), true)
+      toast('Model switched to ' + this.modelLabel(ref), true)
     } catch (e) {
-      if ((e as ApiError).status !== 401) toast('切换模型失败: ' + (e as Error).message)
+      if ((e as ApiError).status !== 401) toast('Failed to switch model: ' + (e as Error).message)
     }
   }
 
   async pickReasoning(effort: string) {
     const sid = this.store.get().sessionId
     if (!sid) {
-      toast('先创建或选择一个会话')
+      toast('Create or select a session first')
       return
     }
     try {
@@ -840,9 +843,9 @@ export class AppController {
         curReasoning: effort,
         reasoningOverridden: r.Overridden ?? r.overridden ?? effort !== 'default',
       })
-      toast('reasoning: ' + (effort === 'default' ? '默认' : effort), true)
+      toast('reasoning: ' + (effort === 'default' ? 'default' : effort), true)
     } catch (e) {
-      if ((e as ApiError).status !== 401) toast('设置 reasoning 失败: ' + (e as Error).message)
+      if ((e as ApiError).status !== 401) toast('Failed to set reasoning: ' + (e as Error).message)
     }
   }
 
@@ -930,9 +933,9 @@ export class AppController {
         const sess = this.store.get().sessions.find((x) => x.id === id)
         const title = (sess && sess.title) || shortId(id)
         const ok = await confirmDialog({
-          title: '删除会话',
-          body: `「${title}」将被永久删除，包括全部消息与事件记录。该操作不可恢复。`,
-          okLabel: '删除',
+          title: 'Delete session',
+          body: `"${title}" will be permanently deleted, including all messages and event records. This cannot be undone.`,
+          okLabel: 'Delete',
         })
         if (!ok) return
         await this.api.deleteSession(id)
@@ -947,16 +950,16 @@ export class AppController {
           this.showLandingState()
           this.setSessionState('closed')
         }
-        toast('会话已删除', true)
+        toast('Session deleted', true)
       } else {
         await this.api.archiveSession(id, action === 'archive')
-        toast(action === 'archive' ? '已归档' : '已取消归档', true)
+        toast(action === 'archive' ? 'Archived' : 'Unarchived', true)
         // Archived/unarchived the currently open session: sync the composer
         // read-only state
         if (id === this.store.get().sessionId) this.setArchived(action === 'archive')
       }
     } catch (e) {
-      if ((e as ApiError).status !== 401) toast('操作失败: ' + (e as Error).message)
+      if ((e as ApiError).status !== 401) toast('Operation failed: ' + (e as Error).message)
     }
     await this.refreshSessions()
   }
@@ -1061,7 +1064,7 @@ export class AppController {
     // default view = active sessions
     this.openSession(id, { archived: this.store.get().showArchived }).catch((e) => {
       if ((e as ApiError).status !== 401)
-        toast('打开会话失败：' + (e as Error).message, false, true)
+        toast('Failed to open session: ' + (e as Error).message, false, true)
     })
   }
 
@@ -1075,10 +1078,14 @@ export class AppController {
     }
     const wsId = sess.workspace_id || ''
     const ws = s.workspaces.find((w) => w.id === wsId)
-    const name = ws ? ws.name || ws.root_path || '' : wsId ? '已删除的工作区' : '默认工作区'
+    const name = ws
+      ? ws.name || ws.root_path || ''
+      : wsId
+        ? 'Deleted workspace'
+        : 'Default workspace'
     this.store.set({
       hdrWorkspace: name + ' /',
-      hdrWorkspaceTitle: ((ws && ws.root_path) || name) + '（点击在侧栏定位）',
+      hdrWorkspaceTitle: ((ws && ws.root_path) || name) + ' (click to locate in the sidebar)',
     })
   }
 
@@ -1117,7 +1124,7 @@ export class AppController {
     try {
       const { workspace } = await this.api.registerWorkspace(rootPath, '')
       this.store.set({ dirPickerOpen: false })
-      toast('已添加工作区 ' + (workspace.name || rootPath), true)
+      toast('Workspace added: ' + (workspace.name || rootPath), true)
       await this.loadWorkspaces()
       await this.refreshSessions()
       // After adding the first workspace, leave the onboarding state for the
@@ -1126,7 +1133,7 @@ export class AppController {
         this.showLandingState()
       }
     } catch (e) {
-      if ((e as ApiError).status !== 401) toast('添加工作区失败: ' + (e as Error).message)
+      if ((e as ApiError).status !== 401) toast('Failed to add workspace: ' + (e as Error).message)
     }
   }
 
@@ -1139,7 +1146,7 @@ export class AppController {
   onNewSession = (wsId: string) => {
     this.newSession(wsId).catch((e) => {
       if ((e as ApiError).status !== 401)
-        toast('创建会话失败：' + (e as Error).message, false, true)
+        toast('Failed to create session: ' + (e as Error).message, false, true)
     })
   }
 
@@ -1151,15 +1158,16 @@ export class AppController {
     const count = (ws && ws.session_count) || 0
     const body =
       count > 0
-        ? `「${name}」将被删除，其下 ${count} 个会话将一并永久删除（不可恢复）。磁盘目录不受影响。`
-        : `「${name}」将从工作区列表移除（无会话）。磁盘目录不受影响。`
-    const ok = await confirmDialog({ title: '删除工作区', body, okLabel: '删除' })
+        ? `"${name}" will be deleted along with its ${count} ${count === 1 ? 'session' : 'sessions'} — permanent. The on-disk directory is not affected.`
+        : `"${name}" will be removed from the workspace list (no sessions). The on-disk directory is not affected.`
+    const ok = await confirmDialog({ title: 'Delete workspace', body, okLabel: 'Delete' })
     if (!ok) return
     try {
       await this.api.deleteWorkspace(wsId)
-      toast('工作区已删除', true)
+      toast('Workspace deleted', true)
     } catch (e) {
-      if ((e as ApiError).status !== 401) toast('删除工作区失败: ' + (e as Error).message)
+      if ((e as ApiError).status !== 401)
+        toast('Failed to delete workspace: ' + (e as Error).message)
       return
     }
     // If the currently open session belongs to the deleted workspace, detach
@@ -1197,8 +1205,8 @@ export class AppController {
     const hasSessions = this.store.get().sessions.length > 0
     this.store.set({
       landingHint: hasSessions
-        ? '从侧栏选择会话，或直接开始输入。'
-        : '还没有会话——添加工作区，或直接开始输入。',
+        ? 'Pick a session from the sidebar, or just start typing.'
+        : 'No sessions yet — add a workspace, or just start typing.',
       landingShowAddWs: !hasSessions,
       landingVisible: true,
       hdrWorkspace: '',
@@ -1225,17 +1233,17 @@ export class AppController {
   ) => {
     const s = this.store.get()
     if (s.readOnly) {
-      toast('子 agent 会话为只读，不能追问')
+      toast('Subagent sessions are read-only; follow-ups are not allowed')
       return
     }
     if (s.archived) {
-      toast('会话已归档，仅可查看；取消归档后可继续对话')
+      toast('This session is archived and read-only; unarchive it to continue')
       return
     }
     // followup is text-only: images go with a normal prompt (the backend also
     // rejects followup+images)
     if (followup && images.length) {
-      toast('排队到下一轮的消息仅支持文本，图片已忽略')
+      toast('Queued messages are text-only; images were dropped')
       images = []
     }
     // Idempotency key: resending the same "text + image set + delivery mode"
@@ -1264,10 +1272,10 @@ export class AppController {
       if (err.code === 'session_archived') {
         this.setArchived(true)
         void this.refreshSessions()
-        toast('会话已归档，仅可查看；取消归档后可继续对话')
+        toast('This session is archived and read-only; unarchive it to continue')
         return
       }
-      toast('发送失败：' + err.message, false, true)
+      toast('Failed to send: ' + err.message, false, true)
     }
   }
 
@@ -1275,7 +1283,7 @@ export class AppController {
     const sid = this.store.get().sessionId
     if (!sid) return
     this.api.cancelTurn(sid).catch((e) => {
-      if ((e as ApiError).status !== 401) toast('取消失败：' + (e as Error).message)
+      if ((e as ApiError).status !== 401) toast('Failed to cancel: ' + (e as Error).message)
     })
   }
 
@@ -1373,7 +1381,8 @@ export class AppController {
     try {
       await this.openSession(sid, { archived: this.store.get().archived })
     } catch (e) {
-      if ((e as ApiError).status !== 401) toast('重连失败：' + (e as Error).message, false, true)
+      if ((e as ApiError).status !== 401)
+        toast('Failed to reconnect: ' + (e as Error).message, false, true)
     }
   }
 
@@ -1385,13 +1394,13 @@ export class AppController {
     try {
       if (shiftKey) {
         const ok = await confirmDialog({
-          title: '撤销分享',
-          body: '撤销后，已发出的分享链接将立即失效（再次分享会生成新链接）。',
-          okLabel: '撤销分享',
+          title: 'Unshare',
+          body: 'The shared link stops working immediately (sharing again creates a new link).',
+          okLabel: 'Unshare',
         })
         if (!ok) return
         await this.api.revokeShare(sid)
-        toast('分享已撤销', true)
+        toast('Sharing revoked', true)
         return
       }
       // Desktop: if the share listener is off, confirm in place and enable it —
@@ -1402,14 +1411,14 @@ export class AppController {
         const endpoint = await this.api.getShareEndpoint()
         if (!endpoint.enabled) {
           const ok = await confirmDialog({
-            title: '开启局域网分享',
-            body: '分享链接需要一个局域网可达的监听。开启后，同一网络内持有链接的人可只读查看本会话（可随时在设置 → 系统 → 局域网分享关闭）。',
-            okLabel: '开启并复制链接',
+            title: 'Enable LAN sharing',
+            body: 'The share link needs a LAN-reachable listener. Once enabled, anyone on the same network with the link can view this session read-only (disable anytime under 设置 → 系统 → 局域网分享).',
+            okLabel: 'Enable and copy link',
           })
           if (!ok) return
           const resp = await this.api.setShareEndpoint(true)
           if (resp?.endpoint?.error) {
-            toast('分享监听启动失败: ' + resp.endpoint.error)
+            toast('Failed to start share listener: ' + resp.endpoint.error)
             return
           }
         }
@@ -1422,23 +1431,25 @@ export class AppController {
       const { path, url: absoluteUrl } = await this.api.shareSession(sid)
       const url = absoluteUrl || location.origin + path
       if (await copyText(url)) {
-        toast('分享链接已复制：任何持有链接的人可只读查看本会话', true)
+        toast('Share link copied — anyone with the link can view this session read-only', true)
       } else {
         // Clipboard unavailable (insecure context): open the share page and
         // copy from the address bar
         window.open(url, '_blank', 'noopener')
-        toast('剪贴板不可用，已在新标签页打开分享页（可从地址栏复制链接）')
+        toast(
+          'Clipboard unavailable — the share page was opened in a new tab (copy the link from the address bar)',
+        )
       }
     } catch (err) {
-      if ((err as ApiError).status !== 401) toast('分享失败: ' + (err as Error).message)
+      if ((err as ApiError).status !== 401) toast('Failed to share: ' + (err as Error).message)
     }
   }
 
   copySessionId = async () => {
     const sid = this.store.get().sessionId
     if (!sid) return
-    if (await copyText(sid)) toast('已复制 session ID', true)
-    else toast('剪贴板不可用，session id: ' + sid)
+    if (await copyText(sid)) toast('Session ID copied', true)
+    else toast('Clipboard unavailable, session id: ' + sid)
   }
 
   // ---------- settings panel ----------

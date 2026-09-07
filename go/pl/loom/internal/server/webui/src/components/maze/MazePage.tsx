@@ -27,11 +27,15 @@ export function MazePage({ controller }: { controller: AppController }) {
     [controller],
   )
 
-  if (!sessionId) return <div className="maze-empty">未选择会话</div>
-  if (error) return <div className="maze-error">轨迹加载失败：{error}</div>
-  if (!data || loading) return <div className="maze-empty">正在构建轨迹…</div>
+  if (!sessionId) return <div className="maze-empty">No session selected</div>
+  if (error) return <div className="maze-error">Failed to load trace: {error}</div>
+  if (!data || loading) return <div className="maze-empty">Building trace…</div>
   if (data.lanes.length === 0 || data.lanes[0].stats.steps === 0) {
-    return <div className="maze-empty">暂无执行轨迹——发起一轮对话后这里会画出探索迷宫</div>
+    return (
+      <div className="maze-empty">
+        No execution trace yet — start a conversation and the exploration maze appears here
+      </div>
+    )
   }
   return (
     <div className="maze-page">

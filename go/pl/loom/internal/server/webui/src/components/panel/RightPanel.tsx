@@ -52,7 +52,7 @@ export function RightPanel({ controller }: { controller: AppController }) {
             className={'rp-tab' + (tab === 'changes' ? ' is-active' : '')}
             onClick={() => controller.setRightPanelTab('changes')}
           >
-            变更
+            Changes
           </button>
           <button
             type="button"
@@ -61,20 +61,20 @@ export function RightPanel({ controller }: { controller: AppController }) {
             className={'rp-tab' + (tab === 'files' ? ' is-active' : '')}
             onClick={() => controller.setRightPanelTab('files')}
           >
-            文件
+            Files
           </button>
         </div>
         <button
           type="button"
           className="icon-btn"
-          title="收起面板"
+          title="Collapse panel"
           onClick={() => controller.toggleRightPanel()}
         >
           <Icon name="xmark" />
         </button>
       </div>
       {!wsId ? (
-        <div className="rp-empty">暂无工作区</div>
+        <div className="rp-empty">No workspace</div>
       ) : tab === 'changes' ? (
         <ChangesPane controller={controller} wsId={wsId} />
       ) : (
@@ -87,12 +87,12 @@ export function RightPanel({ controller }: { controller: AppController }) {
 // ---------- Changes tab ----------
 
 const STATUS_LABEL: Record<string, string> = {
-  M: '已修改',
-  A: '新增',
-  D: '已删除',
-  R: '重命名',
-  T: '类型变更',
-  U: '未跟踪',
+  M: 'Modified',
+  A: 'Added',
+  D: 'Deleted',
+  R: 'Renamed',
+  T: 'Type changed',
+  U: 'Untracked',
 }
 
 function splitPath(p: string): [string, string] {
@@ -180,26 +180,29 @@ const ChangesPane = memo(function ChangesPane({
     fetchDiff(path)
   }
 
-  if (error) return <div className="rp-empty">加载失败：{error}</div>
-  if (!data) return <div className="rp-empty">加载中…</div>
-  if (!data.is_git) return <div className="rp-empty">当前工作区不是 git 仓库</div>
+  if (error) return <div className="rp-empty">Failed to load: {error}</div>
+  if (!data) return <div className="rp-empty">Loading…</div>
+  if (!data.is_git)
+    return <div className="rp-empty">The current workspace is not a git repository</div>
 
   const files = data.files || []
   return (
     <div className="rp-body">
       <div className="rp-subhead">
-        <span className="rp-branch mono" title="当前分支">
+        <span className="rp-branch mono" title="Current branch">
           {data.branch || 'HEAD'}
         </span>
         <span className="gf-stats mono">
           {(data.adds ?? 0) > 0 && <span className="st-add">+{data.adds}</span>}
           {(data.dels ?? 0) > 0 && <span className="st-del">−{data.dels}</span>}
         </span>
-        <button type="button" className="icon-btn" title="刷新" onClick={() => void reload()}>
+        <button type="button" className="icon-btn" title="Refresh" onClick={() => void reload()}>
           <Icon name="rotate-left" />
         </button>
       </div>
-      {files.length === 0 && <div className="rp-empty">工作区干净，没有未提交的变更</div>}
+      {files.length === 0 && (
+        <div className="rp-empty">Working tree clean — no uncommitted changes</div>
+      )}
       {files.map((f) => (
         <GitFileRow
           key={f.path}
@@ -252,18 +255,18 @@ const GitFileRow = memo(function GitFileRow({
       {open && (
         <div className="gf-diff">
           {diffError ? (
-            <div className="rp-empty">diff 加载失败：{diffError}</div>
+            <div className="rp-empty">Failed to load diff: {diffError}</div>
           ) : !diff ? (
-            <div className="rp-empty">加载中…</div>
+            <div className="rp-empty">Loading…</div>
           ) : diff.is_dir ? (
-            <div className="rp-empty">新增目录（无 diff 可展示）</div>
+            <div className="rp-empty">New directory (no diff to show)</div>
           ) : diff.diff ? (
             <>
               <DiffView diffText={diff.diff} />
-              {diff.truncated && <div className="notice">diff 过大，已截断</div>}
+              {diff.truncated && <div className="notice">Diff too large; truncated</div>}
             </>
           ) : (
-            <div className="rp-empty">无内容差异（可能仅是模式/重命名变更）</div>
+            <div className="rp-empty">No content changes (mode or rename only)</div>
           )}
         </div>
       )}
@@ -345,8 +348,8 @@ const FilesPane = memo(function FilesPane({
   }
   return (
     <div className="rp-body">
-      {error && <div className="rp-empty">加载失败：{error}</div>}
-      {!tree[''] && !error && <div className="rp-empty">加载中…</div>}
+      {error && <div className="rp-empty">Failed to load: {error}</div>}
+      {!tree[''] && !error && <div className="rp-empty">Loading…</div>}
       {tree[''] && (
         <DirChildren
           path=""
@@ -377,7 +380,7 @@ function DirChildren({
   onOpenFile: (path: string) => void
 }) {
   const entries = tree[path]
-  if (!entries) return <div className="ft-loading">加载中…</div>
+  if (!entries) return <div className="ft-loading">Loading…</div>
   return (
     <>
       {entries.map((e) =>
@@ -472,7 +475,7 @@ const FilePreview = memo(function FilePreview({
   return (
     <div className="rp-body fp">
       <div className="rp-subhead">
-        <button type="button" className="icon-btn" title="返回文件树" onClick={onBack}>
+        <button type="button" className="icon-btn" title="Back to file tree" onClick={onBack}>
           <Icon name="arrow-left" />
         </button>
         <span className="fp-path mono" title={path}>
@@ -480,11 +483,11 @@ const FilePreview = memo(function FilePreview({
         </span>
       </div>
       {error ? (
-        <div className="rp-empty">加载失败：{error}</div>
+        <div className="rp-empty">Failed to load: {error}</div>
       ) : !data ? (
-        <div className="rp-empty">加载中…</div>
+        <div className="rp-empty">Loading…</div>
       ) : data.binary ? (
-        <div className="rp-empty">二进制文件不支持预览</div>
+        <div className="rp-empty">Binary files cannot be previewed</div>
       ) : (
         <>
           <pre className="fp-code mono">
@@ -494,7 +497,9 @@ const FilePreview = memo(function FilePreview({
               <code>{data.content}</code>
             )}
           </pre>
-          {data.truncated && <div className="notice">文件过大，仅显示前 256KB</div>}
+          {data.truncated && (
+            <div className="notice">File too large; showing the first 256KB only</div>
+          )}
         </>
       )}
     </div>

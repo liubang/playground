@@ -148,7 +148,7 @@ export interface TranscriptIO {
   answerQuestion: (questionId: string, answer: unknown) => Promise<unknown>
   sendFeedback?: (runId: string, value: 0 | 1) => Promise<unknown>
   getFeedback?: (runId: string) => string
-  // Per-turn file revert (the turn-summary block's 撤销本轮改动 action):
+  // Per-turn file revert (the turn-summary block's revert action):
   // restores the workspace files one run mutated; absent in read-only
   // surfaces (share page) where the button must not render.
   revertRun?: (runId: string) => Promise<RevertOutcome>
@@ -677,7 +677,7 @@ export class TranscriptController {
         if (p.error && !this.turnErrorShown) {
           this.append({
             kind: 'fatal',
-            text: `本轮失败 — ${String(p.error || '').slice(0, 300)}`,
+            text: `Turn failed — ${String(p.error || '').slice(0, 300)}`,
           })
           this.turnErrorShown = true
         }
@@ -753,7 +753,7 @@ export class TranscriptController {
         const waitS = Math.max(1, Math.round(((p.wait_ms as number) || 0) / 1000))
         this.append({
           kind: 'notice',
-          text: `模型请求 ${(p.code as string) || '失败'}，${waitS}s 后重试（第 ${(p.attempt as string) || '?'}/${(p.max_attempts as string) || '?'} 次）`,
+          text: `Model request ${(p.code as string) || 'failed'}; retrying in ${waitS}s (attempt ${(p.attempt as string) || '?'}/${(p.max_attempts as string) || '?'})`,
           warn: true,
         })
         this.showThinking()
@@ -809,7 +809,7 @@ export class TranscriptController {
         this.collapseApproval(
           (p.approval_id as string) || '',
           p.decision === 'allow',
-          (p.actor as string) || '其他客户端',
+          (p.actor as string) || 'another client',
         )
         this.showThinking()
         break
@@ -836,12 +836,12 @@ export class TranscriptController {
         break
       }
       case 'run.cancel_requested':
-        this.append({ kind: 'notice', text: '正在取消…' })
+        this.append({ kind: 'notice', text: 'Cancelling…' })
         break
       case 'run.cancelled':
         this.hideThinking()
-        this.append({ kind: 'notice', text: '本轮已取消', warn: true })
-        this.turnCancelled = true // the turn.finished summary marks 已取消
+        this.append({ kind: 'notice', text: 'Turn cancelled', warn: true })
+        this.turnCancelled = true // the turn.finished summary marks it cancelled
         this.finalizeStream()
         this.finalizeReasoning(evt.time || '')
         this.attachTurnActions()
@@ -852,18 +852,18 @@ export class TranscriptController {
       case 'budget.notice':
         // The backend already produced the concrete copy (graduated reminder /
         // soft landing); display it directly
-        this.append({ kind: 'notice', text: (p.text as string) || '预算提醒', warn: true })
+        this.append({ kind: 'notice', text: (p.text as string) || 'Budget warning', warn: true })
         break
       case 'runtime.warning':
         this.append({
           kind: 'notice',
-          text: (p.message as string) || '运行警告',
+          text: (p.message as string) || 'Run warning',
           warn: true,
         })
         break
       case 'runtime.fatal':
         this.hideThinking()
-        this.append({ kind: 'fatal', text: (p.message as string) || '严重错误' })
+        this.append({ kind: 'fatal', text: (p.message as string) || 'Fatal error' })
         this.turnErrorShown = true
         this.finalizeReasoning(evt.time || '')
         this.attachTurnActions()
@@ -871,13 +871,13 @@ export class TranscriptController {
       case 'subagent.started':
         this.append({
           kind: 'notice',
-          text: `子代理已启动：${(p.role as string) || (p.session_id as string) || ''}`,
+          text: `Subagent started: ${(p.role as string) || (p.session_id as string) || ''}`,
         })
         break
       case 'subagent.finished':
         this.append({
           kind: 'notice',
-          text: `子代理已完成：${(p.role as string) || (p.session_id as string) || ''}`,
+          text: `Subagent finished: ${(p.role as string) || (p.session_id as string) || ''}`,
         })
         break
       default:
@@ -888,14 +888,14 @@ export class TranscriptController {
   // --- pending steer notice lifecycle (queued → injected / turn.started handoff) ---
 
   private addSteerNotice(text: string) {
-    const id = this.append({ kind: 'notice', text: `已排队干预：“${text}”` })
+    const id = this.append({ kind: 'notice', text: `Steer queued: "${text}"` })
     this.steers.push({ id, text })
   }
 
   private addFollowupNotice(text: string) {
     const id = this.append({
       kind: 'notice',
-      text: `已排队到下轮：“${text}”，将作为下一轮运行`,
+      text: `Queued for the next turn: "${text}" — it will run next`,
     })
     this.followups.push({ id, text })
   }
@@ -1126,14 +1126,14 @@ export class TranscriptController {
     this.patchBlock(id, { resolving: true })
     try {
       await this.io.resolveApproval(block.payload, { decision, always, trust })
-      this.collapseApproval(approvalId, decision === 'allow', '你')
+      this.collapseApproval(approvalId, decision === 'allow', 'you')
     } catch (e) {
       const err = e as Error & { code?: string; status?: number }
       // binding_mismatch / not_idle both mean the approval was already handled
       // or expired (e.g. a duplicate request from the same origin was auto-
       // allowed by a remembered rule) — collapse silently
       if (err.code === 'binding_mismatch' || err.code === 'not_idle') {
-        this.collapseApproval(approvalId, true, '其他客户端')
+        this.collapseApproval(approvalId, true, 'another client')
       } else {
         this.patchBlock(id, { resolving: false })
         this.io.onError(err)
@@ -1163,7 +1163,7 @@ export class TranscriptController {
       kind: 'resolved',
       ok: allowed,
       actor,
-      what: '审批',
+      what: 'approval',
     } as BlockModel
     this.setBlocks(next)
     this.requestFollow(false)
@@ -1209,7 +1209,7 @@ export class TranscriptController {
       id: next[i].id,
       v: next[i].v + 1,
       kind: 'notice',
-      text: skipped ? '问题已跳过' : '问题已回答',
+      text: skipped ? 'Question skipped' : 'Question answered',
     } as BlockModel
     this.setBlocks(next)
     this.requestFollow(false)
@@ -1299,19 +1299,19 @@ export class TranscriptController {
       const conflicts = outcome.conflicts || []
       const skipped = outcome.skipped || []
       const parts: string[] = []
-      if (restored) parts.push(`恢复 ${restored} 个文件`)
-      if (deleted) parts.push(`移除新建 ${deleted} 个文件`)
+      if (restored) parts.push(`restored ${restored} ${restored === 1 ? 'file' : 'files'}`)
+      if (deleted) parts.push(`removed ${deleted} new ${deleted === 1 ? 'file' : 'files'}`)
       if (conflicts.length)
         parts.push(
-          `${conflicts.length} 个文件在轮次后有外部改动（已覆盖）：${conflicts.slice(0, 3).join('、')}${conflicts.length > 3 ? ' 等' : ''}`,
+          `${conflicts.length} ${conflicts.length === 1 ? 'file' : 'files'} had external edits after the turn (overwritten): ${conflicts.slice(0, 3).join(', ')}${conflicts.length > 3 ? ', …' : ''}`,
         )
       if (skipped.length)
         parts.push(
-          `${skipped.length} 个文件无法回滚（原始内容未记录）：${skipped.slice(0, 3).join('、')}${skipped.length > 3 ? ' 等' : ''}`,
+          `${skipped.length} ${skipped.length === 1 ? 'file' : 'files'} could not be reverted (original content not recorded): ${skipped.slice(0, 3).join(', ')}${skipped.length > 3 ? ', …' : ''}`,
         )
       this.patchBlock(blockId, {
         reverting: false,
-        revertNote: parts.length ? parts.join('；') : '没有可回滚的改动',
+        revertNote: parts.length ? parts.join('; ') : 'Nothing to revert',
         revertWarn: conflicts.length > 0 || skipped.length > 0,
       })
       // The review projection compares against the CURRENT workspace
@@ -1437,8 +1437,8 @@ export function histCompletion(r: ToolResult): ToolCompletion {
 // before and after switching sessions.
 export function failureText(err: FailurePayload): string {
   const detail = (err.message || '').slice(0, 300)
-  if (!err.code && !err.stage) return `本轮失败 — ${detail}`
-  const head = `模型请求失败（${err.stage || 'unknown'}）：${err.code || ''}`
+  if (!err.code && !err.stage) return `Turn failed — ${detail}`
+  const head = `Model request failed (${err.stage || 'unknown'}): ${err.code || ''}`
   return detail ? `${head} — ${detail}` : head
 }
 

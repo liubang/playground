@@ -70,14 +70,14 @@ function onZoomKeydown(e: KeyboardEvent<HTMLImageElement>) {
 // load-event critical path (decode happens on the raster thread when idle).
 const zoomableProps = {
   tabIndex: 0,
-  title: '点击放大',
+  title: 'Click to enlarge',
   decoding: 'async' as const,
 }
 
 // InlineImage renders an inline image element (base64 data URI).
 export function InlineImage({ mediaType, data }: { mediaType?: string; data: string }) {
   const [failed, setFailed] = useState(false)
-  if (failed) return <div className="notice is-warn">图片加载失败</div>
+  if (failed) return <div className="notice is-warn">Image failed to load</div>
   return (
     <img
       className="inline-image"
@@ -112,7 +112,7 @@ export function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
       alive = false
     }
   }, [artifact.id, artifact.size, fetchArtifactURL])
-  if (failed) return <div className="notice is-warn">图片加载失败</div>
+  if (failed) return <div className="notice is-warn">Image failed to load</div>
   return (
     <img
       className="inline-image"
@@ -158,7 +158,7 @@ export function ArtifactBlock({ artifact }: { artifact: ArtifactRef }) {
   if (failed)
     return (
       <div className="block block-artifact">
-        <div className="notice is-warn">artifact 加载失败</div>
+        <div className="notice is-warn">Artifact failed to load</div>
       </div>
     )
   if (!resolved) return <div className="block block-artifact" />
@@ -209,22 +209,22 @@ function ArtifactFile({
         if (!d.open || text !== null || !isText) return
         blob.text().then(
           (t) => setText(t),
-          () => setText('(读取失败)'),
+          () => setText('(read failed)'),
         )
       }}
     >
       <summary>
         <span className="artifact-file-label">
-          {`${isText ? '输出附件' : '附件'} · ${mediaType || '二进制'} · ${fmtBytes(size)}`}
+          {`${isText ? 'output attachment' : 'attachment'} · ${mediaType || 'binary'} · ${fmtBytes(size)}`}
         </span>
         <a
           className="artifact-download"
           href={url}
           download
-          title="下载完整内容"
+          title="Download full content"
           onClick={(e) => e.stopPropagation()}
         >
-          下载
+          Download
         </a>
       </summary>
       {isText && <div className="tool-preview mono">{text ?? ''}</div>}
