@@ -311,9 +311,13 @@ func (a *StreamAggregator) Finalize() (domain.Message, domain.StopReason, int64,
 		appendPart(domain.ContentPart{Kind: domain.PartToolCall, ToolCall: &call})
 	}
 	// A response of pure reasoning with neither visible text nor tool calls
-	// is still an empty answer — reasoning alone cannot advance the run.
+	// cannot advance the run. It is a transient provider failure — the model
+	// surfaced only its thinking this time — so mark it retryable: the loop
+	// re-issues the request with backoff instead of stranding the session on
+	// a reply with no deliverable content.
 	if a.text == "" && len(indexes) == 0 {
-		return domain.Message{}, "", 0, 0, fmt.Errorf("empty model response")
+		return domain.Message{}, "", 0, 0,
+			domain.NewError(domain.ErrUnavailable, "empty model response", domain.WithRetryable(true))
 	}
 	return domain.Message{
 		ID:        domain.NewMessageID(),

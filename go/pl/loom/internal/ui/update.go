@@ -1752,6 +1752,22 @@ func (m Model) handleSessionSwitched(msg sessionSwitchedMsg) (tea.Model, tea.Cmd
 	m.pendingFollowups = nil
 	m.subOverlay = nil
 	m.mode = ModeChat
+	// A session switch is a full view reset. Stale per-session state must
+	// not leak into the fresh session: a leftover busy phase keeps the
+	// spinner ticking and the activity timer redrawing every frame (screen
+	// flicker), and a stale scroll/follow position strands the new
+	// transcript above its tail ("can't scroll to bottom"). Resetting here —
+	// synchronously, before the snapshot or any stale event lands — keeps
+	// the first frame of the new session calm and pinned to the tail.
+	m.phase = "idle"
+	m.activityLabel = ""
+	m.lastActivityAt = time.Time{}
+	m.spinning = false
+	m.plan = domain.Plan{}
+	m.planHidden = false
+	m.compactions = 0
+	m.contextOccupancy = 0
+	m.resumeFollowTail()
 	// The fresh subscription belongs to a fresh session: a dead-stream
 	// lockout or a spent resubscribe budget from the previous session must
 	// not carry over, or prompt submission would stay blocked even though

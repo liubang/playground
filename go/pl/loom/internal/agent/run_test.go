@@ -1628,6 +1628,125 @@ func TestLoopExecuteRetriesSilentStreamTruncation(t *testing.T) {
 	}
 }
 
+// emptyResponseEvents is a cleanly-completing reasoning-only stream: no
+// text and no tool call, which Finalize rejects as a retryable "empty
+// model response".
+func emptyResponseEvents() []domain.ModelEvent {
+	return []domain.ModelEvent{
+		{Kind: domain.ModelEventReasoningStart},
+		{Kind: domain.ModelEventReasoningDelta, ReasoningDelta: "thinking only"},
+		{Kind: domain.ModelEventReasoningEnd},
+		{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopEndTurn},
+	}
+}
+
+// TestLoopExecuteRetriesEmptyModelResponse locks the finalize-stage
+// recovery path: a reasoning-only reply is a transient provider failure —
+// the model surfaced only its thinking this time — so the loop re-issues
+// the request with backoff instead of stranding the session on a reply
+// that cannot advance the run.
+func TestLoopExecuteRetriesEmptyModelResponse(t *testing.T) {
+	store := fakes.NewFakeStore()
+	run := newTestRun(domain.DefaultLimits())
+	mustCreateSession(t, store, run.SessionID)
+
+	model := &streamStepModel{steps: []streamStep{
+		{events: emptyResponseEvents()},
+		{events: []domain.ModelEvent{
+			{Kind: domain.ModelEventTextDelta, TextDelta: "real answer"},
+			{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopEndTurn},
+		}},
+	}}
+	loop := &Loop{
+		Run: run, Model: model, Store: store, Registry: NewToolRegistry(), Logger: slog.Default(),
+		StartRetry: fastStartRetry,
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute() error = %v, want the empty response retried to success", err)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
+	}
+	if model.calls != 2 {
+		t.Fatalf("model calls = %d, want 2 (empty response + retry)", model.calls)
+	}
+	events, err := store.LoadEvents(context.Background(), run.SessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	idx := eventIndex(events, domain.EventModelRequestRetrying)
+	if idx < 0 {
+		t.Fatalf("model.request_retrying not persisted: %v", collectEventTypes(events))
+	}
+	var payload struct {
+		Stage string `json:"stage"`
+		Code  string `json:"code"`
+	}
+	if err := json.Unmarshal(events[idx].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal retrying payload: %v", err)
+	}
+	if payload.Stage != "finalize" {
+		t.Fatalf("retrying stage = %q, want finalize", payload.Stage)
+	}
+	if payload.Code != string(domain.ErrUnavailable) {
+		t.Fatalf("retrying code = %q, want %s", payload.Code, domain.ErrUnavailable)
+	}
+	if eventIndex(events, domain.EventModelRequestFailed) >= 0 {
+		t.Fatalf("a recovered retry must not emit model.request_failed: %v", collectEventTypes(events))
+	}
+}
+
+// TestLoopExecuteEmptyModelResponseGivesUp locks the retry bound: a
+// persistently reasoning-only model exhausts MaxAttempts and fails with a
+// terminal model.request_failed carrying stage=finalize — it never hangs
+// the turn forever.
+func TestLoopExecuteEmptyModelResponseGivesUp(t *testing.T) {
+	store := fakes.NewFakeStore()
+	run := newTestRun(domain.DefaultLimits())
+	mustCreateSession(t, store, run.SessionID)
+
+	model := &streamStepModel{steps: []streamStep{
+		{events: emptyResponseEvents()},
+		{events: emptyResponseEvents()},
+		{events: emptyResponseEvents()},
+	}}
+	loop := &Loop{
+		Run: run, Model: model, Store: store, Registry: NewToolRegistry(), Logger: slog.Default(),
+		StartRetry: StartRetryPolicy{MaxAttempts: 3, InitialWait: time.Millisecond, MaxWait: 2 * time.Millisecond},
+	}
+	if err := loop.Execute(context.Background()); err == nil {
+		t.Fatal("expected error from a persistently empty-response model")
+	}
+	if run.State.Outcome != domain.OutcomeFailed {
+		t.Fatalf("outcome = %s, want failed", run.State.Outcome)
+	}
+	if model.calls != 3 {
+		t.Fatalf("model calls = %d, want 3 (MaxAttempts bound)", model.calls)
+	}
+	events, err := store.LoadEvents(context.Background(), run.SessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	if got := countEvents(events, domain.EventModelRequestRetrying); got != 2 {
+		t.Fatalf("model.request_retrying count = %d, want 2: %v", got, collectEventTypes(events))
+	}
+	if countEvents(events, domain.EventModelRequestFailed) != 1 {
+		t.Fatalf("model.request_failed count = %d, want 1 (terminal): %v",
+			countEvents(events, domain.EventModelRequestFailed), collectEventTypes(events))
+	}
+	idx := eventIndex(events, domain.EventModelRequestFailed)
+	var payload struct {
+		Stage string `json:"stage"`
+		Code  string `json:"code"`
+	}
+	if err := json.Unmarshal(events[idx].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal failed payload: %v", err)
+	}
+	if payload.Stage != "finalize" || payload.Code != string(domain.ErrUnavailable) {
+		t.Fatalf("failed payload = %+v, want stage=finalize code=%s", payload, domain.ErrUnavailable)
+	}
+}
+
 // TestLoopExecuteDoesNotRetryStreamWithPartialContent locks the safety
 // boundary: once ANY content streamed (text here; reasoning/tool
 // fragments count the same), a failure — even a retryable-classified

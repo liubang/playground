@@ -1534,13 +1534,22 @@ func (l *Loop) callModel(ctx context.Context) error {
 	// left off; consuming the streak here scopes it to exactly this call.
 	attemptBase := l.Run.StartRetryStreak
 	l.Run.StartRetryStreak = 0
-	// The attempt loop spans stream establishment AND consumption
-	// (deepseek-harness retries both stages): a consumption failure that
-	// delivered nothing — no text, reasoning, or tool-call fragment — is
-	// as safely retryable as a start failure, because nothing reached the
-	// UI or the transcript. A failure WITH activity breaks out unretried:
-	// the partial draft is preserved as an interrupted message below.
+	// The attempt loop spans stream establishment, consumption AND
+	// finalization (deepseek-harness retries all three): a failure that
+	// delivered nothing able to advance the run — no text or tool call — is
+	// as safely retryable as a start failure, because nothing actionable
+	// reached the transcript. A failure WITH delivered content breaks out
+	// unretried: the partial draft is preserved as an interrupted message
+	// below. A reasoning-only reply finalizes to "empty model response": it
+	// delivered only thinking, which cannot advance the run, so it is
+	// retried as well.
 	stage := "start"
+	var (
+		response     domain.Message
+		stop         domain.StopReason
+		inputTokens  int64
+		outputTokens int64
+	)
 	for attempt := 1; ; attempt++ {
 		stage = "start"
 		stream, err = l.Model.Stream(ctx, req)
@@ -1550,17 +1559,30 @@ func (l *Loop) callModel(ctx context.Context) error {
 			err = consumeStream(stream, agg)
 			_ = stream.Close()
 			if err == nil {
-				break
-			}
-			if agg.HasActivity() {
-				break
-			}
-			if errors.Is(err, io.EOF) {
-				// The pump ended without any terminal or error event: a
-				// silent truncation, retryable like the providers' typed
-				// stream errors.
-				err = domain.NewError(domain.ErrUnavailable, "model stream closed before completion",
-					domain.WithRetryable(true), domain.WithCause(err))
+				response, stop, inputTokens, outputTokens, err = agg.Finalize()
+				if err == nil {
+					break
+				}
+				stage = "finalize"
+				// A deterministic finalize failure (a malformed tool call)
+				// is not transient: break so the unretryable path below
+				// preserves any partial draft and fails. A retryable one
+				// ("empty model response") falls through to the shared
+				// backoff below and is re-issued.
+				if !domain.IsRetryable(err) {
+					break
+				}
+			} else {
+				if agg.HasActivity() {
+					break
+				}
+				if errors.Is(err, io.EOF) {
+					// The pump ended without any terminal or error event: a
+					// silent truncation, retryable like the providers' typed
+					// stream errors.
+					err = domain.NewError(domain.ErrUnavailable, "model stream closed before completion",
+						domain.WithRetryable(true), domain.WithCause(err))
+				}
 			}
 		}
 		l.recordGeneration(ctx, trace.GenerationRecord{
@@ -1611,9 +1633,10 @@ func (l *Loop) callModel(ctx context.Context) error {
 	}
 
 	if err != nil {
-		// Mid-stream failure WITH delivered content: unretryable inline
-		// (the deltas already streamed to the UI). Preserve the partial
-		// draft as an interrupted message, then fail as before.
+		// A failure that broke out of the attempt loop without retrying:
+		// either a mid-stream failure that already delivered content, or a
+		// deterministic finalize failure. Preserve the partial draft as an
+		// interrupted message, then fail.
 		if agg.HasPartialContent() {
 			l.Run.AddAssistantMessage(agg.InterruptedMessage())
 		}
@@ -1628,35 +1651,13 @@ func (l *Loop) callModel(ctx context.Context) error {
 			return fmt.Errorf("model stream consumption: %w", err)
 		}
 		l.Run.appendEvent(domain.EventModelRequestFailed, modelRequestFailedPayload{
-			RequestID: req.ID, Stage: "stream", Code: errorCodeForAudit(err), Message: err.Error(),
+			RequestID: req.ID, Stage: stage, Code: errorCodeForAudit(err), Message: err.Error(),
 		})
 		if isContextOverflowError(err) {
 			return l.handleContextOverflow(ctx, err)
 		}
 		l.terminate(ctx, domain.OutcomeFailed)
 		return fmt.Errorf("model stream consumption: %w", err)
-	}
-	response, stop, inputTokens, outputTokens, err := agg.Finalize()
-	if err != nil {
-		if agg.HasPartialContent() {
-			l.Run.AddAssistantMessage(agg.InterruptedMessage())
-		}
-		l.recordGeneration(ctx, trace.GenerationRecord{
-			RequestID: req.ID.String(), Turn: l.Run.Usage.Turns, Model: modelName,
-			Input: messages, StartTime: startedAt, EndTime: l.Run.Clock.Now(), Err: err,
-		})
-		if errors.Is(err, context.Canceled) {
-			l.terminate(ctx, domain.OutcomeCancelled)
-			return fmt.Errorf("model stream finalization: %w", err)
-		}
-		l.Run.appendEvent(domain.EventModelRequestFailed, modelRequestFailedPayload{
-			RequestID: req.ID, Stage: "finalize", Code: errorCodeForAudit(err), Message: err.Error(),
-		})
-		if isContextOverflowError(err) {
-			return l.handleContextOverflow(ctx, err)
-		}
-		l.terminate(ctx, domain.OutcomeFailed)
-		return fmt.Errorf("model stream finalization: %w", err)
 	}
 	if rewritten := agg.RewrittenIDs(); len(rewritten) > 0 && l.Logger != nil {
 		l.Logger.Warn("rewrote colliding provider tool call ids", "count", len(rewritten))
