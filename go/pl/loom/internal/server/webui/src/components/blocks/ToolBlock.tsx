@@ -10,7 +10,8 @@ import { Icon, type IconName } from '../../lib/icons'
 import { DiffView } from './DiffView'
 import { ArtifactBlock, InlineImage } from './images'
 
-// st → [icon, label]; className uses English short codes (err/error/canceled), labels are uniformly Chinese
+// st → [icon, label]; className uses English short codes (err/canceled).
+// The ok label is only used as the icon's tooltip; err/canceled render it inline.
 const TOOL_STATUS: Record<string, ['check' | 'xmark' | 'ban', string]> = {
   ok: ['check', 'Succeeded'],
   err: ['xmark', 'Failed'],
@@ -90,16 +91,21 @@ export const ToolBlock = memo(function ToolBlock({
     const st =
       completion.status === 'success' ? 'ok' : completion.status === 'error' ? 'err' : 'canceled'
     const meta = TOOL_STATUS[st]
-    statusEl = (
-      <span className={'tool-status ' + st}>
-        {meta ? (
-          <>
-            <Icon name={meta[0]} /> {meta[1]}
-          </>
-        ) : (
-          completion.status || 'done'
-        )}
-      </span>
+    // Success is the common case: icon only, with the label kept as tooltip for
+    // a11y — the repeated "Succeeded" text is noise in a long transcript. Failure
+    // and cancellation keep icon + label so anomalies stand out while scanning.
+    statusEl = meta ? (
+      st === 'ok' ? (
+        <span className={'tool-status ' + st} title={meta[1]}>
+          <Icon name={meta[0]} />
+        </span>
+      ) : (
+        <span className={'tool-status ' + st}>
+          <Icon name={meta[0]} /> {meta[1]}
+        </span>
+      )
+    ) : (
+      <span className={'tool-status ' + st}>{completion.status || 'done'}</span>
     )
   }
 
