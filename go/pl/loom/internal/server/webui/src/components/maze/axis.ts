@@ -3,8 +3,14 @@
 // thinking between turns) collapse into a thin seam labeled ⏸; ticks inside
 // activity segments still show true wall-clock seconds.
 
-/** Gaps longer than this many seconds get folded. */
-export const GAP_SECS = 60
+/** Gaps longer than this many seconds get folded. 60s used to be the
+ * threshold, but sub-minute idle stretches (user thinking between turns,
+ * 20–50s) then rendered as raw empty canvas — in idle-dominated sessions
+ * they consumed most of the width and left tick clusters separated by
+ * voids that read like a broken axis. In-turn tool runtime is part of the
+ * activity ranges (never counted as idle), so 20s of true inactivity is a
+ * safe fold point. */
+export const GAP_SECS = 20
 /** Width a folded seam occupies in display-domain seconds. */
 export const FOLD_TO_SECS = 3
 
@@ -93,6 +99,10 @@ export function buildFoldedAxis(ranges: [number, number][], tmax: number): Folde
 
 const TICK_STEPS = [1, 2, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 14400, 43200]
 
+/** Minimum horizontal pixels between tick marks: labels like "1m34s" are
+ * ~30px at 10px font; tighter spacing makes adjacent labels overlap. */
+export const MIN_TICK_PX = 56
+
 export interface AxisTick {
   /** Display-domain coordinate. */
   d: number
@@ -125,23 +135,28 @@ export function formatDur(t: number): string {
 
 /**
  * Visible ticks for a display-domain window: placed inside activity
- * segments only, labels carry real wall-clock seconds.
+ * segments only, labels carry real wall-clock seconds. pxWidth is the
+ * drawable canvas width; when given, the step also has to leave at least
+ * MIN_TICK_PX between marks — the count-based bound alone picks steps so
+ * fine that labels overlap on compressed (heavily folded) axes.
  */
 export function axisTicks(
   axis: FoldedAxis,
   dStart: number,
   dEnd: number,
   maxTicks = 50,
+  pxWidth = 0,
 ): AxisTick[] {
   const span = dEnd - dStart
   if (span <= 0) return []
-  // Pick the coarsest tick step (real seconds) that stays within maxTicks.
+  // Pick the coarsest tick step (real seconds) that stays within maxTicks
+  // AND leaves enough room per label.
   let step = TICK_STEPS[TICK_STEPS.length - 1]
   for (const s of TICK_STEPS) {
-    if (span / s <= maxTicks) {
-      step = s
-      break
-    }
+    if (span / s > maxTicks) continue
+    if (pxWidth > 0 && (s / span) * pxWidth < MIN_TICK_PX) continue
+    step = s
+    break
   }
   const ticks: AxisTick[] = []
   for (const [segS, segE] of axis.segments) {

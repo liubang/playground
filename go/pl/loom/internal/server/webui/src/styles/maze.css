@@ -148,7 +148,6 @@ brush/pinch pointer handlers. */
   fill: var(--primary);
 }
 .maze-node.v-answer rect,
-.maze-node.v-answer .maze-answer-dot,
 .maze-parbar.v-answer {
   fill: var(--info);
 }

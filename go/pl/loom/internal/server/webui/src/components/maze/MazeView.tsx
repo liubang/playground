@@ -5,13 +5,13 @@
 //
 // Visual language (isomorphic to dsh-trace-compare, styled via styles/maze.css
 // + tokens.css):
-//   - solid main path: steps that advanced the task (duration capsules
-//     filled by verdict color) and answer nodes;
+//   - solid main path: steps that advanced the task — duration capsules
+//     filled by verdict color (answers are capsules too, tinted green);
 //   - dashed detour arcs: error (red ✗) / dead-end (grey ·) / blind-retry
 //     (amber ↻) steps, hanging off the nearest main step;
 //   - sub-agent branches: aggregated nodes (purple) whose sub-bars are the
 //     child's judged tool calls;
-//   - idle folding: >60s of no activity collapses into a ⏸ seam while
+//   - idle folding: >20s of no activity collapses into a ⏸ seam while
 //     ticks keep real wall-clock seconds;
 //   - drag selects a range to zoom into (Grafana-style brush), Shift-drag
 //     or a trackpad horizontal swipe pans, wheel zooms around the cursor,
@@ -522,7 +522,10 @@ export const MazeView = memo(function MazeView({
     return formatDur(hi - lo)
   }, [brush, dStart, dEnd, getRect])
 
-  const ticks = useMemo(() => axisTicks(axis, dStart, dEnd), [axis, dStart, dEnd])
+  const ticks = useMemo(
+    () => axisTicks(axis, dStart, dEnd, 50, canvasW - PAD_X * 2),
+    [axis, dStart, dEnd, canvasW],
+  )
 
   // Turn-alignment lines (two lanes): turns present on both sides link
   // their closing main nodes.
@@ -688,19 +691,29 @@ export const MazeView = memo(function MazeView({
               ),
             )}
             {/* ticks */}
-            {ticks.map((tk, i) => (
-              <g key={'tk' + i} className="maze-tick">
-                <line
-                  x1={toX(tk.d, svgW)}
-                  y1={layout.totalH - AXIS_H}
-                  x2={toX(tk.d, svgW)}
-                  y2={layout.totalH - AXIS_H + 6}
-                />
-                <text x={toX(tk.d, svgW)} y={layout.totalH - 8} textAnchor="middle">
-                  {tk.label}
-                </text>
-              </g>
-            ))}
+            {ticks.map((tk, i) => {
+              const tx = toX(tk.d, svgW)
+              // Labels are centered on their tick: clamp the text (not the
+              // tick line) into the canvas so the first/last label isn't
+              // clipped by the SVG edge.
+              const hw = estTextWidth(tk.label) / 2
+              const lo = PAD_X + hw
+              const hi = svgW - PAD_X - hw
+              const cx = lo <= hi ? Math.min(Math.max(tx, lo), hi) : svgW / 2
+              return (
+                <g key={'tk' + i} className="maze-tick">
+                  <line
+                    x1={tx}
+                    y1={layout.totalH - AXIS_H}
+                    x2={tx}
+                    y2={layout.totalH - AXIS_H + 6}
+                  />
+                  <text x={cx} y={layout.totalH - 8} textAnchor="middle">
+                    {tk.label}
+                  </text>
+                </g>
+              )
+            })}
             {/* lanes */}
             {layout.lanes.map(({ lane, rows, parH, h, byStep }, li) => {
               const top = laneY
@@ -895,7 +908,10 @@ const MainNode = memo(function MainNode({
   const meta = VERDICT_META[n.v] ?? VERDICT_META.ok
   const { x, w } = barProps(n, axis, toX, svgW)
   if (x > svgW || x + w < 0) return null
-  const isAnswer = n.v === 'answer'
+  // Answer steps are duration capsules like any other main-path step —
+  // they used to render as a fixed-size dot, which dropped the step's
+  // wall-clock length entirely (a pure-chat session became a row of
+  // identical dots). The verdict color (green) still sets them apart.
   // Fit the longest label first, fall back to the step id, then nothing —
   // estimated at ~6px/char (ASCII) plus 8px capsule padding.
   const full = `S${n.step}·${n.turn} ${formatDur(n.e - n.s)}`
@@ -926,11 +942,7 @@ const MainNode = memo(function MainNode({
       onMouseLeave={() => onHover(null)}
       onClick={() => onSelect({ laneKey, node: n })}
     >
-      {isAnswer ? (
-        <circle cx={x + w / 2} cy={y} r={6} className="maze-answer-dot" />
-      ) : (
-        <rect x={x} y={y - 9} width={w} height={18} rx={9} />
-      )}
+      <rect x={x} y={y - 9} width={w} height={18} rx={9} />
       {label && (
         <text x={x + w / 2} y={y + 3.5} textAnchor="middle" className="maze-node-label">
           {label}
