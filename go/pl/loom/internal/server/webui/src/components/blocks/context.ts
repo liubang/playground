@@ -14,6 +14,9 @@ export interface BlocksIO {
   // Bearer auth, so we fetch and then create a blob URL (content-addressed + immutable,
   // cached by id+size).
   fetchArtifactURL: (id: string, size: number) => Promise<ArtifactEntry>
+  // revealFile opens a workspace path in the right panel's Files tab. Absent on
+  // the read-only share page (no file tree there).
+  revealFile?: (path: string) => void
 }
 
 const noopIO: BlocksIO = {

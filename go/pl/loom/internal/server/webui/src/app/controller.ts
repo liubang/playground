@@ -30,6 +30,12 @@ const THEME_KEY = 'loom_theme'
 const SIDEBAR_KEY = 'loom_sidebar_collapsed'
 const RIGHT_PANEL_KEY = 'loom_right_panel'
 const RIGHT_PANEL_TAB_KEY = 'loom_right_panel_tab'
+const RIGHT_PANEL_W_KEY = 'loom_right_panel_width'
+// Panel width bounds (px): below MIN the tree collapses unreadably; above MAX
+// the chat column starves. DEFAULT matches the CSS fallback in tokens/base.
+export const RIGHT_PANEL_DEFAULT_W = 360
+export const RIGHT_PANEL_MIN_W = 260
+export const RIGHT_PANEL_MAX_W = 760
 // Local feedback vote state: key carries session+run, value is "up"/"down".
 // For UI restore only; Langfuse is the source of truth (score id is idempotent,
 // re-voting overwrites instead of duplicating).
@@ -108,6 +114,11 @@ export interface AppState {
   rightPanelOpen: boolean
   rightPanelTab: 'changes' | 'files'
   gitStamp: number
+  // Panel geometry (persisted; null = follow the CSS default so the mid-range
+  // breakpoint still applies) and the cross-view "reveal this file" request:
+  // transcript path clicks bump seq, the Files tab consumes it.
+  rightPanelWidth: number | null
+  panelRequest: { path: string; seq: number } | null
   // Baseline approval mode (quick switch in composer; initial value from
   // config approval.mode)
   approvalMode: string
@@ -160,6 +171,8 @@ function initialState(): AppState {
     rightPanelOpen: false,
     rightPanelTab: 'changes',
     gitStamp: 0,
+    rightPanelWidth: null,
+    panelRequest: null,
     approvalMode: 'on-request',
   }
 }
@@ -380,7 +393,17 @@ export class AppController {
       localStorage.getItem(RIGHT_PANEL_KEY) === '1' &&
       !window.matchMedia('(max-width: 767px)').matches
     const tab = localStorage.getItem(RIGHT_PANEL_TAB_KEY) === 'files' ? 'files' : 'changes'
-    this.store.set({ rightPanelOpen: open, rightPanelTab: tab })
+    this.store.set({
+      rightPanelOpen: open,
+      rightPanelTab: tab,
+      rightPanelWidth: this.loadPanelWidth(),
+    })
+  }
+
+  private loadPanelWidth(): number | null {
+    const raw = parseInt(localStorage.getItem(RIGHT_PANEL_W_KEY) || '', 10)
+    if (!Number.isFinite(raw)) return null
+    return Math.min(RIGHT_PANEL_MAX_W, Math.max(RIGHT_PANEL_MIN_W, raw))
   }
 
   toggleRightPanel() {
@@ -389,15 +412,61 @@ export class AppController {
     localStorage.setItem(RIGHT_PANEL_KEY, now ? '1' : '0')
   }
 
+  setRightPanelWidth(px: number) {
+    const w = Math.min(RIGHT_PANEL_MAX_W, Math.max(RIGHT_PANEL_MIN_W, Math.round(px)))
+    if (w === this.store.get().rightPanelWidth) return
+    this.store.set({ rightPanelWidth: w })
+    localStorage.setItem(RIGHT_PANEL_W_KEY, String(w))
+  }
+
+  // resetRightPanelWidth drops the explicit width, handing control back to CSS
+  // (and the responsive breakpoints).
+  resetRightPanelWidth() {
+    localStorage.removeItem(RIGHT_PANEL_W_KEY)
+    this.store.set({ rightPanelWidth: null })
+  }
+
   setRightPanelTab(tab: 'changes' | 'files') {
     this.store.set({ rightPanelTab: tab })
     localStorage.setItem(RIGHT_PANEL_TAB_KEY, tab)
   }
 
+  // revealFileInPanel is the transcript → file-tree bridge: a path rendered in a
+  // tool block (or elsewhere) opens the Files tab focused on that file. The path
+  // may be absolute (strip the workspace root) or already workspace-relative.
+  //
+  // An arrow property (not a method) on purpose: App hands this function
+  // straight to BlocksIO for tool-block clicks, so it travels unbound — as a
+  // prototype method `this` would be undefined there.
+  revealFileInPanel = (path: string) => {
+    const rel = this.relativizeToWorkspace(path)
+    if (!rel) return
+    if (this.store.get().rightPanelTab !== 'files') this.setRightPanelTab('files')
+    if (!this.store.get().rightPanelOpen) this.toggleRightPanel()
+    const seq = (this.store.get().panelRequest?.seq || 0) + 1
+    this.store.set({ panelRequest: { path: rel, seq } })
+  }
+
+  // relativizeToWorkspace maps an agent-reported path onto a workspace-relative
+  // one; returns '' when the path is absolute but outside the workspace (then
+  // there is nothing to reveal).
+  private relativizeToWorkspace(p: string): string {
+    let s = (p || '').trim().replace(/^\.\//, '')
+    if (!s) return ''
+    const ws = this.store.get().workspaces.find((w) => w.id === this.currentWorkspaceId())
+    const root = (ws?.root_path || '').replace(/\/+$/, '')
+    if (root && (s === root || s.startsWith(root + '/'))) {
+      s = s.slice(root.length)
+    } else if (s.startsWith('/')) {
+      return ''
+    }
+    return s.replace(/^\/+/, '')
+  }
+
   // Changes-list invalidation signal: git is the source of truth; transcript
   // events only trigger refetches. Trailing-edge debounce — a long agent turn
   // completes dozens of tools, and each completion would otherwise spawn a git
-  // status round (three git subprocesses server-side) plus tree refetches.
+  // status round (several git subprocesses server-side) plus tree refetches.
   private gitStampTimer: ReturnType<typeof setTimeout> | null = null
 
   private bumpGitStamp() {

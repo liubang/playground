@@ -401,6 +401,19 @@
   white-space: pre-wrap;
   word-break: break-all;
 }
+/* Revealable file path: a real button reset to look like inline text. */
+.block-tool button.tool-target.is-path {
+  background: none;
+  border: none;
+  font: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+.block-tool button.tool-target.is-path:hover {
+  color: var(--primary);
+  text-decoration: underline;
+}
 .block-tool .tool-dur {
   margin-left: auto;
   color: var(--muted);

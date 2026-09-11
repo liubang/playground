@@ -19,6 +19,8 @@ package server
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"io"
 	"io/fs"
@@ -29,6 +31,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -171,11 +174,43 @@ func (s *Server) handleListWorkspaceFiles(w http.ResponseWriter, r *http.Request
 		}
 		return entries[i].Name < entries[j].Name
 	})
+	// Weak ETag over the listing signature (name/kind/size/mtime): unchanged
+	// directories answer 304, so the panel keeps its cached tree instead of
+	// re-downloading and re-rendering every expanded directory on each refresh.
+	etag := listingETag(entries, truncated)
+	if match := r.Header.Get("If-None-Match"); match != "" && strings.Contains(match, etag) {
+		w.Header().Set("ETag", etag)
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "no-cache")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"path":      rel,
 		"entries":   entries,
 		"truncated": truncated,
 	})
+}
+
+// listingETag fingerprints one directory listing. It is deliberately weak
+// (W/"…"): the value identifies the answer's content, not byte identity, which
+// is exactly what the conditional-request path needs.
+func listingETag(entries []wsFileEntry, truncated bool) string {
+	h := sha1.New()
+	if truncated {
+		_, _ = h.Write([]byte("truncated\n"))
+	}
+	for _, e := range entries {
+		_, _ = io.WriteString(h, e.Name)
+		_, _ = h.Write([]byte{'\x00'})
+		_, _ = io.WriteString(h, e.Kind)
+		_, _ = h.Write([]byte{'\x00'})
+		_, _ = io.WriteString(h, strconv.FormatInt(e.Size, 10))
+		_, _ = h.Write([]byte{'\x00'})
+		_, _ = io.WriteString(h, e.ModTime)
+		_, _ = h.Write([]byte{'\n'})
+	}
+	return `W/"` + hex.EncodeToString(h.Sum(nil)[:10]) + `"`
 }
 
 // --- file preview ---
@@ -305,15 +340,18 @@ func (e *gitError) Unwrap() error { return e.err }
 // paths — the prefix is the translation, and changes outside the workspace
 // subtree are filtered out.
 func gitRepoContext(ctx context.Context, root string) (toplevel, prefix string, err error) {
-	out, err := runGit(ctx, root, "rev-parse", "--is-inside-work-tree")
-	if err != nil || strings.TrimSpace(out) != "true" {
+	// One process for both facts (was two): rev-parse prints requested values in
+	// argument order, so "true" then the toplevel path. Outside a work tree the
+	// --show-toplevel lookup fails, which is precisely the not-a-repo signal.
+	out, err := runGit(ctx, root, "rev-parse", "--is-inside-work-tree", "--show-toplevel")
+	if err != nil {
 		return "", "", errNotGitRepo
 	}
-	out, err = runGit(ctx, root, "rev-parse", "--show-toplevel")
-	if err != nil {
-		return "", "", err
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) < 2 || strings.TrimSpace(lines[0]) != "true" {
+		return "", "", errNotGitRepo
 	}
-	toplevel, err = filepath.EvalSymlinks(strings.TrimSpace(out))
+	toplevel, err = filepath.EvalSymlinks(strings.TrimSpace(lines[1]))
 	if err != nil {
 		return "", "", err
 	}
@@ -326,6 +364,31 @@ func gitRepoContext(ctx context.Context, root string) (toplevel, prefix string, 
 		return toplevel, "", nil
 	}
 	return toplevel, filepath.ToSlash(rel) + "/", nil
+}
+
+// repoContextCache memoizes gitRepoContext for a short TTL: locating the
+// enclosing work tree costs a whole git subprocess per call, and the answer
+// almost never changes mid-session. The not-a-repo verdict is cached as well,
+// with a deliberately short TTL so a fresh `git init` shows up quickly.
+type repoContextResult struct {
+	toplevel, prefix string
+	err              error
+	expires          time.Time
+}
+
+var repoContextCache sync.Map // workspace root -> repoContextResult
+
+const repoContextTTL = 5 * time.Second
+
+func cachedGitRepoContext(ctx context.Context, root string) (toplevel, prefix string, err error) {
+	if v, ok := repoContextCache.Load(root); ok {
+		if e := v.(repoContextResult); time.Now().Before(e.expires) {
+			return e.toplevel, e.prefix, e.err
+		}
+	}
+	toplevel, prefix, err = gitRepoContext(ctx, root)
+	repoContextCache.Store(root, repoContextResult{toplevel, prefix, err, time.Now().Add(repoContextTTL)})
+	return toplevel, prefix, err
 }
 
 // errNotGitRepo signals the workspace root is not inside a git work tree;
@@ -342,6 +405,36 @@ func stripRepoPrefix(prefix, repoRel string) (string, bool) {
 		return repoRel[len(prefix):], true
 	}
 	return "", false
+}
+
+// parseBranchHeaderZ splits the `## ...` header git prepends under --branch
+// (newline-terminated) from the NUL-delimited porcelain records, and returns
+// the branch name. Detached heads read "HEAD (no branch)" and are reported
+// as "HEAD" — matching rev-parse --abbrev-ref, which this replaces; an
+// unborn branch ("No commits yet on <name>") keeps the actual name.
+func parseBranchHeaderZ(raw string) (branch, entries string) {
+	head := raw
+	if i := strings.IndexByte(raw, 0); i >= 0 {
+		head, entries = raw[:i], raw[i+1:]
+	}
+	for _, line := range strings.Split(head, "\n") {
+		h, ok := strings.CutPrefix(line, "## ")
+		if !ok {
+			continue
+		}
+		if b, ok := strings.CutPrefix(h, "No commits yet on "); ok {
+			branch = b
+			continue
+		}
+		if i := strings.Index(h, "..."); i >= 0 { // strip tracking info
+			h = h[:i]
+		}
+		if i := strings.IndexByte(h, ' '); i >= 0 { // "HEAD (no branch)"
+			h = h[:i]
+		}
+		branch = h
+	}
+	return branch, entries
 }
 
 // parsePorcelainZ parses `git status --porcelain=v1 -z` output into entries,
@@ -413,28 +506,35 @@ func (s *Server) handleWorkspaceGitStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 	ctx := r.Context()
-	toplevel, prefix, err := gitRepoContext(ctx, root)
+	toplevel, prefix, err := cachedGitRepoContext(ctx, root)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"is_git": false})
 		return
 	}
-	branch, _ := runGit(ctx, toplevel, "rev-parse", "--abbrev-ref", "HEAD")
-	branch = strings.TrimSpace(branch)
-
+	// --branch folds the branch name into the status header (## branch),
+	// saving a separate rev-parse --abbrev-ref subprocess per refresh.
 	raw, err := runGit(ctx, toplevel, "-c", "status.relativePaths=false",
-		"status", "--porcelain=v1", "-z", "--untracked-files=normal")
+		"status", "--porcelain=v1", "-z", "--untracked-files=normal", "--branch")
 	if err != nil {
 		writeError(w, invalidInput("git status failed: "+err.Error()))
 		return
 	}
-	unstagedStats, _ := runGit(ctx, toplevel, "diff", "--numstat", "-z")
-	stagedStats, _ := runGit(ctx, toplevel, "diff", "--cached", "--numstat", "-z")
-	unstaged := parseNumstatZ(unstagedStats)
-	staged := parseNumstatZ(stagedStats)
+	branch, entries := parseBranchHeaderZ(raw)
+	// One combined numstat vs HEAD (was: separate unstaged + staged calls, then
+	// summed per file). The row shows a file's total change against the last
+	// commit, which is what the panel renders anyway — and it costs one git
+	// subprocess instead of two.
+	totalsRaw, terr := runGit(ctx, toplevel, "diff", "HEAD", "--numstat", "-z")
+	if terr != nil {
+		// Unborn HEAD (repository with no commits yet): fall back to the
+		// worktree-vs-index diff.
+		totalsRaw, _ = runGit(ctx, toplevel, "diff", "--numstat", "-z")
+	}
+	totals := parseNumstatZ(totalsRaw)
 
 	files := make([]gitFileEntry, 0)
 	totalAdds, totalDels := 0, 0
-	for _, rec := range parsePorcelainZ(raw) {
+	for _, rec := range parsePorcelainZ(entries) {
 		xy, repoRel := rec[0], rec[1]
 		wsRel, ok := stripRepoPrefix(prefix, repoRel)
 		if !ok {
@@ -455,11 +555,10 @@ func (s *Server) handleWorkspaceGitStatus(w http.ResponseWriter, r *http.Request
 				letter = y
 			}
 			entry.Status = string(letter)
-			u := unstaged[repoRel]
-			st := staged[repoRel]
-			entry.Adds = u.adds + st.adds
-			entry.Dels = u.dels + st.dels
-			entry.NoStat = u.binary || st.binary
+			st := totals[repoRel]
+			entry.Adds = st.adds
+			entry.Dels = st.dels
+			entry.NoStat = st.binary
 		}
 		totalAdds += entry.Adds
 		totalDels += entry.Dels
@@ -516,7 +615,7 @@ func (s *Server) handleWorkspaceGitDiff(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	ctx := r.Context()
-	toplevel, prefix, err := gitRepoContext(ctx, root)
+	toplevel, prefix, err := cachedGitRepoContext(ctx, root)
 	if err != nil {
 		writeError(w, invalidInput("not a git repository"))
 		return

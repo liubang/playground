@@ -2,7 +2,15 @@
 // composer + status bar) + global overlays (toast / confirm / settings /
 // directory browser / banner).
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from 'react'
 import type { AppController } from './app/controller'
 import { useStore } from './store/store'
 import { Gate } from './components/Gate'
@@ -46,6 +54,7 @@ export function App({ controller }: { controller: AppController }) {
   const banner = useStore(controller.store, (s) => s.banner)
   const mainView = useStore(controller.store, (s) => s.mainView)
   const rightPanelOpen = useStore(controller.store, (s) => s.rightPanelOpen)
+  const rightPanelWidth = useStore(controller.store, (s) => s.rightPanelWidth)
   const sessionId = useStore(controller.store, (s) => s.sessionId)
   const sessionLoading = useStore(controller.store, (s) => s.sessionLoading)
   const connState = useStore(controller.store, (s) => s.connState)
@@ -89,7 +98,24 @@ export function App({ controller }: { controller: AppController }) {
     [controller],
   )
 
-  const blocksIO = useMemo(() => ({ fetchArtifactURL: controller.fetchArtifactURL }), [controller])
+  const blocksIO = useMemo(
+    () => ({
+      fetchArtifactURL: controller.fetchArtifactURL,
+      // Tool-block paths are clickable: reveal the file in the right panel
+      revealFile: controller.revealFileInPanel,
+    }),
+    [controller],
+  )
+
+  // The user's custom panel width lives on #app as an inline CSS variable so it
+  // overrides the default; null keeps the responsive CSS value.
+  const panelStyle = useMemo<CSSProperties | undefined>(
+    () =>
+      rightPanelWidth != null
+        ? ({ '--rpanel-w': `${rightPanelWidth}px` } as unknown as CSSProperties)
+        : undefined,
+    [rightPanelWidth],
+  )
 
   // Stable props: Header (memo)/TranscriptView must not re-render passively on unrelated App slice changes (conn
   // badge, landing state, etc.) — the previous inline arrows/objects were new references on every render.
@@ -133,8 +159,23 @@ export function App({ controller }: { controller: AppController }) {
       }
       if (controller.store.get().busy) controller.cancelTurn()
     }
+    // Cmd/Ctrl+B toggles the workspace panel (VS Code convention). Skipped while
+    // typing so it never shadows a text field's own binding.
+    const onPanelKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'b') return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      const s = controller.store.get()
+      if (s.view !== 'app' || s.noWorkspace) return
+      e.preventDefault()
+      controller.toggleRightPanel()
+    }
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    document.addEventListener('keydown', onPanelKey)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('keydown', onPanelKey)
+    }
   }, [controller])
 
   if (view === 'boot') {
@@ -163,6 +204,7 @@ export function App({ controller }: { controller: AppController }) {
           (sidebarCollapsed ? ' sidebar-collapsed' : '') +
           (rightPanelOpen ? ' panel-open' : '')
         }
+        style={panelStyle}
       >
         {/* Narrow-screen drawer backdrop: visible only within the breakpoint;
             clicking it collapses the drawer */}
@@ -171,6 +213,14 @@ export function App({ controller }: { controller: AppController }) {
           aria-hidden="true"
           onClick={() => controller.dismissSidebarDrawer()}
         />
+        {/* Right-panel drawer scrim (narrow screens only; inert on desktop) */}
+        {rightPanelOpen && (
+          <div
+            className="right-panel-backdrop"
+            aria-hidden="true"
+            onClick={() => controller.toggleRightPanel()}
+          />
+        )}
         <div className="app-body">
           <aside id="sidebar" className="sidebar">
             <Sidebar controller={controller} revealWs={revealWs} />

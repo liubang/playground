@@ -1,6 +1,7 @@
 /* ============================== Right workspace panel (changes / file tree) ============================== */
 /* Three-column grid: opening the panel appends the --rpanel-w right column; when closed the
-   aside isn't rendered, so no reset rules needed */
+   aside isn't rendered, so no reset rules needed. --rpanel-w resolves either from the responsive
+   CSS default (tokens/base + the 1360px breakpoint) or from an inline user width on #app. */
 .shell.panel-open .app-body {
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--rpanel-w);
 }
@@ -16,10 +17,34 @@
   overflow: hidden;
 }
 .rp {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
   height: 100%;
+}
+/* Drag handle straddling the left border region. */
+.rp-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 5px;
+  z-index: 3;
+  cursor: col-resize;
+  background: transparent;
+}
+.rp-resizer:hover,
+body.rp-resizing .rp-resizer {
+  background: color-mix(in srgb, var(--primary) 55%, transparent);
+}
+body.rp-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+/* While dragging, suppress text selection/hover bleed across the app. */
+body.rp-resizing * {
+  cursor: col-resize !important;
 }
 .rp-head {
   display: flex;
@@ -39,6 +64,10 @@
 }
 .rp-tab {
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   background: none;
   border: none;
   color: var(--muted);
@@ -52,11 +81,28 @@
   background: var(--bg1);
   color: var(--fg);
 }
+.rp-tab-badge {
+  flex: none;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--warning) 22%, transparent);
+  color: var(--warning);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
 .rp-body {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
   padding: 8px;
+}
+.rp-body:focus-visible {
+  outline: 1px solid var(--ring-color);
+  outline-offset: -1px;
 }
 .rp-empty {
   color: var(--muted);
@@ -85,10 +131,131 @@
   flex: 1;
   text-align: right;
 }
-/* Git changed-file rows: borderless compact list — a card frame per file
-   read as sparse; separation is just a hairline, hover gives affordance,
-   and the expanded diff carries the same frameless stripe style as the
-   turn-summary inline diff. */
+
+/* -------- search / filter inputs (both tabs) -------- */
+.rp-search,
+.rp-filter {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg2);
+  border-radius: var(--radius-md);
+  padding: 0 8px;
+  height: 28px;
+}
+.rp-filter {
+  flex: none;
+  margin: 0 0 8px;
+}
+.rp-search .icon,
+.rp-filter .icon {
+  flex: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+.rp-search input,
+.rp-filter input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: var(--fg);
+  font-size: var(--text-sm);
+  outline: none;
+}
+.rp-search input::placeholder,
+.rp-filter input::placeholder {
+  color: var(--muted);
+}
+.rp-filter-clear {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+}
+.rp-filter-clear:hover {
+  color: var(--fg);
+}
+.rp-chip {
+  flex: none;
+  background: var(--bg2);
+  border: none;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.rp-chip.is-active {
+  background: color-mix(in srgb, var(--primary) 20%, transparent);
+  color: var(--primary);
+}
+
+/* -------- virtual list scaffolding -------- */
+.rp-body.vlist {
+  padding: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.vlist-inner {
+  width: 100%;
+}
+.vlist-row {
+  overflow: hidden;
+}
+
+/* -------- context menu -------- */
+.rp-menu {
+  position: fixed;
+  z-index: var(--z-menu);
+  min-width: 180px;
+  background: var(--bg1);
+  border: 1px solid var(--bg2);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.rp-menu-item {
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--fg);
+  font-size: var(--text-sm);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.rp-menu-item:hover {
+  background: var(--bg2);
+}
+
+/* -------- git changed-file rows -------- */
+.gc-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.gc-count {
+  color: var(--muted);
+  font-weight: 500;
+  text-transform: none;
+}
 .gf {
   margin: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--fg) 7%, transparent);
@@ -96,15 +263,20 @@
 .gf:last-child {
   border-bottom: none;
 }
+.vlist .gf {
+  height: 100%;
+}
 .gf-row {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
+  height: 100%;
+  min-height: 38px;
   background: none;
   border: none;
   color: var(--fg);
-  padding: 7px 10px;
+  padding: 4px 10px;
   cursor: pointer;
   text-align: left;
   font-size: var(--text-sm);
@@ -185,30 +357,98 @@
   max-height: 320px;
   overflow-y: auto;
 }
-/* File tree */
+
+/* -------- file tree -------- */
 .ft-row {
   display: flex;
   align-items: center;
-  gap: 7px;
-  width: 100%;
-  background: none;
-  border: none;
-  color: var(--fg);
-  padding: 4px 10px;
+  height: 100%;
+  min-height: 24px;
+  padding: 0 10px 0 8px;
   cursor: pointer;
   font-size: var(--text-sm);
-  text-align: left;
+  color: var(--fg);
   border-radius: var(--radius-sm);
 }
 .ft-row:hover {
   background: var(--bg2);
 }
-.ft-row .icon {
+.ft-row.is-cursor {
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+}
+.ft-row:focus-visible {
+  outline: 1px solid var(--ring-color);
+  outline-offset: -1px;
+}
+/* Indent guide rails: one hairline per ancestor level. */
+.ft-guides {
+  display: flex;
+  align-self: stretch;
+  flex: none;
+}
+.ft-guide {
+  width: 14px;
+  border-left: 1px solid color-mix(in srgb, var(--fg) 9%, transparent);
+}
+.ft-caret {
+  flex: none;
+  width: 14px;
+  font-size: 10px;
   color: var(--muted);
+  margin-right: 2px;
+}
+.ft-caret-spacer {
+  flex: none;
+  width: 14px;
+  margin-right: 2px;
+}
+.ft-ico {
   flex: none;
   font-size: 13px;
+  margin-right: 6px;
+  color: var(--muted);
+}
+.ft-ico-dir {
+  color: color-mix(in srgb, var(--warning) 70%, var(--muted));
+}
+.ft-ico-code {
+  color: var(--primary);
+}
+.ft-ico-data {
+  color: var(--warning);
+}
+.ft-ico-doc {
+  color: var(--info);
+}
+.ft-ico-web {
+  color: var(--purple);
+}
+.ft-ico-img {
+  color: var(--highlight);
+}
+.ft-ico-generic {
+  color: var(--muted);
 }
 .ft-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* git status colours in the tree (leaf files). */
+.ft-name.is-m {
+  color: var(--warning);
+}
+.ft-name.is-a {
+  color: var(--success);
+}
+.ft-name.is-d {
+  color: var(--error);
+}
+.ft-dir {
+  flex: none;
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -218,34 +458,75 @@
   font-size: 12px;
   padding: 4px 24px;
 }
-/* File preview */
+
+/* -------- file preview -------- */
 .rp-body.fp {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding: 8px;
 }
 .fp-path {
   flex: 1;
   min-width: 0;
   font-size: 12px;
-  color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.fp-code {
+.fp-path-dir {
+  color: var(--muted);
+}
+.fp-path-name {
+  color: var(--fg);
+}
+.fp-scroll {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  margin: 0;
-  padding: 10px;
+  display: flex;
+  align-items: flex-start;
   background: var(--bg2);
   border-radius: var(--radius-md);
+}
+.fp-lines {
+  flex: none;
+  position: sticky;
+  left: 0;
+  text-align: right;
+  user-select: none;
+  padding: 10px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+  background: var(--bg2);
+  border-right: 1px solid color-mix(in srgb, var(--fg) 8%, transparent);
+}
+.fp-code {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
   font-size: 12px;
   line-height: 1.55;
   white-space: pre;
 }
-/* Narrow screens: the panel degrades to a right drawer, taking no grid column */
+.fp-scroll.is-wrap .fp-code {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* -------- narrow-screen drawer -------- */
+/* Scrim: inert by default (drawer mode alone enables it). Declared BEFORE the
+   breakpoint — a base rule after it would win on source order and keep the scrim
+   hidden even inside the media query. */
+.right-panel-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-drawer) - 1);
+  background: rgba(0, 0, 0, 0.35);
+}
 @media (max-width: 767px) {
   .shell.panel-open .app-body,
   .shell.panel-open.sidebar-collapsed .app-body {
@@ -254,8 +535,14 @@
   .right-panel {
     position: fixed;
     inset: 0 0 0 auto;
-    width: min(360px, 92vw);
+    width: min(380px, 92vw);
     z-index: var(--z-drawer);
     box-shadow: var(--shadow-md);
+  }
+  .rp-resizer {
+    display: none; /* the drawer is fixed-width on narrow screens */
+  }
+  .right-panel-backdrop {
+    display: block;
   }
 }

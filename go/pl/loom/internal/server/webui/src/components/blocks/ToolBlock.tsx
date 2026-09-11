@@ -9,6 +9,7 @@ import { diffForToolCall } from '../../lib/diff'
 import { Icon, type IconName } from '../../lib/icons'
 import { DiffView } from './DiffView'
 import { ArtifactBlock, InlineImage } from './images'
+import { useBlocksIO } from './context'
 
 // st → [icon, label]; className uses English short codes (err/canceled).
 // The ok label is only used as the icon's tooltip; err/canceled render it inline.
@@ -52,6 +53,21 @@ function toolMeta(toolName: string): [IconName, string] {
   return ['gear', toolName || 'tool']
 }
 
+// Tools whose display target is a workspace file path (and thus revealable in
+// the right panel).
+const FILE_PATH_TOOLS = new Set(['read_file', 'edit', 'write'])
+
+// pathFromArgs reads the canonical file path out of edit/write args (snapshot
+// rebuilds carry args; the live path carries target).
+function pathFromArgs(args: unknown): string {
+  if (args && typeof args === 'object') {
+    const a = args as Record<string, unknown>
+    const v = a.path ?? a.file_path
+    if (typeof v === 'string' && v) return v
+  }
+  return ''
+}
+
 export interface ToolBlockProps {
   callId?: string // anchor: the maze's chat jump looks up the DOM row by it (data-call-id)
   toolName: string
@@ -76,6 +92,12 @@ export const ToolBlock = memo(function ToolBlock({
   fetchToolOutput,
 }: ToolBlockProps) {
   const [targetExpanded, setTargetExpanded] = useState(false)
+  const { revealFile } = useBlocksIO()
+  // A file path we can hand to the right panel: prefer structured args, fall
+  // back to the display target for the known file tools.
+  const revealPath =
+    pathFromArgs(diffArgs?.args) || (FILE_PATH_TOOLS.has(toolName) ? target || '' : '')
+  const canReveal = !!revealFile && !!revealPath
   // Lazy diff: this component is only mounted inside the virtualized render window; useMemo caches by
   // diffArgs reference, so the LCS is not recomputed after scrolling away
   const diffText = useMemo(
@@ -123,20 +145,33 @@ export const ToolBlock = memo(function ToolBlock({
           <Icon name={icon} />
         </span>
         <span className="tool-name mono">{verb}</span>
-        {target && (
-          // After CSS ellipsis truncation, both the native tooltip and click-to-expand
-          // (wrapped display) reveal the full content.
-          <span
-            className={'tool-target mono' + (targetExpanded ? ' expanded' : '')}
-            title={target}
-            onClick={(e) => {
-              e.stopPropagation()
-              setTargetExpanded((v) => !v)
-            }}
-          >
-            {target}
-          </span>
-        )}
+        {target &&
+          (canReveal ? (
+            <button
+              type="button"
+              className={'tool-target mono is-path' + (targetExpanded ? ' expanded' : '')}
+              title={`${target} — open in the file panel`}
+              onClick={(e) => {
+                e.stopPropagation()
+                revealFile!(revealPath)
+              }}
+            >
+              {target}
+            </button>
+          ) : (
+            // After CSS ellipsis truncation, both the native tooltip and click-to-expand
+            // (wrapped display) reveal the full content.
+            <span
+              className={'tool-target mono' + (targetExpanded ? ' expanded' : '')}
+              title={target}
+              onClick={(e) => {
+                e.stopPropagation()
+                setTargetExpanded((v) => !v)
+              }}
+            >
+              {target}
+            </span>
+          ))}
         {statusEl}
         <span className="tool-dur mono">
           {completion?.duration_ms != null ? fmtDuration(completion.duration_ms) : ''}

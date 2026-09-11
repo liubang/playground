@@ -31,6 +31,14 @@ import type {
   WorkspaceGitStatus,
 } from './types'
 
+// ConditionalResult is the shape returned by validators that speak
+// If-None-Match: either "unchanged" (keep the cache) or fresh data + ETag.
+export interface ConditionalResult<T> {
+  notModified: boolean
+  etag: string
+  data?: T
+}
+
 export class ApiError extends Error {
   status: number
   code: string
@@ -48,12 +56,15 @@ export interface ApiOptions {
 }
 
 export function createApi({ getToken, onUnauthorized }: ApiOptions) {
-  async function req<T = unknown>(
+  // rawReq issues the authenticated request and normalizes transport/401 errors;
+  // it deliberately does NOT treat non-2xx as fatal so conditional-request
+  // callers can inspect 304. Everything else goes through req() below.
+  async function rawReq(
     method: string,
     path: string,
     body?: unknown,
     extraHeaders?: Record<string, string>,
-  ): Promise<T> {
+  ): Promise<Response> {
     const headers: Record<string, string> = { Authorization: 'Bearer ' + getToken() }
     if (body !== undefined) headers['Content-Type'] = 'application/json'
     Object.assign(headers, extraHeaders || {})
@@ -71,20 +82,45 @@ export function createApi({ getToken, onUnauthorized }: ApiOptions) {
       onUnauthorized()
       throw new ApiError(401, 'unauthenticated', 'token rejected')
     }
-    if (!res.ok) {
-      let code = ''
-      let message = ''
-      try {
-        const payload = await res.json()
-        code = payload?.error?.code || ''
-        message = payload?.error?.message || ''
-      } catch {
-        /* non-JSON error body */
-      }
-      throw new ApiError(res.status, code, message || res.statusText)
+    return res
+  }
+
+  async function errorFrom(res: Response): Promise<ApiError> {
+    let code = ''
+    let message = ''
+    try {
+      const payload = await res.json()
+      code = payload?.error?.code || ''
+      message = payload?.error?.message || ''
+    } catch {
+      /* non-JSON error body */
     }
+    return new ApiError(res.status, code, message || res.statusText)
+  }
+
+  async function req<T = unknown>(
+    method: string,
+    path: string,
+    body?: unknown,
+    extraHeaders?: Record<string, string>,
+  ): Promise<T> {
+    const res = await rawReq(method, path, body, extraHeaders)
+    if (!res.ok) throw await errorFrom(res)
     if (res.status === 204) return null as T
     return res.json() as Promise<T>
+  }
+
+  // getConditional performs a GET with an If-None-Match validator and reports
+  // 304 explicitly (plus the fresh ETag) so callers can keep their cached copy.
+  async function getConditional<T>(path: string, etag: string): Promise<ConditionalResult<T>> {
+    const res = await rawReq('GET', path, undefined, etag ? { 'If-None-Match': etag } : undefined)
+    if (res.status === 304) return { notModified: true, etag }
+    if (!res.ok) throw await errorFrom(res)
+    return {
+      notModified: false,
+      etag: res.headers.get('ETag') || '',
+      data: (await res.json()) as T,
+    }
   }
 
   return {
@@ -146,11 +182,17 @@ export function createApi({ getToken, onUnauthorized }: ApiOptions) {
     browseDirectories: (path: string) =>
       req<DirBrowseResult>('GET', `/v1/files/browse?path=${encodeURIComponent(path || '')}`),
     // Workspace right panel: file tree / file preview / git changes / diff (all
-    // confined to the workspace root)
-    listWorkspaceFiles: (id: string, path: string, showAll = false) =>
-      req<WorkspaceFileList>(
-        'GET',
+    // confined to the workspace root). The listing carries the previous ETag so
+    // an unchanged directory revalidates to 304 instead of resending its JSON.
+    listWorkspaceFiles: (
+      id: string,
+      path: string,
+      showAll = false,
+      etag = '',
+    ): Promise<ConditionalResult<WorkspaceFileList>> =>
+      getConditional<WorkspaceFileList>(
         `/v1/workspaces/${id}/files?path=${encodeURIComponent(path)}${showAll ? '&all=1' : ''}`,
+        etag,
       ),
     readWorkspaceFile: (id: string, path: string) =>
       req<WorkspaceFileContent>(
