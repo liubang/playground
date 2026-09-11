@@ -852,5 +852,306 @@ TEST(CpuBackendTest, AddBiasInPlaceShapeMismatch) {
     EXPECT_EQ(s.code, ErrorCode::kInvalidArgument);
 }
 
+// LayerNorm (vision towers: affine norm, biased)
+
+TEST(CpuBackendTest, LayerNormF32) {
+    auto x = HostTensor::alloc({2, 4}, DType::kF32);
+    auto out = HostTensor::alloc({2, 4}, DType::kF32);
+    auto weight = HostTensor::alloc({4}, DType::kF32);
+    auto bias = HostTensor::alloc({4}, DType::kF32);
+    float* xp = x.view.data_as<float>();
+    float* wp = weight.view.data_as<float>();
+    float* bp = bias.view.data_as<float>();
+    // Row 0: [1, 2, 3, 4] (mean 2.5), row 1: [4, 4, 4, 4] (variance 0).
+    for (int i = 0; i < 4; ++i) {
+        xp[i] = 1.0f + static_cast<float>(i);
+        xp[4 + i] = 4.0f;
+        wp[i] = 1.0f + 0.25f * static_cast<float>(i);
+        bp[i] = -0.5f + 0.25f * static_cast<float>(i);
+    }
+
+    const float eps = 1e-5f;
+    CpuBackend backend;
+    ASSERT_TRUE(backend.LayerNorm(out.view, x.view, weight.view, bias.view, eps).ok());
+
+    const float* op = out.view.data_as<float>();
+    // Row 0: closed form (x - 2.5) / sqrt(1.25 + eps) * w + b.
+    const float rstd = 1.0f / std::sqrt(1.25f + eps);
+    for (int i = 0; i < 4; ++i) {
+        const float expected = (static_cast<float>(i) - 1.5f) * rstd * wp[i] + bp[i];
+        EXPECT_NEAR(op[i], expected, 1e-6f) << "col " << i;
+    }
+    // Row 1: variance 0 -> out = (0) * rstd * w + b = b.
+    for (int i = 0; i < 4; ++i) {
+        EXPECT_NEAR(op[4 + i], bp[i], 1e-6f) << "col " << i;
+    }
+}
+
+TEST(CpuBackendTest, LayerNormNoBias) {
+    // An invalid bias view is explicitly allowed (means "no bias").
+    auto x = HostTensor::alloc({1, 4}, DType::kF32);
+    auto out = HostTensor::alloc({1, 4}, DType::kF32);
+    auto weight = HostTensor::alloc({4}, DType::kF32);
+    float* xp = x.view.data_as<float>();
+    float* wp = weight.view.data_as<float>();
+    for (int i = 0; i < 4; ++i) {
+        xp[i] = 0.5f * static_cast<float>(i) - 0.75f;
+        wp[i] = 1.0f;
+    }
+
+    CpuBackend backend;
+    ASSERT_TRUE(backend.LayerNorm(out.view, x.view, weight.view, {}, 1e-6f).ok());
+
+    const float* op = out.view.data_as<float>();
+    float mean = 0.0f;
+    for (int i = 0; i < 4; ++i) {
+        mean += xp[i];
+    }
+    mean /= 4.0f;
+    float var = 0.0f;
+    for (int i = 0; i < 4; ++i) {
+        var += (xp[i] - mean) * (xp[i] - mean);
+    }
+    var /= 4.0f;
+    const float rstd = 1.0f / std::sqrt(var + 1e-6f);
+    for (int i = 0; i < 4; ++i) {
+        EXPECT_NEAR(op[i], (xp[i] - mean) * rstd, 1e-6f);
+    }
+}
+
+TEST(CpuBackendTest, LayerNormShapeMismatch) {
+    auto x = HostTensor::alloc({1, 4}, DType::kF32);
+    auto out = HostTensor::alloc({1, 4}, DType::kF32);
+    auto weight = HostTensor::alloc({8}, DType::kF32);
+    auto bias = HostTensor::alloc({4}, DType::kF32);
+    CpuBackend backend;
+    auto s = backend.LayerNorm(out.view, x.view, weight.view, bias.view, 1e-5f);
+    EXPECT_FALSE(s.ok());
+    EXPECT_EQ(s.code, ErrorCode::kInvalidArgument);
+
+    x = HostTensor::alloc({1, 4}, DType::kF32);
+    auto s2 = backend.LayerNorm(out.view, x.view, weight.view, bias.view, 0.0f);
+    EXPECT_EQ(s2.code, ErrorCode::kInvalidArgument);
+}
+
+// GeluInPlace (vision towers)
+
+TEST(CpuBackendTest, GeluTanhApprox) {
+    auto x = HostTensor::alloc({1, 4}, DType::kF32);
+    float* xp = x.view.data_as<float>();
+    xp[0] = 0.0f;
+    xp[1] = 1.0f;
+    xp[2] = -1.0f;
+    xp[3] = 3.0f;
+
+    CpuBackend backend;
+    ASSERT_TRUE(backend.GeluInPlace(x.view, /*tanh_approx=*/true).ok());
+
+    EXPECT_FLOAT_EQ(xp[0], 0.0f);
+    // Standard tanh-approx reference values.
+    EXPECT_NEAR(xp[1], 0.841192f, 1e-5f);
+    EXPECT_NEAR(xp[2], -0.158808f, 1e-5f);
+    // Large inputs saturate towards the identity; the exact tanh-approx
+    // reference is 3 * 0.5 * (1 + tanh(sqrt(2/pi) * (3 + 0.044715 * 27))).
+    EXPECT_NEAR(xp[3], 2.9963627f, 1e-5f);
+}
+
+TEST(CpuBackendTest, GeluExactErf) {
+    auto x = HostTensor::alloc({1, 3}, DType::kF32);
+    float* xp = x.view.data_as<float>();
+    xp[0] = 0.0f;
+    xp[1] = 1.0f;
+    xp[2] = -0.5f;
+
+    CpuBackend backend;
+    ASSERT_TRUE(backend.GeluInPlace(x.view, /*tanh_approx=*/false).ok());
+
+    EXPECT_FLOAT_EQ(xp[0], 0.0f);
+    // 0.5 * (1 + erf(1/sqrt(2))) = 0.841344746...
+    EXPECT_NEAR(xp[1], 0.84134475f, 1e-6f);
+    // 0.5 * (-0.5) * (1 + erf(-0.5/sqrt(2)))
+    const float ref = 0.5f * -0.5f * (1.0f + std::erf(-0.5f * 0.70710678f));
+    EXPECT_NEAR(xp[2], ref, 1e-6f);
+}
+
+// RopeApply (table-driven rotary: vision 2D rope, MRoPE)
+
+TEST(CpuBackendTest, RopeApplyRotatesNeoxPairs) {
+    // q/k: [n=1, heads=1, head_dim=4]; pair (i, i + half) rotates by row angle.
+    auto q = HostTensor::alloc({1, 1, 4}, DType::kF32);
+    auto k = HostTensor::alloc({1, 1, 4}, DType::kF32);
+    auto c = HostTensor::alloc({1, 4}, DType::kF32);
+    auto s = HostTensor::alloc({1, 4}, DType::kF32);
+    float* qp = q.view.data_as<float>();
+    float* kp = k.view.data_as<float>();
+    float* cp = c.view.data_as<float>();
+    float* sp = s.view.data_as<float>();
+    qp[0] = 1.0f;
+    qp[1] = 0.0f;
+    qp[2] = 0.0f;
+    qp[3] = 2.0f;
+    kp[0] = 0.0f;
+    kp[1] = 1.0f;
+    kp[2] = 0.0f;
+    kp[3] = 0.0f;
+    // Pair angles: 0 -> pair0 angle a, 1 -> pair1 angle b (duplicated halves).
+    const float a = 0.5f, b = 0.25f;
+    cp[0] = std::cos(a);
+    cp[1] = std::cos(b);
+    cp[2] = cp[0];
+    cp[3] = cp[1];
+    sp[0] = std::sin(a);
+    sp[1] = std::sin(b);
+    sp[2] = sp[0];
+    sp[3] = sp[1];
+
+    CpuBackend backend;
+    ASSERT_TRUE(backend.RopeApply(q.view, k.view, c.view, s.view).ok());
+
+    // q: pair0 = (q0, q2) = (1, 0) rotated by a -> (cos a, sin a)
+    EXPECT_NEAR(qp[0], std::cos(a), 1e-6f);
+    EXPECT_NEAR(qp[2], std::sin(a), 1e-6f);
+    // q: pair1 = (q1, q3) = (0, 2) rotated by b -> (-2 sin b, 2 cos b)
+    EXPECT_NEAR(qp[1], -2.0f * std::sin(b), 1e-6f);
+    EXPECT_NEAR(qp[3], 2.0f * std::cos(b), 1e-6f);
+    // k: pair0 = (0, 0) stays 0; pair1 = (1, 0) rotated by b -> (cos b, sin b)
+    EXPECT_FLOAT_EQ(kp[0], 0.0f);
+    EXPECT_FLOAT_EQ(kp[2], 0.0f);
+    EXPECT_NEAR(kp[1], std::cos(b), 1e-6f);
+    EXPECT_NEAR(kp[3], std::sin(b), 1e-6f);
+}
+
+TEST(CpuBackendTest, RopeApplyPerRowTables) {
+    // Two tokens with different angle rows must rotate independently.
+    auto q = HostTensor::alloc({2, 1, 2}, DType::kF32);
+    auto k = HostTensor::alloc({2, 1, 2}, DType::kF32);
+    auto c = HostTensor::alloc({2, 2}, DType::kF32);
+    auto s = HostTensor::alloc({2, 2}, DType::kF32);
+    float* qp = q.view.data_as<float>();
+    float* cp = c.view.data_as<float>();
+    float* sp = s.view.data_as<float>();
+    qp[0] = 1.0f;
+    qp[1] = 0.0f;
+    qp[2] = 1.0f;
+    qp[3] = 0.0f;
+    cp[0] = 1.0f;
+    sp[0] = 0.0f; // row 0: angle 0
+    cp[1] = 1.0f;
+    sp[1] = 0.0f;
+    cp[2] = 0.0f;
+    sp[2] = 1.0f; // row 1: angle pi/2
+    cp[3] = 0.0f;
+    sp[3] = 1.0f;
+
+    CpuBackend backend;
+    ASSERT_TRUE(backend.RopeApply(q.view, k.view, c.view, s.view).ok());
+
+    EXPECT_NEAR(qp[0], 1.0f, 1e-6f);
+    EXPECT_NEAR(qp[1], 0.0f, 1e-6f);
+    EXPECT_NEAR(qp[2], 0.0f, 1e-6f);
+    EXPECT_NEAR(qp[3], 1.0f, 1e-6f);
+}
+
+TEST(CpuBackendTest, RopeApplyShapeMismatch) {
+    auto q = HostTensor::alloc({1, 1, 4}, DType::kF32);
+    auto k = HostTensor::alloc({1, 1, 4}, DType::kF32);
+    auto c = HostTensor::alloc({1, 2}, DType::kF32); // wrong table width
+    auto s = HostTensor::alloc({1, 4}, DType::kF32);
+    CpuBackend backend;
+    auto st = backend.RopeApply(q.view, k.view, c.view, s.view);
+    EXPECT_FALSE(st.ok());
+    EXPECT_EQ(st.code, ErrorCode::kInvalidArgument);
+}
+
+// AttentionFull (vision: bidirectional MHA)
+
+TEST(CpuBackendTest, AttentionFullMatchesSoftmaxReference) {
+    const int64_t n = 3, heads = 2, hd = 2;
+    auto q = HostTensor::alloc({n, heads, hd}, DType::kF32);
+    auto k = HostTensor::alloc({n, heads, hd}, DType::kF32);
+    auto v = HostTensor::alloc({n, heads, hd}, DType::kF32);
+    auto out = HostTensor::alloc({n, heads * hd}, DType::kF32);
+    float* qp = q.view.data_as<float>();
+    float* kp = k.view.data_as<float>();
+    float* vp = v.view.data_as<float>();
+    for (int64_t i = 0; i < static_cast<int64_t>(n * heads * hd); ++i) {
+        qp[i] = 0.1f * static_cast<float>(i % 5) - 0.2f;
+        kp[i] = 0.1f * static_cast<float>(i % 7) - 0.3f;
+        vp[i] = 0.05f * static_cast<float>(i % 6) - 0.1f;
+    }
+
+    AttentionConfig cfg;
+    cfg.num_heads = static_cast<int32_t>(heads);
+    cfg.num_kv_heads = static_cast<int32_t>(heads);
+    cfg.head_dim = static_cast<int32_t>(hd);
+    cfg.scale = 1.0f / std::sqrt(static_cast<float>(hd));
+
+    CpuBackend backend;
+    ASSERT_TRUE(backend.AttentionFull(out.view, q.view, k.view, v.view, cfg).ok());
+
+    // Reference: full (non-causal) softmax attention per head.
+    const float* op = out.view.data_as<float>();
+    for (int64_t h = 0; h < heads; ++h) {
+        for (int64_t i = 0; i < n; ++i) {
+            float scores[3];
+            float mx = -std::numeric_limits<float>::infinity();
+            for (int64_t j = 0; j < n; ++j) {
+                float dot = 0.0f;
+                for (int64_t d = 0; d < hd; ++d) {
+                    dot += qp[(i * heads + h) * hd + d] * kp[(j * heads + h) * hd + d];
+                }
+                scores[j] = dot * cfg.scale;
+                mx = std::max(mx, scores[j]);
+            }
+            float denom = 0.0f;
+            for (int64_t j = 0; j < n; ++j) {
+                scores[j] = std::exp(scores[j] - mx);
+                denom += scores[j];
+            }
+            for (int64_t d = 0; d < hd; ++d) {
+                float acc = 0.0f;
+                for (int64_t j = 0; j < n; ++j) {
+                    acc += (scores[j] / denom) * vp[(j * heads + h) * hd + d];
+                }
+                EXPECT_NEAR(op[(i * heads + h) * hd + d], acc, 1e-6f)
+                    << "head " << h << " token " << i << " dim " << d;
+            }
+        }
+    }
+}
+
+TEST(CpuBackendTest, AttentionFullShapeMismatch) {
+    auto q = HostTensor::alloc({2, 1, 2}, DType::kF32);
+    auto k = HostTensor::alloc({3, 1, 2}, DType::kF32); // different token count
+    auto v = HostTensor::alloc({2, 1, 2}, DType::kF32);
+    auto out = HostTensor::alloc({2, 2}, DType::kF32);
+    AttentionConfig cfg;
+    cfg.num_heads = 1;
+    cfg.num_kv_heads = 1;
+    cfg.head_dim = 2;
+    cfg.scale = 1.0f;
+    CpuBackend backend;
+    auto st = backend.AttentionFull(out.view, q.view, k.view, v.view, cfg);
+    EXPECT_FALSE(st.ok());
+    EXPECT_EQ(st.code, ErrorCode::kInvalidArgument);
+}
+
+TEST(CpuBackendTest, AttentionFullRequiresMhaKVAheads) {
+    // GQA is meaningless without a KV cache: num_kv_heads must equal n.
+    auto q = HostTensor::alloc({1, 2, 2}, DType::kF32);
+    auto k = HostTensor::alloc({1, 2, 2}, DType::kF32);
+    auto v = HostTensor::alloc({1, 2, 2}, DType::kF32);
+    auto out = HostTensor::alloc({1, 4}, DType::kF32);
+    AttentionConfig cfg;
+    cfg.num_heads = 2;
+    cfg.num_kv_heads = 1; // GQA -> rejected
+    cfg.head_dim = 2;
+    cfg.scale = 1.0f;
+    CpuBackend backend;
+    auto st = backend.AttentionFull(out.view, q.view, k.view, v.view, cfg);
+    EXPECT_FALSE(st.ok());
+    EXPECT_EQ(st.code, ErrorCode::kInvalidArgument);
+}
+
 } // namespace
 } // namespace pl::mllm

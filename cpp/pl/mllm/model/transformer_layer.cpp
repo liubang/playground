@@ -251,7 +251,9 @@ Status TransformerLayer::ForwardBatch(TensorView hidden,
                                       KVCache& cache,
                                       Backend& backend,
                                       ScratchArena& scratch,
-                                      const ModelConfig& config) const {
+                                      const ModelConfig& config,
+                                      TensorView rope_cos,
+                                      TensorView rope_sin) const {
     const int32_t n = static_cast<int32_t>(hidden.shape().dim(0));
     const int32_t hidden_size = config.hidden_size;
     const int32_t num_heads = config.num_attention_heads;
@@ -349,13 +351,22 @@ Status TransformerLayer::ForwardBatch(TensorView hidden,
     if (!v_reshaped.ok())
         return v_reshaped.status();
 
-    RopeConfig rope_cfg{
-        .head_dim = head_dim,
-        .freq_base = config.rope_freq_base,
-    };
-    if (auto s = backend.RoPE(q_reshaped.value(), k_reshaped.value(), start_pos, rope_cfg);
-        !s.ok()) {
-        return s;
+    if (rope_cos.valid() || rope_sin.valid()) {
+        // Table-driven rope (multimodal MRoPE): angles are per-row from
+        // caller-built tables; start_pos no longer influences rotation.
+        if (auto s = backend.RopeApply(q_reshaped.value(), k_reshaped.value(), rope_cos, rope_sin);
+            !s.ok()) {
+            return s;
+        }
+    } else {
+        RopeConfig rope_cfg{
+            .head_dim = head_dim,
+            .freq_base = config.rope_freq_base,
+        };
+        if (auto s = backend.RoPE(q_reshaped.value(), k_reshaped.value(), start_pos, rope_cfg);
+            !s.ok()) {
+            return s;
+        }
     }
 
     // 5/6. Append K/V and run causal attention. The GEMMs above are batched;
@@ -420,6 +431,12 @@ Status TransformerLayer::ForwardBatch(TensorView hidden,
 
     if (auto s = backend.MatMul(proj, attn_ctx, weights_.o_weight_name); !s.ok()) {
         return s;
+    }
+    // Optional attention output bias (ERNIE 4.5).
+    if (weights_.o_bias.valid()) {
+        if (auto s = backend.AddBiasInPlace(proj, weights_.o_bias); !s.ok()) {
+            return s;
+        }
     }
 
     // 8. Residual add

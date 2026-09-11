@@ -1099,6 +1099,207 @@ TEST(MetalParityTest, SwiGLUParity) {
     expect_close(out_cpu.view, out_gpu.view, 1e-5f, 1e-5f);
 }
 
+// ---------------------------------------------------------------------------
+// Vision-encoder op parity (LayerNorm / GELU / RopeApply / AttentionFull)
+// ---------------------------------------------------------------------------
+
+TEST(MetalParityTest, LayerNormParity) {
+    REQUIRE_METAL();
+    const int batch = 3, hidden = 64;
+    auto x = HostTensor::alloc({batch, hidden}, DType::kF32);
+    auto w = HostTensor::alloc({hidden}, DType::kF32);
+    auto b = HostTensor::alloc({hidden}, DType::kF32);
+    auto out_cpu = HostTensor::alloc({batch, hidden}, DType::kF32);
+    auto out_gpu = HostTensor::alloc({batch, hidden}, DType::kF32);
+    fill_random(x.view.data_as<float>(), batch * hidden, 201);
+    fill_random(w.view.data_as<float>(), hidden, 202);
+    fill_random(b.view.data_as<float>(), hidden, 203);
+
+    CpuBackend cpu;
+    ASSERT_TRUE(cpu.LayerNorm(out_cpu.view, x.view, w.view, b.view, 1e-5f).ok());
+
+    MetalBackend gpu;
+    ASSERT_TRUE(gpu.LayerNorm(out_gpu.view, x.view, w.view, b.view, 1e-5f).ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
+
+    expect_close(out_cpu.view, out_gpu.view, 1e-5f, 1e-5f);
+}
+
+// bf16 affine weights/bias: exercises both the upload-time bf16->f32
+// activation conversion and (via GPU vs CPU agreement) reference math on
+// mixed-precision norm parameters, as produced by PaddleOCR-VL GGUFs.
+TEST(MetalParityTest, LayerNormBf16ParamsParity) {
+    REQUIRE_METAL();
+    const int batch = 2, hidden = 32;
+    auto x = HostTensor::alloc({batch, hidden}, DType::kF32);
+    auto w = HostTensor::alloc({hidden}, DType::kBF16);
+    auto b = HostTensor::alloc({hidden}, DType::kBF16);
+    auto out_cpu = HostTensor::alloc({batch, hidden}, DType::kF32);
+    auto out_gpu = HostTensor::alloc({batch, hidden}, DType::kF32);
+    fill_random(x.view.data_as<float>(), batch * hidden, 211);
+    std::vector<float> wf(hidden), bf(hidden);
+    fill_random(wf.data(), hidden, 212);
+    fill_random(bf.data(), hidden, 213);
+    for (size_t i = 0; i < wf.size(); ++i) {
+        w.view.data_as<uint16_t>()[i] = fp32_to_bf16(wf[i]);
+        b.view.data_as<uint16_t>()[i] = fp32_to_bf16(bf[i]);
+    }
+
+    CpuBackend cpu;
+    ASSERT_TRUE(cpu.LayerNorm(out_cpu.view, x.view, w.view, b.view, 1e-6f).ok());
+
+    MetalBackend gpu;
+    ASSERT_TRUE(gpu.LayerNorm(out_gpu.view, x.view, w.view, b.view, 1e-6f).ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
+
+    expect_close(out_cpu.view, out_gpu.view, 1e-4f, 1e-4f);
+}
+
+TEST(MetalParityTest, GeluParity) {
+    REQUIRE_METAL();
+    const int n = 512;
+    for (const bool tanh_approx : {true, false}) {
+        auto x_cpu = HostTensor::alloc({1, n}, DType::kF32);
+        auto x_gpu = HostTensor::alloc({1, n}, DType::kF32);
+        fill_random(x_cpu.view.data_as<float>(), n, 221);
+        std::memcpy(x_gpu.view.data(), x_cpu.view.data(), x_cpu.view.byte_size());
+
+        CpuBackend cpu;
+        ASSERT_TRUE(cpu.GeluInPlace(x_cpu.view, tanh_approx).ok());
+
+        MetalBackend gpu;
+        ASSERT_TRUE(gpu.GeluInPlace(x_gpu.view, tanh_approx).ok());
+        ASSERT_TRUE(gpu.SyncToHost(x_gpu.view).ok());
+
+        // The exact-erf path on Metal uses a 1.5e-7-accurate polynomial;
+        // keep a comfortable absolute slack.
+        expect_close(x_cpu.view, x_gpu.view, 1e-4f, 1e-4f);
+    }
+}
+
+TEST(MetalParityTest, RopeApplyParity) {
+    REQUIRE_METAL();
+    const int n = 3, q_heads = 4, kv_heads = 4, head_dim = 16;
+    auto q_cpu = HostTensor::alloc({n, q_heads, head_dim}, DType::kF32);
+    auto k_cpu = HostTensor::alloc({n, kv_heads, head_dim}, DType::kF32);
+    auto q_gpu = HostTensor::alloc({n, q_heads, head_dim}, DType::kF32);
+    auto k_gpu = HostTensor::alloc({n, kv_heads, head_dim}, DType::kF32);
+    auto cos_t = HostTensor::alloc({n, head_dim}, DType::kF32);
+    auto sin_t = HostTensor::alloc({n, head_dim}, DType::kF32);
+    fill_random(q_cpu.view.data_as<float>(), n * q_heads * head_dim, 231);
+    fill_random(k_cpu.view.data_as<float>(), n * kv_heads * head_dim, 232);
+    std::memcpy(q_gpu.view.data(), q_cpu.view.data(), q_cpu.view.byte_size());
+    std::memcpy(k_gpu.view.data(), k_cpu.view.data(), k_cpu.view.byte_size());
+    // Tables: unit-circle cos/sin values (arbitrary per-row angles).
+    fill_random(cos_t.view.data_as<float>(), n * head_dim, 233);
+    fill_random(sin_t.view.data_as<float>(), n * head_dim, 234);
+
+    CpuBackend cpu;
+    ASSERT_TRUE(cpu.RopeApply(q_cpu.view, k_cpu.view, cos_t.view, sin_t.view).ok());
+
+    MetalBackend gpu;
+    ASSERT_TRUE(gpu.RopeApply(q_gpu.view, k_gpu.view, cos_t.view, sin_t.view).ok());
+    ASSERT_TRUE(gpu.SyncToHost(q_gpu.view).ok());
+    ASSERT_TRUE(gpu.SyncToHost(k_gpu.view).ok());
+
+    expect_close(q_cpu.view, q_gpu.view, 1e-5f, 1e-5f);
+    expect_close(k_cpu.view, k_gpu.view, 1e-5f, 1e-5f);
+}
+
+// Bidirectional attention parity at vision-tower-like dimensions
+// (heads=16, head_dim=64, n=257 tokens — odd to exercise the block tail).
+TEST(MetalParityTest, AttentionFullParity) {
+    REQUIRE_METAL();
+    const int n = 257, num_heads = 16, head_dim = 64;
+    auto q = HostTensor::alloc({n, num_heads, head_dim}, DType::kF32);
+    auto k = HostTensor::alloc({n, num_heads, head_dim}, DType::kF32);
+    auto v = HostTensor::alloc({n, num_heads, head_dim}, DType::kF32);
+    auto out_cpu = HostTensor::alloc({n, num_heads * head_dim}, DType::kF32);
+    auto out_gpu = HostTensor::alloc({n, num_heads * head_dim}, DType::kF32);
+    fill_random(q.view.data_as<float>(), n * num_heads * head_dim, 241);
+    fill_random(k.view.data_as<float>(), n * num_heads * head_dim, 242);
+    fill_random(v.view.data_as<float>(), n * num_heads * head_dim, 243);
+
+    AttentionConfig cfg{
+        .num_heads = num_heads,
+        .num_kv_heads = num_heads,
+        .head_dim = head_dim,
+        .scale = 1.0f / std::sqrt(static_cast<float>(head_dim)),
+    };
+
+    CpuBackend cpu;
+    ASSERT_TRUE(cpu.AttentionFull(out_cpu.view, q.view, k.view, v.view, cfg).ok());
+
+    MetalBackend gpu;
+    ASSERT_TRUE(gpu.AttentionFull(out_gpu.view, q.view, k.view, v.view, cfg).ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
+
+    // Online-softmax accumulation order differs from CPU's two-pass softmax.
+    expect_close(out_cpu.view, out_gpu.view, 1e-4f, 1e-3f);
+}
+
+// bf16 weight import: converted to f16 on the GPU; runs the decode GEMV and
+// a batched prefill GEMM, both must match the CPU bf16 reference.
+TEST(MetalParityTest, MatMulBf16WeightParity) {
+    REQUIRE_METAL();
+    const int batch = 5, in_dim = 256, out_dim = 64;
+    auto x = HostTensor::alloc({batch, in_dim}, DType::kF32);
+    auto w = HostTensor::alloc({out_dim, in_dim}, DType::kBF16);
+    auto out_cpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    auto out_gpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    fill_random(x.view.data_as<float>(), batch * in_dim, 251);
+    std::vector<float> w_f32(static_cast<size_t>(out_dim) * in_dim);
+    fill_random(w_f32.data(), w_f32.size(), 252);
+    for (size_t i = 0; i < w_f32.size(); ++i) {
+        w.view.data_as<uint16_t>()[i] = fp32_to_bf16(w_f32[i]);
+    }
+
+    CpuBackend cpu;
+    std::array names = {std::string_view{"w0"}};
+    std::array<TensorView, 1> views = {w.view};
+    ASSERT_TRUE(cpu.ImportWeights(views, names).ok());
+    ASSERT_TRUE(cpu.MatMul(out_cpu.view, x.view, "w0").ok());
+
+    MetalBackend gpu;
+    ASSERT_TRUE(gpu.ImportWeights(views, names).ok());
+    ASSERT_TRUE(gpu.MatMul(out_gpu.view, x.view, "w0").ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
+
+    // Batched path goes through the f16 MPS GEMM.
+    expect_close(out_cpu.view, out_gpu.view, 1e-2f, 1e-2f);
+}
+
+// Batched GEMM fallback parity: dims that violate the MPS alignment
+// constraints (in_dim = 1179 like the vision patch embedder) must still
+// produce correct results through the generic compute-kernel path.
+TEST(MetalParityTest, MatMulGemmFallbackParity) {
+    REQUIRE_METAL();
+    const int batch = 37, in_dim = 1179, out_dim = 96;
+    auto x = HostTensor::alloc({batch, in_dim}, DType::kF32);
+    auto w = HostTensor::alloc({out_dim, in_dim}, DType::kBF16);
+    auto out_cpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    auto out_gpu = HostTensor::alloc({batch, out_dim}, DType::kF32);
+    fill_random(x.view.data_as<float>(), batch * in_dim, 261);
+    std::vector<float> w_f32(static_cast<size_t>(out_dim) * in_dim);
+    fill_random(w_f32.data(), w_f32.size(), 262);
+    for (size_t i = 0; i < w_f32.size(); ++i) {
+        w.view.data_as<uint16_t>()[i] = fp32_to_bf16(w_f32[i]);
+    }
+
+    CpuBackend cpu;
+    std::array names = {std::string_view{"w0"}};
+    std::array<TensorView, 1> views = {w.view};
+    ASSERT_TRUE(cpu.ImportWeights(views, names).ok());
+    ASSERT_TRUE(cpu.MatMul(out_cpu.view, x.view, "w0").ok());
+
+    MetalBackend gpu;
+    ASSERT_TRUE(gpu.ImportWeights(views, names).ok());
+    ASSERT_TRUE(gpu.MatMul(out_gpu.view, x.view, "w0").ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
+
+    expect_close(out_cpu.view, out_gpu.view, 1e-2f, 1e-2f);
+}
+
 // Error propagation: a GPU-side failure must surface from Synchronize /
 // SyncToHost and turn every subsequent op into an error (fail loud). Before
 // the fix, flush() cleared the command buffer BEFORE checking its status, so

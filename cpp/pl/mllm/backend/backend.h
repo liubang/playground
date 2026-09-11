@@ -161,6 +161,65 @@ public:
     // Block until all queued work is complete.
     virtual Status Synchronize() = 0;
 
+    // --- Optional vision-encoder ops ---------------------------------------
+    // Vision towers (ViT family) need LayerNorm-with-bias, GELU and full
+    // bidirectional attention — none of which the causal-LM path uses.
+    // Defaults return kUnsupported so backends compile unchanged; the CPU
+    // reference backend implements them first (per the project convention),
+    // device kernels follow once profiling justifies them.
+
+    // LayerNorm with affine parameters:
+    //   out[b, i] = (x[b, i] - mean_b) / sqrt(var_b + eps) * weight[i] + bias[i]
+    // x, out: [batch, hidden]; weight/bias: [hidden] (bias may be invalid).
+    virtual Status LayerNorm(
+        TensorView out, TensorView x, TensorView weight, TensorView bias, float eps) {
+        (void)out;
+        (void)x;
+        (void)weight;
+        (void)bias;
+        (void)eps;
+        return Status::Error(ErrorCode::kUnsupported, "LayerNorm not supported");
+    }
+
+    // GELU in place: x = gelu(x). tanh_approx selects the tanh approximation
+    // (SigLIP / ViT convention); false = exact erf form.
+    // x: [batch, n] (any contiguous shape).
+    virtual Status GeluInPlace(TensorView x, bool tanh_approx) {
+        (void)x;
+        (void)tanh_approx;
+        return Status::Error(ErrorCode::kUnsupported, "GELU not supported");
+    }
+
+    // Rotary embedding application with caller-computed tables (neox
+    // pairing: dim i rotates with dim i + head_dim/2). This single primitive
+    // covers every non-classic rope variant — vision 2D rope, multimodal
+    // 3D rope (mrope), ... — because the geometry (per-position angles) is
+    // computed by whoever understands it (vision tower / engine), while the
+    // backend only applies the rotation.
+    // q, k: [n, num_heads, head_dim]; cos, sin: [n, head_dim] f32 (broadcast
+    // over heads).
+    virtual Status RopeApply(TensorView q, TensorView k, TensorView cos, TensorView sin) {
+        (void)q;
+        (void)k;
+        (void)cos;
+        (void)sin;
+        return Status::Error(ErrorCode::kUnsupported, "RopeApply not supported");
+    }
+
+    // Full bidirectional multi-head self-attention over n tokens: no causal
+    // mask, no KV cache (vision encoder attention).
+    // q, k, v: [n, num_heads, head_dim] (MHA — num_kv_heads == num_heads)
+    // out:     [n, num_heads * head_dim]
+    virtual Status AttentionFull(
+        TensorView out, TensorView q, TensorView k, TensorView v, const AttentionConfig& config) {
+        (void)out;
+        (void)q;
+        (void)k;
+        (void)v;
+        (void)config;
+        return Status::Error(ErrorCode::kUnsupported, "AttentionFull not supported");
+    }
+
     // --- Optional device-residency hooks -----------------------------------
     // Backends that keep activations device-resident (e.g. Metal) implement
     // these; the default implementations preserve plain host-memory semantics

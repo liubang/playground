@@ -94,7 +94,7 @@ WeightStore make_all_weights(const ModelConfig& cfg) {
 
     const int32_t head_dim = cfg.effective_head_dim();
     for (int l = 0; l < cfg.num_layers; ++l) {
-        auto names = make_layer_weight_names(l, cfg.qkv_bias, cfg.qk_norm);
+        auto names = make_layer_weight_names(l, cfg.qkv_bias, cfg.qk_norm, cfg.o_bias);
         store.add_range(names.q_weight, cfg.num_attention_heads * head_dim, cfg.hidden_size);
         store.add_range(names.k_weight, cfg.num_kv_heads * head_dim, cfg.hidden_size);
         store.add_range(names.v_weight, cfg.num_kv_heads * head_dim, cfg.hidden_size);
@@ -108,6 +108,9 @@ WeightStore make_all_weights(const ModelConfig& cfg) {
             store.add_norm(names.q_bias, cfg.num_attention_heads * head_dim, 0.01f);
             store.add_norm(names.k_bias, cfg.num_kv_heads * head_dim, 0.01f);
             store.add_norm(names.v_bias, cfg.num_kv_heads * head_dim, 0.01f);
+        }
+        if (cfg.o_bias) {
+            store.add_norm(names.o_bias, cfg.hidden_size, 0.01f);
         }
         if (cfg.qk_norm) {
             store.add_norm(names.q_norm, head_dim, 1.0f);
@@ -259,10 +262,22 @@ TEST(ModelTest, ArchRegistryFeatureFlags) {
     EXPECT_EQ(find_architecture("llama"), &kArchLlama);
     EXPECT_EQ(find_architecture("qwen2"), &kArchQwen2);
     EXPECT_EQ(find_architecture("qwen3"), &kArchQwen3);
+    EXPECT_EQ(find_architecture("ernie4_5"), &kArchErnie45);
+    EXPECT_EQ(find_architecture("paddleocr"), &kArchPaddleOcr);
     EXPECT_TRUE(kArchQwen2.qkv_bias);
     EXPECT_FALSE(kArchQwen2.qk_norm);
+    EXPECT_FALSE(kArchQwen2.o_bias);
     EXPECT_TRUE(kArchQwen3.qk_norm);
     EXPECT_FALSE(kArchQwen3.qkv_bias);
+    EXPECT_TRUE(kArchErnie45.qkv_bias);
+    EXPECT_TRUE(kArchErnie45.o_bias);
+    EXPECT_FALSE(kArchErnie45.qk_norm);
+    // PaddleOCR-VL text decoder: the ERNIE 4.5 dense skeleton but with
+    // use_bias = false (official config.json) — no projection biases.
+    EXPECT_FALSE(kArchPaddleOcr.qkv_bias);
+    EXPECT_FALSE(kArchPaddleOcr.o_bias);
+    EXPECT_FALSE(kArchPaddleOcr.qk_norm);
+    EXPECT_EQ(kArchPaddleOcr.default_rope_freq_base, kArchErnie45.default_rope_freq_base);
     EXPECT_GT(kArchQwen2.default_rope_freq_base, kArchLlama.default_rope_freq_base);
 }
 
@@ -343,6 +358,67 @@ TEST(ModelTest, Qwen3ForwardWithQkNormAndDecoupledHeadDim) {
     for (int i = 0; i < cfg.vocab_size; ++i) {
         EXPECT_TRUE(std::isfinite(lp[i]));
     }
+}
+
+// ERNIE 4.5: Qwen2-like plus an attention output projection bias.
+TEST(ModelTest, Ernie45ForwardWithAllBiases) {
+    auto cfg = make_tiny_config();
+    cfg.architecture = "ernie4_5";
+    cfg.qkv_bias = true;
+    cfg.o_bias = true;
+    cfg.rope_freq_base = 500000.0f;
+    auto store = make_all_weights(cfg);
+
+    auto model_result = CreateModel(cfg, store.entries);
+    ASSERT_TRUE(model_result.ok()) << model_result.status().message;
+    auto model = std::move(model_result).value();
+
+    CpuBackend backend;
+    ASSERT_TRUE(import_weights(backend, store));
+
+    auto cache = KVCache::Create(cfg, 32, DType::kF32).value();
+    auto arena = ScratchArena::Create(1024 * 1024).value();
+
+    auto hidden0 = store.entries[0].view.slice(0, 2, 3).value().reshape({1, cfg.hidden_size});
+    ASSERT_TRUE(hidden0.ok());
+    arena.Reset();
+    ASSERT_TRUE(model->Forward(hidden0.value(), 0, cache, backend, arena).ok());
+
+    arena.Reset();
+    auto logits_buf = OwnedBuffer::AllocateCpu(cfg.vocab_size * 4, 64);
+    ASSERT_TRUE(logits_buf.ok());
+    auto logits_owned = std::move(logits_buf).value();
+    TensorView logits(logits_owned.data(), DType::kF32, {1, cfg.vocab_size});
+    ASSERT_TRUE(model->ComputeLogits(hidden0.value(), logits, backend, arena).ok());
+    auto* lp = logits.data_as<float>();
+    for (int i = 0; i < cfg.vocab_size; ++i) {
+        EXPECT_TRUE(std::isfinite(lp[i]));
+    }
+
+    // weight_names() must cover both the qkv biases and the o-proj bias so
+    // backends import them.
+    const auto names = model->weight_names();
+    EXPECT_NE(std::find(names.begin(), names.end(), "blk.0.attn_q.bias"), names.end());
+    EXPECT_NE(std::find(names.begin(), names.end(), "blk.0.attn_output.bias"), names.end());
+    EXPECT_NE(std::find(names.begin(), names.end(), "blk.1.attn_output.bias"), names.end());
+}
+
+TEST(ModelTest, Ernie45MissingOutputBiasFailsFast) {
+    auto cfg = make_tiny_config();
+    cfg.architecture = "ernie4_5";
+    cfg.qkv_bias = true;
+    cfg.o_bias = true;
+
+    // Build qwen2-style weights (qkv bias but no output bias) but claim
+    // ernie4_5 — Create must fail.
+    const bool saved = cfg.o_bias;
+    cfg.o_bias = false;
+    auto store = make_all_weights(cfg);
+    cfg.o_bias = saved;
+
+    auto model_result = CreateModel(cfg, store.entries);
+    EXPECT_FALSE(model_result.ok());
+    EXPECT_EQ(model_result.status().code, ErrorCode::kNotFound);
 }
 
 TEST(ModelTest, Qwen2MissingBiasFailsFast) {

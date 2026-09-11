@@ -89,4 +89,24 @@ uint16_t fp32_to_fp16(float f) noexcept {
     return static_cast<uint16_t>(sign | half);
 }
 
+float bf16_to_fp32(uint16_t b) noexcept {
+    const uint32_t bits = static_cast<uint32_t>(b) << 16;
+    float out;
+    std::memcpy(&out, &bits, sizeof(out));
+    return out;
+}
+
+uint16_t fp32_to_bf16(float f) noexcept {
+    uint32_t bits;
+    std::memcpy(&bits, &f, sizeof(bits));
+    // NaN input stays NaN (force quiet NaN well above the threshold).
+    if (((bits & 0x7FFFFFFFU) > 0x7F800000U)) {
+        return static_cast<uint16_t>(0x7FC0U | (bits >> 16));
+    }
+    // round to nearest even on the 16 dropped bits
+    const uint32_t lsb = (bits >> 16) & 1U;
+    bits += 0x7FFFU + lsb;
+    return static_cast<uint16_t>(bits >> 16);
+}
+
 } // namespace pl::mllm

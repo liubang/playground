@@ -791,6 +791,11 @@ Result<std::vector<int32_t>> Tokenizer::Encode(std::string_view text, bool add_b
     return ids;
 }
 
+int32_t Tokenizer::LookupToken(std::string_view piece) const {
+    const auto it = piece_to_id_.find(std::string(piece));
+    return it != piece_to_id_.end() ? it->second : -1;
+}
+
 Result<std::string> Tokenizer::DecodeOne(int32_t token) const {
     if (token < 0 || token >= static_cast<int32_t>(tokens_.size())) {
         return Status::Error(ErrorCode::kInvalidArgument, "token id out of range");

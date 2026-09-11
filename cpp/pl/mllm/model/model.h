@@ -74,6 +74,34 @@ public:
                            Backend& backend,
                            ScratchArena& scratch) const = 0;
 
+    // Multimodal prefill with caller-computed rotary tables (MRoPE models).
+    // Identical to Prefill except the per-row rope angles come from tables
+    // instead of the linear position sequence start_pos + b:
+    //   rope_cos / rope_sin: [n, head_dim] f32, neox layout with duplicated
+    //   halves (row i pairs dims i and i + head_dim/2) — the same layout the
+    //   vision towers use with Backend::RopeApply.
+    // kv_start_pos is still the causal/KV offset of row 0 (the number of
+    // sequence rows already in the cache); attention masking and KV
+    // addressing are unaffected by the multimodal position geometry.
+    // Default: kUnsupported; models with a generic rope application point
+    // override it.
+    virtual Status PrefillRopeTables(TensorView hidden,
+                                     int64_t kv_start_pos,
+                                     TensorView rope_cos,
+                                     TensorView rope_sin,
+                                     KVCache& cache,
+                                     Backend& backend,
+                                     ScratchArena& scratch) const {
+        (void)hidden;
+        (void)kv_start_pos;
+        (void)rope_cos;
+        (void)rope_sin;
+        (void)cache;
+        (void)backend;
+        (void)scratch;
+        return Status::Error(ErrorCode::kUnsupported, "PrefillRopeTables not supported");
+    }
+
     // Final norm + output projection (lm_head).
     // hidden: [1, hidden_size]; logits: [1, vocab_size] — output.
     virtual Status ComputeLogits(TensorView hidden,

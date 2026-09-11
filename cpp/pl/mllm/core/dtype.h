@@ -28,6 +28,7 @@ enum class DType : uint8_t {
     kF16,
     kQ8_0,
     kQ4_0,
+    kBF16,
 };
 
 // Quantized block layout (ggml-compatible, little-endian).
@@ -58,6 +59,7 @@ inline constexpr size_t kQ4_0TypeSize = 2 + kQ4_0BlockSize / 2; // fp16 scale + 
         case DType::kF32:
             return 4;
         case DType::kF16:
+        case DType::kBF16:
             return 2;
         case DType::kQ8_0:
             return kQ8_0TypeSize;
@@ -79,5 +81,10 @@ inline constexpr size_t kQ4_0TypeSize = 2 + kQ4_0BlockSize / 2; // fp16 scale + 
 // Portable IEEE-754 half <-> float conversion (bit-exact, no HW dependency).
 [[nodiscard]] float fp16_to_fp32(uint16_t h) noexcept;
 [[nodiscard]] uint16_t fp32_to_fp16(float f) noexcept;
+
+// bfloat16 <-> float conversion (bf16 widens/narrows by dropping/adding the
+// low 16 mantissa bits; narrowing uses round-to-nearest-even).
+[[nodiscard]] float bf16_to_fp32(uint16_t b) noexcept;
+[[nodiscard]] uint16_t fp32_to_bf16(float f) noexcept;
 
 } // namespace pl::mllm

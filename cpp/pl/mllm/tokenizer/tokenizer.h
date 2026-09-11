@@ -51,6 +51,10 @@ public:
     [[nodiscard]] Result<std::string> Decode(std::span<const int32_t> tokens) const;
     [[nodiscard]] Result<std::string> DecodeOne(int32_t token) const;
 
+    // Exact whole-piece lookup (e.g. special tokens such as a multimodal
+    // image placeholder). Returns -1 when the piece is not in the vocab.
+    [[nodiscard]] int32_t LookupToken(std::string_view piece) const;
+
 private:
     // Tokenizer family as declared by tokenizer.ggml.model.
     enum class ModelType {

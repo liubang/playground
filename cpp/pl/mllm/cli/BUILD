@@ -25,5 +25,6 @@ cc_binary(
     visibility = ["//visibility:public"],
     deps = [
         "//cpp/pl/mllm/engine",
+        "//cpp/pl/mllm/media:image_io",
     ],
 )

@@ -45,6 +45,7 @@
 
 namespace {
 
+using pl::mllm::bf16_to_fp32;
 using pl::mllm::DType;
 using pl::mllm::fp16_to_fp32;
 using pl::mllm::GGUFFile;
@@ -72,6 +73,13 @@ Status embedding_row(const TensorView& embd, int32_t token, int32_t hidden, Tens
         const auto* src = embd.data_as<const uint16_t>() + static_cast<size_t>(token) * hidden;
         for (int32_t i = 0; i < hidden; ++i) {
             od[i] = fp16_to_fp32(src[i]);
+        }
+        return {};
+    }
+    if (embd.dtype() == DType::kBF16) {
+        const auto* src = embd.data_as<const uint16_t>() + static_cast<size_t>(token) * hidden;
+        for (int32_t i = 0; i < hidden; ++i) {
+            od[i] = bf16_to_fp32(src[i]);
         }
         return {};
     }

@@ -43,20 +43,23 @@ const char* dtype_label(DType d) {
             return "q4_0";
         case DType::kQ8_0:
             return "q8_0";
+        case DType::kBF16:
+            return "bf16";
     }
     return "unknown";
 }
 
 // Dtypes with end-to-end support in every backend's MatMul path.
 bool is_supported_matmul_dtype(DType d) {
-    return d == DType::kF32 || d == DType::kF16 || d == DType::kQ8_0 || d == DType::kQ4_0;
+    return d == DType::kF32 || d == DType::kF16 || d == DType::kQ8_0 || d == DType::kQ4_0 ||
+           d == DType::kBF16;
 }
 
 // Norms / biases are consumed elementwise (RmsNorm, AddBiasInPlace) and must
 // be dense floats; a block-quantized dtype here would read garbage (CPU
 // elem_to_f32 yields 0 for Q4_0 -> silent all-zero activations).
 bool is_supported_elementwise_dtype(DType d) {
-    return d == DType::kF32 || d == DType::kF16;
+    return d == DType::kF32 || d == DType::kF16 || d == DType::kBF16;
 }
 
 // Fail fast on missing or unsupported weights so a broken checkpoint errors
@@ -132,7 +135,8 @@ Result<std::unique_ptr<DenseDecoderModel>> DenseDecoderModel::Create(
     // Build per-layer weight references from the standard GGUF naming scheme,
     // honoring the family feature flags (Qwen2 bias, Qwen3 QK norm).
     for (int32_t l = 0; l < config.num_layers; ++l) {
-        const LayerWeightNames names = make_layer_weight_names(l, config.qkv_bias, config.qk_norm);
+        const LayerWeightNames names =
+            make_layer_weight_names(l, config.qkv_bias, config.qk_norm, config.o_bias);
 
         LayerWeights lw;
         model->name_storage_.push_back(names.q_weight);
@@ -199,6 +203,16 @@ Result<std::unique_ptr<DenseDecoderModel>> DenseDecoderModel::Create(
                 return s;
             }
         }
+        if (config.o_bias) {
+            lw.o_bias = find_weight(weights, names.o_bias);
+            if (!lw.o_bias.valid()) {
+                return Status::Error(ErrorCode::kNotFound,
+                                     "missing output bias weight for layer " + std::to_string(l));
+            }
+            if (auto s = require_elementwise_weight(lw.o_bias, names.o_bias); !s.ok()) {
+                return s;
+            }
+        }
         if (config.qk_norm) {
             lw.q_norm = find_weight(weights, names.q_norm);
             lw.k_norm = find_weight(weights, names.k_norm);
@@ -259,6 +273,36 @@ Status DenseDecoderModel::Prefill(TensorView hidden,
     return {};
 }
 
+Status DenseDecoderModel::PrefillRopeTables(TensorView hidden,
+                                            int64_t kv_start_pos,
+                                            TensorView rope_cos,
+                                            TensorView rope_sin,
+                                            KVCache& cache,
+                                            Backend& backend,
+                                            ScratchArena& scratch) const {
+    const int32_t n = static_cast<int32_t>(hidden.shape().dim(0));
+    if (n <= 0) {
+        return Status::Error(ErrorCode::kInvalidArgument, "PrefillRopeTables: empty batch");
+    }
+    const int32_t head_dim = config_.effective_head_dim();
+    if (!rope_cos.valid() || !rope_sin.valid() || rope_cos.shape().dim(0) != n ||
+        rope_sin.shape().dim(0) != n || rope_cos.shape().dim(1) != head_dim ||
+        rope_sin.shape().dim(1) != head_dim) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "PrefillRopeTables: tables must be [n, head_dim]");
+    }
+    for (const auto& layer : layers_) {
+        scratch.Reset();
+        if (auto s = layer.ForwardBatch(
+                hidden, kv_start_pos, cache, backend, scratch, config_, rope_cos, rope_sin);
+            !s.ok()) {
+            return s;
+        }
+    }
+    cache.Advance(n);
+    return {};
+}
+
 Status DenseDecoderModel::ComputeLogits(TensorView hidden,
                                         TensorView logits,
                                         Backend& backend,
@@ -290,7 +334,8 @@ std::vector<std::string> DenseDecoderModel::weight_names() const {
     names.emplace_back("output_norm.weight");
     // Per-layer
     for (int32_t l = 0; l < config_.num_layers; ++l) {
-        const LayerWeightNames w = make_layer_weight_names(l, config_.qkv_bias, config_.qk_norm);
+        const LayerWeightNames w =
+            make_layer_weight_names(l, config_.qkv_bias, config_.qk_norm, config_.o_bias);
         names.push_back(w.q_weight);
         names.push_back(w.k_weight);
         names.push_back(w.v_weight);
@@ -304,6 +349,9 @@ std::vector<std::string> DenseDecoderModel::weight_names() const {
             names.push_back(w.q_bias);
             names.push_back(w.k_bias);
             names.push_back(w.v_bias);
+        }
+        if (config_.o_bias) {
+            names.push_back(w.o_bias);
         }
         if (config_.qk_norm) {
             names.push_back(w.q_norm);

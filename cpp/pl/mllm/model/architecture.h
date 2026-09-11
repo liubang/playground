@@ -36,6 +36,9 @@ struct ArchSpec {
     bool dense_decoder = true;
     // Additive bias on Q/K/V projections (e.g. Qwen2: attn_q.bias, ...).
     bool qkv_bias = false;
+    // Additive bias on the attention output projection
+    // (e.g. ERNIE 4.5: attn_output.bias).
+    bool o_bias = false;
     // Per-head RMSNorm on Q/K before RoPE
     // (e.g. Qwen3: attn_q_norm.weight / attn_k_norm.weight).
     bool qk_norm = false;
@@ -55,11 +58,31 @@ inline constexpr ArchSpec kArchQwen3{
     .qk_norm = true,
     .default_rope_freq_base = 1000000.0f,
 };
+// ERNIE 4.5 dense (Baidu): Qwen2-like with an additional attention output
+// projection bias; rope_theta 5e5.
+inline constexpr ArchSpec kArchErnie45{
+    .name = "ernie4_5",
+    .qkv_bias = true,
+    .o_bias = true,
+    .default_rope_freq_base = 500000.0f,
+};
+// PaddleOCR-VL text decoder (Baidu): same skeleton as ERNIE 4.5 dense but
+// with `use_bias = false` (per the official config.json — no projection
+// biases at all) and a decoupled head_dim (hidden 1024, 16 heads,
+// head_dim 128). Converted GGUFs carry `general.architecture = "paddleocr"`.
+// The multimodal 3D rope (mrope_section [16, 24, 24]) is layered on top by
+// the engine when images are present; the dense compute graph is unchanged.
+inline constexpr ArchSpec kArchPaddleOcr{
+    .name = "paddleocr",
+    .default_rope_freq_base = 500000.0f,
+};
 
 inline constexpr std::array kSupportedArchitectures{
     &kArchLlama,
     &kArchQwen2,
     &kArchQwen3,
+    &kArchErnie45,
+    &kArchPaddleOcr,
 };
 
 // Look up an architecture by GGUF name; nullptr when unsupported.

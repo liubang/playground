@@ -15,6 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/08/29 22:15
 
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -330,6 +331,94 @@ TEST(GgufLoaderTest, Qwen3ConfigWithHeadDim) {
     EXPECT_FALSE(cfg.value().qkv_bias);
     EXPECT_EQ(cfg.value().head_dim, 16);
     EXPECT_FLOAT_EQ(cfg.value().rope_freq_base, 1000000.0f);
+}
+
+// ERNIE 4.5: qkv bias + attention-output bias, rope_theta 5e5 default.
+TEST(GgufLoaderTest, Ernie45ConfigFlags) {
+    td::GgufWriter w = make_arch_writer("ernie4_5");
+    TempFile tmp(w.build(32));
+    auto file = GGUFFile::Open(tmp.path());
+    ASSERT_TRUE(file.ok()) << file.status().message;
+
+    auto cfg = file.value()->model_config();
+    ASSERT_TRUE(cfg.ok()) << cfg.status().message;
+    EXPECT_EQ(cfg.value().architecture, "ernie4_5");
+    EXPECT_TRUE(cfg.value().qkv_bias);
+    EXPECT_TRUE(cfg.value().o_bias);
+    EXPECT_FALSE(cfg.value().qk_norm);
+    EXPECT_FLOAT_EQ(cfg.value().rope_freq_base, 500000.0f);
+}
+
+// PaddleOCR-VL text decoder: ERNIE 4.5 skeleton but use_bias = false.
+TEST(GgufLoaderTest, PaddleOcrConfigFlags) {
+    td::GgufWriter w = make_arch_writer("paddleocr");
+    TempFile tmp(w.build(32));
+    auto file = GGUFFile::Open(tmp.path());
+    ASSERT_TRUE(file.ok()) << file.status().message;
+
+    auto cfg = file.value()->model_config();
+    ASSERT_TRUE(cfg.ok()) << cfg.status().message;
+    EXPECT_EQ(cfg.value().architecture, "paddleocr");
+    EXPECT_FALSE(cfg.value().qkv_bias);
+    EXPECT_FALSE(cfg.value().o_bias);
+    EXPECT_FALSE(cfg.value().qk_norm);
+    EXPECT_FLOAT_EQ(cfg.value().rope_freq_base, 500000.0f);
+}
+
+// MRoPE: `<arch>.rope.mrope_section` splits the head_dim/2 rotary pairs
+// into (t, h, w) sections. Tiny arch fixture: hidden 16, 2 heads ->
+// head_dim 8 -> 4 pairs, so {2, 1, 1} is the valid split.
+TEST(GgufLoaderTest, MRopeSectionParsed) {
+    td::GgufWriter w = make_arch_writer("qwen2");
+    w.meta_i32_array("qwen2.rope.mrope_section", {2, 1, 1});
+    TempFile tmp(w.build(32));
+    auto file = GGUFFile::Open(tmp.path());
+    ASSERT_TRUE(file.ok()) << file.status().message;
+
+    auto cfg = file.value()->model_config();
+    ASSERT_TRUE(cfg.ok()) << cfg.status().message;
+    EXPECT_TRUE(cfg.value().has_mrope());
+    EXPECT_EQ(cfg.value().mrope_section, (std::array<int32_t, 3>{2, 1, 1}));
+}
+
+// Without the metadata key the model stays on classic 1D rope.
+TEST(GgufLoaderTest, MRopeSectionAbsentIsClassic) {
+    td::GgufWriter w = make_arch_writer("qwen2");
+    TempFile tmp(w.build(32));
+    auto file = GGUFFile::Open(tmp.path());
+    ASSERT_TRUE(file.ok()) << file.status().message;
+
+    auto cfg = file.value()->model_config();
+    ASSERT_TRUE(cfg.ok()) << cfg.status().message;
+    EXPECT_FALSE(cfg.value().has_mrope());
+    EXPECT_EQ(cfg.value().mrope_section, (std::array<int32_t, 3>{0, 0, 0}));
+}
+
+// Sections must be positive and sum to head_dim/2 -> {2, 2, 2} sums to 6 != 4.
+TEST(GgufLoaderTest, MRopeSectionBadSumRejected) {
+    td::GgufWriter w = make_arch_writer("qwen2");
+    w.meta_i32_array("qwen2.rope.mrope_section", {2, 2, 2});
+    TempFile tmp(w.build(32));
+    auto file = GGUFFile::Open(tmp.path());
+    ASSERT_TRUE(file.ok()) << file.status().message;
+
+    auto cfg = file.value()->model_config();
+    EXPECT_FALSE(cfg.ok());
+    EXPECT_EQ(cfg.status().code, ErrorCode::kInvalidFormat);
+}
+
+// A malformed section (wrong arity) is ignored, not fatal: the loader
+// treats it as absent and the config stays classic-rope.
+TEST(GgufLoaderTest, MRopeSectionWrongArityIgnored) {
+    td::GgufWriter w = make_arch_writer("qwen2");
+    w.meta_i32_array("qwen2.rope.mrope_section", {2, 2});
+    TempFile tmp(w.build(32));
+    auto file = GGUFFile::Open(tmp.path());
+    ASSERT_TRUE(file.ok()) << file.status().message;
+
+    auto cfg = file.value()->model_config();
+    ASSERT_TRUE(cfg.ok()) << cfg.status().message;
+    EXPECT_FALSE(cfg.value().has_mrope());
 }
 
 TEST(GgufLoaderTest, UnsupportedArchitectureRejected) {

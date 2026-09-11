@@ -81,6 +81,8 @@ size_t align_up(size_t n, size_t a) noexcept {
             return DType::kQ4_0;
         case 8:
             return DType::kQ8_0;
+        case 30:
+            return DType::kBF16;
         default:
             return DType::kF32; // sentinel: caller rejects before this
     }
@@ -432,7 +434,7 @@ Result<std::shared_ptr<GGUFFile>> GGUFFile::Open(std::string path) {
         if (!cursor.read_pod(type) || !cursor.read_pod(offset)) {
             return Status::Error(ErrorCode::kInvalidFormat, "truncated tensor tail: " + name);
         }
-        if (type != 0 && type != 1 && type != 2 && type != 8) {
+        if (type != 0 && type != 1 && type != 2 && type != 8 && type != 30) {
             return Status::Error(ErrorCode::kUnsupported,
                                  "unsupported tensor dtype id " + std::to_string(type) + " for " +
                                      name);
@@ -650,6 +652,7 @@ Result<ModelConfig> GGUFFile::model_config() const {
     const ArchSpec* arch = find_architecture(architecture_);
     if (arch != nullptr) {
         cfg.qkv_bias = arch->qkv_bias;
+        cfg.o_bias = arch->o_bias;
         cfg.qk_norm = arch->qk_norm;
     }
 
@@ -683,6 +686,31 @@ Result<ModelConfig> GGUFFile::model_config() const {
     auto rope = f32_meta(p + "rope.freq_base");
     const float default_rope_base = arch != nullptr ? arch->default_rope_freq_base : 10000.0f;
     cfg.rope_freq_base = rope.ok() ? rope.value() : default_rope_base;
+
+    // MRoPE section (multimodal models, Qwen2-VL family): an int array of 3
+    // splitting the rotary pairs into (t, h, w) sections. Absent = 1D rope.
+    // Two key flavors exist in the wild: `rope.dimension_sections` (the
+    // llama.cpp converter's Qwen2-VL / PaddleOCR-VL convention, 4 ints with
+    // a trailing 0) and `rope.mrope_section` (3 ints).
+    const MetadataValue* mrope = metadata(p + "rope.dimension_sections");
+    if (mrope == nullptr) {
+        mrope = metadata(p + "rope.mrope_section");
+    }
+    if (mrope != nullptr) {
+        std::visit(
+            [&cfg](auto&& val) {
+                using T = std::decay_t<decltype(val)>;
+                if constexpr (std::is_same_v<T, std::vector<int32_t>> ||
+                              std::is_same_v<T, std::vector<uint32_t>>) {
+                    if (val.size() >= 3) {
+                        for (size_t i = 0; i < 3; ++i) {
+                            cfg.mrope_section[i] = static_cast<int32_t>(val[i]);
+                        }
+                    }
+                }
+            },
+            *mrope);
+    }
 
     // head_dim: prefer explicit "attention.head_dim", then fall back to
     // "attention.key_length" (used by Qwen3), then 0 (= hidden / heads).

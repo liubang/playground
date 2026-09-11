@@ -40,6 +40,9 @@ struct LayerWeightNames {
     std::string q_bias;
     std::string k_bias;
     std::string v_bias;
+    // Optional attention output projection bias (ERNIE 4.5); empty when not
+    // applicable.
+    std::string o_bias;
     // Optional per-head Q/K RMSNorm weights (Qwen3); empty when not applicable.
     std::string q_norm;
     std::string k_norm;
@@ -58,7 +61,8 @@ struct LayerWeightNames {
 // Optional names follow the arch feature flags (see ArchSpec).
 inline LayerWeightNames make_layer_weight_names(int32_t layer,
                                                 bool qkv_bias = false,
-                                                bool qk_norm = false) {
+                                                bool qk_norm = false,
+                                                bool o_bias = false) {
     const std::string prefix = "blk." + std::to_string(layer) + ".";
     return LayerWeightNames{
         .q_weight = prefix + "attn_q.weight",
@@ -68,6 +72,7 @@ inline LayerWeightNames make_layer_weight_names(int32_t layer,
         .q_bias = qkv_bias ? prefix + "attn_q.bias" : "",
         .k_bias = qkv_bias ? prefix + "attn_k.bias" : "",
         .v_bias = qkv_bias ? prefix + "attn_v.bias" : "",
+        .o_bias = o_bias ? prefix + "attn_output.bias" : "",
         .q_norm = qk_norm ? prefix + "attn_q_norm.weight" : "",
         .k_norm = qk_norm ? prefix + "attn_k_norm.weight" : "",
         .attn_norm = prefix + "attn_norm.weight",

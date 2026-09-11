@@ -29,11 +29,13 @@
 #include "cpp/pl/mllm/core/buffer.h"
 #include "cpp/pl/mllm/core/dtype.h"
 #include "cpp/pl/mllm/core/tensor.h"
+#include "cpp/pl/mllm/engine/mrope.h"
 #include "cpp/pl/mllm/kv_cache/kv_cache.h"
 #include "cpp/pl/mllm/loader/gguf.h"
 #include "cpp/pl/mllm/model/model.h"
 #include "cpp/pl/mllm/sampler/sampler.h"
 #include "cpp/pl/mllm/tokenizer/tokenizer.h"
+#include "cpp/pl/mllm/vision/vision_tower.h"
 
 namespace pl::mllm {
 
@@ -64,6 +66,12 @@ struct Engine::Impl {
     // Raw `tokenizer.chat_template` from GGUF metadata (jinja source).
     // Empty = model ships no template.
     std::string chat_template;
+
+    // Multimodal (optional): the mmproj weight file keeps the mmap alive;
+    // the vision tower borrows views into it. Empty/null = text-only.
+    std::shared_ptr<GGUFFile> mmproj;
+    std::unique_ptr<vision::VisionTower> vision_tower;
+    std::string image_placeholder = "<|IMAGE_PLACEHOLDER|>";
 };
 
 // Destructor must be in .cpp where Impl is complete.
@@ -109,6 +117,13 @@ Status embedding_row(const TensorView& embd, int32_t token, int32_t hidden, Tens
         const auto* src = embd.data_as<const uint16_t>() + static_cast<size_t>(token) * hidden;
         for (int32_t i = 0; i < hidden; ++i) {
             od[i] = fp16_to_fp32(src[i]);
+        }
+        return {};
+    }
+    if (embd.dtype() == DType::kBF16) {
+        const auto* src = embd.data_as<const uint16_t>() + static_cast<size_t>(token) * hidden;
+        for (int32_t i = 0; i < hidden; ++i) {
+            od[i] = bf16_to_fp32(src[i]);
         }
         return {};
     }
@@ -182,6 +197,15 @@ Result<std::unique_ptr<Engine>> Engine::Create(Options options) {
     }
     auto config = cfg_result.value();
 
+    // Explicit MRoPE section override (CLI/API escape hatch when the GGUF
+    // lacks `<arch>.rope.mrope_section`).
+    if (options.mrope_section[0] > 0) {
+        config.mrope_section = options.mrope_section;
+        if (auto s = config.Validate(); !s.ok()) {
+            return s;
+        }
+    }
+
     auto tok_result = Tokenizer::FromGGUF(*gguf);
     if (!tok_result.ok()) {
         return tok_result.status();
@@ -203,6 +227,53 @@ Result<std::unique_ptr<Engine>> Engine::Create(Options options) {
         return model_result.status();
     }
     auto model = std::move(model_result).value();
+
+    // Vision tower (optional): load the mmproj GGUF, build the tower from
+    // its metadata, and merge its tensors into the backend import list (the
+    // `v.`/`mm.` namespaces never collide with text weights).
+    std::shared_ptr<GGUFFile> mmproj;
+    std::unique_ptr<vision::VisionTower> vision_tower;
+    if (!options.mmproj_path.empty()) {
+        auto mm = GGUFFile::Open(options.mmproj_path);
+        if (!mm.ok()) {
+            return mm.status();
+        }
+        mmproj = std::move(mm).value();
+        std::vector<vision::WeightEntry> vision_entries;
+        vision_entries.reserve(mmproj->tensors().size());
+        for (const auto& ti : mmproj->tensors()) {
+            auto view = mmproj->tensor(ti.name);
+            if (!view.ok()) {
+                continue;
+            }
+            TensorView v = view.value();
+            // Conv-style kernels (e.g. the patch embedder stored as
+            // [out_channels, 3, p, p]) are used as plain [out_dim, in_dim]
+            // GEMM matrices: ggml dim reversal makes the leading dim the
+            // output channels and the remainder is the contiguous flattened
+            // receptive field, so a 2D reshape preserves the layout exactly.
+            if (v.shape().rank() > 2) {
+                const int64_t out_dim = v.shape().dim(0);
+                const int64_t in_dim = v.shape().numel() / out_dim;
+                v = TensorView(v.data(), v.dtype(), Shape({out_dim, in_dim}));
+            }
+            vision_entries.push_back({ti.name, v});
+        }
+        auto tower = vision::CreateVisionTower(*mmproj, vision_entries);
+        if (!tower.ok()) {
+            return tower.status();
+        }
+        vision_tower = std::move(tower).value();
+        if (vision_tower->config().output_dim != config.hidden_size) {
+            return Status::Error(ErrorCode::kInvalidFormat,
+                                 "mmproj projector output dim != model hidden_size " +
+                                     std::to_string(vision_tower->config().output_dim) + " vs " +
+                                     std::to_string(config.hidden_size));
+        }
+        for (const auto& e : vision_entries) {
+            weight_entries.push_back({e.name, e.view});
+        }
+    }
 
     // Backend: CPU reference everywhere; Metal GPU only on macOS.
     std::unique_ptr<Backend> backend;
@@ -308,8 +379,15 @@ Result<std::unique_ptr<Engine>> Engine::Create(Options options) {
     engine->impl_->weight_entries = std::move(weight_entries);
     engine->impl_->chat_template = std::move(chat_template);
     engine->impl_->ring = options.ring;
+    engine->impl_->mmproj = std::move(mmproj);
+    engine->impl_->vision_tower = std::move(vision_tower);
+    engine->impl_->image_placeholder = std::move(options.image_placeholder);
 
     return engine;
+}
+
+bool Engine::has_vision() const noexcept {
+    return impl_->vision_tower != nullptr;
 }
 
 Result<TensorView> Engine::RunPrefill(std::span<const int32_t> tokens) {
@@ -379,6 +457,159 @@ Result<TensorView> Engine::RunPrefill(std::span<const int32_t> tokens) {
     // caller can sample the first generated token directly.
     return TensorView(
         dst + row_of_last * static_cast<size_t>(hidden), DType::kF32, Shape({1, hidden}));
+}
+
+Result<Engine::MultimodalPrefill> Engine::RunPrefillMultimodal(
+    std::span<const int32_t> tokens, std::span<const media::Image> images) {
+    auto& impl = *impl_;
+    const int32_t hidden = impl.config.hidden_size;
+    const int32_t head_dim = impl.config.effective_head_dim();
+
+    if (impl.vision_tower == nullptr) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "multimodal prompt but the engine has no mmproj");
+    }
+    if (!impl.config.has_mrope()) {
+        return Status::Error(
+            ErrorCode::kInvalidArgument,
+            "model GGUF lacks <arch>.rope.mrope_section; pass Options::mrope_section");
+    }
+    const int32_t placeholder = impl.tokenizer.LookupToken(impl.image_placeholder);
+    if (placeholder < 0) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "tokenizer vocab lacks the image placeholder piece: " +
+                                 impl.image_placeholder);
+    }
+
+    // Encode every image up front; the tower yields LM-space embeddings
+    // over the merged patch grid.
+    std::vector<vision::VisionOutput> encoded;
+    encoded.reserve(images.size());
+    for (const auto& img : images) {
+        auto out = impl.vision_tower->Encode(img, *impl.backend);
+        if (!out.ok()) {
+            return out.status();
+        }
+        if (out.value().embeddings.shape().dim(1) != hidden) {
+            return Status::Error(ErrorCode::kInvalidFormat,
+                                 "vision tower output width != model hidden_size");
+        }
+        encoded.push_back(std::move(out).value());
+    }
+
+    // Expand the prompt into the physical row sequence: text-token rows and
+    // image rows (one per placeholder, in order), and the matching MRoPE
+    // segments.
+    struct RowRef {
+        int32_t token; // >= 0: text row, < 0: image row
+        int32_t image; // index into `encoded` for image rows
+        int32_t row;   // row inside the image's embedding matrix
+    };
+    std::vector<RowRef> rows;
+    std::vector<PromptSegment> segments;
+    int32_t text_run = 0;
+    size_t next_image = 0;
+    auto flush_text = [&]() {
+        if (text_run > 0) {
+            segments.push_back(PromptSegment::Text(text_run));
+            text_run = 0;
+        }
+    };
+    for (const int32_t tok : tokens) {
+        if (tok != placeholder) {
+            rows.push_back({tok, -1, 0});
+            ++text_run;
+            continue;
+        }
+        if (next_image >= encoded.size()) {
+            return Status::Error(ErrorCode::kInvalidArgument,
+                                 "more image placeholders than images");
+        }
+        flush_text();
+        const vision::VisionOutput& vo = encoded[next_image];
+        for (int32_t r = 0; r < vo.n_tokens; ++r) {
+            rows.push_back({-1, static_cast<int32_t>(next_image), r});
+        }
+        segments.push_back(PromptSegment::Image(vo.grid_h, vo.grid_w));
+        ++next_image;
+    }
+    flush_text();
+    if (next_image != encoded.size()) {
+        return Status::Error(ErrorCode::kInvalidArgument, "fewer image placeholders than images");
+    }
+
+    // MRoPE geometry for the whole prompt, then per-row rotary tables.
+    const MRopePlan plan = BuildMRopePlan(segments);
+    if (plan.positions.size() != rows.size()) {
+        return Status::Error(ErrorCode::kInternal, "mrope plan / row count mismatch");
+    }
+    std::vector<float> rope_cos, rope_sin;
+    BuildMRopeTables(plan.positions,
+                     head_dim,
+                     impl.config.mrope_section,
+                     impl.config.rope_freq_base,
+                     rope_cos,
+                     rope_sin);
+
+    // Chunked prefill over the spliced rows, same chunking discipline as
+    // RunPrefill: the residual stream lives in prefill_hidden; K/V offsets
+    // are physical sequence indices (chunk_start), rope angles come from
+    // the tables.
+    const int32_t chunk_max = std::min<int32_t>(kPrefillChunk, impl.cache->capacity());
+    auto* dst = static_cast<float*>(impl.prefill_hidden.data());
+    const int64_t total = static_cast<int64_t>(rows.size());
+    int64_t row_of_last = 0;
+    for (int64_t chunk_start = 0; chunk_start < total; chunk_start += chunk_max) {
+        const int32_t n = static_cast<int32_t>(std::min<int64_t>(chunk_max, total - chunk_start));
+        for (int32_t i = 0; i < n; ++i) {
+            const RowRef& ref = rows[static_cast<size_t>(chunk_start + i)];
+            TensorView row(dst + static_cast<size_t>(i) * static_cast<size_t>(hidden),
+                           DType::kF32,
+                           Shape({1, hidden}));
+            if (ref.token >= 0) {
+                if (ref.token >= impl.config.vocab_size) {
+                    return Status::Error(ErrorCode::kInvalidArgument,
+                                         "prefill: token out of vocab range");
+                }
+                if (auto s = embedding_row(impl.token_embd, ref.token, hidden, row); !s.ok()) {
+                    return s;
+                }
+            } else {
+                const vision::VisionOutput& vo = encoded[static_cast<size_t>(ref.image)];
+                const float* src = vo.embeddings.data_as<const float>() +
+                                   static_cast<size_t>(ref.row) * static_cast<size_t>(hidden);
+                std::memcpy(row.data(), src, static_cast<size_t>(hidden) * sizeof(float));
+            }
+        }
+        TensorView batch(dst, DType::kF32, Shape({n, hidden}));
+        if (auto s = impl.backend->NotifyHostWrite(batch); !s.ok()) {
+            return s;
+        }
+        if (impl.ring && impl.backend->HasDeviceKV()) {
+            if (auto s = EnsureDeviceKvRoom(impl, chunk_start, n); !s.ok()) {
+                return s;
+            }
+        }
+        const size_t table_off = static_cast<size_t>(chunk_start) * static_cast<size_t>(head_dim);
+        TensorView cos_chunk(rope_cos.data() + table_off, DType::kF32, Shape({n, head_dim}));
+        TensorView sin_chunk(rope_sin.data() + table_off, DType::kF32, Shape({n, head_dim}));
+        if (auto s = impl.model->PrefillRopeTables(
+                batch, chunk_start, cos_chunk, sin_chunk, *impl.cache, *impl.backend, *impl.arena);
+            !s.ok()) {
+            return s;
+        }
+        if (auto s = impl.backend->SyncToHost(batch); !s.ok()) {
+            return s;
+        }
+        row_of_last = n - 1;
+    }
+
+    return MultimodalPrefill{
+        .hidden = TensorView(
+            dst + row_of_last * static_cast<size_t>(hidden), DType::kF32, Shape({1, hidden})),
+        .mrope_delta = plan.delta,
+        .prompt_rows = static_cast<int32_t>(total),
+    };
 }
 
 bool Engine::has_chat_template() const noexcept {
@@ -451,12 +682,23 @@ Result<std::vector<int32_t>> Engine::GenerateTokens(std::string_view prompt,
     return result;
 }
 
+Result<std::vector<int32_t>> Engine::GenerateTokens(const GenerateInput& input,
+                                                    GenerateParams params) {
+    std::vector<int32_t> result;
+    auto s = GenerateStream(input, params, [&](std::string_view, int32_t tok) {
+        result.push_back(tok);
+        return true;
+    });
+    if (!s.ok() && s.code != ErrorCode::kCancelled) {
+        return s;
+    }
+    return result;
+}
+
 Status Engine::GenerateStream(std::string_view prompt,
                               GenerateParams params,
                               std::function<bool(std::string_view, int32_t)> on_piece) {
     auto& impl = *impl_;
-    const int32_t hidden = impl.config.hidden_size;
-    const int32_t vocab = impl.config.vocab_size;
 
     // Tokenize prompt.
     auto enc_result = impl.tokenizer.Encode(prompt, true);
@@ -487,10 +729,82 @@ Status Engine::GenerateStream(std::string_view prompt,
     if (!prefill_result.ok()) {
         return prefill_result.status();
     }
-    TensorView hidden_state = prefill_result.value();
     auto prefill_end = Clock::now();
     perf_.prefill_ms = elapsed_ms(prefill_start, prefill_end);
     perf_.prompt_tokens = static_cast<int32_t>(prompt_tokens.size());
+
+    return DecodeStage(prefill_result.value(),
+                       prompt_tokens,
+                       static_cast<int32_t>(prompt_tokens.size()),
+                       /*mrope_delta=*/0,
+                       params,
+                       t_start,
+                       on_piece);
+}
+
+Status Engine::GenerateStream(const GenerateInput& input,
+                              GenerateParams params,
+                              std::function<bool(std::string_view, int32_t)> on_piece) {
+    // A prompt without images is the plain text pipeline.
+    if (input.images.empty()) {
+        return GenerateStream(std::string_view(input.prompt), params, std::move(on_piece));
+    }
+    auto& impl = *impl_;
+
+    auto enc_result = impl.tokenizer.Encode(input.prompt, true);
+    if (!enc_result.ok()) {
+        return enc_result.status();
+    }
+    auto prompt_tokens = enc_result.value();
+
+    // Capacity estimate in physical rows: text tokens (minus placeholders)
+    // plus the per-image merged-token counts.
+    int64_t rows = static_cast<int64_t>(prompt_tokens.size());
+    if (impl.vision_tower != nullptr) {
+        for (const auto& img : input.images) {
+            auto tc = impl.vision_tower->TokenCount(img.width, img.height);
+            if (!tc.ok()) {
+                return tc.status();
+            }
+            rows += tc.value() - 1; // one placeholder expands to tc rows
+        }
+    }
+    if (!impl.ring && rows + params.max_tokens > impl.cache->capacity()) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "prompt (with images) + max_tokens exceeds cache capacity");
+    }
+
+    impl.cache->Clear();
+
+    auto t_start = Clock::now();
+    auto prefill_start = Clock::now();
+    auto prefill_result = RunPrefillMultimodal(prompt_tokens, input.images);
+    if (!prefill_result.ok()) {
+        return prefill_result.status();
+    }
+    auto prefill_end = Clock::now();
+    perf_.prefill_ms = elapsed_ms(prefill_start, prefill_end);
+    perf_.prompt_tokens = prefill_result.value().prompt_rows;
+
+    return DecodeStage(prefill_result.value().hidden,
+                       prompt_tokens,
+                       prefill_result.value().prompt_rows,
+                       prefill_result.value().mrope_delta,
+                       params,
+                       t_start,
+                       on_piece);
+}
+
+Status Engine::DecodeStage(TensorView hidden_state,
+                           std::span<const int32_t> prompt_tokens,
+                           int32_t prompt_rows,
+                           int64_t mrope_delta,
+                           GenerateParams params,
+                           std::chrono::steady_clock::time_point t_start,
+                           const std::function<bool(std::string_view, int32_t)>& on_piece) {
+    auto& impl = *impl_;
+    const int32_t hidden = impl.config.hidden_size;
+    const int32_t vocab = impl.config.vocab_size;
 
     // Set up sampler.
     SamplerParams sp;
@@ -516,7 +830,9 @@ Status Engine::GenerateStream(std::string_view prompt,
     // Scratch for the repetition-penalty context window (only touched when
     // repeat_penalty is enabled).
     std::vector<int32_t> penalty_ctx;
-    int64_t pos = static_cast<int64_t>(prompt_tokens.size());
+    // Physical sequence index of the next appended token; its rope position
+    // is mrope_delta + seq_pos (identical to seq_pos for text-only models).
+    int64_t seq_pos = prompt_rows;
 
     auto decode_start = Clock::now();
     bool first_token = true;
@@ -599,21 +915,23 @@ Status Engine::GenerateStream(std::string_view prompt,
 
         // Ring mode + device KV: make room in the device window for this
         // token before the model appends (host caches compact themselves).
+        // Addressing is physical (seq_pos); the rope position additionally
+        // carries the multimodal delta.
         if (impl.ring && impl.backend->HasDeviceKV()) {
-            if (auto s = EnsureDeviceKvRoom(impl, pos, 1); !s.ok()) {
+            if (auto s = EnsureDeviceKvRoom(impl, seq_pos, 1); !s.ok()) {
                 return s;
             }
         }
 
-        if (auto s =
-                impl.model->Forward(embd_buf.value(), pos, *impl.cache, *impl.backend, *impl.arena);
+        if (auto s = impl.model->Forward(
+                embd_buf.value(), mrope_delta + seq_pos, *impl.cache, *impl.backend, *impl.arena);
             !s.ok()) {
             return s;
         }
         // Forward updates the buffer in place; it is now the hidden state
         // for the next sampling step.
         hidden_state = embd_buf.value();
-        ++pos;
+        ++seq_pos;
     }
 
     auto decode_end = Clock::now();

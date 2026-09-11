@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <string>
 
@@ -44,10 +45,19 @@ struct ModelConfig {
     int32_t context_length = 0;
     float rms_norm_eps = 1e-5f;
     float rope_freq_base = 10000.0f;
-    // Feature flags (see ArchSpec): additive Q/K/V bias (Qwen2) and per-head
-    // Q/K RMSNorm (Qwen3).
+    // Feature flags (see ArchSpec): additive Q/K/V bias (Qwen2), additive
+    // attention-output bias (ERNIE 4.5) and per-head Q/K RMSNorm (Qwen3).
     bool qkv_bias = false;
+    bool o_bias = false;
     bool qk_norm = false;
+
+    // Multimodal rotary (MRoPE, Qwen2-VL family): split of the head_dim/2
+    // rotary pairs into (temporal, height, width) sections, e.g. {16, 24,
+    // 24} for head_dim 128. All zeros = plain 1D rope (text-only models).
+    // Parsed from `<arch>.rope.mrope_section` in the GGUF metadata.
+    std::array<int32_t, 3> mrope_section{0, 0, 0};
+
+    [[nodiscard]] bool has_mrope() const noexcept { return mrope_section[0] > 0; }
 
     [[nodiscard]] Status Validate() const {
         if (find_architecture(architecture) == nullptr) {
@@ -73,6 +83,17 @@ struct ModelConfig {
         }
         if (!(rms_norm_eps > 0.0f) || !(rope_freq_base > 0.0f)) {
             return Status::Error(ErrorCode::kInvalidFormat, "config: bad float field");
+        }
+        if (has_mrope()) {
+            const int64_t sum =
+                static_cast<int64_t>(mrope_section[0]) + mrope_section[1] + mrope_section[2];
+            const bool positive =
+                mrope_section[0] > 0 && mrope_section[1] > 0 && mrope_section[2] > 0;
+            if (!positive || sum != hd / 2) {
+                return Status::Error(ErrorCode::kInvalidFormat,
+                                     "config: mrope_section must be positive and sum to "
+                                     "head_dim/2");
+            }
         }
         return {};
     }

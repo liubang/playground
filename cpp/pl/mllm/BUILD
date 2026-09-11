@@ -136,6 +136,42 @@ cc_test(
 )
 
 cc_test(
+    name = "image_test",
+    srcs = ["ut/media/image_test.cpp"],
+    copts = TEST_COPTS,
+    deps = [
+        "//cpp/pl/mllm/media",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "mrope_test",
+    srcs = ["ut/engine/mrope_test.cpp"],
+    copts = TEST_COPTS,
+    deps = [
+        "//cpp/pl/mllm/engine",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "vision_tower_test",
+    srcs = ["ut/vision/vision_tower_test.cpp"],
+    copts = TEST_COPTS,
+    deps = [
+        "//cpp/pl/mllm/backend",
+        "//cpp/pl/mllm/backend/cpu:cpu_backend",
+        "//cpp/pl/mllm/core",
+        "//cpp/pl/mllm/loader",
+        "//cpp/pl/mllm/media",
+        "//cpp/pl/mllm/ut/testdata:gguf_writer",
+        "//cpp/pl/mllm/vision",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "engine_test",
     srcs = ["ut/engine/engine_test.cpp"],
     copts = TEST_COPTS,

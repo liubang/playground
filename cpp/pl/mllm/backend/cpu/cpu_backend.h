@@ -46,6 +46,17 @@ public:
     Status AddBiasInPlace(TensorView x, TensorView bias) override;
     Status Synchronize() override { return {}; }
 
+    // Vision-encoder reference ops (Backend defaults return kUnsupported).
+    Status LayerNorm(
+        TensorView out, TensorView x, TensorView weight, TensorView bias, float eps) override;
+    Status GeluInPlace(TensorView x, bool tanh_approx) override;
+    Status AttentionFull(TensorView out,
+                         TensorView q,
+                         TensorView k,
+                         TensorView v,
+                         const AttentionConfig& config) override;
+    Status RopeApply(TensorView q, TensorView k, TensorView cos, TensorView sin) override;
+
     // Test helper: direct access to imported weight by name.
     [[nodiscard]] const TensorView* FindWeight(std::string_view name) const;
 

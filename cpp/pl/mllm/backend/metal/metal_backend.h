@@ -68,6 +68,17 @@ public:
                      const KVCacheView& kv,
                      const AttentionConfig& config) override;
     Status SwiGLU(TensorView out, TensorView gate, TensorView up) override;
+    // Vision-encoder ops (multimodal): affine LayerNorm, GELU, table-driven
+    // rope and bidirectional attention.
+    Status LayerNorm(
+        TensorView out, TensorView x, TensorView weight, TensorView bias, float eps) override;
+    Status GeluInPlace(TensorView x, bool tanh_approx) override;
+    Status RopeApply(TensorView q, TensorView k, TensorView cos, TensorView sin) override;
+    Status AttentionFull(TensorView out,
+                         TensorView q,
+                         TensorView k,
+                         TensorView v,
+                         const AttentionConfig& config) override;
     Status AddInPlace(TensorView x, TensorView residual) override;
     Status AddBiasInPlace(TensorView x, TensorView bias) override;
     Status Synchronize() override;

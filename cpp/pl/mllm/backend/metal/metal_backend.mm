@@ -69,6 +69,8 @@ float elem_to_f32(const void* base, DType dtype, int64_t idx) {
         return static_cast<const float*>(base)[static_cast<size_t>(idx)];
     case DType::kF16:
         return fp16_to_fp32(static_cast<const uint16_t*>(base)[static_cast<size_t>(idx)]);
+    case DType::kBF16:
+        return bf16_to_fp32(static_cast<const uint16_t*>(base)[static_cast<size_t>(idx)]);
     case DType::kQ8_0: {
         const auto* blocks = static_cast<const Q8Block*>(base);
         const int64_t block_idx = idx / kQ8_0BlockSize;
@@ -133,6 +135,12 @@ struct MetalBackend::Impl {
     id<MTLComputePipelineState> gemv_f16_fused_ps = nil;
     id<MTLComputePipelineState> gemv_f32_fused_ps = nil;
     id<MTLComputePipelineState> append_kv_ps = nil;
+    id<MTLComputePipelineState> layernorm_ps = nil;        // vision LayerNorm (affine)
+    id<MTLComputePipelineState> gelu_ps = nil;             // vision GELU in place
+    id<MTLComputePipelineState> rope_apply_ps = nil;       // table-driven rope (vision/mrope)
+    id<MTLComputePipelineState> attention_full_ps = nil;   // bidirectional vision attention
+    id<MTLComputePipelineState> gemm_f32_ps = nil;         // MPS-unfriendly batched GEMM fallback
+    id<MTLComputePipelineState> gemm_f16_ps = nil;
     id<MTLComputePipelineState> dequant_q8_0_f16_ps = nil; // q8_0 -> f16 for MPS prefill
     id<MTLComputePipelineState> dequant_q4_0_f16_ps = nil; // q4_0 -> f16 for MPS prefill
     id<MTLComputePipelineState> cvt_f32_to_f16_ps = nil;   // GEMM A conversion
@@ -280,6 +288,12 @@ private:
         gemv_f16_fused_ps = make_ps("mllm_gemv_f16_fused");
         gemv_f32_fused_ps = make_ps("mllm_gemv_f32_fused");
         append_kv_ps = make_ps("mllm_append_kv");
+        layernorm_ps = make_ps("mllm_layernorm");
+        gelu_ps = make_ps("mllm_gelu_inplace");
+        rope_apply_ps = make_ps("mllm_rope_apply");
+        attention_full_ps = make_ps("mllm_attention_full");
+        gemm_f32_ps = make_ps("mllm_gemm_f32");
+        gemm_f16_ps = make_ps("mllm_gemm_f16");
         dequant_q8_0_f16_ps = make_ps("mllm_dequant_q8_0_f16");
         dequant_q4_0_f16_ps = make_ps("mllm_dequant_q4_0_f16");
         cvt_f32_to_f16_ps = make_ps("mllm_cvt_f32_to_f16");
@@ -295,7 +309,9 @@ private:
             !gemv_q8_0_ps || !gemv_q4_0_ps || !gemv_f16_ps || !gemv_f32_ps ||
             !gemv_q8_0_fused_ps || !gemv_q4_0_fused_ps || !gemv_f16_fused_ps ||
             !gemv_f32_fused_ps ||
-            !append_kv_ps || !dequant_q8_0_f16_ps || !dequant_q4_0_f16_ps ||
+            !append_kv_ps || !layernorm_ps || !gelu_ps || !rope_apply_ps ||
+            !attention_full_ps || !gemm_f32_ps || !gemm_f16_ps ||
+            !dequant_q8_0_f16_ps || !dequant_q4_0_f16_ps ||
             !cvt_f32_to_f16_ps ||
             !cvt_f16_to_f32_ps) {
             init_error = Status::Error(ErrorCode::kBackendFailure,
@@ -472,18 +488,40 @@ Status MetalBackend::ImportWeights(std::span<const TensorView> weights,
         }
         Impl::Weight wg;
         wg.shape = w.shape();
-        // Keep weights in their native format: f32 as f32, f16 as f16, Q8_0 raw.
-        // The GEMV kernels handle each type natively.
-        id<MTLBuffer> buf = [impl_->device
-            newBufferWithBytes:w.data()
-                        length:w.byte_size()
-                       options:MTLResourceStorageModeShared];
+        id<MTLBuffer> buf = nil;
+        if (w.dtype() == DType::kBF16) {
+            // Metal has no native bf16 compute in the kernels used here, so
+            // bf16 weights (PaddleOCR-VL GGUFs use them pervasively) are
+            // converted to f16 at import: same 2-byte footprint, and every
+            // bf16 weight value is exactly representable in f16 (the mantissa
+            // only grows), except the pathological |x| >= 65504 which would
+            // already overflow the forward pass anyway.
+            const int64_t numel = w.shape().numel();
+            std::vector<uint16_t> host(static_cast<size_t>(numel));
+            const auto* src = static_cast<const uint16_t*>(w.data());
+            for (int64_t e = 0; e < numel; ++e) {
+                host[static_cast<size_t>(e)] = fp32_to_fp16(bf16_to_fp32(
+                    src[static_cast<size_t>(e)]));
+            }
+            buf = [impl_->device
+                newBufferWithBytes:host.data()
+                            length:host.size() * sizeof(uint16_t)
+                           options:MTLResourceStorageModeShared];
+            wg.dtype = DType::kF16;
+        } else {
+            // Keep weights in their native format: f32 as f32, f16 as f16,
+            // Q8_0 raw.  The GEMV kernels handle each type natively.
+            buf = [impl_->device
+                newBufferWithBytes:w.data()
+                            length:w.byte_size()
+                           options:MTLResourceStorageModeShared];
+            wg.dtype = w.dtype();
+        }
         if (!buf) {
             return Status::Error(ErrorCode::kBackendFailure,
                                  "MetalBackend: buffer alloc failed");
         }
         wg.buf = buf;
-        wg.dtype = w.dtype();
         impl_->weights_[std::string(names[i])] = wg;
     }
     return {};
@@ -582,6 +620,49 @@ if (auto s = ensure_ready(*impl_); !s.ok()) return s;
         threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
         // Deferred — no commit/wait here.
         return {};
+    }
+
+    // --- Generic GEMM fallback (batch > 1) ---
+    // The MPS f16 path needs inner/output dims to be multiples of 8 and the
+    // f32 path needs multiples of 4 (16-byte row pitch).  The vision patch
+    // embedder (3*p*p = 1179 columns) violates this, so run a plain
+    // compute-kernel GEMM instead of failing the whole encode.
+    {
+        const bool wants_f16 = (w.dtype != DType::kF32);
+        const bool mps_ok = wants_f16 ? ((in_dim % 8) == 0 && (out_dim % 8) == 0)
+                                      : ((in_dim % 4) == 0 && (out_dim % 4) == 0);
+        if (!mps_ok) {
+            id<MTLComputePipelineState> ps = nil;
+            switch (w.dtype) {
+            case DType::kF32:
+                ps = impl_->gemm_f32_ps;
+                break;
+            case DType::kF16:
+                ps = impl_->gemm_f16_ps;
+                break;
+            default:
+                // Quantized weights are always 8-aligned (block size 32), and
+                // bf16 was converted to f16 at import time.
+                return Status::Error(ErrorCode::kUnsupported,
+                                     "MatMul: unsupported weight dtype for GEMM fallback");
+            }
+            const uint32_t in_d = static_cast<uint32_t>(in_dim);
+            const uint32_t out_d = static_cast<uint32_t>(out_dim);
+            id<MTLComputeCommandEncoder> enc = impl_->encoder();
+            [enc setComputePipelineState:ps];
+            [enc setBuffer:obuf offset:0 atIndex:0];
+            [enc setBuffer:xbuf offset:0 atIndex:1];
+            [enc setBuffer:w.buf offset:0 atIndex:2];
+            [enc setBytes:&in_d length:sizeof(in_d) atIndex:3];
+            [enc setBytes:&out_d length:sizeof(out_d) atIndex:4];
+            // 2D grid: x = output column, y = batch row.
+            [enc dispatchThreads:MTLSizeMake(static_cast<NSUInteger>(out_dim),
+                                             static_cast<NSUInteger>(batch), 1)
+                threadsPerThreadgroup:MTLSizeMake(16, 16, 1)];
+            impl_->shadow_[reinterpret_cast<uintptr_t>(out.data())] =
+                {obuf, out_bytes, true};
+            return {};
+        }
     }
 
     // --- MPS path (batch > 1, prefill) ---
@@ -1196,6 +1277,242 @@ Status MetalBackend::Attention(TensorView out, TensorView q, const KVCacheView& 
     [enc dispatchThreadgroups:MTLSizeMake(static_cast<NSUInteger>(num_heads), 1, 1)
          threadsPerThreadgroup:MTLSizeMake(attn_tsize, 1, 1)];
     // Deferred.
+    return {};
+}
+
+// =========================================================================
+// LayerNorm — vision-encoder affine normalization
+// =========================================================================
+
+Status MetalBackend::LayerNorm(
+    TensorView out, TensorView x, TensorView weight, TensorView bias, float eps) {
+    if (auto s = ensure_ready(*impl_); !s.ok()) return s;
+    if (auto s = check_contig_valid(out, "LayerNorm"); !s.ok()) return s;
+    if (auto s = check_contig_valid(x, "LayerNorm"); !s.ok()) return s;
+    if (auto s = check_contig_valid(weight, "LayerNorm"); !s.ok()) return s;
+    if (bias.valid()) {
+        if (auto s = check_contig_valid(bias, "LayerNorm"); !s.ok()) return s;
+    }
+
+    if (x.shape().rank() != 2 || out.shape() != x.shape()) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "LayerNorm: expected [batch, hidden] tensors");
+    }
+    if (out.dtype() != DType::kF32 || x.dtype() != DType::kF32) {
+        return Status::Error(ErrorCode::kUnsupported,
+                             "LayerNorm: x/out must be f32");
+    }
+    const int32_t rows = static_cast<int32_t>(x.shape().dim(0));
+    const int32_t n = static_cast<int32_t>(x.shape().dim(1));
+    if (weight.shape().numel() != n || (bias.valid() && bias.shape().numel() != n)) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "LayerNorm: weight/bias shape mismatch");
+    }
+
+    id<MTLBuffer> xbuf = upload_tensor(*impl_, x);
+    id<MTLBuffer> wbuf = upload_tensor(*impl_, weight);
+    id<MTLBuffer> bbuf = bias.valid() ? upload_tensor(*impl_, bias) : wbuf;
+    const size_t out_bytes = static_cast<size_t>(out.shape().numel()) * sizeof(float);
+    id<MTLBuffer> obuf = impl_->get_or_alloc_output(out.data(), out_bytes);
+    if (!xbuf || !wbuf || !bbuf || !obuf) {
+        return Status::Error(ErrorCode::kBackendFailure, "LayerNorm: buffer alloc failed");
+    }
+
+    const uint32_t ne = static_cast<uint32_t>(n);
+    const uint32_t has_bias = bias.valid() ? 1u : 0u;
+    id<MTLComputeCommandEncoder> enc = impl_->encoder();
+    [enc setComputePipelineState:impl_->layernorm_ps];
+    [enc setBuffer:obuf offset:0 atIndex:0];
+    [enc setBuffer:xbuf offset:0 atIndex:1];
+    [enc setBuffer:wbuf offset:0 atIndex:2];
+    [enc setBuffer:bbuf offset:0 atIndex:3];
+    [enc setBytes:&ne length:sizeof(ne) atIndex:4];
+    [enc setBytes:&eps length:sizeof(eps) atIndex:5];
+    [enc setBytes:&has_bias length:sizeof(has_bias) atIndex:6];
+    [enc setThreadgroupMemoryLength:256 * sizeof(float) atIndex:0];
+    [enc dispatchThreadgroups:MTLSizeMake(static_cast<NSUInteger>(rows), 1, 1)
+         threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
+    return {};
+}
+
+// =========================================================================
+// GeluInPlace — vision MLP activation
+// =========================================================================
+
+Status MetalBackend::GeluInPlace(TensorView x, bool tanh_approx) {
+    if (auto s = ensure_ready(*impl_); !s.ok()) return s;
+    if (auto s = check_contig_valid(x, "GeluInPlace"); !s.ok()) return s;
+    if (x.dtype() != DType::kF32) {
+        return Status::Error(ErrorCode::kUnsupported, "GeluInPlace: x must be f32");
+    }
+
+    const int64_t n = x.shape().numel();
+    id<MTLBuffer> xbuf = upload_tensor(*impl_, x);
+    if (!xbuf) {
+        return Status::Error(ErrorCode::kBackendFailure, "GeluInPlace: buffer alloc failed");
+    }
+    // In-place: the modified buffer becomes the device-side truth.
+    impl_->shadow_[reinterpret_cast<uintptr_t>(x.data())] = {xbuf, x.byte_size(), true};
+
+    const uint32_t ne = static_cast<uint32_t>(n);
+    const uint32_t tanh_app = tanh_approx ? 1u : 0u;
+    id<MTLComputeCommandEncoder> enc = impl_->encoder();
+    [enc setComputePipelineState:impl_->gelu_ps];
+    [enc setBuffer:xbuf offset:0 atIndex:0];
+    [enc setBytes:&ne length:sizeof(ne) atIndex:1];
+    [enc setBytes:&tanh_app length:sizeof(tanh_app) atIndex:2];
+    [enc dispatchThreads:MTLSizeMake(static_cast<NSUInteger>(n), 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
+    return {};
+}
+
+// =========================================================================
+// RopeApply — table-driven rotation (vision 2D rope / multimodal mrope)
+// =========================================================================
+
+Status MetalBackend::RopeApply(TensorView q, TensorView k, TensorView cos, TensorView sin) {
+    if (auto s = ensure_ready(*impl_); !s.ok()) return s;
+    if (auto s = check_contig_valid(q, "RopeApply"); !s.ok()) return s;
+    if (auto s = check_contig_valid(k, "RopeApply"); !s.ok()) return s;
+    if (auto s = check_contig_valid(cos, "RopeApply"); !s.ok()) return s;
+    if (auto s = check_contig_valid(sin, "RopeApply"); !s.ok()) return s;
+
+    if (q.shape().rank() != 3 || k.shape().rank() != 3) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "RopeApply: q/k must be [rows, heads, head_dim]");
+    }
+    const int32_t rows = static_cast<int32_t>(q.shape().dim(0));
+    const int32_t head_dim = static_cast<int32_t>(q.shape().dim(2));
+    if (head_dim <= 0 || (head_dim & 1) != 0) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "RopeApply: head_dim must be positive and even");
+    }
+    if (k.shape().dim(0) != rows || k.shape().dim(2) != head_dim) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "RopeApply: q/k shape mismatch");
+    }
+    if (cos.shape().rank() != 2 || sin.shape().rank() != 2 ||
+        cos.shape().dim(0) != rows || sin.shape().dim(0) != rows ||
+        cos.shape().dim(1) != head_dim || sin.shape().dim(1) != head_dim) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "RopeApply: tables must be [rows, head_dim]");
+    }
+    if (q.dtype() != DType::kF32 || k.dtype() != DType::kF32) {
+        return Status::Error(ErrorCode::kUnsupported, "RopeApply: q/k must be f32");
+    }
+
+    id<MTLBuffer> qbuf = upload_tensor(*impl_, q);
+    id<MTLBuffer> kbuf = upload_tensor(*impl_, k);
+    id<MTLBuffer> cbuf = upload_tensor(*impl_, cos);
+    id<MTLBuffer> sbuf = upload_tensor(*impl_, sin);
+    if (!qbuf || !kbuf || !cbuf || !sbuf) {
+        return Status::Error(ErrorCode::kBackendFailure, "RopeApply: buffer alloc failed");
+    }
+    // In-place on q/k.
+    impl_->shadow_[reinterpret_cast<uintptr_t>(q.data())] = {qbuf, q.byte_size(), true};
+    impl_->shadow_[reinterpret_cast<uintptr_t>(k.data())] = {kbuf, k.byte_size(), true};
+
+    const uint32_t hq = static_cast<uint32_t>(q.shape().dim(1));
+    const uint32_t hk = static_cast<uint32_t>(k.shape().dim(1));
+    const uint32_t nr = static_cast<uint32_t>(rows);
+    const uint32_t hd = static_cast<uint32_t>(head_dim);
+    const size_t pairs = static_cast<size_t>(rows) *
+                         static_cast<size_t>(hq + hk) * static_cast<size_t>(hd) / 2;
+
+    id<MTLComputeCommandEncoder> enc = impl_->encoder();
+    [enc setComputePipelineState:impl_->rope_apply_ps];
+    [enc setBuffer:qbuf offset:0 atIndex:0];
+    [enc setBuffer:kbuf offset:0 atIndex:1];
+    [enc setBuffer:cbuf offset:0 atIndex:2];
+    [enc setBuffer:sbuf offset:0 atIndex:3];
+    [enc setBytes:&hq length:sizeof(hq) atIndex:4];
+    [enc setBytes:&hk length:sizeof(hk) atIndex:5];
+    [enc setBytes:&nr length:sizeof(nr) atIndex:6];
+    [enc setBytes:&hd length:sizeof(hd) atIndex:7];
+    [enc dispatchThreads:MTLSizeMake(pairs, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
+    return {};
+}
+
+// =========================================================================
+// AttentionFull — bidirectional vision-encoder attention (no mask)
+// =========================================================================
+
+Status MetalBackend::AttentionFull(
+    TensorView out, TensorView q, TensorView k, TensorView v, const AttentionConfig& config) {
+    if (auto s = ensure_ready(*impl_); !s.ok()) return s;
+    if (auto s = check_contig_valid(out, "AttentionFull"); !s.ok()) return s;
+    if (auto s = check_contig_valid(q, "AttentionFull"); !s.ok()) return s;
+    if (auto s = check_contig_valid(k, "AttentionFull"); !s.ok()) return s;
+    if (auto s = check_contig_valid(v, "AttentionFull"); !s.ok()) return s;
+
+    if (q.shape().rank() != 3 || k.shape().rank() != 3 || v.shape().rank() != 3) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "AttentionFull: q/k/v must be [n, heads, head_dim]");
+    }
+    const int32_t n = static_cast<int32_t>(q.shape().dim(0));
+    const int32_t num_heads = config.num_heads;
+    const int32_t head_dim = config.head_dim;
+    if (config.num_kv_heads != num_heads) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "AttentionFull: requires MHA (num_kv_heads == num_heads)");
+    }
+    if (head_dim <= 0 || head_dim > 256 || (head_dim & 1) != 0) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "AttentionFull: unsupported head_dim");
+    }
+    if (q.shape().dim(1) != num_heads || q.shape().dim(2) != head_dim ||
+        k.shape().dim(0) != n || k.shape().dim(1) != num_heads || k.shape().dim(2) != head_dim ||
+        v.shape().dim(0) != n || v.shape().dim(1) != num_heads || v.shape().dim(2) != head_dim) {
+        return Status::Error(ErrorCode::kInvalidArgument, "AttentionFull: shape mismatch");
+    }
+    if (out.shape().rank() != 2 || out.shape().dim(0) != n ||
+        out.shape().dim(1) != static_cast<int64_t>(num_heads) * head_dim) {
+        return Status::Error(ErrorCode::kInvalidArgument,
+                             "AttentionFull: out must be [n, heads * head_dim]");
+    }
+    if (out.dtype() != DType::kF32 || q.dtype() != DType::kF32) {
+        return Status::Error(ErrorCode::kUnsupported, "AttentionFull: tensors must be f32");
+    }
+    const float scale = config.scale > 0.0f
+                            ? config.scale
+                            : 1.0f / std::sqrt(static_cast<float>(head_dim));
+
+    id<MTLBuffer> qbuf = upload_tensor(*impl_, q);
+    id<MTLBuffer> kbuf = upload_tensor(*impl_, k);
+    id<MTLBuffer> vbuf = upload_tensor(*impl_, v);
+    const size_t out_bytes = static_cast<size_t>(out.shape().numel()) * sizeof(float);
+    id<MTLBuffer> obuf = impl_->get_or_alloc_output(out.data(), out_bytes);
+    if (!qbuf || !kbuf || !vbuf || !obuf) {
+        return Status::Error(ErrorCode::kBackendFailure, "AttentionFull: buffer alloc failed");
+    }
+
+    const uint32_t nh = static_cast<uint32_t>(num_heads);
+    const uint32_t hd = static_cast<uint32_t>(head_dim);
+    const uint32_t sl = static_cast<uint32_t>(n);
+    const NSUInteger tg_q_bytes = static_cast<NSUInteger>(head_dim) * sizeof(float);
+    const NSUInteger tg_acc_bytes = tg_q_bytes;
+    const NSUInteger tg_sc_bytes = 128 * sizeof(float);
+    const NSUInteger tg_red_bytes = tg_sc_bytes;
+
+    id<MTLComputeCommandEncoder> enc = impl_->encoder();
+    [enc setComputePipelineState:impl_->attention_full_ps];
+    [enc setBuffer:obuf offset:0 atIndex:0];
+    [enc setBuffer:qbuf offset:0 atIndex:1];
+    [enc setBuffer:kbuf offset:0 atIndex:2];
+    [enc setBuffer:vbuf offset:0 atIndex:3];
+    [enc setBytes:&nh length:sizeof(nh) atIndex:4];
+    [enc setBytes:&hd length:sizeof(hd) atIndex:5];
+    [enc setBytes:&sl length:sizeof(sl) atIndex:6];
+    [enc setBytes:&scale length:sizeof(scale) atIndex:7];
+    [enc setThreadgroupMemoryLength:tg_q_bytes atIndex:0];
+    [enc setThreadgroupMemoryLength:tg_sc_bytes atIndex:1];
+    [enc setThreadgroupMemoryLength:tg_acc_bytes atIndex:2];
+    [enc setThreadgroupMemoryLength:tg_red_bytes atIndex:3];
+    // One threadgroup per (head, query row); 128 threads matches BLOCK.
+    [enc dispatchThreadgroups:MTLSizeMake(static_cast<NSUInteger>(num_heads),
+                                          static_cast<NSUInteger>(n), 1)
+         threadsPerThreadgroup:MTLSizeMake(128, 1, 1)];
     return {};
 }
 

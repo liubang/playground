@@ -51,6 +51,9 @@ struct LayerWeights {
     TensorView q_bias;
     TensorView k_bias;
     TensorView v_bias;
+    // Optional additive attention-output projection bias (ERNIE 4.5).
+    // Invalid TensorView = absent; size is [hidden_size].
+    TensorView o_bias;
     // Optional per-head Q/K RMSNorm weights applied before RoPE (Qwen3).
     // Shape: [head_dim] each. Invalid TensorView = absent.
     TensorView q_norm;
@@ -78,18 +81,24 @@ public:
     // Batched forward pass for a run of n tokens (prefill).
     // hidden: [n, hidden_size] — modified in-place (residual adds); must live
     // outside the scratch arena (the caller resets the arena per layer).
-    // start_pos: absolute sequence position of row 0; row b uses position
-    // start_pos + b with causal masking (each token attends to itself and
-    // all earlier positions).
+    // start_pos: sequence offset of row 0; with the default (invalid) rope
+    // tables row b rotates at rope position start_pos + b, and attention
+    // masks causally (each token attends to itself and all earlier rows).
     // cache: shared KV cache; K/V for all n tokens are appended for this
     // layer (the caller advances the cache length by n afterwards).
     // scratch: arena for intermediate activations (reset per layer by caller).
+    // rope_cos/rope_sin: optional per-row rotary tables [n, head_dim] f32
+    // (neox layout, duplicated halves) — when present, the rope angles come
+    // from the tables (multimodal MRoPE), while start_pos keeps governing
+    // ONLY causal masking and KV addressing.
     Status ForwardBatch(TensorView hidden,
                         int64_t start_pos,
                         KVCache& cache,
                         Backend& backend,
                         ScratchArena& scratch,
-                        const ModelConfig& config) const;
+                        const ModelConfig& config,
+                        TensorView rope_cos = {},
+                        TensorView rope_sin = {}) const;
 
 private:
     int32_t layer_index_;

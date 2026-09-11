@@ -1203,6 +1203,305 @@ kernel void mllm_gemv_f32(
                  + partial[base + 2] + partial[base + 3];
     }
 }
+
+// =========================================================================
+// Vision-encoder ops (LayerNorm / GELU / table-driven RoPE / full
+// attention). Used by the multimodal vision tower and the rope-table LM
+// prefill path; the causal LM decode path never touches them.
+// =========================================================================
+
+// LayerNorm with affine params (ViT family):
+//   out[b, i] = (x[b, i] - mean_b) / sqrt(var_b + eps) * w[i] + b[i]
+// One threadgroup per row; two threadgroup reductions (mean, then var).
+kernel void mllm_layernorm(
+    device float* out            [[buffer(0)]],
+    const device float* x        [[buffer(1)]],
+    const device float* w        [[buffer(2)]],
+    const device float* b        [[buffer(3)]],
+    constant uint& n             [[buffer(4)]],
+    constant float& eps          [[buffer(5)]],
+    constant uint& has_bias      [[buffer(6)]],
+    uint tid   [[thread_index_in_threadgroup]],
+    uint tgid  [[threadgroup_position_in_grid]],
+    uint tsize [[threads_per_threadgroup]],
+    threadgroup float* scratch   [[threadgroup(0)]])
+{
+    const uint row = tgid;
+    const device float* xrow = x + (size_t)row * n;
+    device float* orow = out + (size_t)row * n;
+
+    float sum = 0.0f;
+    for (uint i = tid; i < n; i += tsize) {
+        sum += xrow[i];
+    }
+    scratch[tid] = sum;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (uint s = tsize / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            scratch[tid] += scratch[tid + s];
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    const float mean = scratch[0] / (float)n;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    float vs = 0.0f;
+    for (uint i = tid; i < n; i += tsize) {
+        const float d = xrow[i] - mean;
+        vs += d * d;
+    }
+    scratch[tid] = vs;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (uint s = tsize / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            scratch[tid] += scratch[tid + s];
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    const float inv = rsqrt(scratch[0] / (float)n + eps);
+
+    for (uint i = tid; i < n; i += tsize) {
+        float v = (xrow[i] - mean) * inv * w[i];
+        if (has_bias != 0) {
+            v += b[i];
+        }
+        orow[i] = v;
+    }
+}
+
+// GELU in place. tanh_app != 0 selects the tanh approximation
+// (SigLIP / ViT convention); 0 uses the exact erf form. MSL has no erf, so
+// the exact path evaluates the Abramowitz & Stegun 7.1.26 rational
+// approximation (|error| <= 1.5e-7 — far below fp32 activation noise).
+kernel void mllm_gelu_inplace(
+    device float* x              [[buffer(0)]],
+    constant uint& n             [[buffer(1)]],
+    constant uint& tanh_app      [[buffer(2)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= n) return;
+    const float v = x[gid];
+    float r;
+    if (tanh_app != 0) {
+        const float u = 0.7978845608028654f * (v + 0.044715f * v * v * v);
+        r = 0.5f * v * (1.0f + tanh(u));
+    } else {
+        const float z = fabs(v) * 0.7071067811865476f;
+        const float t = 1.0f / (1.0f + 0.3275911f * z);
+        const float p = (((((1.061405429f * t - 1.453152027f) * t) +
+                           1.421413741f) * t - 0.284496736f) * t +
+                         0.254829592f) * t;
+        const float ez = 1.0f - p * exp(-z * z);
+        r = 0.5f * v * (1.0f + copysign(ez, v));
+    }
+    x[gid] = r;
+}
+
+// Table-driven RoPE (neox pairing): geometry is computed on the host
+// (2D vision rope / 3D mrope), the kernel only applies the rotation.
+// q, k: [rows, num_heads, head_dim]; cos/sin: [rows, head_dim] f32.
+//   x'[i]       = x[i] * cos[i]       - x[i + d/2] * sin[i]
+//   x'[i + d/2] = x[i] * sin[i]       + x[i + d/2] * cos[i + d/2]
+// Grid covers q pairs then k pairs (same split as mllm_rope).
+kernel void mllm_rope_apply(
+    device float* q              [[buffer(0)]],
+    device float* k              [[buffer(1)]],
+    const device float* cs       [[buffer(2)]],
+    const device float* sn       [[buffer(3)]],
+    constant uint& q_heads       [[buffer(4)]],
+    constant uint& k_heads       [[buffer(5)]],
+    constant uint& rows          [[buffer(6)]],
+    constant uint& head_dim      [[buffer(7)]],
+    uint gid [[thread_position_in_grid]])
+{
+    const uint hd2 = head_dim / 2;
+    const uint q_pairs = rows * q_heads * hd2;
+
+    device float* ptr;
+    uint heads;
+    uint h;
+    uint i;
+    if (gid < q_pairs) {
+        ptr = q;
+        heads = q_heads;
+        h = gid / hd2;
+        i = gid % hd2;
+    } else {
+        const uint g2 = gid - q_pairs;
+        ptr = k;
+        heads = k_heads;
+        h = g2 / hd2;
+        i = g2 % hd2;
+    }
+    const uint row = h / heads;
+
+    ptr += (size_t)h * head_dim + i;
+    const size_t base = (size_t)row * head_dim + i;
+    const float c = cs[base];
+    const float s = sn[base];
+    const float a = ptr[0];
+    const float b = ptr[hd2];
+    ptr[0] = a * c - b * s;
+    ptr[hd2] = a * s + b * c;
+}
+
+// Full bidirectional multi-head self-attention (vision encoder): no causal
+// mask, every query row attends to all n keys. Structure mirrors
+// mllm_attention_flash_batch but with a constant prefix length and
+// MHA layout (num_kv_heads == num_heads) supplied as flat tensors.
+// q, k, v: [n, num_heads, head_dim]; out: [n, num_heads * head_dim].
+// 2D dispatch: x = head, y = query row; 128 threads per group.
+kernel void mllm_attention_full(
+    device float* out            [[buffer(0)]],
+    const device float* q        [[buffer(1)]],
+    const device float* keys     [[buffer(2)]],
+    const device float* values   [[buffer(3)]],
+    constant uint& num_heads     [[buffer(4)]],
+    constant uint& head_dim      [[buffer(5)]],
+    constant uint& seq_len       [[buffer(6)]],
+    constant float& scale        [[buffer(7)]],
+    uint tid   [[thread_index_in_threadgroup]],
+    uint2 tgid [[threadgroup_position_in_grid]],
+    uint2 tg_sz [[threads_per_threadgroup]],
+    threadgroup float* tg_q   [[threadgroup(0)]],
+    threadgroup float* tg_sc  [[threadgroup(1)]],
+    threadgroup float* tg_acc [[threadgroup(2)]],
+    threadgroup float* tg_red [[threadgroup(3)]])
+{
+    constexpr uint BLOCK = 128;
+    const uint tsize = tg_sz.x;
+    const uint h = tgid.x;
+    const uint row = tgid.y;
+    if (h >= num_heads) return;
+    const size_t row_stride = (size_t)num_heads * head_dim;
+    const device float* kb = keys + (size_t)h * head_dim;
+    const device float* vb = values + (size_t)h * head_dim;
+    const device float* qh = q + (size_t)row * row_stride + (size_t)h * head_dim;
+
+    // Load q into threadgroup memory for broadcast-friendly access.
+    for (uint i = tid; i < head_dim; i += tsize) tg_q[i] = qh[i];
+    // Init output accumulator.
+    for (uint i = tid; i < head_dim; i += tsize) tg_acc[i] = 0.0f;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    float m_run = -INFINITY;
+    float l_run = 0.0f;
+
+    for (uint j0 = 0; j0 < seq_len; j0 += BLOCK) {
+        const uint bl = min(BLOCK, seq_len - j0);
+
+        // Stage A: cooperative score computation.
+        float s = -INFINITY;
+        if (tid < bl) {
+            const device float* kj = kb + (size_t)(j0 + tid) * row_stride;
+            float dot = 0.0f;
+            for (uint dd = 0; dd < head_dim; ++dd) {
+                dot += tg_q[dd] * kj[dd];
+            }
+            s = dot * scale;
+        }
+        tg_sc[tid] = s;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+
+        // Stage B: block-max via tree reduction.
+        tg_red[tid] = s;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        for (uint st = BLOCK / 2; st > 0; st >>= 1) {
+            if (tid < st) tg_red[tid] = max(tg_red[tid], tg_red[tid + st]);
+            threadgroup_barrier(mem_flags::mem_threadgroup);
+        }
+        const float m_block = tg_red[0];
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+
+        // Stage C: weights w = exp(s - m_block); block sumexp.
+        float w = (tid < bl) ? exp(tg_sc[tid] - m_block) : 0.0f;
+        tg_sc[tid] = w;
+        tg_red[tid] = w;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        for (uint st = BLOCK / 2; st > 0; st >>= 1) {
+            if (tid < st) tg_red[tid] += tg_red[tid + st];
+            threadgroup_barrier(mem_flags::mem_threadgroup);
+        }
+        const float sum_block = tg_red[0];
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+
+        // Stage D: merge block into running acc using online softmax.
+        const float m_new = max(m_run, m_block);
+        const float corr_old = exp(m_run - m_new);
+        const float corr_new = exp(m_block - m_new);
+
+        for (uint d = tid; d < head_dim; d += tsize) {
+            float p = 0.0f;
+            for (uint jj = 0; jj < bl; ++jj) {
+                p += tg_sc[jj] * vb[(size_t)(j0 + jj) * row_stride + d];
+            }
+            tg_acc[d] = tg_acc[d] * corr_old + p * corr_new;
+        }
+        l_run = l_run * corr_old + sum_block * corr_new;
+        m_run = m_new;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+
+    // Final write: out[row, h, d] = acc / l_run.
+    device float* orow = out + (size_t)row * row_stride + (size_t)h * head_dim;
+    for (uint d = tid; d < head_dim; d += tsize) {
+        orow[d] = tg_acc[d] / l_run;
+    }
+}
+
+// =========================================================================
+// Generic batched GEMM fallbacks for the prefill path when the MPS matrix
+// kernel cannot be used (odd inner/output dims that violate the MPS row
+// alignment constraints — e.g. the 3*ps*ps*ps = 1179-column patch
+// embedder). One thread per output element; B rows are read with float4
+// vectorization and stay hot in L2 across the many batch rows.
+//   out[r, c] = sum_i x[r, i] * w[c, i]
+// =========================================================================
+kernel void mllm_gemm_f32(
+    device float* out        [[buffer(0)]],
+    const device float* x    [[buffer(1)]],
+    const device float* w    [[buffer(2)]],
+    constant uint& in_dim    [[buffer(3)]],
+    constant uint& out_dim   [[buffer(4)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    const uint c = gid.x;
+    const uint r = gid.y;
+    if (c >= out_dim) return;
+    const device float* xr = x + (size_t)r * in_dim;
+    const device float* wr = w + (size_t)c * in_dim;
+    float acc = 0.0f;
+    const uint vec_end = in_dim - (in_dim % 4u);
+    for (uint i = 0; i < vec_end; i += 4) {
+        const float4 xv = float4(xr[i], xr[i + 1], xr[i + 2], xr[i + 3]);
+        const float4 wv = float4(wr[i], wr[i + 1], wr[i + 2], wr[i + 3]);
+        acc += dot(xv, wv);
+    }
+    for (uint i = vec_end; i < in_dim; ++i) {
+        acc += xr[i] * wr[i];
+    }
+    out[(size_t)r * out_dim + c] = acc;
+}
+
+kernel void mllm_gemm_f16(
+    device float* out        [[buffer(0)]],
+    const device float* x    [[buffer(1)]],
+    const device half* w     [[buffer(2)]],
+    constant uint& in_dim    [[buffer(3)]],
+    constant uint& out_dim   [[buffer(4)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    const uint c = gid.x;
+    const uint r = gid.y;
+    if (c >= out_dim) return;
+    const device float* xr = x + (size_t)r * in_dim;
+    const device half* wr = w + (size_t)c * in_dim;
+    float acc = 0.0f;
+    for (uint i = 0; i < in_dim; ++i) {
+        acc += xr[i] * (float)wr[i];
+    }
+    out[(size_t)r * out_dim + c] = acc;
+}
 )msl";
 
 } // namespace pl::mllm::metal

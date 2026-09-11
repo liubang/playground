@@ -13,36 +13,31 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/08/29 22:15
+# Created: 2026/09/11
 
+load("@rules_cc//cc:defs.bzl", "cc_library")
 load("//cpp:copts/configure_copts.bzl", "COPTS", "LINKOPTS")
 
+package(default_visibility = ["//visibility:public"])
+
+# Vision tower abstraction: image -> LM-space token embeddings.
 cc_library(
-    name = "engine",
+    name = "vision",
     srcs = [
-        "engine.cpp",
-        "mrope.cpp",
+        "paddleocr_tower.cpp",
+        "vision_tower.cpp",
     ],
     hdrs = [
-        "engine.h",
-        "mrope.h",
+        "config.h",
+        "paddleocr_tower.h",
+        "vision_tower.h",
     ],
     copts = COPTS,
     linkopts = LINKOPTS,
-    visibility = ["//visibility:public"],
     deps = [
         "//cpp/pl/mllm/backend",
-        "//cpp/pl/mllm/backend/cpu:cpu_backend",
         "//cpp/pl/mllm/core",
-        "//cpp/pl/mllm/kv_cache",
         "//cpp/pl/mllm/loader",
         "//cpp/pl/mllm/media",
-        "//cpp/pl/mllm/model",
-        "//cpp/pl/mllm/sampler",
-        "//cpp/pl/mllm/tokenizer",
-        "//cpp/pl/mllm/vision",
-    ] + select({
-        "@platforms//os:macos": ["//cpp/pl/mllm/backend/metal:metal_backend"],
-        "//conditions:default": [],
-    }),
+    ],
 )

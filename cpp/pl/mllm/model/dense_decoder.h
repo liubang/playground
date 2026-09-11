@@ -56,6 +56,14 @@ public:
                    Backend& backend,
                    ScratchArena& scratch) const override;
 
+    Status PrefillRopeTables(TensorView hidden,
+                             int64_t kv_start_pos,
+                             TensorView rope_cos,
+                             TensorView rope_sin,
+                             KVCache& cache,
+                             Backend& backend,
+                             ScratchArena& scratch) const override;
+
     Status ComputeLogits(TensorView hidden,
                          TensorView logits,
                          Backend& backend,
