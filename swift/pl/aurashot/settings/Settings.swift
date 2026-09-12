@@ -162,14 +162,41 @@ final class Settings {
         set { UserDefaults.standard.set(newValue, forKey: Key.ocrCliPath) }
     }
 
+    /// Default model directory, per design doc D8: Application
+    /// Support, not a top-level ~/models folder. `resolveModels` still
+    /// probes the legacy location as a fallback for existing installs.
+    nonisolated static var defaultModelDir: URL {
+        URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent(
+                "Library/Application Support/AuraShot/models/paddleocr-vl-1.6",
+                isDirectory: true,
+            )
+    }
+
+    /// Legacy default used before the Application Support move.
+    nonisolated static var legacyModelDir: URL {
+        URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent("models/paddleocr-vl-1.6", isDirectory: true)
+    }
+
+    /// Whether the user has explicitly chosen a model directory.
+    nonisolated var isModelDirCustomized: Bool {
+        !(UserDefaults.standard.string(forKey: Key.ocrModelDir) ?? "").isEmpty
+    }
+
+    /// A hotkey combo conflicts if key code AND modifiers match —
+    /// Carbon registration would collide.
+    nonisolated static func hotkeysConflict(_ a: KeyCombo, _ b: KeyCombo) -> Bool {
+        a.keyCode == b.keyCode && a.carbonModifiers == b.carbonModifiers
+    }
+
     /// Directory holding PaddleOCR-VL-1.6-GGUF{,-mmproj}.gguf.
     nonisolated var ocrModelDir: URL {
         get {
             if let path = UserDefaults.standard.string(forKey: Key.ocrModelDir), !path.isEmpty {
                 return URL(fileURLWithPath: path, isDirectory: true)
             }
-            return URL(fileURLWithPath: NSHomeDirectory())
-                .appendingPathComponent("models/paddleocr-vl-1.6", isDirectory: true)
+            return Self.defaultModelDir
         }
         set { UserDefaults.standard.set(newValue.path, forKey: Key.ocrModelDir) }
     }

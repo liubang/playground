@@ -45,37 +45,52 @@ enum ScreenCapture {
             excludingWindowNumbers.contains(Int($0.windowID))
         }
 
-        var snapshots: [ScreenSnapshot] = []
-        for display in content.displays {
-            let filter = SCContentFilter(
-                display: display,
-                excludingWindows: ownWindows,
-            )
-            // Capture at the display's native pixel size (derived from
-            // AppKit's backingScaleFactor), not its point size, so
-            // crops stay sharp on Retina.
-            let scale = backingScale(for: display.displayID)
-            let config = SCStreamConfiguration()
-            config.width = Int(display.frame.width * scale)
-            config.height = Int(display.frame.height * scale)
-            config.showsCursor = false
-            do {
-                let image = try await SCScreenshotManager.captureImage(
-                    contentFilter: filter,
-                    configuration: config,
-                )
-                snapshots.append(ScreenSnapshot(
-                    image: image,
-                    displayID: display.displayID,
-                    frameCG: display.frame,
-                    scale: CGFloat(image.width) / display.frame.width,
-                ))
-            } catch {
-                throw ScreenCaptureError.captureFailed(
-                    display: display.displayID,
-                    underlying: error,
-                )
+        // Resolve backing scales up front: NSScreen is main-thread
+        // state, and the capture tasks below run off it.
+        let jobs: [(display: SCDisplay, scale: CGFloat)] = content.displays.map {
+            ($0, backingScale(for: $0.displayID))
+        }
+
+        // Capture all displays CONCURRENTLY — SCScreenshotManager is
+        // async and independent per display; a dual-screen setup would
+        // otherwise pay two sequential compositing round-trips.
+        let snapshots = try await withThrowingTaskGroup(of: ScreenSnapshot.self) { group in
+            for (display, scale) in jobs {
+                group.addTask {
+                    let filter = SCContentFilter(
+                        display: display,
+                        excludingWindows: ownWindows,
+                    )
+                    // Capture at the display's native pixel size, not
+                    // its point size, so crops stay sharp on Retina.
+                    let config = SCStreamConfiguration()
+                    config.width = Int(display.frame.width * scale)
+                    config.height = Int(display.frame.height * scale)
+                    config.showsCursor = false
+                    do {
+                        let image = try await SCScreenshotManager.captureImage(
+                            contentFilter: filter,
+                            configuration: config,
+                        )
+                        return ScreenSnapshot(
+                            image: image,
+                            displayID: display.displayID,
+                            frameCG: display.frame,
+                            scale: CGFloat(image.width) / display.frame.width,
+                        )
+                    } catch {
+                        throw ScreenCaptureError.captureFailed(
+                            display: display.displayID,
+                            underlying: error,
+                        )
+                    }
+                }
             }
+            var result: [ScreenSnapshot] = []
+            for try await snapshot in group {
+                result.append(snapshot)
+            }
+            return result
         }
         guard !snapshots.isEmpty else { throw ScreenCaptureError.noDisplays }
         return snapshots

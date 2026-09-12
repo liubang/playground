@@ -13,8 +13,13 @@ import AppKit
 /// toolbar (✓ copies), ⏎, double-click inside the selection, ⌘C, or ⌘S.
 ///
 /// All geometry here is view-local points (bottom-left origin). The
-/// window routes GLOBAL mouse events (cross-screen drags and sessions
-/// where another app owns focus) through handleGlobalMouse.
+/// session controller routes GLOBAL mouse events (cross-screen drags
+/// and sessions where another app owns focus) through handleGlobalMouse.
+///
+/// Rendering cost discipline: every interactive mutation funnels
+/// through withDirtyTracking, which redraws ONLY the union of the
+/// pre/post-mutation affected regions — a full-screen veil + snapshot
+/// redraw per mouseMoved event doesn't scale on a 5K display.
 final class SelectionView: NSView {
     /// The selection frame blue (≈ system blue on a light base).
     private static let selectionBlue = NSColor(red: 0.04, green: 0.52, blue: 1.0, alpha: 1)
@@ -24,6 +29,9 @@ final class SelectionView: NSView {
     private var canvas: Canvas?
     private var display: DisplayContext?
     private var candidateRects: [(rect: CGRect, name: String)] = []
+    /// The snapshot wrapped once at arm time — draw() used to rebuild
+    /// the NSImage on every single redraw.
+    private var snapshotImage: NSImage?
 
     // MARK: - Interaction state
 
@@ -33,8 +41,11 @@ final class SelectionView: NSView {
     private enum DragKind {
         case none
         case newSelection(anchor: CGPoint)
-        case resize(handle: Handle, original: CGRect)
-        case move(offset: CGPoint)
+        /// baseAnnotations snapshots the annotation stack at gesture
+        /// start; each drag tick re-derives transformed copies from it,
+        /// so repeated affine mapping can't accumulate rounding drift.
+        case resize(handle: Handle, original: CGRect, baseAnnotations: [Annotation])
+        case move(offset: CGPoint, original: CGRect, baseAnnotations: [Annotation])
         case annotate(start: CGPoint)
         /// Fine-tuning an already-placed mosaic region: drag one of
         /// its 8 handles / drag the region itself. The patch is drawn
@@ -69,6 +80,7 @@ final class SelectionView: NSView {
     var onConfirm: (() -> Void)? // copy + close
     var onSave: (() -> Void)?
     var onOcr: (() -> Void)?
+    var onPin: (() -> Void)?
     var onCancel: (() -> Void)?
 
     var currentSelection: CGRect? {
@@ -112,7 +124,7 @@ final class SelectionView: NSView {
         addSubview(toolbar)
 
         palette.isHidden = true
-        palette.onChange = { [weak self] in
+        palette.onChange = { [weak self] change in
             guard let self else { return }
             // Live-update an open text editor; future strokes pick the
             // new attributes up at creation time.
@@ -123,8 +135,12 @@ final class SelectionView: NSView {
                 frame.size.height = palette.currentFontSize * 1.6
                 editor.frame = frame
             }
-            // Mosaic intensity changes re-bake the active region.
-            rebakeActiveMosaic()
+            // Only the mosaic INTENSITY knob justifies a re-bake. With
+            // the color panel in continuous mode, rebaking on color
+            // changes would run a CIFilter render per drag tick.
+            if change == .variant, activeTool == .mosaic {
+                rebakeActiveMosaic()
+            }
         }
         addSubview(palette)
     }
@@ -139,6 +155,7 @@ final class SelectionView: NSView {
     func arm(canvas: Canvas, display: DisplayContext) {
         self.canvas = canvas
         self.display = display
+        snapshotImage = NSImage(cgImage: display.snapshot.image, size: display.frameNS.size)
         candidateRects = canvas.windowCandidates.compactMap { candidate in
             let ns = CoordinateSpace.rectToNS(candidate.frameCG)
             guard ns.intersects(display.frameNS) else { return nil }
@@ -153,15 +170,77 @@ final class SelectionView: NSView {
         needsDisplay = true
     }
 
+    // MARK: - Dirty-rect tracking
+
+    /// The region a redraw must cover for the CURRENT state: selection
+    /// chrome (glow band, capsule, close button), the hover preview,
+    /// the magnifier and every annotation. Invalidating the union of
+    /// the pre- and post-mutation regions keeps redraws local; the
+    /// veil/cutout fill is state-driven and clips correctly, so a
+    /// partial redraw is exact.
+    private func affectedRect() -> CGRect {
+        var rect = CGRect.null
+        if let selection, selection.width > 0, selection.height > 0 {
+            // Glow halo (blur radius 12 → visual extent ~30pt).
+            rect = rect.union(selection.insetBy(dx: -34, dy: -34))
+            // Size capsule, whether it floats above or tucks inside.
+            rect = rect.union(CGRect(x: selection.minX - 4, y: selection.maxY - 40,
+                                     width: 340, height: 90))
+            rect = rect.union(closeButtonRect(selection).insetBy(dx: -12, dy: -12))
+        }
+        if let hoverCandidate, selection == nil {
+            rect = rect.union(hoverCandidate.rect.insetBy(dx: -34, dy: -34))
+            // App-name chip above the rect.
+            rect = rect.union(CGRect(x: hoverCandidate.rect.minX, y: hoverCandidate.rect.maxY,
+                                     width: 260, height: 44))
+        }
+        if magnifierActive, let cursor {
+            rect = rect.union(magnifierDirtyRect(at: cursor))
+        }
+        for annotation in annotations {
+            rect = rect.union(dirtyBounds(of: annotation))
+        }
+        if let pending = pendingAnnotation {
+            rect = rect.union(dirtyBounds(of: pending))
+        }
+        return rect.intersection(bounds)
+    }
+
+    /// An annotation's conservative drawing bounds: strokes/arrowheads
+    /// get a generous margin; text is MEASURED because its glyph run
+    /// extends far past the annotation's nominal rect.
+    private func dirtyBounds(of annotation: Annotation) -> CGRect {
+        if annotation.tool == .text {
+            let font = annotation.fontName.flatMap { NSFont(name: $0, size: annotation.fontSize) }
+                ?? NSFont.boldSystemFont(ofSize: annotation.fontSize)
+            let size = (annotation.text as NSString).size(withAttributes: [.font: font])
+            return CGRect(x: annotation.start.x, y: annotation.start.y,
+                          width: size.width, height: size.height)
+                .insetBy(dx: -8, dy: -8)
+        }
+        // 24pt covers line width, round caps, arrowheads and the
+        // mosaic grip dots.
+        return annotation.rect.insetBy(dx: -24, dy: -24)
+    }
+
+    /// Runs `body` and redraws only what the mutation could have
+    /// touched (union of the affected regions before and after).
+    private func withDirtyTracking(_ body: () -> Void) {
+        let before = affectedRect()
+        body()
+        setNeedsDisplay(before.union(affectedRect()))
+    }
+
     // MARK: - Public editing API (keyboard entry points)
 
     func undoAnnotation() {
         guard !annotations.isEmpty else { return }
-        annotations.removeLast()
-        if let index = activeMosaicIndex, index >= annotations.count {
-            activeMosaicIndex = nil
+        withDirtyTracking {
+            annotations.removeLast()
+            if let index = activeMosaicIndex, index >= annotations.count {
+                activeMosaicIndex = nil
+            }
         }
-        needsDisplay = true
     }
 
     // MARK: - Toolbar
@@ -172,17 +251,21 @@ final class SelectionView: NSView {
             // The toolbar toggled itself already; mirror its state and
             // show the style palette while a tool is armed.
             setTool(toolbar.activeTool)
-            palette.isHidden = (activeTool == nil)
             updateToolbarPlacement()
         case .undo:
             undoAnnotation()
         case .clearAll:
-            annotations.removeAll()
-            activeMosaicIndex = nil
-            needsDisplay = true
+            withDirtyTracking {
+                annotations.removeAll()
+                activeMosaicIndex = nil
+            }
         case .ocr:
             if let selection, selection.width >= 3, selection.height >= 3 {
                 onOcr?()
+            }
+        case .pin:
+            if let selection, selection.width >= 3, selection.height >= 3 {
+                onPin?()
             }
         case .cancel:
             onCancel?()
@@ -200,7 +283,17 @@ final class SelectionView: NSView {
 
     private func updateToolbarPlacement() {
         let visible = (phase == .live && mode == .editing && selection != nil)
-        toolbar.isHidden = !visible
+        if visible, toolbar.isHidden {
+            fadeIn(toolbar)
+        } else if !visible {
+            toolbar.isHidden = true
+        }
+        let paletteVisible = visible && activeTool != nil
+        if paletteVisible, palette.isHidden {
+            fadeIn(palette)
+        } else if !paletteVisible {
+            palette.isHidden = true
+        }
         guard visible, let selection else { return }
         let size = toolbar.intrinsicContentSize
         var origin = CGPoint(x: selection.maxX - size.width, y: selection.minY - size.height - 8)
@@ -224,18 +317,28 @@ final class SelectionView: NSView {
         palette.frame = CGRect(origin: paletteOrigin, size: paletteSize)
     }
 
+    private func fadeIn(_ view: NSView) {
+        view.alphaValue = 0
+        view.isHidden = false
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            view.animator().alphaValue = 1
+        }
+    }
+
     // MARK: - Text annotation editor
 
     private func stampStep(at p: CGPoint) {
-        annotations.append(Annotation(
-            tool: .step,
-            start: p,
-            end: p,
-            color: palette.currentColor,
-            number: nextStepNumber,
-        ))
-        nextStepNumber += 1
-        needsDisplay = true
+        withDirtyTracking {
+            annotations.append(Annotation(
+                tool: .step,
+                start: p,
+                end: p,
+                color: palette.currentColor,
+                number: nextStepNumber,
+            ))
+            nextStepNumber += 1
+        }
     }
 
     private func beginTextEdit(at p: CGPoint) {
@@ -265,16 +368,17 @@ final class SelectionView: NSView {
         guard let editor = textEditor else { return }
         let text = editor.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if commit, !text.isEmpty {
-            annotations.append(Annotation(
-                tool: .text,
-                start: CGPoint(x: editor.frame.minX, y: editor.frame.minY + 2),
-                end: editor.frame.origin,
-                text: text,
-                color: palette.currentColor,
-                fontSize: palette.currentFontSize,
-                fontName: palette.currentFont().fontName,
-            ))
-            needsDisplay = true
+            withDirtyTracking {
+                annotations.append(Annotation(
+                    tool: .text,
+                    start: CGPoint(x: editor.frame.minX, y: editor.frame.minY + 2),
+                    end: editor.frame.origin,
+                    text: text,
+                    color: palette.currentColor,
+                    fontSize: palette.currentFontSize,
+                    fontName: palette.currentFont().fontName,
+                ))
+            }
         }
         editor.removeFromSuperview()
         textEditor = nil
@@ -327,199 +431,229 @@ final class SelectionView: NSView {
 
     private func handleDown(at p: CGPoint, clickCount: Int) {
         guard phase == .live else { return }
-        // Global-monitor events skip hit-testing: a click that lands on
-        // the toolbar or palette must not be read as "outside the
-        // selection → start over".
-        if !toolbar.isHidden, toolbar.frame.contains(p) {
-            return
-        }
-        if !palette.isHidden, palette.frame.contains(p) {
-            return
-        }
-        // The white ✕ badge at the selection's top-right cancels the
-        // whole session.
-        if mode == .editing, let sel = selection,
-           closeButtonRect(sel).insetBy(dx: -6, dy: -6).contains(p)
-        {
-            onCancel?()
-            return
-        }
-        endTextEdit(commit: true)
-        cursor = p
-
-        switch mode {
-        case .idle:
-            beginNewSelection(at: p)
-        case .dragging:
-            break // a second button down mid-drag: ignore
-        case .editing:
-            guard let sel = selection else { mode = .idle; beginNewSelection(at: p); return }
-            if clickCount == 2, sel.contains(effectivePoint: p), activeTool == nil {
-                confirmSelection()
+        withDirtyTracking {
+            // Global-monitor events skip hit-testing: a click that lands on
+            // the toolbar or palette must not be read as "outside the
+            // selection → start over".
+            if !toolbar.isHidden, toolbar.frame.contains(p) {
                 return
             }
-            // An active mosaic region wins the hit-test: its handles
-            // resize it, its body moves it, anything else finalizes it
-            // and falls through to whatever the click means.
-            if let index = activeMosaicIndex, index < annotations.count {
-                let region = annotations[index].rect
-                if let handle = hitHandle(p, in: region) {
-                    dragKind = .mosaicResize(handle: handle, index: index)
-                    needsDisplay = true
-                    return
-                }
-                if region.contains(p) {
-                    dragKind = .mosaicMove(
-                        index: index,
-                        offset: CGPoint(x: p.x - region.minX, y: p.y - region.minY),
-                    )
-                    needsDisplay = true
-                    return
-                }
-                activeMosaicIndex = nil
+            if !palette.isHidden, palette.frame.contains(p) {
+                return
             }
-            if let handle = hitHandle(p, in: sel) {
-                dragKind = .resize(handle: handle, original: sel)
-            } else if let tool = activeTool, sel.contains(effectivePoint: p) {
-                let point = clamp(p, to: sel)
-                switch tool {
-                case .text:
-                    beginTextEdit(at: point)
-                case .step:
-                    stampStep(at: point)
-                default:
-                    dragKind = .annotate(start: point)
-                }
-            } else if sel.contains(effectivePoint: p) {
-                dragKind = .move(offset: CGPoint(x: p.x - sel.minX, y: p.y - sel.minY))
-            } else {
-                // Clicking outside starts a fresh selection; the old
-                // annotations go with the old region (cleared inside).
+            // The white ✕ badge at the selection's top-right cancels the
+            // whole session.
+            if mode == .editing, let sel = selection,
+               closeButtonRect(sel).insetBy(dx: -6, dy: -6).contains(p)
+            {
+                onCancel?()
+                return
+            }
+            endTextEdit(commit: true)
+            cursor = p
+
+            switch mode {
+            case .idle:
                 beginNewSelection(at: p)
+            case .dragging:
+                break // a second button down mid-drag: ignore
+            case .editing:
+                guard let sel = selection else { mode = .idle; beginNewSelection(at: p); return }
+                if clickCount == 2, sel.contains(effectivePoint: p), activeTool == nil {
+                    confirmSelection()
+                    return
+                }
+                // An active mosaic region wins the hit-test: its handles
+                // resize it, its body moves it, anything else finalizes it
+                // and falls through to whatever the click means.
+                if let index = activeMosaicIndex, index < annotations.count {
+                    let region = annotations[index].rect
+                    if let handle = hitHandle(p, in: region) {
+                        dragKind = .mosaicResize(handle: handle, index: index)
+                        return
+                    }
+                    if region.contains(p) {
+                        dragKind = .mosaicMove(
+                            index: index,
+                            offset: CGPoint(x: p.x - region.minX, y: p.y - region.minY),
+                        )
+                        return
+                    }
+                    activeMosaicIndex = nil
+                }
+                if let handle = hitHandle(p, in: sel) {
+                    dragKind = .resize(handle: handle, original: sel, baseAnnotations: annotations)
+                } else if let tool = activeTool, sel.contains(effectivePoint: p) {
+                    let point = clamp(p, to: sel)
+                    switch tool {
+                    case .text:
+                        beginTextEdit(at: point)
+                    case .step:
+                        stampStep(at: point)
+                    default:
+                        dragKind = .annotate(start: point)
+                    }
+                } else if sel.contains(effectivePoint: p) {
+                    dragKind = .move(
+                        offset: CGPoint(x: p.x - sel.minX, y: p.y - sel.minY),
+                        original: sel,
+                        baseAnnotations: annotations,
+                    )
+                } else {
+                    // Clicking outside starts a fresh selection; the old
+                    // annotations go with the old region (cleared inside).
+                    beginNewSelection(at: p)
+                }
             }
         }
-        needsDisplay = true
     }
 
     private func handleDrag(at p: CGPoint, shift: Bool) {
         guard phase == .live else { return }
         let clamped = clampToBounds(p)
-        cursor = clamped
 
-        switch dragKind {
-        case .none:
-            return
-        case let .newSelection(anchor):
-            var end = clamped
-            if !shift, !suppressSuction {
-                end = suctionPoint(for: end)
-            }
-            selection = normalizedRect(from: anchor, to: end)
-        case let .resize(handle, original):
-            selection = resizedRect(original: original, handle: handle, to: clamped)
-        case let .move(offset):
-            guard let sel = selection else { return }
-            var origin = CGPoint(x: clamped.x - offset.x, y: clamped.y - offset.y)
-            origin.x = min(max(origin.x, 0), bounds.maxX - sel.width)
-            origin.y = min(max(origin.y, 0), bounds.maxY - sel.height)
-            selection = CGRect(origin: origin, size: sel.size)
-        case let .mosaicResize(handle, index):
-            guard index < annotations.count, let sel = selection else { return }
-            let original = annotations[index].rect
-            let rect = resizedRect(original: original, handle: handle, to: clamp(clamped, to: sel))
-            annotations[index].start = rect.origin
-            annotations[index].end = CGPoint(x: rect.maxX, y: rect.maxY)
-        case let .mosaicMove(index, offset):
-            guard index < annotations.count, let sel = selection else { return }
-            let size = annotations[index].rect.size
-            var origin = CGPoint(x: clamped.x - offset.x, y: clamped.y - offset.y)
-            origin.x = min(max(origin.x, sel.minX), sel.maxX - size.width)
-            origin.y = min(max(origin.y, sel.minY), sel.maxY - size.height)
-            annotations[index].start = origin
-            annotations[index].end = CGPoint(x: origin.x + size.width, y: origin.y + size.height)
-        case let .annotate(start):
-            guard let tool = activeTool, let sel = selection else { return }
-            let point = clamp(clamped, to: sel)
-            if tool == .freehand {
-                // Accumulate the stroke sample by sample.
-                var stroke = pendingAnnotation ?? Annotation(
-                    tool: .freehand, start: start, end: start,
-                    color: palette.currentColor, lineWidth: palette.currentLineWidth,
-                )
-                stroke.points.append(point)
-                pendingAnnotation = stroke
-            } else {
-                pendingAnnotation = Annotation(
-                    tool: tool,
-                    start: start,
-                    end: point,
-                    color: palette.currentColor,
-                    lineWidth: palette.currentLineWidth,
-                )
+        withDirtyTracking {
+            cursor = clamped
+
+            switch dragKind {
+            case .none:
+                return
+            case let .newSelection(anchor):
+                var end = clamped
+                if !shift, !suppressSuction {
+                    end = suctionPoint(for: end)
+                }
+                selection = normalizedRect(from: anchor, to: end)
+            case let .resize(handle, original, baseAnnotations):
+                let resized = resizedRect(original: original, handle: handle, to: clamped)
+                selection = resized
+                // Annotations ride along with the selection: re-derive
+                // from the gesture-start snapshot to avoid drift.
+                if !baseAnnotations.isEmpty {
+                    annotations = baseAnnotations.map { $0.mapped(from: original, to: resized) }
+                }
+            case let .move(offset, original, baseAnnotations):
+                var origin = CGPoint(x: clamped.x - offset.x, y: clamped.y - offset.y)
+                origin.x = min(max(origin.x, 0), bounds.maxX - original.width)
+                origin.y = min(max(origin.y, 0), bounds.maxY - original.height)
+                let moved = CGRect(origin: origin, size: original.size)
+                selection = moved
+                if !baseAnnotations.isEmpty {
+                    let delta = CGPoint(x: moved.minX - original.minX, y: moved.minY - original.minY)
+                    annotations = baseAnnotations.map { $0.translated(by: delta) }
+                }
+            case let .mosaicResize(handle, index):
+                guard index < annotations.count, let sel = selection else { return }
+                let original = annotations[index].rect
+                let rect = resizedRect(original: original, handle: handle, to: clamp(clamped, to: sel))
+                annotations[index].start = rect.origin
+                annotations[index].end = CGPoint(x: rect.maxX, y: rect.maxY)
+            case let .mosaicMove(index, offset):
+                guard index < annotations.count, let sel = selection else { return }
+                let size = annotations[index].rect.size
+                var origin = CGPoint(x: clamped.x - offset.x, y: clamped.y - offset.y)
+                origin.x = min(max(origin.x, sel.minX), sel.maxX - size.width)
+                origin.y = min(max(origin.y, sel.minY), sel.maxY - size.height)
+                annotations[index].start = origin
+                annotations[index].end = CGPoint(x: origin.x + size.width, y: origin.y + size.height)
+            case let .annotate(start):
+                guard let tool = activeTool, let sel = selection else { return }
+                let point = clamp(clamped, to: sel)
+                if tool == .freehand {
+                    // Accumulate the stroke sample by sample, decimated:
+                    // mouseDragged fires far denser than a visible
+                    // stroke needs, and every redraw re-strokes all
+                    // accumulated points.
+                    var stroke = pendingAnnotation ?? Annotation(
+                        tool: .freehand, start: start, end: start,
+                        color: palette.currentColor, lineWidth: palette.currentLineWidth,
+                    )
+                    let threshold = Annotation.freehandMinSampleDistance
+                    if let last = stroke.points.last,
+                       abs(point.x - last.x) < threshold, abs(point.y - last.y) < threshold
+                    {
+                        return
+                    }
+                    stroke.points.append(point)
+                    stroke.end = point
+                    pendingAnnotation = stroke
+                } else {
+                    pendingAnnotation = Annotation(
+                        tool: tool,
+                        start: start,
+                        end: point,
+                        color: palette.currentColor,
+                        lineWidth: palette.currentLineWidth,
+                    )
+                }
             }
         }
         updateToolbarPlacement()
-        needsDisplay = true
     }
 
     private func handleUp(at p: CGPoint) {
         guard phase == .live else { return }
         let finished = dragKind
-        dragKind = .none
-        suppressSuction = false
 
-        switch finished {
-        case .none:
-            return
-        case .newSelection:
-            guard let sel = selection else { mode = .idle; return }
-            if sel.width >= 3, sel.height >= 3 {
-                mode = .editing
-            } else {
-                // Click, not a drag: pick the topmost window under the
-                // cursor; empty desktop clicks reset to idle.
-                if let hit = candidateRects.first(where: { $0.rect.contains(p) }) {
-                    selection = hit.rect.intersection(bounds)
+        withDirtyTracking {
+            dragKind = .none
+            suppressSuction = false
+
+            switch finished {
+            case .none:
+                return
+            case .newSelection:
+                guard let sel = selection else { mode = .idle; return }
+                if sel.width >= 3, sel.height >= 3 {
                     mode = .editing
                 } else {
-                    selection = nil
-                    mode = .idle
+                    // Click, not a drag: pick the topmost window under the
+                    // cursor; empty desktop clicks reset to idle.
+                    if let hit = candidateRects.first(where: { $0.rect.contains(p) }) {
+                        selection = hit.rect.intersection(bounds)
+                        mode = .editing
+                    } else {
+                        selection = nil
+                        mode = .idle
+                    }
                 }
+            case .resize, .move:
+                // Mosaic patches encode the pixels UNDER them — after
+                // the selection (and with it the regions) moved or
+                // resized, re-bake every patch at its new location.
+                rebakeAllMosaics()
+            case let .annotate(start):
+                _ = start
+                guard var pending = pendingAnnotation else { break }
+                pendingAnnotation = nil
+                if pending.isSubstantial {
+                    if pending.tool == .mosaic, let display {
+                        pending.mosaicScale = palette.currentMosaicScale
+                        pending.patch = Mosaic.patch(
+                            snapshot: display.snapshot.image,
+                            viewRect: pending.rect,
+                            display: display,
+                            scale: pending.mosaicScale,
+                        )
+                    }
+                    annotations.append(pending)
+                    // Fresh mosaics stay active (dotted outline + handles)
+                    // so the region can be fine-tuned right away.
+                    if pending.tool == .mosaic {
+                        activeMosaicIndex = annotations.count - 1
+                    }
+                }
+            case .mosaicResize, .mosaicMove:
+                // The patch was drawn STRETCHED during the gesture; re-bake
+                // the pixellation at full pixel resolution for the final rect.
+                rebakeActiveMosaic()
             }
-        case .resize, .move:
-            break // stay in editing
-        case let .annotate(start):
-            guard var pending = pendingAnnotation else { break }
-            pendingAnnotation = nil
-            if pending.isSubstantial {
-                if pending.tool == .mosaic, let display {
-                    pending.patch = Mosaic.patch(
-                        snapshot: display.snapshot.image,
-                        viewRect: pending.rect,
-                        display: display,
-                        scale: palette.currentMosaicScale,
-                    )
-                }
-                annotations.append(pending)
-                // Fresh mosaics stay active (dotted outline + handles)
-                // so the region can be fine-tuned right away.
-                if pending.tool == .mosaic {
-                    activeMosaicIndex = annotations.count - 1
-                }
-            }
-            _ = start
-        case .mosaicResize, .mosaicMove:
-            // The patch was drawn STRETCHED during the gesture; re-bake
-            // the pixellation at full pixel resolution for the final rect.
-            rebakeActiveMosaic()
         }
         updateToolbarPlacement()
-        needsDisplay = true
     }
 
     private func handleMoved(at p: CGPoint) {
         guard phase == .live, case .none = dragKind else { return }
-        cursor = p
         // The toolbar and palette float OUTSIDE the selection; without
         // this early-out the editing branch below would keep slamming
         // the crosshair cursor back on while hovering their buttons.
@@ -531,34 +665,36 @@ final class SelectionView: NSView {
             NSCursor.arrow.set()
             return
         }
-        switch mode {
-        case .idle:
-            hoverCandidate = candidateRects.first { $0.rect.contains(p) }
-            NSCursor.crosshair.set()
-        case .dragging:
-            break
-        case .editing:
-            hoverCandidate = nil
-            if let sel = selection {
-                if closeButtonRect(sel).insetBy(dx: -6, dy: -6).contains(p) {
-                    NSCursor.arrow.set()
-                } else if let index = activeMosaicIndex, index < annotations.count,
-                          hitHandle(p, in: annotations[index].rect) != nil
-                          || annotations[index].rect.contains(p)
-                {
-                    NSCursor.arrow.set()
-                } else if hitHandle(p, in: sel) != nil {
-                    NSCursor.arrow.set()
-                } else if activeTool == .text, sel.contains(effectivePoint: p) {
-                    NSCursor.iBeam.set()
-                } else if sel.contains(effectivePoint: p), activeTool == nil {
-                    NSCursor.openHand.set()
-                } else {
-                    NSCursor.crosshair.set()
+        withDirtyTracking {
+            cursor = p
+            switch mode {
+            case .idle:
+                hoverCandidate = candidateRects.first { $0.rect.contains(p) }
+                NSCursor.crosshair.set()
+            case .dragging:
+                break
+            case .editing:
+                hoverCandidate = nil
+                if let sel = selection {
+                    if closeButtonRect(sel).insetBy(dx: -6, dy: -6).contains(p) {
+                        NSCursor.arrow.set()
+                    } else if let index = activeMosaicIndex, index < annotations.count,
+                              hitHandle(p, in: annotations[index].rect) != nil
+                              || annotations[index].rect.contains(p)
+                    {
+                        NSCursor.arrow.set()
+                    } else if hitHandle(p, in: sel) != nil {
+                        NSCursor.arrow.set()
+                    } else if activeTool == .text, sel.contains(effectivePoint: p) {
+                        NSCursor.iBeam.set()
+                    } else if sel.contains(effectivePoint: p), activeTool == nil {
+                        NSCursor.openHand.set()
+                    } else {
+                        NSCursor.crosshair.set()
+                    }
                 }
             }
         }
-        needsDisplay = true
     }
 
     private func beginNewSelection(at p: CGPoint) {
@@ -570,7 +706,6 @@ final class SelectionView: NSView {
         activeMosaicIndex = nil
         nextStepNumber = 1
         setTool(nil)
-        palette.isHidden = true
         // Starting a drag on top of a window usually means "a region
         // around this window", not "this window" (design §6.3).
         suppressSuction = candidateRects.contains { $0.rect.contains(p) }
@@ -579,11 +714,14 @@ final class SelectionView: NSView {
     }
 
     private func setTool(_ tool: AnnotationTool?) {
-        activeTool = tool
-        toolbar.setActiveTool(tool)
-        palette.activate(tool)
-        // Switching tools finalizes the editable mosaic region.
-        activeMosaicIndex = nil
+        // Clearing activeMosaicIndex drops the dotted chrome → redraw.
+        withDirtyTracking {
+            activeTool = tool
+            toolbar.setActiveTool(tool)
+            palette.activate(tool)
+            // Switching tools finalizes the editable mosaic region.
+            activeMosaicIndex = nil
+        }
     }
 
     /// Re-renders the pixellated patch of the active mosaic region at
@@ -592,13 +730,31 @@ final class SelectionView: NSView {
     private func rebakeActiveMosaic() {
         guard let index = activeMosaicIndex, index < annotations.count,
               annotations[index].tool == .mosaic, let display else { return }
-        annotations[index].patch = Mosaic.patch(
-            snapshot: display.snapshot.image,
-            viewRect: annotations[index].rect,
-            display: display,
-            scale: palette.currentMosaicScale,
-        )
-        needsDisplay = true
+        withDirtyTracking {
+            annotations[index].mosaicScale = palette.currentMosaicScale
+            annotations[index].patch = Mosaic.patch(
+                snapshot: display.snapshot.image,
+                viewRect: annotations[index].rect,
+                display: display,
+                scale: annotations[index].mosaicScale,
+            )
+        }
+    }
+
+    /// Re-bakes EVERY mosaic patch — needed after the selection moved
+    /// or resized, because a patch encodes the pixels under it and the
+    /// regions just changed position/shape. Each region keeps its own
+    /// intensity level.
+    private func rebakeAllMosaics() {
+        guard let display else { return }
+        for index in annotations.indices where annotations[index].tool == .mosaic {
+            annotations[index].patch = Mosaic.patch(
+                snapshot: display.snapshot.image,
+                viewRect: annotations[index].rect,
+                display: display,
+                scale: annotations[index].mosaicScale,
+            )
+        }
     }
 
     // MARK: - Handles
@@ -699,8 +855,8 @@ final class SelectionView: NSView {
     // MARK: - Drawing
 
     override func draw(_: NSRect) {
-        if let image = display?.snapshot.image {
-            NSImage(cgImage: image, size: bounds.size).draw(in: bounds)
+        if let snapshotImage {
+            snapshotImage.draw(in: bounds)
         } else {
             NSColor.black.withAlphaComponent(0.25).setFill()
             bounds.fill()
@@ -753,8 +909,21 @@ final class SelectionView: NSView {
         if let selection, selection.width > 0, selection.height > 0 {
             drawSelectionChrome(selection)
         }
-        if phase == .live, case .none = dragKind, mode != .editing, let cursor {
+        if magnifierActive, let cursor {
             drawMagnifier(at: cursor)
+        }
+    }
+
+    /// The magnifier shows while hovering AND while dragging out a new
+    /// selection (pixel-precise edge placement); it hides in editing
+    /// mode where the toolbar owns the interaction.
+    private var magnifierActive: Bool {
+        guard phase == .live, mode != .editing, cursor != nil else { return false }
+        switch dragKind {
+        case .none, .newSelection:
+            return true
+        default:
+            return false
         }
     }
 
@@ -856,11 +1025,14 @@ final class SelectionView: NSView {
     }
 
     /// Blue capsule above the selection's top-left corner with the
-    /// live dimensions ("715 × 399 pt").
+    /// live dimensions in points AND pixels — the pixel figure is the
+    /// one that matters for design specs and bug reports.
     private func drawSizeCapsule(_ sel: CGRect) {
+        let scale = display?.scale ?? 1
         let text = "\(Int(sel.width)) × \(Int(sel.height)) pt"
+            + " · \(Int((sel.width * scale).rounded())) × \(Int((sel.height * scale).rounded())) px"
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold),
             .foregroundColor: NSColor.white,
         ]
         let textSize = text.size(withAttributes: attrs)
@@ -919,6 +1091,30 @@ final class SelectionView: NSView {
         cross.stroke()
     }
 
+    /// Where the magnifier panel lands for a cursor position (flips to
+    /// the other side near screen edges). Shared by the dirty-rect
+    /// computation and the drawing pass so they never disagree.
+    private func magnifierDest(at p: CGPoint) -> CGRect {
+        let side: CGFloat = 150
+        var dest = CGRect(x: p.x + 24, y: p.y + 24, width: side, height: side)
+        if dest.maxX > bounds.maxX - 8 {
+            dest.origin.x = p.x - 24 - side
+        }
+        if dest.maxY > bounds.maxY - 8 {
+            dest.origin.y = p.y - 24 - side
+        }
+        return dest
+    }
+
+    /// Panel + readout chip (the chip sits below the panel, or above
+    /// it when there is no room).
+    private func magnifierDirtyRect(at p: CGPoint) -> CGRect {
+        let dest = magnifierDest(at: p)
+        return dest.insetBy(dx: -4, dy: -4)
+            .union(CGRect(x: dest.minX - 4, y: dest.minY - 32,
+                          width: dest.width + 8, height: dest.height + 72))
+    }
+
     /// Loupe: zoomed pixels around the cursor with a pixel grid,
     /// crosshair guides and a position/color readout.
     private func drawMagnifier(at p: CGPoint) {
@@ -932,13 +1128,7 @@ final class SelectionView: NSView {
         guard crop.width > 0, crop.height > 0,
               let tile = display.snapshot.image.cropping(to: crop) else { return }
 
-        var dest = CGRect(x: p.x + 24, y: p.y + 24, width: side, height: side)
-        if dest.maxX > bounds.maxX - 8 {
-            dest.origin.x = p.x - 24 - side
-        }
-        if dest.maxY > bounds.maxY - 8 {
-            dest.origin.y = p.y - 24 - side
-        }
+        let dest = magnifierDest(at: p)
 
         NSGraphicsContext.saveGraphicsState()
         NSBezierPath(rect: dest).addClip()
@@ -977,7 +1167,9 @@ final class SelectionView: NSView {
         NSColor.white.withAlphaComponent(0.9).setStroke()
         border.stroke()
 
-        // Readout: global position + center pixel color.
+        // Readout: global position (CG space, top-left origin — the
+        // convention every other screenshot tool reports) + the center
+        // pixel's color.
         let bitmap = NSBitmapImageRep(cgImage: tile)
         let cx = min(max(Int(crop.width) / 2, 0), bitmap.pixelsWide - 1)
         let cy = min(max(Int(crop.height) / 2, 0), bitmap.pixelsHigh - 1)
@@ -990,8 +1182,12 @@ final class SelectionView: NSView {
                 Int((color.blueComponent * 255).rounded()),
             )
         }
-        let global = display.frameNS.origin
-        let readout = "X:\(Int(global.x + p.x)) Y:\(Int(global.y + p.y))\(colorText)"
+        let globalNS = CGPoint(
+            x: display.frameNS.origin.x + p.x,
+            y: display.frameNS.origin.y + p.y,
+        )
+        let globalCG = CoordinateSpace.pointToCG(globalNS)
+        let readout = "X:\(Int(globalCG.x)) Y:\(Int(globalCG.y))\(colorText)"
         drawChip(readout, at: CGPoint(
             x: dest.minX,
             y: dest.minY > 30 ? dest.minY - 24 : dest.maxY + 6,

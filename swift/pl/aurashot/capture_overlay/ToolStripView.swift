@@ -11,6 +11,7 @@ final class ToolStripView: NSView {
         case ocr
         case cancel
         case save
+        case pin
         case done // copy + close
     }
 
@@ -44,6 +45,7 @@ final class ToolStripView: NSView {
         .button(symbol: "xmark", tip: "取消 (Esc)", action: .cancel),
         .button(symbol: "text.viewfinder", tip: "识别文字 (OCR)", action: .ocr),
         .button(symbol: "square.and.arrow.down", tip: "保存 (⌘S)", action: .save),
+        .button(symbol: "pin", tip: "贴图 (⌘P)", action: .pin),
         .button(symbol: "doc.on.doc", tip: "复制到剪贴板 (⏎)", action: .done),
     ]
 

@@ -11,10 +11,34 @@ final class HotKeyManager {
     /// 'ACLP' — identifies AuraShot's hotkeys among all Carbon clients.
     private static let signature = OSType(0x4143_4C50)
 
+    /// Shared instance: the settings window's recorder needs to suspend
+    /// the registrations while it listens for a new combo, otherwise
+    /// pressing e.g. ⌘⇧X into the recorder would trigger a capture
+    /// instead of being recorded.
+    static let shared = HotKeyManager()
+
+    /// Called by resume() so the owner can re-register from Settings.
+    var onResumeNeeded: (() -> Void)?
+
     private var refs: [UInt32: EventHotKeyRef] = [:]
     private var actions: [UInt32: () -> Void] = [:]
     private var handlerRef: EventHandlerRef?
     private var nextID: UInt32 = 1
+    private var suspended = false
+
+    /// Temporarily unregisters every hotkey (recorder capture).
+    func suspend() {
+        guard !suspended else { return }
+        suspended = true
+        unregisterAll()
+    }
+
+    /// Ends a suspension; the owner re-registers via onResumeNeeded.
+    func resume() {
+        guard suspended else { return }
+        suspended = false
+        onResumeNeeded?()
+    }
 
     /// Registers a hotkey. `carbonModifiers` uses Carbon's modifier
     /// masks (cmdKey, shiftKey, optionKey, controlKey). Returns false
@@ -25,6 +49,7 @@ final class HotKeyManager {
         carbonModifiers: UInt32,
         action: @escaping () -> Void,
     ) -> Bool {
+        guard !suspended else { return false }
         if handlerRef == nil {
             installHandler()
         }

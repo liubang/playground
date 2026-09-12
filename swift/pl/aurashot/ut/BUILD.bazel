@@ -1,0 +1,24 @@
+# Unit tests for AuraShot. Same pattern as //swift/pl/aurabar/ut: the
+# app library is built without -enable-testing, so the local
+# testable_lib recompiles the shared sources with -enable-testing and
+# the tests `@testable import AuraShot`.
+
+load("@rules_swift//swift:swift.bzl", "swift_library", "swift_test")
+
+swift_library(
+    name = "testable_lib",
+    srcs = ["//swift/pl/aurashot:sources_for_tests"],
+    copts = ["-enable-testing"],
+    module_name = "AuraShot",
+    target_compatible_with = ["@platforms//os:macos"],
+    visibility = ["//visibility:private"],
+)
+
+# bazel test //swift/pl/aurashot/ut:aurashot_tests — pure-logic tests
+# (crop math, annotation transforms, hotkey combos, filename pattern).
+swift_test(
+    name = "aurashot_tests",
+    srcs = glob(["*.swift"]),
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = [":testable_lib"],
+)

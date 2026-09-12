@@ -35,6 +35,10 @@ final class HotkeyRecorderView: NSView {
     override func mouseDown(with _: NSEvent) {
         recording = true
         window?.makeFirstResponder(self)
+        // Unregister the live Carbon hotkeys while recording: pressing
+        // the current combo into the field must be CAPTURED, not fire
+        // a screenshot session out from under the settings window.
+        HotKeyManager.shared.suspend()
     }
 
     override func keyDown(with event: NSEvent) {
@@ -68,10 +72,14 @@ final class HotkeyRecorderView: NSView {
     private func cancelRecording() {
         recording = false
         window?.makeFirstResponder(nil)
+        HotKeyManager.shared.resume()
     }
 
     override func resignFirstResponder() -> Bool {
-        recording = false
+        if recording {
+            recording = false
+            HotKeyManager.shared.resume()
+        }
         return super.resignFirstResponder()
     }
 

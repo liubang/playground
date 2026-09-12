@@ -20,6 +20,7 @@ final class SettingsWindowController: NSObject {
     private var ocrStatusLabel: NSTextField?
     private var ocrServerStatusLabel: NSTextField?
     private var ocrServerRestartButton: NSButton?
+    private var hotkeyWarningLabel: NSTextField?
 
     func show() {
         if window == nil {
@@ -45,11 +46,38 @@ final class SettingsWindowController: NSObject {
 
         let settings = Settings.shared
 
-        // Hotkey recorders.
+        // Hotkey recorders. A combo equal to the OTHER action's combo
+        // would fail Carbon registration (or shadow it), so it's
+        // rejected with an inline warning instead of being saved.
         let captureRecorder = HotkeyRecorderView(combo: settings.captureCombo)
-        captureRecorder.onChange = { combo in settings.captureCombo = combo }
+        captureRecorder.onChange = { [weak self, weak captureRecorder] combo in
+            if Settings.hotkeysConflict(combo, settings.ocrCombo) {
+                NSSound.beep()
+                captureRecorder?.combo = settings.captureCombo
+                self?.showHotkeyConflict("截图快捷键与 OCR 快捷键相同")
+                return
+            }
+            self?.showHotkeyConflict(nil)
+            settings.captureCombo = combo
+        }
         let ocrRecorder = HotkeyRecorderView(combo: settings.ocrCombo)
-        ocrRecorder.onChange = { combo in settings.ocrCombo = combo }
+        ocrRecorder.onChange = { [weak self, weak ocrRecorder] combo in
+            if Settings.hotkeysConflict(combo, settings.captureCombo) {
+                NSSound.beep()
+                ocrRecorder?.combo = settings.ocrCombo
+                self?.showHotkeyConflict("OCR 快捷键与截图快捷键相同")
+                return
+            }
+            self?.showHotkeyConflict(nil)
+            settings.ocrCombo = combo
+        }
+
+        // Inline hotkey conflict warning (hidden until needed).
+        let hotkeyWarning = NSTextField(labelWithString: "")
+        hotkeyWarning.font = .systemFont(ofSize: 11)
+        hotkeyWarning.textColor = .systemRed
+        hotkeyWarning.isHidden = true
+        hotkeyWarningLabel = hotkeyWarning
 
         // Save folder row.
         let pathLabel = NSTextField(labelWithString: "")
@@ -144,6 +172,7 @@ final class SettingsWindowController: NSObject {
         let grid = NSGridView(views: [
             [label("截图快捷键"), captureRecorder],
             [label("OCR 快捷键"), ocrRecorder],
+            [NSGridCell.emptyContentView, hotkeyWarning],
             [label("保存位置"), pathRow],
             [NSGridCell.emptyContentView, autoSave],
             [NSGridCell.emptyContentView, borderShadow],
@@ -241,6 +270,11 @@ final class SettingsWindowController: NSObject {
                 ocrServerStatusLabel?.stringValue = "未运行（\(status.detail)）"
             }
         }
+    }
+
+    private func showHotkeyConflict(_ message: String?) {
+        hotkeyWarningLabel?.stringValue = message ?? ""
+        hotkeyWarningLabel?.isHidden = (message == nil)
     }
 
     private func updatePatternPreview() {

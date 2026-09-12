@@ -37,6 +37,10 @@ struct Annotation {
     var points: [CGPoint] = []
     /// Step only: the 1-based marker number.
     var number: Int = 1
+    /// Mosaic only: the palette intensity the patch was baked with, so
+    /// re-bakes after a move/resize keep THIS region's look even if the
+    /// palette level has since changed.
+    var mosaicScale: CGFloat = 1.0
     /// Mosaic only: the pre-rendered pixellated patch, captured at
     /// commit time at pixel resolution (sharp on Retina exports).
     var patch: NSImage?
@@ -63,6 +67,11 @@ struct Annotation {
         }
     }
 
+    /// Freehand strokes decimate samples closer than this (points) —
+    /// unthrottled mouseDragged delivery would otherwise grow the
+    /// point list without bound and every redraw re-strokes all of it.
+    static let freehandMinSampleDistance: CGFloat = 1.5
+
     /// The meaningful minimum; tinier drags count as clicks.
     var isSubstantial: Bool {
         switch tool {
@@ -70,6 +79,35 @@ struct Annotation {
         case .freehand: points.count >= 2
         default: rect.width >= 3 || rect.height >= 3
         }
+    }
+
+    /// A copy shifted by `delta` — used when the selection moves and
+    /// the annotations ride along with it.
+    func translated(by delta: CGPoint) -> Annotation {
+        var copy = self
+        copy.start = CGPoint(x: start.x + delta.x, y: start.y + delta.y)
+        copy.end = CGPoint(x: end.x + delta.x, y: end.y + delta.y)
+        copy.points = points.map { CGPoint(x: $0.x + delta.x, y: $0.y + delta.y) }
+        return copy
+    }
+
+    /// A copy affine-mapped from rect `src` onto rect `dst` — used when
+    /// the selection resizes. Shapes stretch with the region; text and
+    /// step markers keep their font/marker size and only reposition
+    /// (scaling glyphs mid-gesture reads worse than keeping them).
+    /// Mosaic patches are re-baked by the caller after the gesture.
+    func mapped(from src: CGRect, to dst: CGRect) -> Annotation {
+        guard src.width > 0, src.height > 0 else { return self }
+        let sx = dst.width / src.width
+        let sy = dst.height / src.height
+        func map(_ p: CGPoint) -> CGPoint {
+            CGPoint(x: dst.minX + (p.x - src.minX) * sx, y: dst.minY + (p.y - src.minY) * sy)
+        }
+        var copy = self
+        copy.start = map(start)
+        copy.end = map(end)
+        copy.points = points.map(map)
+        return copy
     }
 
     func draw() {

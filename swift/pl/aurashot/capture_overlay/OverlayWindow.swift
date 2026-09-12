@@ -3,10 +3,12 @@ import AppKit
 /// One borderless panel per screen during a capture session.
 ///
 /// Lifecycle: init shows the SelectionView in its frozen phase; arm()
-/// supplies the snapshot/canvas and starts live interaction plus — on
-/// the primary screen — the global mouse monitor that makes
-/// cross-screen and foreign-app drags work. invalidate() removes the
-/// monitor; always pair it with orderOut on teardown.
+/// supplies the snapshot/canvas and starts live interaction. The
+/// GLOBAL mouse monitor (cross-screen and foreign-app drags) is owned
+/// by CaptureSessionController, which broadcasts events to every
+/// screen's SelectionView — routing them through just the primary
+/// screen's window would leave the other displays dead whenever
+/// another app holds focus.
 final class OverlayWindow: NSPanel {
     let selectionView: SelectionView
 
@@ -14,7 +16,7 @@ final class OverlayWindow: NSPanel {
     private var onConfirm: (() -> Void)?
     private var onSaveKey: (() -> Void)?
     private var onOcr: (() -> Void)?
-    private var globalMonitor: Any?
+    private var onPin: (() -> Void)?
 
     init(screen: NSScreen, onCancel: @escaping () -> Void) {
         self.onCancel = onCancel
@@ -37,6 +39,8 @@ final class OverlayWindow: NSPanel {
         isReleasedWhenClosed = false
         contentView = selectionView
         selectionView.onCancel = onCancel
+        // Faded in by the session controller after ordering front.
+        alphaValue = 0
     }
 
     /// Switches the view to live phase and wires the points where
@@ -44,54 +48,21 @@ final class OverlayWindow: NSPanel {
     func arm(
         canvas: Canvas,
         display: DisplayContext,
-        isPrimaryScreen: Bool,
         onConfirm: @escaping () -> Void,
         onSave: @escaping () -> Void,
         onOcr: @escaping () -> Void,
+        onPin: @escaping () -> Void,
     ) {
         self.onConfirm = onConfirm
         self.onOcr = onOcr
+        self.onPin = onPin
         onSaveKey = onSave
         selectionView.onConfirm = onConfirm
         selectionView.onSave = onSave
         selectionView.onOcr = onOcr
+        selectionView.onPin = onPin
         selectionView.onCancel = onCancel
         selectionView.arm(canvas: canvas, display: display)
-        if isPrimaryScreen {
-            installGlobalMouseMonitor()
-        }
-    }
-
-    func invalidate() {
-        if let monitor = globalMonitor {
-            NSEvent.removeMonitor(monitor)
-            globalMonitor = nil
-        }
-    }
-
-    deinit {
-        invalidate()
-    }
-
-    /// Global events arrive only while OTHER apps are active — exactly
-    /// the cases where AppKit won't deliver local events to our
-    /// nonactivating panels (click-through screens, mid-drag across a
-    /// display boundary). Each screen's view filters by containment,
-    /// so only the display under the cursor reacts.
-    private func installGlobalMouseMonitor() {
-        let mask: NSEvent.EventTypeMask = [
-            .leftMouseDown, .leftMouseDragged, .leftMouseUp, .mouseMoved,
-        ]
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
-            guard let self else { return }
-            let pointCG = CoordinateSpace.pointToCG(NSEvent.mouseLocation)
-            selectionView.handleGlobalMouse(
-                pointCG: pointCG,
-                type: event.type,
-                clickCount: event.clickCount,
-                shift: event.modifierFlags.contains(.shift),
-            )
-        }
     }
 
     override var canBecomeKey: Bool {
@@ -125,6 +96,10 @@ final class OverlayWindow: NSPanel {
             case "s":
                 if selectionView.currentSelection != nil {
                     onSaveKey?()
+                }
+            case "p":
+                if selectionView.currentSelection != nil {
+                    onPin?()
                 }
             case "z":
                 selectionView.undoAnnotation()

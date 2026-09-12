@@ -7,26 +7,33 @@ import AppKit
 ///   autoSave on  → write straight to the folder, no panel; name
 ///                  collisions get a " 2", " 3"… suffix.
 enum FileSaver {
+    /// Encodes the PNG off the main thread (a full-screen Retina PNG
+    /// takes a visible beat to encode), then routes to auto-save or
+    /// the save panel back on the main actor.
     @MainActor
-    @discardableResult
-    static func save(_ image: CGImage) -> Bool {
-        guard let png = NSBitmapImageRep(cgImage: image)
-            .representation(using: .png, properties: [:])
-        else {
-            NSLog("AuraShot: PNG encoding failed")
-            return false
+    static func save(_ image: CGImage) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let png = NSBitmapImageRep(cgImage: image)
+                .representation(using: .png, properties: [:])
+            else {
+                NSLog("AuraShot: PNG encoding failed")
+                Task { @MainActor in OcrHud.toast("PNG 编码失败") }
+                return
+            }
+            Task { @MainActor in
+                if Settings.shared.autoSave {
+                    writeToDefaultFolder(png)
+                } else {
+                    presentSavePanel(png)
+                }
+            }
         }
-
-        if Settings.shared.autoSave {
-            return writeToDefaultFolder(png)
-        }
-        return presentSavePanel(png)
     }
 
     // MARK: - Auto save
 
     @MainActor
-    private static func writeToDefaultFolder(_ png: Data) -> Bool {
+    private static func writeToDefaultFolder(_ png: Data) {
         let url = uniqueFileURL()
         do {
             try FileManager.default.createDirectory(
@@ -35,10 +42,10 @@ enum FileSaver {
             )
             try png.write(to: url)
             NSLog("AuraShot: saved \(url.path)")
-            return true
+            OcrHud.toast("已保存：\(url.lastPathComponent)")
         } catch {
             NSLog("AuraShot: save failed: \(error.localizedDescription)")
-            return false
+            OcrHud.toast("保存失败：\(error.localizedDescription)")
         }
     }
 
@@ -64,7 +71,7 @@ enum FileSaver {
     // MARK: - Interactive save
 
     @MainActor
-    private static func presentSavePanel(_ png: Data) -> Bool {
+    private static func presentSavePanel(_ png: Data) {
         let panel = NSSavePanel()
         // The capture overlays live at screenSaver level and cover every
         // display — at the default level the panel would appear UNDER
@@ -79,7 +86,7 @@ enum FileSaver {
         )
         panel.directoryURL = Settings.shared.saveDirectory
         NSApp.activate(ignoringOtherApps: true)
-        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
 
         do {
             try FileManager.default.createDirectory(
@@ -87,11 +94,10 @@ enum FileSaver {
                 withIntermediateDirectories: true,
             )
             try png.write(to: url)
-            return true
+            OcrHud.toast("已保存：\(url.lastPathComponent)")
         } catch {
             NSApp.activate(ignoringOtherApps: true)
             NSAlert(error: error).runModal()
-            return false
         }
     }
 }

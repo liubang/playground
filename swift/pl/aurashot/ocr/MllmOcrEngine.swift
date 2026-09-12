@@ -102,16 +102,35 @@ final class MllmServerClient: @unchecked Sendable {
         proc?.terminate()
     }
 
+    /// Healthy-probe result cache: recognize() probes on every call,
+    /// and a hung server would otherwise cost the full 1.5s timeout
+    /// each time. A positive answer stays trusted for a few seconds.
+    private var lastHealthyAt: Date?
+
     /// Cheap probe: is a healthy mllm server answering on the port?
     func isHealthy() async -> Bool {
+        lock.lock()
+        if let last = lastHealthyAt, Date().timeIntervalSince(last) < 5 {
+            lock.unlock()
+            return true
+        }
+        lock.unlock()
+
         var request = URLRequest(url: baseURL.appendingPathComponent("healthz"))
         request.timeoutInterval = 1.5
         guard let (data, response) = try? await session.data(for: request),
-              let http = response as? HTTPURLResponse, http.statusCode == 200
+              let http = response as? HTTPURLResponse, http.statusCode == 200,
+              String(data: data, encoding: .utf8)?.contains("\"ok\"") ?? false
         else {
+            lock.lock()
+            lastHealthyAt = nil
+            lock.unlock()
             return false
         }
-        return String(data: data, encoding: .utf8)?.contains("\"ok\"") ?? false
+        lock.lock()
+        lastHealthyAt = Date()
+        lock.unlock()
+        return true
     }
 
     /// Passive refresh for the settings UI: notices a crashed child and
@@ -145,7 +164,15 @@ final class MllmServerClient: @unchecked Sendable {
         _status = Status(phase: .booting, binary: binary)
         lock.unlock()
 
+        // A failed boot clears bootAttempted: transient causes (port
+        // briefly occupied, models just downloaded) must not lock the
+        // app onto the slow CLI fallback for its whole lifetime.
+        // The engine's busy flag serializes OCR calls, so at most one
+        // boot is ever in flight.
         let fail: (String) -> Bool = { detail in
+            self.lock.lock()
+            self.bootAttempted = false
+            self.lock.unlock()
             self.setStatus { $0.phase = .failed; $0.detail = detail }
             return false
         }
@@ -388,16 +415,26 @@ final class MllmOcrEngine: OcrEngine, @unchecked Sendable {
     }
 
     /// The PaddleOCR-VL checkpoint pair under the configured directory.
+    /// Without an explicit setting, the legacy ~/models location is
+    /// probed as a fallback so existing installs keep working.
     static func resolveModels() throws -> (model: String, mmproj: String) {
-        let dir = Settings.shared.ocrModelDir.path
-        let model = dir + "/PaddleOCR-VL-1.6-GGUF.gguf"
-        let mmproj = dir + "/PaddleOCR-VL-1.6-GGUF-mmproj.gguf"
-        guard FileManager.default.fileExists(atPath: model),
-              FileManager.default.fileExists(atPath: mmproj)
-        else {
-            throw OcrError.modelMissing("目录 \(dir) 下缺少 PaddleOCR-VL-1.6-GGUF{,-mmproj}.gguf")
+        var dirs = [Settings.shared.ocrModelDir.path]
+        if !Settings.shared.isModelDirCustomized {
+            let legacy = Settings.legacyModelDir.path
+            if legacy != dirs[0] {
+                dirs.append(legacy)
+            }
         }
-        return (model, mmproj)
+        for dir in dirs {
+            let model = dir + "/PaddleOCR-VL-1.6-GGUF.gguf"
+            let mmproj = dir + "/PaddleOCR-VL-1.6-GGUF-mmproj.gguf"
+            if FileManager.default.fileExists(atPath: model),
+               FileManager.default.fileExists(atPath: mmproj)
+            {
+                return (model, mmproj)
+            }
+        }
+        throw OcrError.modelMissing("目录 \(dirs[0]) 下缺少 PaddleOCR-VL-1.6-GGUF{,-mmproj}.gguf")
     }
 
     // MARK: - Process
@@ -482,7 +519,15 @@ final class MllmOcrEngine: OcrEngine, @unchecked Sendable {
                 watchdog.cancel()
                 stdoutPipe.fileHandleForReading.readabilityHandler = nil
                 stderrPipe.fileHandleForReading.readabilityHandler = nil
+                // Process exit does NOT imply the pipe was drained by
+                // the handlers — whatever is still buffered would be
+                // lost, truncating the tail of the output. The process
+                // is dead, so these reads hit EOF immediately.
+                let outTail = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+                let errTail = stderrPipe.fileHandleForReading.readDataToEndOfFile()
                 lock.lock()
+                stdoutData.append(outTail)
+                stderrData.append(errTail)
                 let out = stdoutData
                 let err = stderrData
                 lock.unlock()

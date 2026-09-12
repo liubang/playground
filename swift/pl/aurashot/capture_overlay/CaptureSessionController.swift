@@ -10,7 +10,7 @@ import AppKit
 /// desktop covered by inert black windows that look like a hang.
 @MainActor
 final class CaptureSessionController {
-    private enum OutputAction { case copy, save, ocr }
+    private enum OutputAction { case copy, save, pin, ocr }
 
     private var windows: [OverlayWindow] = []
     private var displays: [DisplayContext] = []
@@ -26,6 +26,13 @@ final class CaptureSessionController {
     /// without key status until then, and Esc-to-cancel would be dead in
     /// the gap. Removed on arm() and teardown.
     private var frozenEscMonitor: Any?
+    /// Global mouse monitor, installed at arm() time. Events meant for
+    /// OTHER apps (our panels are nonactivating; the user can also have
+    /// ⌘Tabbed away mid-session) are broadcast to EVERY screen's
+    /// SelectionView — each filters by containment. Installing it on
+    /// only the primary screen's window left the other displays
+    /// unresponsive whenever AuraShot wasn't the active app.
+    private var globalMouseMonitor: Any?
 
     /// Starts a capture session. No-op while one is already up.
     func begin(ocr: Bool = false) {
@@ -56,6 +63,12 @@ final class CaptureSessionController {
             }
             windows.append(window)
             window.orderFrontRegardless()
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            for window in windows {
+                window.animator().alphaValue = 1
+            }
         }
 
         installFrozenEscMonitor()
@@ -111,6 +124,7 @@ final class CaptureSessionController {
         stopFrozenEscMonitor()
         NSApp.activate(ignoringOtherApps: true)
         windows.first?.makeKeyAndOrderFront(nil)
+        installGlobalMouseMonitor()
 
         let canvas = Canvas(displays: displays, windowCandidates: candidates)
         let confirmAction: OutputAction = ocrSession ? .ocr : .copy
@@ -119,7 +133,6 @@ final class CaptureSessionController {
             window.arm(
                 canvas: canvas,
                 display: display,
-                isPrimaryScreen: index == 0,
                 onConfirm: { [weak self] in
                     self?.finish(in: display, action: confirmAction)
                 },
@@ -128,6 +141,9 @@ final class CaptureSessionController {
                 },
                 onOcr: { [weak self] in
                     self?.finish(in: display, action: .ocr)
+                },
+                onPin: { [weak self] in
+                    self?.finish(in: display, action: .pin)
                 },
             )
         }
@@ -157,7 +173,9 @@ final class CaptureSessionController {
         }
         let image = ImageCompositor.composite(
             base: base,
-            selectionPoints: selection,
+            crop: crop,
+            imageHeight: display.snapshot.image.height,
+            scale: display.scale,
             annotations: view.currentAnnotations,
         )
         guard let image else {
@@ -169,18 +187,21 @@ final class CaptureSessionController {
         // transparent padding). OCR keeps the RAW bitmap: the padding
         // is dead pixels for the recognizer and the shadow can only
         // confuse it.
-        let output: CGImage
-        if action == .ocr || !Settings.shared.borderShadow {
-            output = image
+        let output: CGImage = if action == .ocr || !Settings.shared.borderShadow {
+            image
         } else {
-            let scale = CGFloat(crop.width) / selection.width
-            output = FrameDecorator.apply(to: image, scale: scale) ?? image
+            FrameDecorator.apply(to: image, scale: display.scale) ?? image
         }
 
         switch action {
         case .copy:
             ClipboardWriter.write(output)
             teardown()
+            OcrHud.toast("已复制到剪贴板")
+        case .pin:
+            let pinned = output
+            teardown()
+            PinWindowController.pin(image: pinned, pixelScale: display.scale)
         case .save:
             // Save FIRST tears the session down, then shows the panel:
             // a modal NSSavePanel behind screenSaver-level overlays is
@@ -209,13 +230,50 @@ final class CaptureSessionController {
                 let blocks = try await engine.recognize(image)
                 let text = blocks.map(\.text).joined(separator: "\n")
                 ClipboardWriter.writeText(text)
-                OcrHud.show("已复制识别结果（\(text.count) 字）", spinner: false)
-                OcrHud.dismiss(after: 1.4)
+                OcrHud.dismiss()
+                // The text is already on the clipboard; the panel lets
+                // the user review/trim and re-copy instead of pasting
+                // blind.
+                OcrResultWindowController.shared.show(text: text)
             } catch {
                 NSLog("AuraShot: OCR failed: \(error.localizedDescription)")
                 OcrHud.show(error.localizedDescription, spinner: false)
                 OcrHud.dismiss(after: 3)
             }
+        }
+    }
+
+    // MARK: - Global mouse monitor
+
+    /// While another app is active, AppKit won't deliver local events
+    /// to our nonactivating panels — route global events to every
+    /// screen's view; each one reacts only when the point falls inside
+    /// its own display.
+    private func installGlobalMouseMonitor() {
+        stopGlobalMouseMonitor()
+        let mask: NSEvent.EventTypeMask = [
+            .leftMouseDown, .leftMouseDragged, .leftMouseUp, .mouseMoved,
+        ]
+        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
+            guard let self else { return }
+            let pointCG = CoordinateSpace.pointToCG(NSEvent.mouseLocation)
+            let shift = event.modifierFlags.contains(.shift)
+            let clickCount = event.clickCount
+            for window in windows {
+                window.selectionView.handleGlobalMouse(
+                    pointCG: pointCG,
+                    type: event.type,
+                    clickCount: clickCount,
+                    shift: shift,
+                )
+            }
+        }
+    }
+
+    private func stopGlobalMouseMonitor() {
+        if let monitor = globalMouseMonitor {
+            NSEvent.removeMonitor(monitor)
+            globalMouseMonitor = nil
         }
     }
 
@@ -240,14 +298,25 @@ final class CaptureSessionController {
 
     private func teardown() {
         stopFrozenEscMonitor()
-        for window in windows {
-            window.invalidate()
-            window.orderOut(nil)
-        }
+        stopGlobalMouseMonitor()
+        let closing = windows
         windows.removeAll()
         displays.removeAll()
         isActive = false
         previousApp?.activate()
         previousApp = nil
+        // A quick fade-out reads far less abrupt than an instant
+        // orderOut; the windows leave the session's ownership right
+        // away so a new session can't race the animation.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            for window in closing {
+                window.animator().alphaValue = 0
+            }
+        } completionHandler: {
+            for window in closing {
+                window.orderOut(nil)
+            }
+        }
     }
 }

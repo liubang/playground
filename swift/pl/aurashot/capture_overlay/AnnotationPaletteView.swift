@@ -25,7 +25,18 @@ final class AnnotationPaletteView: NSView {
         var fontBold: Bool = true
     }
 
-    var onChange: (() -> Void)?
+    /// What changed in the palette: the container only reacts to some
+    /// kinds (e.g. a mosaic re-bake is needed for an intensity change,
+    /// not for dragging around the color wheel — and with the color
+    /// panel's continuous updates that distinction is the difference
+    /// between 60fps and a CIFilter render per tick).
+    enum Change {
+        case color
+        case variant // stroke width / font size / mosaic intensity
+        case font
+    }
+
+    var onChange: ((Change) -> Void)?
 
     static let widths: [CGFloat] = [2, 4, 7]
     static let fontSizes: [CGFloat] = [14, 20, 28]
@@ -187,13 +198,13 @@ final class AnnotationPaletteView: NSView {
     @objc private func fontFamilyChanged(_ sender: NSPopUpButton) {
         let index = min(max(sender.indexOfSelectedItem, 0), Self.fonts.count - 1)
         mutateStyle { $0.fontFamily = Self.fonts[index].id }
-        onChange?()
+        onChange?(.font)
         needsDisplay = true
     }
 
     @objc private func fontStyleChanged(_ sender: NSPopUpButton) {
         mutateStyle { $0.fontBold = (sender.indexOfSelectedItem == 1) }
-        onChange?()
+        onChange?(.font)
         needsDisplay = true
     }
 
@@ -298,6 +309,7 @@ final class AnnotationPaletteView: NSView {
                 default: style.lineWidth = Self.widths[hit]
                 }
             }
+            onChange?(.variant)
         } else {
             let colorIndex = hit - 100
             if colorIndex == Self.colors.count {
@@ -305,8 +317,8 @@ final class AnnotationPaletteView: NSView {
                 return
             }
             mutateStyle { $0.color = Self.colors[colorIndex] }
+            onChange?(.color)
         }
-        onChange?()
         needsDisplay = true
     }
 
@@ -330,7 +342,7 @@ final class AnnotationPaletteView: NSView {
     @objc private func colorPanelChanged(_ panel: NSColorPanel) {
         customColor = panel.color
         mutateStyle { $0.color = panel.color }
-        onChange?()
+        onChange?(.color)
         needsDisplay = true
     }
 

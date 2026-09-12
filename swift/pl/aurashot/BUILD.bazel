@@ -35,6 +35,28 @@ swift_library(
     target_compatible_with = ["@platforms//os:macos"],
 )
 
+# Sources recompiled with -enable-testing by //swift/pl/aurashot/ut so
+# swift_test targets there can `@testable import AuraShot`. Excludes
+# the @main entry point: its _main symbol would collide with the
+# generated test-runner main.
+filegroup(
+    name = "sources_for_tests",
+    srcs = glob(
+        [
+            "annotate/*.swift",
+            "app/*.swift",
+            "capture/*.swift",
+            "capture_overlay/*.swift",
+            "hotkey/*.swift",
+            "ocr/*.swift",
+            "output/*.swift",
+            "settings/*.swift",
+        ],
+        exclude = ["app/AuraShotApp.swift"],
+    ),
+    visibility = ["//visibility:public"],
+)
+
 # The OCR engine, bundled into Contents/Resources (spawned per OCR
 # session; see swift/pl/aurashot/ocr/MllmOcrEngine.swift). Wrapped in
 # opt_binary: the repo's default C++ config is debug+ASan, and a bundled
