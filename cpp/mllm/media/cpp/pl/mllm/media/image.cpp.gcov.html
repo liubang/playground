@@ -1,0 +1,345 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - mllm/media/cpp/pl/mllm/media/image.cpp</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">mllm/media/cpp/pl/mllm/media</a> - image.cpp<span style="font-size: 80%;"> (source / <a href="image.cpp.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">135</td>
+            <td class="headerCovTableEntry">135</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-09-12 14:15:21</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">10</td>
+            <td class="headerCovTableEntry">10</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryMed">86.6&nbsp;%</td>
+            <td class="headerCovTableEntry">112</td>
+            <td class="headerCovTableEntry">97</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/09/11</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : #include &quot;cpp/pl/mllm/media/image.h&quot;</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : #include &lt;algorithm&gt;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : #include &lt;cmath&gt;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : #include &lt;utility&gt;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : #include &lt;vector&gt;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : </span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : namespace pl::mllm::media {</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : </span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : namespace {</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : </span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : // Shared u8 -&gt; f32 [0, 1] ingest for interleaved sources with `channels`</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : // per pixel (alpha is ignored when channels == 4).</span>
+<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC tlaBgGNC">           6 : Result&lt;Image&gt; from_u8(</span></span>
+<span id="L32"><span class="lineNum">      32</span>                 :             :     const uint8_t* data, int32_t width, int32_t height, int32_t channels, int32_t stride_px) {</span>
+<span id="L33"><span class="lineNum">      33</span>   [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 3 times"> + </span>]:<span class="tlaGNC">           6 :     if (data == nullptr || width &lt;= 0 || height &lt;= 0) {</span></span>
+<span id="L34"><span class="lineNum">      34</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :         return Status::Error(ErrorCode::kInvalidArgument, &quot;image: bad input&quot;);</span></span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :     }</span>
+<span id="L36"><span class="lineNum">      36</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           3 :     const int32_t stride = stride_px &gt; 0 ? stride_px : width;</span></span>
+<span id="L37"><span class="lineNum">      37</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           3 :     if (stride &lt; width) {</span></span>
+<span id="L38"><span class="lineNum">      38</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :         return Status::Error(ErrorCode::kInvalidArgument, &quot;image: stride &lt; width&quot;);</span></span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :     }</span>
+<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">           2 :     Image img;</span></span>
+<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">           2 :     img.width = width;</span></span>
+<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">           2 :     img.height = height;</span></span>
+<span id="L43"><span class="lineNum">      43</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     img.pixels.resize(static_cast&lt;size_t&gt;(width) * static_cast&lt;size_t&gt;(height) * 3);</span></span>
+<span id="L44"><span class="lineNum">      44</span>                 :             : </span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :     constexpr float kScale = 1.0f / 255.0f;</span>
+<span id="L46"><span class="lineNum">      46</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           4 :     for (int32_t y = 0; y &lt; height; ++y) {</span></span>
+<span id="L47"><span class="lineNum">      47</span>                 :<span class="tlaGNC">           2 :         const uint8_t* src = data + static_cast&lt;size_t&gt;(y) * static_cast&lt;size_t&gt;(stride) *</span></span>
+<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">           2 :                                         static_cast&lt;size_t&gt;(channels);</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">           2 :         float* dst = img.pixels.data() + static_cast&lt;size_t&gt;(y) * static_cast&lt;size_t&gt;(width) * 3;</span></span>
+<span id="L50"><span class="lineNum">      50</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           6 :         for (int32_t x = 0; x &lt; width; ++x) {</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">           4 :             dst[x * 3 + 0] = static_cast&lt;float&gt;(src[x * channels + 0]) * kScale;</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">           4 :             dst[x * 3 + 1] = static_cast&lt;float&gt;(src[x * channels + 1]) * kScale;</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">           4 :             dst[x * 3 + 2] = static_cast&lt;float&gt;(src[x * channels + 2]) * kScale;</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :         }</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             :     }</span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">           2 :     return img;</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : }</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : </span>
+<span id="L59"><span class="lineNum">      59</span>                 :             : } // namespace</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             : </span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">           5 : Result&lt;Image&gt; Image::FromRgb8(const uint8_t* data,</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :             :                               int32_t width,</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :                               int32_t height,</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :                               int32_t stride_px) {</span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">           5 :     return from_u8(data, width, height, /*channels=*/3, stride_px);</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :             : }</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             : </span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">           1 : Result&lt;Image&gt; Image::FromRgba8(const uint8_t* data,</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :             :                                int32_t width,</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :                                int32_t height,</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             :                                int32_t stride_px) {</span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">           1 :     return from_u8(data, width, height, /*channels=*/4, stride_px);</span></span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : }</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : </span>
+<span id="L75"><span class="lineNum">      75</span>                 :             : // Qwen2-VL family smart resize (mirrors the reference Python semantics:</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             : // round-to-nearest multiple, then shrink via floor or grow via ceil when</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             : // the area leaves the [min_pixels, max_pixels] band).</span>
+<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">          19 : std::pair&lt;int32_t, int32_t&gt; SmartResize(</span></span>
+<span id="L79"><span class="lineNum">      79</span>                 :             :     int32_t width, int32_t height, int32_t factor, int64_t min_pixels, int64_t max_pixels) {</span>
+<span id="L80"><span class="lineNum">      80</span>   [<span class="tlaGBC" title="Branch 0 was taken 18 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 17 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span> :<span class="tlaGNC">          19 :     if (width &lt;= 0 || height &lt;= 0 || factor &lt;= 0) {</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 5 was taken 16 times"> + </span>]
+<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">           3 :         return {0, 0};</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :             :     }</span>
+<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">          16 :     const double f = static_cast&lt;double&gt;(factor);</span></span>
+<span id="L84"><span class="lineNum">      84</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          16 :     if (height &lt; factor) {</span></span>
+<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">           1 :         width = static_cast&lt;int32_t&gt;(std::lround(static_cast&lt;double&gt;(width) * f / height));</span></span>
+<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">           1 :         height = factor;</span></span>
+<span id="L87"><span class="lineNum">      87</span>                 :             :     }</span>
+<span id="L88"><span class="lineNum">      88</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          16 :     if (width &lt; factor) {</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">           2 :         height = static_cast&lt;int32_t&gt;(std::lround(static_cast&lt;double&gt;(height) * f / width));</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">           2 :         width = factor;</span></span>
+<span id="L91"><span class="lineNum">      91</span>                 :             :     }</span>
+<span id="L92"><span class="lineNum">      92</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          16 :     if (std::max(height, width) &gt; 200 * std::min(height, width)) {</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">           2 :         return {0, 0}; // extreme aspect ratio</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :             :     }</span>
+<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">          28 :     auto round_to = [&amp;](int32_t v) {</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :             :         return std::max(factor,</span>
+<span id="L97"><span class="lineNum">      97</span>         [<span class="tlaGBC" title="Branch 0 was taken 18 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          28 :                         static_cast&lt;int32_t&gt;(std::lround(static_cast&lt;double&gt;(v) / f)) * factor);</span></span>
+<span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC">          14 :     };</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">          14 :     int32_t h = round_to(height);</span></span>
+<span id="L100"><span class="lineNum">     100</span>                 :<span class="tlaGNC">          14 :     int32_t w = round_to(width);</span></span>
+<span id="L101"><span class="lineNum">     101</span>                 :             : </span>
+<span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaGNC">          14 :     const int64_t area = static_cast&lt;int64_t&gt;(h) * w;</span></span>
+<span id="L103"><span class="lineNum">     103</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span>]:<span class="tlaGNC">          14 :     if (max_pixels &gt; 0 &amp;&amp; area &gt; max_pixels) {</span></span>
+<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaGNC">           1 :         const double beta = std::sqrt(static_cast&lt;double&gt;(area) / static_cast&lt;double&gt;(max_pixels));</span></span>
+<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC">           1 :         h = static_cast&lt;int32_t&gt;(std::floor(height / beta / f)) * factor;</span></span>
+<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">           1 :         w = static_cast&lt;int32_t&gt;(std::floor(width / beta / f)) * factor;</span></span>
+<span id="L107"><span class="lineNum">     107</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span>]:<span class="tlaGNC">          13 :     } else if (min_pixels &gt; 0 &amp;&amp; area &lt; min_pixels) {</span></span>
+<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">           1 :         const double beta = std::sqrt(static_cast&lt;double&gt;(min_pixels) / static_cast&lt;double&gt;(area));</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">           1 :         h = static_cast&lt;int32_t&gt;(std::ceil(height * beta / f)) * factor;</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">           1 :         w = static_cast&lt;int32_t&gt;(std::ceil(width * beta / f)) * factor;</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :             :     }</span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">          14 :     return {w, h};</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :             : }</span>
+<span id="L114"><span class="lineNum">     114</span>                 :             : </span>
+<span id="L115"><span class="lineNum">     115</span>                 :             : namespace {</span>
+<span id="L116"><span class="lineNum">     116</span>                 :             : </span>
+<span id="L117"><span class="lineNum">     117</span>                 :             : // Cubic convolution kernel (Keys, a = -0.5) — PIL bicubic.</span>
+<span id="L118"><span class="lineNum">     118</span>         [<span class="tlaGBC" title="Branch 0 was taken 72 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 44 times"> + </span>]:<span class="tlaGNC">         116 : float bicubic_kernel(float x) {</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :             :     const float ax = std::fabs(x);</span>
+<span id="L120"><span class="lineNum">     120</span>         [<span class="tlaGBC" title="Branch 0 was taken 72 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 44 times"> + </span>]:<span class="tlaGNC">         116 :     if (ax &lt; 1.0f) {</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">          72 :         return ((1.5f * ax - 2.5f) * ax) * ax + 1.0f;</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :             :     }</span>
+<span id="L123"><span class="lineNum">     123</span>         [<span class="tlaGBC" title="Branch 0 was taken 39 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">          44 :     if (ax &lt; 2.0f) {</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">          39 :         return (((-0.5f * ax) + 2.5f) * ax - 4.0f) * ax + 2.0f;</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :             :     }</span>
+<span id="L126"><span class="lineNum">     126</span>                 :             :     return 0.0f;</span>
+<span id="L127"><span class="lineNum">     127</span>                 :             : }</span>
+<span id="L128"><span class="lineNum">     128</span>                 :             : </span>
+<span id="L129"><span class="lineNum">     129</span>                 :             : // One-dimensional separable resize pass (PIL-compatible bicubic).</span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">           6 : Image resize_bicubic_1d(const Image&amp; src, int32_t dst_w, int32_t dst_h, bool horizontal) {</span></span>
+<span id="L131"><span class="lineNum">     131</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           6 :     const int32_t n_src = horizontal ? src.width : src.height;</span></span>
+<span id="L132"><span class="lineNum">     132</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           6 :     const int32_t n_dst = horizontal ? dst_w : dst_h;</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :             : </span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">           6 :     Image out;</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">           6 :     out.width = dst_w;</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">           6 :     out.height = dst_h;</span></span>
+<span id="L137"><span class="lineNum">     137</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :     out.pixels.resize(static_cast&lt;size_t&gt;(dst_w) * static_cast&lt;size_t&gt;(dst_h) * 3);</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :             : </span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">           6 :     const double scale = static_cast&lt;double&gt;(n_src) / static_cast&lt;double&gt;(n_dst);</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :             :     // Downscaling widens the kernel footprint (PIL antialiasing).</span>
+<span id="L141"><span class="lineNum">     141</span>                 :             :     const double filter_scale = std::max(1.0, scale);</span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">           6 :     const double support = 2.0 * filter_scale;</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :             : </span>
+<span id="L144"><span class="lineNum">     144</span>         [<span class="tlaGBC" title="Branch 0 was taken 23 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">          29 :     for (int32_t d = 0; d &lt; n_dst; ++d) {</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">          23 :         const double center = (static_cast&lt;double&gt;(d) + 0.5) * scale;</span></span>
+<span id="L146"><span class="lineNum">     146</span>         [<span class="tlaGBC" title="Branch 0 was taken 23 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          23 :         const int32_t lo = std::max(0, static_cast&lt;int32_t&gt;(std::ceil(center - support)));</span></span>
+<span id="L147"><span class="lineNum">     147</span>         [<span class="tlaGBC" title="Branch 0 was taken 23 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          23 :         const int32_t hi = std::min(n_src, static_cast&lt;int32_t&gt;(std::floor(center + support)) + 1);</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :             : </span>
+<span id="L149"><span class="lineNum">     149</span>                 :             :         // Gather + normalize the kernel weights for this output coordinate.</span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">          23 :         std::vector&lt;std::pair&lt;int32_t, float&gt;&gt; taps;</span></span>
+<span id="L151"><span class="lineNum">     151</span>         [<span class="tlaGBC" title="Branch 0 was taken 23 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          23 :         taps.reserve(static_cast&lt;size_t&gt;(std::max(0, hi - lo)));</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :             :         float wsum = 0.0f;</span>
+<span id="L153"><span class="lineNum">     153</span>         [<span class="tlaGBC" title="Branch 0 was taken 116 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 23 times"> + </span>]:<span class="tlaGNC">         139 :         for (int32_t s = lo; s &lt; hi; ++s) {</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">         116 :             const float wgt = bicubic_kernel(</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">         116 :                 static_cast&lt;float&gt;((static_cast&lt;double&gt;(s) + 0.5 - center) / filter_scale));</span></span>
+<span id="L156"><span class="lineNum">     156</span>         [<span class="tlaGBC" title="Branch 0 was taken 111 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">         116 :             if (wgt != 0.0f) {</span></span>
+<span id="L157"><span class="lineNum">     157</span>         [<span class="tlaGBC" title="Branch 0 was taken 111 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         111 :                 taps.emplace_back(s, wgt);</span></span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">         111 :                 wsum += wgt;</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :             :             }</span>
+<span id="L160"><span class="lineNum">     160</span>                 :             :         }</span>
+<span id="L161"><span class="lineNum">     161</span>         [<span class="tlaGBC" title="Branch 0 was taken 23 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          23 :         if (wsum != 0.0f) {</span></span>
+<span id="L162"><span class="lineNum">     162</span>         [<span class="tlaGBC" title="Branch 0 was taken 111 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 23 times"> + </span>]:<span class="tlaGNC">         134 :             for (auto&amp; [idx, wgt] : taps) {</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">         111 :                 wgt /= wsum;</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :             :             }</span>
+<span id="L165"><span class="lineNum">     165</span>                 :             :         }</span>
+<span id="L166"><span class="lineNum">     166</span>                 :             : </span>
+<span id="L167"><span class="lineNum">     167</span>         [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 9 times"> + </span>]:<span class="tlaGNC">          23 :         const int32_t sweep = horizontal ? src.height : dst_w;</span></span>
+<span id="L168"><span class="lineNum">     168</span>         [<span class="tlaGBC" title="Branch 0 was taken 118 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 23 times"> + </span>]:<span class="tlaGNC">         141 :         for (int32_t other = 0; other &lt; sweep; ++other) {</span></span>
+<span id="L169"><span class="lineNum">     169</span>         [<span class="tlaGBC" title="Branch 0 was taken 60 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 58 times"> + </span>]:<span class="tlaGNC">         118 :             const int32_t oy = horizontal ? other : d;</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :             :             const int32_t ox = horizontal ? d : other;</span>
+<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">         118 :             float* dst = out.pixels.data() + (static_cast&lt;size_t&gt;(oy) * static_cast&lt;size_t&gt;(dst_w) +</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">         118 :                                               static_cast&lt;size_t&gt;(ox)) *</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :             :                                                  3;</span>
+<span id="L174"><span class="lineNum">     174</span>         [<span class="tlaGBC" title="Branch 0 was taken 354 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 118 times"> + </span>]:<span class="tlaGNC">         472 :             for (int32_t c = 0; c &lt; 3; ++c) {</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :             :                 double acc = 0.0;</span>
+<span id="L176"><span class="lineNum">     176</span>         [<span class="tlaGBC" title="Branch 0 was taken 1962 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 354 times"> + </span>]:<span class="tlaGNC">        2316 :                 for (const auto&amp; [idx, wgt] : taps) {</span></span>
+<span id="L177"><span class="lineNum">     177</span>         [<span class="tlaGBC" title="Branch 0 was taken 1398 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 564 times"> + </span>]:<span class="tlaGNC">        1962 :                     const int32_t sy = horizontal ? other : idx;</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">        1398 :                     const int32_t sx = horizontal ? idx : other;</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">        1962 :                     acc += static_cast&lt;double&gt;(wgt) * static_cast&lt;double&gt;(src.row(sy)[sx * 3 + c]);</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :             :                 }</span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">         354 :                 dst[c] = static_cast&lt;float&gt;(acc);</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :             :             }</span>
+<span id="L183"><span class="lineNum">     183</span>                 :             :         }</span>
+<span id="L184"><span class="lineNum">     184</span>                 :             :     }</span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">           6 :     return out;</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :             : }</span>
+<span id="L187"><span class="lineNum">     187</span>                 :             : </span>
+<span id="L188"><span class="lineNum">     188</span>                 :             : } // namespace</span>
+<span id="L189"><span class="lineNum">     189</span>                 :             : </span>
+<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">          11 : Result&lt;Image&gt; ResizeBicubic(const Image&amp; src, int32_t dst_w, int32_t dst_h) {</span></span>
+<span id="L191"><span class="lineNum">     191</span>   [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">          11 :     if (!src.valid() || dst_w &lt;= 0 || dst_h &lt;= 0) {</span></span>
+<span id="L192"><span class="lineNum">     192</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :         return Status::Error(ErrorCode::kInvalidArgument, &quot;resize: bad input&quot;);</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :             :     }</span>
+<span id="L194"><span class="lineNum">     194</span>   [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           9 :     if (dst_w == src.width &amp;&amp; dst_h == src.height) {</span></span>
+<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">           6 :         return src;</span></span>
+<span id="L196"><span class="lineNum">     196</span>                 :             :     }</span>
+<span id="L197"><span class="lineNum">     197</span>                 :             :     // Two separable passes: horizontal, then vertical.</span>
+<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC">           3 :     Image tmp = resize_bicubic_1d(src, dst_w, src.height, /*horizontal=*/true);</span></span>
+<span id="L199"><span class="lineNum">     199</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :     return resize_bicubic_1d(tmp, dst_w, dst_h, /*horizontal=*/false);</span></span>
+<span id="L200"><span class="lineNum">     200</span>                 :             : }</span>
+<span id="L201"><span class="lineNum">     201</span>                 :             : </span>
+<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">           5 : Result&lt;Image&gt; ResizeBilinear(const Image&amp; src, int32_t dst_w, int32_t dst_h) {</span></span>
+<span id="L203"><span class="lineNum">     203</span>   [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">           5 :     if (!src.valid() || dst_w &lt;= 0 || dst_h &lt;= 0) {</span></span>
+<span id="L204"><span class="lineNum">     204</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :         return Status::Error(ErrorCode::kInvalidArgument, &quot;resize: bad input&quot;);</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :             :     }</span>
+<span id="L206"><span class="lineNum">     206</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           3 :     if (dst_w == src.width &amp;&amp; dst_h == src.height) {</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">           1 :         return src;</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :             :     }</span>
+<span id="L209"><span class="lineNum">     209</span>                 :             : </span>
+<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaGNC">           2 :     Image out;</span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">           2 :     out.width = dst_w;</span></span>
+<span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaGNC">           2 :     out.height = dst_h;</span></span>
+<span id="L213"><span class="lineNum">     213</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     out.pixels.resize(static_cast&lt;size_t&gt;(dst_w) * static_cast&lt;size_t&gt;(dst_h) * 3);</span></span>
+<span id="L214"><span class="lineNum">     214</span>                 :             : </span>
+<span id="L215"><span class="lineNum">     215</span>                 :             :     // Half-pixel-center mapping (what vision preprocessors use).</span>
+<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">           2 :     const float sx = static_cast&lt;float&gt;(src.width) / static_cast&lt;float&gt;(dst_w);</span></span>
+<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">           2 :     const float sy = static_cast&lt;float&gt;(src.height) / static_cast&lt;float&gt;(dst_h);</span></span>
+<span id="L218"><span class="lineNum">     218</span>                 :             : </span>
+<span id="L219"><span class="lineNum">     219</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">          11 :     for (int32_t oy = 0; oy &lt; dst_h; ++oy) {</span></span>
+<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC">           9 :         const float fy = (static_cast&lt;float&gt;(oy) + 0.5f) * sy - 0.5f;</span></span>
+<span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaGNC">           9 :         const int32_t y0 = std::clamp(static_cast&lt;int32_t&gt;(std::floor(fy)), 0, src.height - 1);</span></span>
+<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">           9 :         const int32_t y1 = std::min(y0 + 1, src.height - 1);</span></span>
+<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC">           9 :         const float wy = std::clamp(fy - static_cast&lt;float&gt;(y0), 0.0f, 1.0f);</span></span>
+<span id="L224"><span class="lineNum">     224</span>                 :             : </span>
+<span id="L225"><span class="lineNum">     225</span>         [<span class="tlaGBC" title="Branch 0 was taken 31 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 9 times"> + </span>]:<span class="tlaGNC">          40 :         for (int32_t ox = 0; ox &lt; dst_w; ++ox) {</span></span>
+<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC">          31 :             const float fx = (static_cast&lt;float&gt;(ox) + 0.5f) * sx - 0.5f;</span></span>
+<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">          31 :             const int32_t x0 = std::clamp(static_cast&lt;int32_t&gt;(std::floor(fx)), 0, src.width - 1);</span></span>
+<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">          31 :             const int32_t x1 = std::min(x0 + 1, src.width - 1);</span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">          31 :             const float wx = std::clamp(fx - static_cast&lt;float&gt;(x0), 0.0f, 1.0f);</span></span>
+<span id="L230"><span class="lineNum">     230</span>                 :             : </span>
+<span id="L231"><span class="lineNum">     231</span>                 :             :             const float* r0 = src.row(y0);</span>
+<span id="L232"><span class="lineNum">     232</span>                 :             :             const float* r1 = src.row(y1);</span>
+<span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaGNC">          31 :             float* dst = out.pixels.data() + (static_cast&lt;size_t&gt;(oy) * static_cast&lt;size_t&gt;(dst_w) +</span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC">          31 :                                               static_cast&lt;size_t&gt;(ox)) *</span></span>
+<span id="L235"><span class="lineNum">     235</span>                 :             :                                                  3;</span>
+<span id="L236"><span class="lineNum">     236</span>         [<span class="tlaGBC" title="Branch 0 was taken 93 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 31 times"> + </span>]:<span class="tlaGNC">         124 :             for (int32_t c = 0; c &lt; 3; ++c) {</span></span>
+<span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaGNC">          93 :                 const float p00 = r0[x0 * 3 + c];</span></span>
+<span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">          93 :                 const float p01 = r0[x1 * 3 + c];</span></span>
+<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">          93 :                 const float p10 = r1[x0 * 3 + c];</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">          93 :                 const float p11 = r1[x1 * 3 + c];</span></span>
+<span id="L241"><span class="lineNum">     241</span>                 :             : </span>
+<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">          93 :                 dst[c] = (p00 * (1.0f - wx) + p01 * wx) * (1.0f - wy) +</span></span>
+<span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaGNC">          93 :                          (p10 * (1.0f - wx) + p11 * wx) * wy;</span></span>
+<span id="L244"><span class="lineNum">     244</span>                 :             :             }</span>
+<span id="L245"><span class="lineNum">     245</span>                 :             :         }</span>
+<span id="L246"><span class="lineNum">     246</span>                 :             :     }</span>
+<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC">           2 :     return out;</span></span>
+<span id="L248"><span class="lineNum">     248</span>                 :             : }</span>
+<span id="L249"><span class="lineNum">     249</span>                 :             : </span>
+<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">           6 : void NormalizeInPlace(Image&amp; img, const float mean[3], const float stddev[3]) {</span></span>
+<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">           6 :     const size_t n = static_cast&lt;size_t&gt;(img.width) * static_cast&lt;size_t&gt;(img.height);</span></span>
+<span id="L252"><span class="lineNum">     252</span>         [<span class="tlaGBC" title="Branch 0 was taken 321 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">         327 :     for (size_t i = 0; i &lt; n; ++i) {</span></span>
+<span id="L253"><span class="lineNum">     253</span>         [<span class="tlaGBC" title="Branch 0 was taken 963 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 321 times"> + </span>]:<span class="tlaGNC">        1284 :         for (size_t c = 0; c &lt; 3; ++c) {</span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">         963 :             img.pixels[i * 3 + c] = (img.pixels[i * 3 + c] - mean[c]) / stddev[c];</span></span>
+<span id="L255"><span class="lineNum">     255</span>                 :             :         }</span>
+<span id="L256"><span class="lineNum">     256</span>                 :             :     }</span>
+<span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaGNC">           6 : }</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :             : </span>
+<span id="L259"><span class="lineNum">     259</span>                 :             : } // namespace pl::mllm::media</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>
