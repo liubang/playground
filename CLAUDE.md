@@ -14,7 +14,7 @@ bazel test //...
 # Per-language
 bazel build //cpp/...       # C++ (default: C++20 + ASan, debug mode)
 bazel build //java/...      # Java 21 / Spring Boot
-bazel build //go/...        # Go 1.24
+bazel build //go/...        # Go 1.26
 bazel build //python/...    # Python 3.13
 
 # C++ configs
@@ -94,7 +94,7 @@ All deps declared in `MODULE.bazel` via bzlmod. Key deps: Abseil, brpc/braft, pr
 
 ### CI
 GitHub Actions in `.github/workflows/`:
-- `build_cpp.yml` — macOS (Apple Clang) + Linux (GCC-14, Clang), ASan on
+- `build_cpp.yml` — macOS (Homebrew LLVM) + Linux (Clang-18, GCC-14), ASan on
 - `build_java.yml`, `build_go.yml`, `build_python.yml` — per-language
 
 ### Bazel registry

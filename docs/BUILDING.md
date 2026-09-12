@@ -21,7 +21,7 @@
 brew install bazelisk llvm libomp pkg-config
 ```
 
-Homebrew LLVM 安装后，.bazelrc 中的 macos 配置会自动使用 /opt/homebrew/opt/llvm/bin/clang。最低系统版本要求 macOS 13.3。
+Homebrew LLVM 安装后，.bazelrc 中的 macos 配置会自动使用 /opt/homebrew/opt/llvm/bin/clang。最低系统版本要求 macOS 14.0。
 
 ## Ubuntu/Debian 安装
 
