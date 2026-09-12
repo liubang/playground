@@ -13,23 +13,20 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/09/11
+// Created: 2026/09/12
 
-#include "cpp/pl/mllm/media/image_io.h"
+syntax = "proto3";
 
-namespace pl::mllm::media {
+package pl.mllm.server.proto;
 
-Result<Image> LoadImageFile(const std::string& path) {
-    (void)path;
-    return Status::Error(ErrorCode::kUnsupported,
-                         "image file decoding is only implemented on macOS (ImageIO)");
+option cc_generic_services = true;
+
+// brpc RESTful wiring: bodies are read from / written to the controller
+// attachments directly (the API is OpenAI-shaped JSON, not protobuf), so
+// the messages stay empty.
+message HttpRequest {}
+message HttpResponse {}
+
+service MllmHttpService {
+  rpc default_method(HttpRequest) returns (HttpResponse);
 }
-
-Result<Image> LoadImageData(const void* data, size_t size) {
-    (void)data;
-    (void)size;
-    return Status::Error(ErrorCode::kUnsupported,
-                         "image data decoding is only implemented on macOS (ImageIO)");
-}
-
-} // namespace pl::mllm::media

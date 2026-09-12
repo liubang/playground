@@ -21,20 +21,36 @@ struct KeyCombo: Codable, Equatable {
     /// Builds the display string (⌃⌥⇧⌘ + key) from a recorded event.
     static func displayString(carbonModifiers: UInt32, keyCharacter: String) -> String {
         var result = ""
-        if carbonModifiers & Carbon.Modifier.control != 0 { result += "⌃" }
-        if carbonModifiers & Carbon.Modifier.option != 0 { result += "⌥" }
-        if carbonModifiers & Carbon.Modifier.shift != 0 { result += "⇧" }
-        if carbonModifiers & Carbon.Modifier.cmd != 0 { result += "⌘" }
+        if carbonModifiers & Carbon.Modifier.control != 0 {
+            result += "⌃"
+        }
+        if carbonModifiers & Carbon.Modifier.option != 0 {
+            result += "⌥"
+        }
+        if carbonModifiers & Carbon.Modifier.shift != 0 {
+            result += "⇧"
+        }
+        if carbonModifiers & Carbon.Modifier.cmd != 0 {
+            result += "⌘"
+        }
         return result + keyCharacter.uppercased()
     }
 
     /// NSEvent modifier flags → Carbon mask.
     static func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
         var mask: UInt32 = 0
-        if flags.contains(.command) { mask |= Carbon.Modifier.cmd }
-        if flags.contains(.shift) { mask |= Carbon.Modifier.shift }
-        if flags.contains(.option) { mask |= Carbon.Modifier.option }
-        if flags.contains(.control) { mask |= Carbon.Modifier.control }
+        if flags.contains(.command) {
+            mask |= Carbon.Modifier.cmd
+        }
+        if flags.contains(.shift) {
+            mask |= Carbon.Modifier.shift
+        }
+        if flags.contains(.option) {
+            mask |= Carbon.Modifier.option
+        }
+        if flags.contains(.control) {
+            mask |= Carbon.Modifier.control
+        }
         return mask
     }
 }
@@ -55,6 +71,9 @@ final class Settings {
         static let autoSave = "save.autoSave"
         static let borderShadow = "output.borderShadow"
         static let filenamePattern = "save.filenamePattern"
+        static let ocrEnginePath = "ocr.enginePath"
+        // Legacy key, superseded by ocr.enginePath; still honored for the
+        // one-shot CLI fallback and as a sibling hint for mllm_server.
         static let ocrCliPath = "ocr.cliPath"
         static let ocrModelDir = "ocr.modelDir"
     }
@@ -130,8 +149,14 @@ final class Settings {
 
     // MARK: - OCR engine paths
 
-    /// Explicit mllm_cli path; empty = use the well-known location
-    /// (~/Library/Application Support/AuraShot/mllm_cli).
+    /// Explicit mllm_server path; empty = auto (well-known install
+    /// location, then the server bundled inside AuraShot.app).
+    nonisolated var ocrEnginePath: String {
+        get { UserDefaults.standard.string(forKey: Key.ocrEnginePath) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: Key.ocrEnginePath) }
+    }
+
+    /// Legacy explicit mllm_cli path (superseded by ocrEnginePath).
     nonisolated var ocrCliPath: String {
         get { UserDefaults.standard.string(forKey: Key.ocrCliPath) ?? "" }
         set { UserDefaults.standard.set(newValue, forKey: Key.ocrCliPath) }
@@ -155,7 +180,9 @@ final class Settings {
         let formatter = DateFormatter()
         formatter.dateFormat = pattern
         var name = formatter.string(from: date)
-        if name.isEmpty { name = "screenshot" }
+        if name.isEmpty {
+            name = "screenshot"
+        }
         name = name.replacingOccurrences(of: "/", with: "-")
         name = name.replacingOccurrences(of: ":", with: "-")
         return name + ".png"

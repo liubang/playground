@@ -26,6 +26,48 @@
 
 namespace pl::mllm::media {
 
+namespace {
+
+// Shared rasterization path: decode the first image of `src` into the RGB
+// f32 representation. `what` labels errors (file path / "image data").
+Result<Image> DecodeImageSource(CGImageSourceRef src, const std::string& what) {
+    CGImageRef cg = CGImageSourceCreateImageAtIndex(src, 0, nullptr);
+    if (cg == nullptr) {
+        return Status::Error(ErrorCode::kInvalidFormat, "cannot decode image: " + what);
+    }
+
+    const size_t w = CGImageGetWidth(cg);
+    const size_t h = CGImageGetHeight(cg);
+    if (w == 0 || h == 0 || w > INT32_MAX || h > INT32_MAX) {
+        CGImageRelease(cg);
+        return Status::Error(ErrorCode::kInvalidFormat, "implausible image dimensions");
+    }
+
+    // Rasterize to tightly packed 8-bit RGBX (alpha ignored).
+    std::vector<uint8_t> rgba(w * h * 4);
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+    CGContextRef ctx = CGBitmapContextCreate(rgba.data(),
+                                             w,
+                                             h,
+                                             8,
+                                             w * 4,
+                                             cs,
+                                             kCGImageAlphaNoneSkipLast |
+                                                 kCGBitmapByteOrder32Big);
+    CGColorSpaceRelease(cs);
+    if (ctx == nullptr) {
+        CGImageRelease(cg);
+        return Status::Error(ErrorCode::kInternal, "bitmap context creation failed");
+    }
+    CGContextDrawImage(ctx, CGRectMake(0, 0, static_cast<CGFloat>(w), static_cast<CGFloat>(h)), cg);
+    CGContextRelease(ctx);
+    CGImageRelease(cg);
+
+    return Image::FromRgba8(rgba.data(), static_cast<int32_t>(w), static_cast<int32_t>(h));
+}
+
+} // namespace
+
 Result<Image> LoadImageFile(const std::string& path) {
     @autoreleasepool {
         NSString* ns_path = [NSString stringWithUTF8String:path.c_str()];
@@ -37,40 +79,33 @@ Result<Image> LoadImageFile(const std::string& path) {
         if (src == nullptr) {
             return Status::Error(ErrorCode::kNotFound, "cannot open image: " + path);
         }
-        CGImageRef cg = CGImageSourceCreateImageAtIndex(src, 0, nullptr);
+        Result<Image> result = DecodeImageSource(src, path);
         CFRelease(src);
-        if (cg == nullptr) {
-            return Status::Error(ErrorCode::kInvalidFormat, "cannot decode image: " + path);
-        }
+        return result;
+    }
+}
 
-        const size_t w = CGImageGetWidth(cg);
-        const size_t h = CGImageGetHeight(cg);
-        if (w == 0 || h == 0 || w > INT32_MAX || h > INT32_MAX) {
-            CGImageRelease(cg);
-            return Status::Error(ErrorCode::kInvalidFormat, "implausible image dimensions");
+Result<Image> LoadImageData(const void* data, size_t size) {
+    @autoreleasepool {
+        if (data == nullptr || size == 0) {
+            return Status::Error(ErrorCode::kInvalidArgument, "empty image data");
         }
-
-        // Rasterize to tightly packed 8-bit RGBX (alpha ignored).
-        std::vector<uint8_t> rgba(w * h * 4);
-        CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
-        CGContextRef ctx = CGBitmapContextCreate(rgba.data(),
-                                                 w,
-                                                 h,
-                                                 8,
-                                                 w * 4,
-                                                 cs,
-                                                 kCGImageAlphaNoneSkipLast |
-                                                     kCGBitmapByteOrder32Big);
-        CGColorSpaceRelease(cs);
-        if (ctx == nullptr) {
-            CGImageRelease(cg);
-            return Status::Error(ErrorCode::kInternal, "bitmap context creation failed");
+        CFDataRef cf_data =
+            CFDataCreateWithBytesNoCopy(kCFAllocatorDefault,
+                                        static_cast<const UInt8*>(data),
+                                        static_cast<CFIndex>(size),
+                                        kCFAllocatorNull);
+        if (cf_data == nullptr) {
+            return Status::Error(ErrorCode::kInternal, "CFData creation failed");
         }
-        CGContextDrawImage(ctx, CGRectMake(0, 0, static_cast<CGFloat>(w), static_cast<CGFloat>(h)), cg);
-        CGContextRelease(ctx);
-        CGImageRelease(cg);
-
-        return Image::FromRgba8(rgba.data(), static_cast<int32_t>(w), static_cast<int32_t>(h));
+        CGImageSourceRef src = CGImageSourceCreateWithData(cf_data, nullptr);
+        CFRelease(cf_data);
+        if (src == nullptr) {
+            return Status::Error(ErrorCode::kInvalidFormat, "cannot decode image data");
+        }
+        Result<Image> result = DecodeImageSource(src, "image data");
+        CFRelease(src);
+        return result;
     }
 }
 

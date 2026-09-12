@@ -44,6 +44,10 @@ mkdir -p "$STAGE"
 unzip -q "$ZIP" -d "$STAGE"
 
 pkill -x "$APP_NAME" 2>/dev/null || true
+# Kill a leftover bundled OCR server from the previous install: it was
+# spawned from inside the old bundle, and a running instance would keep
+# the port busy so the new app would keep talking to the old binary.
+pkill -f "$APP_NAME.app/Contents/Resources/mllm_server" 2>/dev/null || true
 rm -rf "$DEST/$APP_NAME.app"
 mv "$STAGE/$APP_NAME.app" "$DEST/"
 

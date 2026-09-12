@@ -637,6 +637,21 @@ std::string Engine::FormatChatPrompt(std::string_view user, std::string_view sys
         return out;
     }
 
+    // PaddleOCR-VL family: "<|begin_of_sentence|>User: ...\nAssistant:\n".
+    // The template has no system slot; a system message is folded into the
+    // user turn (matching the model's OCR-oriented training distribution).
+    if (tpl.find("<|begin_of_sentence|>") != std::string::npos &&
+        tpl.find("User: ") != std::string::npos && tpl.find("Assistant:") != std::string::npos) {
+        std::string out = "<|begin_of_sentence|>User: ";
+        if (!system.empty()) {
+            out += system;
+            out += '\n';
+        }
+        out += user;
+        out += "\nAssistant:\n";
+        return out;
+    }
+
     // Llama-3 family: "<|start_header_id|>"/"<|eot_id|>" markers.
     if (tpl.find("<|start_header_id|>") != std::string::npos) {
         std::string out = "<|begin_of_text|>";

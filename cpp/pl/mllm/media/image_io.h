@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <string>
 
 #include "cpp/pl/mllm/core/status.h"
@@ -30,5 +31,10 @@ namespace pl::mllm::media {
 // portable decoder is wired in. Decoding lives here — not in image.h — so
 // the core container stays platform- and dependency-free.
 [[nodiscard]] Result<Image> LoadImageFile(const std::string& path);
+
+// Decode an encoded image (PNG/JPEG/...) held in memory — the server path,
+// where requests carry base64 payloads instead of file paths. Same platform
+// support as LoadImageFile.
+[[nodiscard]] Result<Image> LoadImageData(const void* data, size_t size);
 
 } // namespace pl::mllm::media

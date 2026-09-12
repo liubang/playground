@@ -15,9 +15,11 @@ final class SettingsWindowController: NSObject {
     private var borderShadowCheckbox: NSButton?
     private var patternField: NSTextField?
     private var patternPreview: NSTextField?
-    private var ocrCliLabel: NSTextField?
+    private var ocrEngineLabel: NSTextField?
     private var ocrModelLabel: NSTextField?
     private var ocrStatusLabel: NSTextField?
+    private var ocrServerStatusLabel: NSTextField?
+    private var ocrServerRestartButton: NSButton?
 
     func show() {
         if window == nil {
@@ -95,17 +97,17 @@ final class SettingsWindowController: NSObject {
         patternPreview = preview
 
         // OCR section: engine binary + model directory + live status.
-        let ocrCliLabel = NSTextField(labelWithString: "")
-        ocrCliLabel.lineBreakMode = .byTruncatingMiddle
-        ocrCliLabel.font = .systemFont(ofSize: 12)
-        ocrCliLabel.textColor = .secondaryLabelColor
-        self.ocrCliLabel = ocrCliLabel
-        let ocrCliButton = NSButton(title: "选择…", target: self, action: #selector(chooseOcrCli))
-        ocrCliButton.bezelStyle = .rounded
-        let ocrCliRow = NSStackView(views: [ocrCliLabel, ocrCliButton])
-        ocrCliRow.orientation = .horizontal
-        ocrCliRow.alignment = .firstBaseline
-        ocrCliRow.spacing = 8
+        let ocrEngineLabel = NSTextField(labelWithString: "")
+        ocrEngineLabel.lineBreakMode = .byTruncatingMiddle
+        ocrEngineLabel.font = .systemFont(ofSize: 12)
+        ocrEngineLabel.textColor = .secondaryLabelColor
+        self.ocrEngineLabel = ocrEngineLabel
+        let ocrEngineButton = NSButton(title: "选择…", target: self, action: #selector(chooseOcrEngine))
+        ocrEngineButton.bezelStyle = .rounded
+        let ocrEngineRow = NSStackView(views: [ocrEngineLabel, ocrEngineButton])
+        ocrEngineRow.orientation = .horizontal
+        ocrEngineRow.alignment = .firstBaseline
+        ocrEngineRow.spacing = 8
 
         let ocrModelLabel = NSTextField(labelWithString: "")
         ocrModelLabel.lineBreakMode = .byTruncatingMiddle
@@ -118,6 +120,21 @@ final class SettingsWindowController: NSObject {
         ocrModelRow.orientation = .horizontal
         ocrModelRow.alignment = .firstBaseline
         ocrModelRow.spacing = 8
+
+        // OCR server row: runtime status + manual restart.
+        let serverStatus = NSTextField(labelWithString: "")
+        serverStatus.lineBreakMode = .byTruncatingMiddle
+        serverStatus.font = .systemFont(ofSize: 12)
+        serverStatus.textColor = .secondaryLabelColor
+        serverStatus.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        ocrServerStatusLabel = serverStatus
+        let restartButton = NSButton(title: "重启", target: self, action: #selector(restartOcrServer))
+        restartButton.bezelStyle = .rounded
+        ocrServerRestartButton = restartButton
+        let serverRow = NSStackView(views: [serverStatus, restartButton])
+        serverRow.orientation = .horizontal
+        serverRow.alignment = .firstBaseline
+        serverRow.spacing = 8
 
         let status = NSTextField(labelWithString: "")
         status.font = .systemFont(ofSize: 11)
@@ -132,8 +149,9 @@ final class SettingsWindowController: NSObject {
             [NSGridCell.emptyContentView, borderShadow],
             [label("文件名规则"), pattern],
             [NSGridCell.emptyContentView, preview],
-            [label("OCR 引擎"), ocrCliRow],
+            [label("OCR 引擎"), ocrEngineRow],
             [label("OCR 模型目录"), ocrModelRow],
+            [label("OCR 服务"), serverRow],
             [NSGridCell.emptyContentView, status],
         ])
         grid.column(at: 0).xPlacement = .trailing
@@ -173,22 +191,55 @@ final class SettingsWindowController: NSObject {
         patternField?.stringValue = settings.filenamePattern
         updatePatternPreview()
         reloadOcrStatus()
+        updateServerStatusLabel()
+        // Pick up crashed children / external servers asynchronously.
+        Task {
+            await MllmServerClient.shared.refresh()
+            await MainActor.run { [weak self] in
+                self?.updateServerStatusLabel()
+            }
+        }
     }
 
     private func reloadOcrStatus() {
         let settings = Settings.shared
-        ocrCliLabel?.stringValue = settings.ocrCliPath.isEmpty
-            ? "自动（~/Library/Application Support/AuraShot/mllm_cli）"
-            : settings.ocrCliPath
+        ocrEngineLabel?.stringValue = settings.ocrEnginePath.isEmpty
+            ? "自动（应用内置 mllm_server）"
+            : settings.ocrEnginePath
         ocrModelLabel?.stringValue = settings.ocrModelDir.path
         do {
-            _ = try MllmOcrEngine.resolveCLI()
             _ = try MllmOcrEngine.resolveModels()
-            ocrStatusLabel?.stringValue = "✅ OCR 就绪"
-            ocrStatusLabel?.textColor = .systemGreen
+            if MllmOcrEngine.resolveServer() != nil {
+                ocrStatusLabel?.stringValue = "OCR 就绪（server 模式）"
+                ocrStatusLabel?.textColor = .systemGreen
+            } else {
+                _ = try MllmOcrEngine.resolveCLI()
+                ocrStatusLabel?.stringValue = "未找到 mllm_server，回退一次性 CLI（每次识别较慢）"
+                ocrStatusLabel?.textColor = .systemOrange
+            }
         } catch {
-            ocrStatusLabel?.stringValue = "⚠️ " + error.localizedDescription
+            ocrStatusLabel?.stringValue = error.localizedDescription
             ocrStatusLabel?.textColor = .systemOrange
+        }
+    }
+
+    private func updateServerStatusLabel() {
+        let status = MllmServerClient.shared.status
+        switch status.phase {
+        case .running:
+            ocrServerStatusLabel?.stringValue = "运行中（本应用启动，端口 8310）"
+        case .booting:
+            ocrServerStatusLabel?.stringValue = "启动中（模型加载可能需要几十秒）…"
+        case .failed:
+            ocrServerStatusLabel?.stringValue = "启动失败：\(status.detail)"
+        case .stopped:
+            if status.healthyExternal {
+                ocrServerStatusLabel?.stringValue = "运行中（外部进程，端口 8310；重启按钮仅控制本应用启动的进程）"
+            } else if status.detail.isEmpty {
+                ocrServerStatusLabel?.stringValue = "未运行（首次 OCR 时自动启动）"
+            } else {
+                ocrServerStatusLabel?.stringValue = "未运行（\(status.detail)）"
+            }
         }
     }
 
@@ -225,7 +276,7 @@ final class SettingsWindowController: NSObject {
         Settings.shared.borderShadow = (sender.state == .on)
     }
 
-    @objc private func chooseOcrCli() {
+    @objc private func chooseOcrEngine() {
         guard let window else { return }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false
@@ -235,8 +286,32 @@ final class SettingsWindowController: NSObject {
         panel.directoryURL = URL(fileURLWithPath: NSHomeDirectory())
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
-            Settings.shared.ocrCliPath = url.path
+            Settings.shared.ocrEnginePath = url.path
             self?.reloadOcrStatus()
+        }
+    }
+
+    @objc private func restartOcrServer() {
+        guard let binary = MllmOcrEngine.resolveServer() else {
+            ocrServerStatusLabel?.stringValue = "未找到 mllm_server 二进制"
+            return
+        }
+        let model: String
+        let mmproj: String
+        do {
+            (model, mmproj) = try MllmOcrEngine.resolveModels()
+        } catch {
+            ocrServerStatusLabel?.stringValue = error.localizedDescription
+            return
+        }
+        ocrServerRestartButton?.isEnabled = false
+        ocrServerStatusLabel?.stringValue = "启动中（模型加载可能需要几十秒）…"
+        Task {
+            _ = await MllmServerClient.shared.restart(binary: binary, model: model, mmproj: mmproj)
+            await MainActor.run { [weak self] in
+                self?.ocrServerRestartButton?.isEnabled = true
+                self?.updateServerStatusLabel()
+            }
         }
     }
 

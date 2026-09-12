@@ -126,8 +126,9 @@ public:
 
     // Format a user (and optional system) message with the model's chat
     // template, taken from the GGUF `tokenizer.chat_template` metadata.
-    // Supports the ChatML (Qwen), Llama-2 and Llama-3 template families;
-    // falls back to the raw user message when no template is present.
+    // Supports the ChatML (Qwen), PaddleOCR-VL, Llama-2 and Llama-3 template
+    // families; falls back to the raw user message when no template is
+    // present.
     // The result ends with the assistant-turn opener, so the model
     // continues as the assistant.
     [[nodiscard]] std::string FormatChatPrompt(std::string_view user,
