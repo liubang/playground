@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryLo">40.3&nbsp;%</td>
-            <td class="headerCovTableEntry">402</td>
+            <td class="headerCovTableEntryLo">39.8&nbsp;%</td>
+            <td class="headerCovTableEntry">407</td>
             <td class="headerCovTableEntry">162</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-09-12 14:15:21</td>
+            <td class="headerValue">2026-09-12 19:34:04</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">40.0&nbsp;%</td>
@@ -49,8 +49,8 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">23.2&nbsp;%</td>
-            <td class="headerCovTableEntry">622</td>
+            <td class="headerCovTableEntryLo">22.9&nbsp;%</td>
+            <td class="headerCovTableEntry">630</td>
             <td class="headerCovTableEntry">144</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
@@ -713,320 +713,336 @@
 <span id="L637"><span class="lineNum">     637</span>                 :             :         return out;</span>
 <span id="L638"><span class="lineNum">     638</span>                 :             :     }</span>
 <span id="L639"><span class="lineNum">     639</span>                 :             : </span>
-<span id="L640"><span class="lineNum">     640</span>                 :             :     // Llama-3 family: &quot;&lt;|start_header_id|&gt;&quot;/&quot;&lt;|eot_id|&gt;&quot; markers.</span>
-<span id="L641"><span class="lineNum">     641</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (tpl.find(&quot;&lt;|start_header_id|&gt;&quot;) != std::string::npos) {</span></span>
-<span id="L642"><span class="lineNum">     642</span>                 :<span class="tlaUNC">           0 :         std::string out = &quot;&lt;|begin_of_text|&gt;&quot;;</span></span>
-<span id="L643"><span class="lineNum">     643</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         if (!system.empty()) {</span></span>
-<span id="L644"><span class="lineNum">     644</span>                 :             :             out += &quot;&lt;|start_header_id|&gt;system&lt;|end_header_id|&gt;\n\n&quot;;</span>
-<span id="L645"><span class="lineNum">     645</span>                 :             :             out += system;</span>
-<span id="L646"><span class="lineNum">     646</span>                 :             :             out += &quot;&lt;|eot_id|&gt;&quot;;</span>
-<span id="L647"><span class="lineNum">     647</span>                 :             :         }</span>
-<span id="L648"><span class="lineNum">     648</span>                 :             :         out += &quot;&lt;|start_header_id|&gt;user&lt;|end_header_id|&gt;\n\n&quot;;</span>
-<span id="L649"><span class="lineNum">     649</span>                 :             :         out += user;</span>
-<span id="L650"><span class="lineNum">     650</span>                 :             :         out += &quot;&lt;|eot_id|&gt;&lt;|start_header_id|&gt;assistant&lt;|end_header_id|&gt;\n\n&quot;;</span>
-<span id="L651"><span class="lineNum">     651</span>                 :<span class="tlaUNC">           0 :         return out;</span></span>
-<span id="L652"><span class="lineNum">     652</span>                 :             :     }</span>
-<span id="L653"><span class="lineNum">     653</span>                 :             : </span>
-<span id="L654"><span class="lineNum">     654</span>                 :             :     // Llama-2 family: &quot;[INST]&quot; markers. System goes inside the first</span>
-<span id="L655"><span class="lineNum">     655</span>                 :             :     // instruction, per the reference template.</span>
-<span id="L656"><span class="lineNum">     656</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (tpl.find(&quot;[INST]&quot;) != std::string::npos) {</span></span>
-<span id="L657"><span class="lineNum">     657</span>                 :<span class="tlaUNC">           0 :         std::string out = &quot;[INST] &quot;;</span></span>
-<span id="L658"><span class="lineNum">     658</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         if (!system.empty()) {</span></span>
-<span id="L659"><span class="lineNum">     659</span>                 :             :             out += &quot;&lt;&lt;SYS&gt;&gt;\n&quot;;</span>
-<span id="L660"><span class="lineNum">     660</span>                 :             :             out += system;</span>
-<span id="L661"><span class="lineNum">     661</span>                 :             :             out += &quot;\n&lt;&lt;/SYS&gt;&gt;\n\n&quot;;</span>
-<span id="L662"><span class="lineNum">     662</span>                 :             :         }</span>
-<span id="L663"><span class="lineNum">     663</span>                 :             :         out += user;</span>
-<span id="L664"><span class="lineNum">     664</span>                 :             :         out += &quot; [/INST]&quot;;</span>
-<span id="L665"><span class="lineNum">     665</span>                 :<span class="tlaUNC">           0 :         return out;</span></span>
-<span id="L666"><span class="lineNum">     666</span>                 :             :     }</span>
-<span id="L667"><span class="lineNum">     667</span>                 :             : </span>
-<span id="L668"><span class="lineNum">     668</span>                 :             :     // No recognized template: pass the user message through verbatim.</span>
-<span id="L669"><span class="lineNum">     669</span>                 :<span class="tlaUNC">           0 :     return std::string(user);</span></span>
-<span id="L670"><span class="lineNum">     670</span>                 :             : }</span>
-<span id="L671"><span class="lineNum">     671</span>                 :             : </span>
-<span id="L672"><span class="lineNum">     672</span>                 :<span class="tlaUNC">           0 : Result&lt;std::vector&lt;int32_t&gt;&gt; Engine::GenerateTokens(std::string_view prompt,</span></span>
-<span id="L673"><span class="lineNum">     673</span>                 :             :                                                     GenerateParams params) {</span>
-<span id="L674"><span class="lineNum">     674</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     std::vector&lt;int32_t&gt; result;</span></span>
-<span id="L675"><span class="lineNum">     675</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     auto s = GenerateStream(prompt, params, [&amp;](std::string_view, int32_t tok) {</span></span>
-<span id="L676"><span class="lineNum">     676</span>                 :<span class="tlaUNC">           0 :         result.push_back(tok);</span></span>
-<span id="L677"><span class="lineNum">     677</span>                 :             :         return true;</span>
-<span id="L678"><span class="lineNum">     678</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     });</span></span>
-<span id="L679"><span class="lineNum">     679</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (!s.ok() &amp;&amp; s.code != ErrorCode::kCancelled) {</span></span>
-<span id="L680"><span class="lineNum">     680</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         return s;</span></span>
-<span id="L681"><span class="lineNum">     681</span>                 :             :     }</span>
-<span id="L682"><span class="lineNum">     682</span>                 :<span class="tlaUNC">           0 :     return result;</span></span>
-<span id="L683"><span class="lineNum">     683</span>                 :             : }</span>
-<span id="L684"><span class="lineNum">     684</span>                 :             : </span>
-<span id="L685"><span class="lineNum">     685</span>                 :<span class="tlaUNC">           0 : Result&lt;std::vector&lt;int32_t&gt;&gt; Engine::GenerateTokens(const GenerateInput&amp; input,</span></span>
-<span id="L686"><span class="lineNum">     686</span>                 :             :                                                     GenerateParams params) {</span>
-<span id="L687"><span class="lineNum">     687</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     std::vector&lt;int32_t&gt; result;</span></span>
-<span id="L688"><span class="lineNum">     688</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     auto s = GenerateStream(input, params, [&amp;](std::string_view, int32_t tok) {</span></span>
-<span id="L689"><span class="lineNum">     689</span>                 :<span class="tlaUNC">           0 :         result.push_back(tok);</span></span>
-<span id="L690"><span class="lineNum">     690</span>                 :             :         return true;</span>
-<span id="L691"><span class="lineNum">     691</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     });</span></span>
-<span id="L692"><span class="lineNum">     692</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (!s.ok() &amp;&amp; s.code != ErrorCode::kCancelled) {</span></span>
-<span id="L693"><span class="lineNum">     693</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         return s;</span></span>
-<span id="L694"><span class="lineNum">     694</span>                 :             :     }</span>
-<span id="L695"><span class="lineNum">     695</span>                 :<span class="tlaUNC">           0 :     return result;</span></span>
-<span id="L696"><span class="lineNum">     696</span>                 :             : }</span>
-<span id="L697"><span class="lineNum">     697</span>                 :             : </span>
-<span id="L698"><span class="lineNum">     698</span>                 :<span class="tlaGNC tlaBgGNC">          13 : Status Engine::GenerateStream(std::string_view prompt,</span></span>
-<span id="L699"><span class="lineNum">     699</span>                 :             :                               GenerateParams params,</span>
-<span id="L700"><span class="lineNum">     700</span>                 :             :                               std::function&lt;bool(std::string_view, int32_t)&gt; on_piece) {</span>
-<span id="L701"><span class="lineNum">     701</span>                 :             :     auto&amp; impl = *impl_;</span>
-<span id="L702"><span class="lineNum">     702</span>                 :             : </span>
-<span id="L703"><span class="lineNum">     703</span>                 :             :     // Tokenize prompt.</span>
-<span id="L704"><span class="lineNum">     704</span>                 :<span class="tlaGNC">          13 :     auto enc_result = impl.tokenizer.Encode(prompt, true);</span></span>
-<span id="L705"><span class="lineNum">     705</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span>]:<span class="tlaGNC">          13 :     if (!enc_result.ok()) {</span></span>
-<span id="L706"><span class="lineNum">     706</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return enc_result.status();</span></span>
-<span id="L707"><span class="lineNum">     707</span>                 :             :     }</span>
-<span id="L708"><span class="lineNum">     708</span>   [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          13 :     auto prompt_tokens = enc_result.value();</span></span>
-<span id="L709"><span class="lineNum">     709</span>                 :             : </span>
-<span id="L710"><span class="lineNum">     710</span>                 :             :     // Ring mode allows sequences longer than the cache: overflow is handled</span>
-<span id="L711"><span class="lineNum">     711</span>                 :             :     // by dropping the oldest tokens (sliding window). Strict mode rejects</span>
-<span id="L712"><span class="lineNum">     712</span>                 :             :     // prompts that cannot fit up front.</span>
-<span id="L713"><span class="lineNum">     713</span>   [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 9 times"> + </span>]:<span class="tlaGNC">          13 :     if (!impl.ring &amp;&amp;</span></span>
-<span id="L714"><span class="lineNum">     714</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 9 times"> + </span>]:<span class="tlaGNC">          10 :         static_cast&lt;int32_t&gt;(prompt_tokens.size()) + params.max_tokens &gt; impl.cache-&gt;capacity()) {</span></span>
-<span id="L715"><span class="lineNum">     715</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         return Status::Error(ErrorCode::kInvalidArgument,</span></span>
-<span id="L716"><span class="lineNum">     716</span>                 :             :                              &quot;prompt + max_tokens exceeds cache capacity&quot;);</span>
-<span id="L717"><span class="lineNum">     717</span>                 :             :     }</span>
-<span id="L718"><span class="lineNum">     718</span>                 :             : </span>
-<span id="L719"><span class="lineNum">     719</span>                 :             :     // Start from an empty cache (an Engine may be reused across calls).</span>
-<span id="L720"><span class="lineNum">     720</span>                 :             :     impl.cache-&gt;Clear();</span>
-<span id="L721"><span class="lineNum">     721</span>                 :             : </span>
-<span id="L722"><span class="lineNum">     722</span>                 :<span class="tlaGNC">          12 :     auto t_start = Clock::now();</span></span>
-<span id="L723"><span class="lineNum">     723</span>                 :             : </span>
-<span id="L724"><span class="lineNum">     724</span>                 :             :     // Prefill. The returned hidden state belongs to the last prompt token</span>
-<span id="L725"><span class="lineNum">     725</span>                 :             :     // and is used directly to sample the first generated token — the last</span>
-<span id="L726"><span class="lineNum">     726</span>                 :             :     // prompt token must NOT be re-forwarded during decode.</span>
-<span id="L727"><span class="lineNum">     727</span>                 :<span class="tlaGNC">          12 :     auto prefill_start = Clock::now();</span></span>
-<span id="L728"><span class="lineNum">     728</span>   [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 12 times"> + </span>]:<span class="tlaGNC">          12 :     auto prefill_result = RunPrefill(prompt_tokens);</span></span>
-<span id="L729"><span class="lineNum">     729</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span>]:<span class="tlaGNC">          12 :     if (!prefill_result.ok()) {</span></span>
-<span id="L730"><span class="lineNum">     730</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return prefill_result.status();</span></span>
-<span id="L731"><span class="lineNum">     731</span>                 :             :     }</span>
-<span id="L732"><span class="lineNum">     732</span>                 :<span class="tlaGNC tlaBgGNC">          12 :     auto prefill_end = Clock::now();</span></span>
-<span id="L733"><span class="lineNum">     733</span>                 :<span class="tlaGNC">          12 :     perf_.prefill_ms = elapsed_ms(prefill_start, prefill_end);</span></span>
-<span id="L734"><span class="lineNum">     734</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :     perf_.prompt_tokens = static_cast&lt;int32_t&gt;(prompt_tokens.size());</span></span>
-<span id="L735"><span class="lineNum">     735</span>                 :             : </span>
-<span id="L736"><span class="lineNum">     736</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :     return DecodeStage(prefill_result.value(),</span></span>
-<span id="L737"><span class="lineNum">     737</span>                 :             :                        prompt_tokens,</span>
-<span id="L738"><span class="lineNum">     738</span>                 :             :                        static_cast&lt;int32_t&gt;(prompt_tokens.size()),</span>
-<span id="L739"><span class="lineNum">     739</span>                 :             :                        /*mrope_delta=*/0,</span>
-<span id="L740"><span class="lineNum">     740</span>                 :             :                        params,</span>
-<span id="L741"><span class="lineNum">     741</span>                 :             :                        t_start,</span>
-<span id="L742"><span class="lineNum">     742</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :                        on_piece);</span></span>
-<span id="L743"><span class="lineNum">     743</span>                 :             : }</span>
-<span id="L744"><span class="lineNum">     744</span>                 :             : </span>
-<span id="L745"><span class="lineNum">     745</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 : Status Engine::GenerateStream(const GenerateInput&amp; input,</span></span>
-<span id="L746"><span class="lineNum">     746</span>                 :             :                               GenerateParams params,</span>
-<span id="L747"><span class="lineNum">     747</span>                 :             :                               std::function&lt;bool(std::string_view, int32_t)&gt; on_piece) {</span>
-<span id="L748"><span class="lineNum">     748</span>                 :             :     // A prompt without images is the plain text pipeline.</span>
-<span id="L749"><span class="lineNum">     749</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (input.images.empty()) {</span></span>
-<span id="L750"><span class="lineNum">     750</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         return GenerateStream(std::string_view(input.prompt), params, std::move(on_piece));</span></span>
-<span id="L751"><span class="lineNum">     751</span>                 :             :     }</span>
-<span id="L752"><span class="lineNum">     752</span>                 :             :     auto&amp; impl = *impl_;</span>
-<span id="L753"><span class="lineNum">     753</span>                 :             : </span>
-<span id="L754"><span class="lineNum">     754</span>                 :<span class="tlaUNC">           0 :     auto enc_result = impl.tokenizer.Encode(input.prompt, true);</span></span>
-<span id="L755"><span class="lineNum">     755</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (!enc_result.ok()) {</span></span>
-<span id="L756"><span class="lineNum">     756</span>                 :<span class="tlaUNC">           0 :         return enc_result.status();</span></span>
-<span id="L757"><span class="lineNum">     757</span>                 :             :     }</span>
-<span id="L758"><span class="lineNum">     758</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :     auto prompt_tokens = enc_result.value();</span></span>
-<span id="L759"><span class="lineNum">     759</span>                 :             : </span>
-<span id="L760"><span class="lineNum">     760</span>                 :             :     // Capacity estimate in physical rows: text tokens (minus placeholders)</span>
-<span id="L761"><span class="lineNum">     761</span>                 :             :     // plus the per-image merged-token counts.</span>
-<span id="L762"><span class="lineNum">     762</span>                 :             :     int64_t rows = static_cast&lt;int64_t&gt;(prompt_tokens.size());</span>
-<span id="L763"><span class="lineNum">     763</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (impl.vision_tower != nullptr) {</span></span>
-<span id="L764"><span class="lineNum">     764</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         for (const auto&amp; img : input.images) {</span></span>
-<span id="L765"><span class="lineNum">     765</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             auto tc = impl.vision_tower-&gt;TokenCount(img.width, img.height);</span></span>
-<span id="L766"><span class="lineNum">     766</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             if (!tc.ok()) {</span></span>
-<span id="L767"><span class="lineNum">     767</span>                 :<span class="tlaUNC">           0 :                 return tc.status();</span></span>
-<span id="L768"><span class="lineNum">     768</span>                 :             :             }</span>
-<span id="L769"><span class="lineNum">     769</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             rows += tc.value() - 1; // one placeholder expands to tc rows</span></span>
-<span id="L770"><span class="lineNum">     770</span>                 :             :         }</span>
-<span id="L771"><span class="lineNum">     771</span>                 :             :     }</span>
-<span id="L772"><span class="lineNum">     772</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (!impl.ring &amp;&amp; rows + params.max_tokens &gt; impl.cache-&gt;capacity()) {</span></span>
-<span id="L773"><span class="lineNum">     773</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         return Status::Error(ErrorCode::kInvalidArgument,</span></span>
-<span id="L774"><span class="lineNum">     774</span>                 :             :                              &quot;prompt (with images) + max_tokens exceeds cache capacity&quot;);</span>
-<span id="L775"><span class="lineNum">     775</span>                 :             :     }</span>
-<span id="L776"><span class="lineNum">     776</span>                 :             : </span>
-<span id="L777"><span class="lineNum">     777</span>                 :             :     impl.cache-&gt;Clear();</span>
-<span id="L778"><span class="lineNum">     778</span>                 :             : </span>
-<span id="L779"><span class="lineNum">     779</span>                 :<span class="tlaUNC">           0 :     auto t_start = Clock::now();</span></span>
-<span id="L780"><span class="lineNum">     780</span>                 :<span class="tlaUNC">           0 :     auto prefill_start = Clock::now();</span></span>
-<span id="L781"><span class="lineNum">     781</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :     auto prefill_result = RunPrefillMultimodal(prompt_tokens, input.images);</span></span>
-<span id="L782"><span class="lineNum">     782</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (!prefill_result.ok()) {</span></span>
-<span id="L783"><span class="lineNum">     783</span>                 :<span class="tlaUNC">           0 :         return prefill_result.status();</span></span>
-<span id="L784"><span class="lineNum">     784</span>                 :             :     }</span>
-<span id="L785"><span class="lineNum">     785</span>                 :<span class="tlaUNC">           0 :     auto prefill_end = Clock::now();</span></span>
-<span id="L786"><span class="lineNum">     786</span>                 :<span class="tlaUNC">           0 :     perf_.prefill_ms = elapsed_ms(prefill_start, prefill_end);</span></span>
-<span id="L787"><span class="lineNum">     787</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     perf_.prompt_tokens = prefill_result.value().prompt_rows;</span></span>
-<span id="L788"><span class="lineNum">     788</span>                 :             : </span>
-<span id="L789"><span class="lineNum">     789</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     return DecodeStage(prefill_result.value().hidden,</span></span>
-<span id="L790"><span class="lineNum">     790</span>                 :             :                        prompt_tokens,</span>
-<span id="L791"><span class="lineNum">     791</span>                 :<span class="tlaUNC">           0 :                        prefill_result.value().prompt_rows,</span></span>
-<span id="L792"><span class="lineNum">     792</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                        prefill_result.value().mrope_delta,</span></span>
-<span id="L793"><span class="lineNum">     793</span>                 :             :                        params,</span>
-<span id="L794"><span class="lineNum">     794</span>                 :             :                        t_start,</span>
-<span id="L795"><span class="lineNum">     795</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC">           0 :                        on_piece);</span></span>
+<span id="L640"><span class="lineNum">     640</span>                 :             :     // PaddleOCR-VL family: &quot;&lt;|begin_of_sentence|&gt;User: ...\nAssistant:\n&quot;.</span>
+<span id="L641"><span class="lineNum">     641</span>                 :             :     // The template has no system slot; a system message is folded into the</span>
+<span id="L642"><span class="lineNum">     642</span>                 :             :     // user turn (matching the model's OCR-oriented training distribution).</span>
+<span id="L643"><span class="lineNum">     643</span>                 :<span class="tlaUNC">           0 :     if (tpl.find(&quot;&lt;|begin_of_sentence|&gt;&quot;) != std::string::npos &amp;&amp;</span></span>
+<span id="L644"><span class="lineNum">     644</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC">           0 :         tpl.find(&quot;User: &quot;) != std::string::npos &amp;&amp; tpl.find(&quot;Assistant:&quot;) != std::string::npos) {</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span>]
-<span id="L796"><span class="lineNum">     796</span>                 :             : }</span>
-<span id="L797"><span class="lineNum">     797</span>                 :             : </span>
-<span id="L798"><span class="lineNum">     798</span>                 :<span class="tlaGNC tlaBgGNC">          12 : Status Engine::DecodeStage(TensorView hidden_state,</span></span>
-<span id="L799"><span class="lineNum">     799</span>                 :             :                            std::span&lt;const int32_t&gt; prompt_tokens,</span>
-<span id="L800"><span class="lineNum">     800</span>                 :             :                            int32_t prompt_rows,</span>
-<span id="L801"><span class="lineNum">     801</span>                 :             :                            int64_t mrope_delta,</span>
-<span id="L802"><span class="lineNum">     802</span>                 :             :                            GenerateParams params,</span>
-<span id="L803"><span class="lineNum">     803</span>                 :             :                            std::chrono::steady_clock::time_point t_start,</span>
-<span id="L804"><span class="lineNum">     804</span>                 :             :                            const std::function&lt;bool(std::string_view, int32_t)&gt;&amp; on_piece) {</span>
-<span id="L805"><span class="lineNum">     805</span>                 :             :     auto&amp; impl = *impl_;</span>
-<span id="L806"><span class="lineNum">     806</span>                 :<span class="tlaGNC">          12 :     const int32_t hidden = impl.config.hidden_size;</span></span>
-<span id="L807"><span class="lineNum">     807</span>                 :<span class="tlaGNC">          12 :     const int32_t vocab = impl.config.vocab_size;</span></span>
-<span id="L808"><span class="lineNum">     808</span>                 :             : </span>
-<span id="L809"><span class="lineNum">     809</span>                 :             :     // Set up sampler.</span>
-<span id="L810"><span class="lineNum">     810</span>                 :             :     SamplerParams sp;</span>
-<span id="L811"><span class="lineNum">     811</span>                 :<span class="tlaGNC">          12 :     sp.temperature = params.temperature;</span></span>
-<span id="L812"><span class="lineNum">     812</span>                 :<span class="tlaGNC">          12 :     sp.top_k = params.top_k;</span></span>
-<span id="L813"><span class="lineNum">     813</span>                 :<span class="tlaGNC">          12 :     sp.top_p = params.top_p;</span></span>
-<span id="L814"><span class="lineNum">     814</span>                 :<span class="tlaGNC">          12 :     sp.repeat_penalty = params.repeat_penalty;</span></span>
-<span id="L815"><span class="lineNum">     815</span>                 :<span class="tlaGNC">          12 :     sp.seed = params.seed;</span></span>
-<span id="L816"><span class="lineNum">     816</span>                 :<span class="tlaGNC">          12 :     Sampler sampler(sp);</span></span>
-<span id="L817"><span class="lineNum">     817</span>                 :             : </span>
-<span id="L818"><span class="lineNum">     818</span>                 :             :     // Logits buffer.</span>
-<span id="L819"><span class="lineNum">     819</span>                 :<span class="tlaGNC">          12 :     auto logits_buf_result = OwnedBuffer::AllocateCpu(static_cast&lt;size_t&gt;(vocab) * 4, 64);</span></span>
-<span id="L820"><span class="lineNum">     820</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span>]:<span class="tlaGNC">          12 :     if (!logits_buf_result.ok()) {</span></span>
-<span id="L821"><span class="lineNum">     821</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return logits_buf_result.status();</span></span>
-<span id="L822"><span class="lineNum">     822</span>                 :             :     }</span>
-<span id="L823"><span class="lineNum">     823</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          12 :     auto logits_owned = std::move(logits_buf_result).value();</span></span>
-<span id="L824"><span class="lineNum">     824</span>                 :<span class="tlaGNC">          12 :     TensorView logits(logits_owned.data(), DType::kF32, {1, vocab});</span></span>
-<span id="L825"><span class="lineNum">     825</span>                 :             : </span>
-<span id="L826"><span class="lineNum">     826</span>                 :             :     // Decode loop: each step samples from the current hidden state, then</span>
-<span id="L827"><span class="lineNum">     827</span>                 :             :     // embeds the sampled token and forwards it to produce the next one.</span>
-<span id="L828"><span class="lineNum">     828</span>                 :<span class="tlaGNC">          12 :     std::vector&lt;int32_t&gt; generated;</span></span>
-<span id="L829"><span class="lineNum">     829</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :     generated.reserve(static_cast&lt;size_t&gt;(params.max_tokens));</span></span>
-<span id="L830"><span class="lineNum">     830</span>                 :             :     // Scratch for the repetition-penalty context window (only touched when</span>
-<span id="L831"><span class="lineNum">     831</span>                 :             :     // repeat_penalty is enabled).</span>
-<span id="L832"><span class="lineNum">     832</span>                 :<span class="tlaGNC">          12 :     std::vector&lt;int32_t&gt; penalty_ctx;</span></span>
-<span id="L833"><span class="lineNum">     833</span>                 :             :     // Physical sequence index of the next appended token; its rope position</span>
-<span id="L834"><span class="lineNum">     834</span>                 :             :     // is mrope_delta + seq_pos (identical to seq_pos for text-only models).</span>
-<span id="L835"><span class="lineNum">     835</span>                 :<span class="tlaGNC">          12 :     int64_t seq_pos = prompt_rows;</span></span>
-<span id="L836"><span class="lineNum">     836</span>                 :             : </span>
-<span id="L837"><span class="lineNum">     837</span>                 :<span class="tlaGNC">          12 :     auto decode_start = Clock::now();</span></span>
-<span id="L838"><span class="lineNum">     838</span>                 :             :     bool first_token = true;</span>
-<span id="L839"><span class="lineNum">     839</span>                 :             : </span>
-<span id="L840"><span class="lineNum">     840</span>         [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          86 :     for (int32_t step = 0; step &lt; params.max_tokens; ++step) {</span></span>
-<span id="L841"><span class="lineNum">     841</span>                 :             :         // Compute logits from the current hidden state. The arena is NOT</span>
-<span id="L842"><span class="lineNum">     842</span>                 :             :         // reset between Forward and ComputeLogits: `hidden_state` lives in</span>
-<span id="L843"><span class="lineNum">     843</span>                 :             :         // the arena and ComputeLogits' scratch allocations follow it.</span>
-<span id="L844"><span class="lineNum">     844</span>   [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 86 times"> + </span>]:<span class="tlaGNC">          86 :         if (auto s = impl.model-&gt;ComputeLogits(hidden_state, logits, *impl.backend, *impl.arena);</span></span>
-<span id="L845"><span class="lineNum">     845</span>                 :             :             !s.ok()) {</span>
-<span id="L846"><span class="lineNum">     846</span>                 :             :             return s;</span>
-<span id="L847"><span class="lineNum">     847</span>                 :             :         }</span>
-<span id="L848"><span class="lineNum">     848</span>                 :             : </span>
-<span id="L849"><span class="lineNum">     849</span>                 :             :         // The sampler reads logits on the host.</span>
-<span id="L850"><span class="lineNum">     850</span>   [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 86 times"> + </span>]:<span class="tlaGNC">          86 :         if (auto s = impl.backend-&gt;SyncToHost(logits); !s.ok()) {</span></span>
-<span id="L851"><span class="lineNum">     851</span>                 :             :             return s;</span>
-<span id="L852"><span class="lineNum">     852</span>                 :             :         }</span>
-<span id="L853"><span class="lineNum">     853</span>                 :             : </span>
-<span id="L854"><span class="lineNum">     854</span>                 :             :         // Sample. The repetition penalty applies to the recent context:</span>
-<span id="L855"><span class="lineNum">     855</span>                 :             :         // prompt tail + generated tokens, capped at a 64-token window</span>
-<span id="L856"><span class="lineNum">     856</span>                 :             :         // (llama.cpp's penalty_last_n default).</span>
-<span id="L857"><span class="lineNum">     857</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 86 times"> + </span>]:<span class="tlaGNC">          86 :         if (params.repeat_penalty != 1.0f) {</span></span>
-<span id="L858"><span class="lineNum">     858</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             constexpr size_t kPenaltyLastN = 64;</span></span>
-<span id="L859"><span class="lineNum">     859</span>                 :             :             // Only the last kPenaltyLastN tokens of (prompt + generated)</span>
-<span id="L860"><span class="lineNum">     860</span>                 :             :             // matter; build the window directly instead of copying both</span>
-<span id="L861"><span class="lineNum">     861</span>                 :             :             // full vectors (O(window) instead of O(context) per step).</span>
-<span id="L862"><span class="lineNum">     862</span>                 :             :             const size_t take_gen = std::min(kPenaltyLastN, generated.size());</span>
-<span id="L863"><span class="lineNum">     863</span>                 :             :             size_t take_prompt = prompt_tokens.size();</span>
-<span id="L864"><span class="lineNum">     864</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             if (take_gen + take_prompt &gt; kPenaltyLastN) {</span></span>
-<span id="L865"><span class="lineNum">     865</span>                 :<span class="tlaUNC">           0 :                 take_prompt = kPenaltyLastN - take_gen;</span></span>
-<span id="L866"><span class="lineNum">     866</span>                 :             :             }</span>
-<span id="L867"><span class="lineNum">     867</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             penalty_ctx.assign(prompt_tokens.end() - take_prompt, prompt_tokens.end());</span></span>
-<span id="L868"><span class="lineNum">     868</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :             penalty_ctx.insert(penalty_ctx.end(), generated.end() - take_gen, generated.end());</span></span>
-<span id="L869"><span class="lineNum">     869</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             sampler.set_penalty_tokens(std::span&lt;const int32_t&gt;(penalty_ctx));</span></span>
-<span id="L870"><span class="lineNum">     870</span>                 :             :         }</span>
-<span id="L871"><span class="lineNum">     871</span>         [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          86 :         int32_t next = sampler.Sample(logits.span_as&lt;float&gt;());</span></span>
-<span id="L872"><span class="lineNum">     872</span>                 :             : </span>
-<span id="L873"><span class="lineNum">     873</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 74 times"> + </span>]:<span class="tlaGNC">          86 :         if (first_token) {</span></span>
-<span id="L874"><span class="lineNum">     874</span>                 :<span class="tlaGNC">          12 :             perf_.time_to_first_token_ms = elapsed_ms(t_start, Clock::now());</span></span>
-<span id="L875"><span class="lineNum">     875</span>                 :             :             first_token = false;</span>
-<span id="L876"><span class="lineNum">     876</span>                 :             :         }</span>
-<span id="L877"><span class="lineNum">     877</span>                 :             : </span>
-<span id="L878"><span class="lineNum">     878</span>                 :             :         // EOS check.</span>
-<span id="L879"><span class="lineNum">     879</span>         [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          86 :         if (next == impl.tokenizer.eos_id()) {</span></span>
-<span id="L880"><span class="lineNum">     880</span>                 :             :             break;</span>
-<span id="L881"><span class="lineNum">     881</span>                 :             :         }</span>
-<span id="L882"><span class="lineNum">     882</span>                 :             : </span>
-<span id="L883"><span class="lineNum">     883</span>         [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          86 :         generated.push_back(next);</span></span>
-<span id="L884"><span class="lineNum">     884</span>                 :             : </span>
-<span id="L885"><span class="lineNum">     885</span>                 :             :         // Decode and stream.</span>
-<span id="L886"><span class="lineNum">     886</span>         [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          86 :         auto text_result = impl.tokenizer.DecodeOne(next);</span></span>
-<span id="L887"><span class="lineNum">     887</span>         [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          86 :         if (text_result.ok()) {</span></span>
-<span id="L888"><span class="lineNum">     888</span>   [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          86 :             if (!on_piece(text_result.value(), next)) {</span></span>
-<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 86 times"> + </span>]
-<span id="L889"><span class="lineNum">     889</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :                 return Status::Error(ErrorCode::kCancelled, &quot;cancelled by callback&quot;);</span></span>
-<span id="L890"><span class="lineNum">     890</span>                 :             :             }</span>
+<span id="L645"><span class="lineNum">     645</span>                 :<span class="tlaUNC">           0 :         std::string out = &quot;&lt;|begin_of_sentence|&gt;User: &quot;;</span></span>
+<span id="L646"><span class="lineNum">     646</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         if (!system.empty()) {</span></span>
+<span id="L647"><span class="lineNum">     647</span>                 :             :             out += system;</span>
+<span id="L648"><span class="lineNum">     648</span>                 :             :             out += '\n';</span>
+<span id="L649"><span class="lineNum">     649</span>                 :             :         }</span>
+<span id="L650"><span class="lineNum">     650</span>                 :             :         out += user;</span>
+<span id="L651"><span class="lineNum">     651</span>                 :             :         out += &quot;\nAssistant:\n&quot;;</span>
+<span id="L652"><span class="lineNum">     652</span>                 :<span class="tlaUNC">           0 :         return out;</span></span>
+<span id="L653"><span class="lineNum">     653</span>                 :             :     }</span>
+<span id="L654"><span class="lineNum">     654</span>                 :             : </span>
+<span id="L655"><span class="lineNum">     655</span>                 :             :     // Llama-3 family: &quot;&lt;|start_header_id|&gt;&quot;/&quot;&lt;|eot_id|&gt;&quot; markers.</span>
+<span id="L656"><span class="lineNum">     656</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (tpl.find(&quot;&lt;|start_header_id|&gt;&quot;) != std::string::npos) {</span></span>
+<span id="L657"><span class="lineNum">     657</span>                 :<span class="tlaUNC">           0 :         std::string out = &quot;&lt;|begin_of_text|&gt;&quot;;</span></span>
+<span id="L658"><span class="lineNum">     658</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         if (!system.empty()) {</span></span>
+<span id="L659"><span class="lineNum">     659</span>                 :             :             out += &quot;&lt;|start_header_id|&gt;system&lt;|end_header_id|&gt;\n\n&quot;;</span>
+<span id="L660"><span class="lineNum">     660</span>                 :             :             out += system;</span>
+<span id="L661"><span class="lineNum">     661</span>                 :             :             out += &quot;&lt;|eot_id|&gt;&quot;;</span>
+<span id="L662"><span class="lineNum">     662</span>                 :             :         }</span>
+<span id="L663"><span class="lineNum">     663</span>                 :             :         out += &quot;&lt;|start_header_id|&gt;user&lt;|end_header_id|&gt;\n\n&quot;;</span>
+<span id="L664"><span class="lineNum">     664</span>                 :             :         out += user;</span>
+<span id="L665"><span class="lineNum">     665</span>                 :             :         out += &quot;&lt;|eot_id|&gt;&lt;|start_header_id|&gt;assistant&lt;|end_header_id|&gt;\n\n&quot;;</span>
+<span id="L666"><span class="lineNum">     666</span>                 :<span class="tlaUNC">           0 :         return out;</span></span>
+<span id="L667"><span class="lineNum">     667</span>                 :             :     }</span>
+<span id="L668"><span class="lineNum">     668</span>                 :             : </span>
+<span id="L669"><span class="lineNum">     669</span>                 :             :     // Llama-2 family: &quot;[INST]&quot; markers. System goes inside the first</span>
+<span id="L670"><span class="lineNum">     670</span>                 :             :     // instruction, per the reference template.</span>
+<span id="L671"><span class="lineNum">     671</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (tpl.find(&quot;[INST]&quot;) != std::string::npos) {</span></span>
+<span id="L672"><span class="lineNum">     672</span>                 :<span class="tlaUNC">           0 :         std::string out = &quot;[INST] &quot;;</span></span>
+<span id="L673"><span class="lineNum">     673</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         if (!system.empty()) {</span></span>
+<span id="L674"><span class="lineNum">     674</span>                 :             :             out += &quot;&lt;&lt;SYS&gt;&gt;\n&quot;;</span>
+<span id="L675"><span class="lineNum">     675</span>                 :             :             out += system;</span>
+<span id="L676"><span class="lineNum">     676</span>                 :             :             out += &quot;\n&lt;&lt;/SYS&gt;&gt;\n\n&quot;;</span>
+<span id="L677"><span class="lineNum">     677</span>                 :             :         }</span>
+<span id="L678"><span class="lineNum">     678</span>                 :             :         out += user;</span>
+<span id="L679"><span class="lineNum">     679</span>                 :             :         out += &quot; [/INST]&quot;;</span>
+<span id="L680"><span class="lineNum">     680</span>                 :<span class="tlaUNC">           0 :         return out;</span></span>
+<span id="L681"><span class="lineNum">     681</span>                 :             :     }</span>
+<span id="L682"><span class="lineNum">     682</span>                 :             : </span>
+<span id="L683"><span class="lineNum">     683</span>                 :             :     // No recognized template: pass the user message through verbatim.</span>
+<span id="L684"><span class="lineNum">     684</span>                 :<span class="tlaUNC">           0 :     return std::string(user);</span></span>
+<span id="L685"><span class="lineNum">     685</span>                 :             : }</span>
+<span id="L686"><span class="lineNum">     686</span>                 :             : </span>
+<span id="L687"><span class="lineNum">     687</span>                 :<span class="tlaUNC">           0 : Result&lt;std::vector&lt;int32_t&gt;&gt; Engine::GenerateTokens(std::string_view prompt,</span></span>
+<span id="L688"><span class="lineNum">     688</span>                 :             :                                                     GenerateParams params) {</span>
+<span id="L689"><span class="lineNum">     689</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     std::vector&lt;int32_t&gt; result;</span></span>
+<span id="L690"><span class="lineNum">     690</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     auto s = GenerateStream(prompt, params, [&amp;](std::string_view, int32_t tok) {</span></span>
+<span id="L691"><span class="lineNum">     691</span>                 :<span class="tlaUNC">           0 :         result.push_back(tok);</span></span>
+<span id="L692"><span class="lineNum">     692</span>                 :             :         return true;</span>
+<span id="L693"><span class="lineNum">     693</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     });</span></span>
+<span id="L694"><span class="lineNum">     694</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (!s.ok() &amp;&amp; s.code != ErrorCode::kCancelled) {</span></span>
+<span id="L695"><span class="lineNum">     695</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         return s;</span></span>
+<span id="L696"><span class="lineNum">     696</span>                 :             :     }</span>
+<span id="L697"><span class="lineNum">     697</span>                 :<span class="tlaUNC">           0 :     return result;</span></span>
+<span id="L698"><span class="lineNum">     698</span>                 :             : }</span>
+<span id="L699"><span class="lineNum">     699</span>                 :             : </span>
+<span id="L700"><span class="lineNum">     700</span>                 :<span class="tlaUNC">           0 : Result&lt;std::vector&lt;int32_t&gt;&gt; Engine::GenerateTokens(const GenerateInput&amp; input,</span></span>
+<span id="L701"><span class="lineNum">     701</span>                 :             :                                                     GenerateParams params) {</span>
+<span id="L702"><span class="lineNum">     702</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     std::vector&lt;int32_t&gt; result;</span></span>
+<span id="L703"><span class="lineNum">     703</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     auto s = GenerateStream(input, params, [&amp;](std::string_view, int32_t tok) {</span></span>
+<span id="L704"><span class="lineNum">     704</span>                 :<span class="tlaUNC">           0 :         result.push_back(tok);</span></span>
+<span id="L705"><span class="lineNum">     705</span>                 :             :         return true;</span>
+<span id="L706"><span class="lineNum">     706</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     });</span></span>
+<span id="L707"><span class="lineNum">     707</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (!s.ok() &amp;&amp; s.code != ErrorCode::kCancelled) {</span></span>
+<span id="L708"><span class="lineNum">     708</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         return s;</span></span>
+<span id="L709"><span class="lineNum">     709</span>                 :             :     }</span>
+<span id="L710"><span class="lineNum">     710</span>                 :<span class="tlaUNC">           0 :     return result;</span></span>
+<span id="L711"><span class="lineNum">     711</span>                 :             : }</span>
+<span id="L712"><span class="lineNum">     712</span>                 :             : </span>
+<span id="L713"><span class="lineNum">     713</span>                 :<span class="tlaGNC tlaBgGNC">          13 : Status Engine::GenerateStream(std::string_view prompt,</span></span>
+<span id="L714"><span class="lineNum">     714</span>                 :             :                               GenerateParams params,</span>
+<span id="L715"><span class="lineNum">     715</span>                 :             :                               std::function&lt;bool(std::string_view, int32_t)&gt; on_piece) {</span>
+<span id="L716"><span class="lineNum">     716</span>                 :             :     auto&amp; impl = *impl_;</span>
+<span id="L717"><span class="lineNum">     717</span>                 :             : </span>
+<span id="L718"><span class="lineNum">     718</span>                 :             :     // Tokenize prompt.</span>
+<span id="L719"><span class="lineNum">     719</span>                 :<span class="tlaGNC">          13 :     auto enc_result = impl.tokenizer.Encode(prompt, true);</span></span>
+<span id="L720"><span class="lineNum">     720</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span>]:<span class="tlaGNC">          13 :     if (!enc_result.ok()) {</span></span>
+<span id="L721"><span class="lineNum">     721</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return enc_result.status();</span></span>
+<span id="L722"><span class="lineNum">     722</span>                 :             :     }</span>
+<span id="L723"><span class="lineNum">     723</span>   [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          13 :     auto prompt_tokens = enc_result.value();</span></span>
+<span id="L724"><span class="lineNum">     724</span>                 :             : </span>
+<span id="L725"><span class="lineNum">     725</span>                 :             :     // Ring mode allows sequences longer than the cache: overflow is handled</span>
+<span id="L726"><span class="lineNum">     726</span>                 :             :     // by dropping the oldest tokens (sliding window). Strict mode rejects</span>
+<span id="L727"><span class="lineNum">     727</span>                 :             :     // prompts that cannot fit up front.</span>
+<span id="L728"><span class="lineNum">     728</span>   [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 9 times"> + </span>]:<span class="tlaGNC">          13 :     if (!impl.ring &amp;&amp;</span></span>
+<span id="L729"><span class="lineNum">     729</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 9 times"> + </span>]:<span class="tlaGNC">          10 :         static_cast&lt;int32_t&gt;(prompt_tokens.size()) + params.max_tokens &gt; impl.cache-&gt;capacity()) {</span></span>
+<span id="L730"><span class="lineNum">     730</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         return Status::Error(ErrorCode::kInvalidArgument,</span></span>
+<span id="L731"><span class="lineNum">     731</span>                 :             :                              &quot;prompt + max_tokens exceeds cache capacity&quot;);</span>
+<span id="L732"><span class="lineNum">     732</span>                 :             :     }</span>
+<span id="L733"><span class="lineNum">     733</span>                 :             : </span>
+<span id="L734"><span class="lineNum">     734</span>                 :             :     // Start from an empty cache (an Engine may be reused across calls).</span>
+<span id="L735"><span class="lineNum">     735</span>                 :             :     impl.cache-&gt;Clear();</span>
+<span id="L736"><span class="lineNum">     736</span>                 :             : </span>
+<span id="L737"><span class="lineNum">     737</span>                 :<span class="tlaGNC">          12 :     auto t_start = Clock::now();</span></span>
+<span id="L738"><span class="lineNum">     738</span>                 :             : </span>
+<span id="L739"><span class="lineNum">     739</span>                 :             :     // Prefill. The returned hidden state belongs to the last prompt token</span>
+<span id="L740"><span class="lineNum">     740</span>                 :             :     // and is used directly to sample the first generated token — the last</span>
+<span id="L741"><span class="lineNum">     741</span>                 :             :     // prompt token must NOT be re-forwarded during decode.</span>
+<span id="L742"><span class="lineNum">     742</span>                 :<span class="tlaGNC">          12 :     auto prefill_start = Clock::now();</span></span>
+<span id="L743"><span class="lineNum">     743</span>   [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 12 times"> + </span>]:<span class="tlaGNC">          12 :     auto prefill_result = RunPrefill(prompt_tokens);</span></span>
+<span id="L744"><span class="lineNum">     744</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span>]:<span class="tlaGNC">          12 :     if (!prefill_result.ok()) {</span></span>
+<span id="L745"><span class="lineNum">     745</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return prefill_result.status();</span></span>
+<span id="L746"><span class="lineNum">     746</span>                 :             :     }</span>
+<span id="L747"><span class="lineNum">     747</span>                 :<span class="tlaGNC tlaBgGNC">          12 :     auto prefill_end = Clock::now();</span></span>
+<span id="L748"><span class="lineNum">     748</span>                 :<span class="tlaGNC">          12 :     perf_.prefill_ms = elapsed_ms(prefill_start, prefill_end);</span></span>
+<span id="L749"><span class="lineNum">     749</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :     perf_.prompt_tokens = static_cast&lt;int32_t&gt;(prompt_tokens.size());</span></span>
+<span id="L750"><span class="lineNum">     750</span>                 :             : </span>
+<span id="L751"><span class="lineNum">     751</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :     return DecodeStage(prefill_result.value(),</span></span>
+<span id="L752"><span class="lineNum">     752</span>                 :             :                        prompt_tokens,</span>
+<span id="L753"><span class="lineNum">     753</span>                 :             :                        static_cast&lt;int32_t&gt;(prompt_tokens.size()),</span>
+<span id="L754"><span class="lineNum">     754</span>                 :             :                        /*mrope_delta=*/0,</span>
+<span id="L755"><span class="lineNum">     755</span>                 :             :                        params,</span>
+<span id="L756"><span class="lineNum">     756</span>                 :             :                        t_start,</span>
+<span id="L757"><span class="lineNum">     757</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :                        on_piece);</span></span>
+<span id="L758"><span class="lineNum">     758</span>                 :             : }</span>
+<span id="L759"><span class="lineNum">     759</span>                 :             : </span>
+<span id="L760"><span class="lineNum">     760</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 : Status Engine::GenerateStream(const GenerateInput&amp; input,</span></span>
+<span id="L761"><span class="lineNum">     761</span>                 :             :                               GenerateParams params,</span>
+<span id="L762"><span class="lineNum">     762</span>                 :             :                               std::function&lt;bool(std::string_view, int32_t)&gt; on_piece) {</span>
+<span id="L763"><span class="lineNum">     763</span>                 :             :     // A prompt without images is the plain text pipeline.</span>
+<span id="L764"><span class="lineNum">     764</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (input.images.empty()) {</span></span>
+<span id="L765"><span class="lineNum">     765</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         return GenerateStream(std::string_view(input.prompt), params, std::move(on_piece));</span></span>
+<span id="L766"><span class="lineNum">     766</span>                 :             :     }</span>
+<span id="L767"><span class="lineNum">     767</span>                 :             :     auto&amp; impl = *impl_;</span>
+<span id="L768"><span class="lineNum">     768</span>                 :             : </span>
+<span id="L769"><span class="lineNum">     769</span>                 :<span class="tlaUNC">           0 :     auto enc_result = impl.tokenizer.Encode(input.prompt, true);</span></span>
+<span id="L770"><span class="lineNum">     770</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (!enc_result.ok()) {</span></span>
+<span id="L771"><span class="lineNum">     771</span>                 :<span class="tlaUNC">           0 :         return enc_result.status();</span></span>
+<span id="L772"><span class="lineNum">     772</span>                 :             :     }</span>
+<span id="L773"><span class="lineNum">     773</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :     auto prompt_tokens = enc_result.value();</span></span>
+<span id="L774"><span class="lineNum">     774</span>                 :             : </span>
+<span id="L775"><span class="lineNum">     775</span>                 :             :     // Capacity estimate in physical rows: text tokens (minus placeholders)</span>
+<span id="L776"><span class="lineNum">     776</span>                 :             :     // plus the per-image merged-token counts.</span>
+<span id="L777"><span class="lineNum">     777</span>                 :             :     int64_t rows = static_cast&lt;int64_t&gt;(prompt_tokens.size());</span>
+<span id="L778"><span class="lineNum">     778</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (impl.vision_tower != nullptr) {</span></span>
+<span id="L779"><span class="lineNum">     779</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         for (const auto&amp; img : input.images) {</span></span>
+<span id="L780"><span class="lineNum">     780</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             auto tc = impl.vision_tower-&gt;TokenCount(img.width, img.height);</span></span>
+<span id="L781"><span class="lineNum">     781</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             if (!tc.ok()) {</span></span>
+<span id="L782"><span class="lineNum">     782</span>                 :<span class="tlaUNC">           0 :                 return tc.status();</span></span>
+<span id="L783"><span class="lineNum">     783</span>                 :             :             }</span>
+<span id="L784"><span class="lineNum">     784</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             rows += tc.value() - 1; // one placeholder expands to tc rows</span></span>
+<span id="L785"><span class="lineNum">     785</span>                 :             :         }</span>
+<span id="L786"><span class="lineNum">     786</span>                 :             :     }</span>
+<span id="L787"><span class="lineNum">     787</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (!impl.ring &amp;&amp; rows + params.max_tokens &gt; impl.cache-&gt;capacity()) {</span></span>
+<span id="L788"><span class="lineNum">     788</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         return Status::Error(ErrorCode::kInvalidArgument,</span></span>
+<span id="L789"><span class="lineNum">     789</span>                 :             :                              &quot;prompt (with images) + max_tokens exceeds cache capacity&quot;);</span>
+<span id="L790"><span class="lineNum">     790</span>                 :             :     }</span>
+<span id="L791"><span class="lineNum">     791</span>                 :             : </span>
+<span id="L792"><span class="lineNum">     792</span>                 :             :     impl.cache-&gt;Clear();</span>
+<span id="L793"><span class="lineNum">     793</span>                 :             : </span>
+<span id="L794"><span class="lineNum">     794</span>                 :<span class="tlaUNC">           0 :     auto t_start = Clock::now();</span></span>
+<span id="L795"><span class="lineNum">     795</span>                 :<span class="tlaUNC">           0 :     auto prefill_start = Clock::now();</span></span>
+<span id="L796"><span class="lineNum">     796</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :     auto prefill_result = RunPrefillMultimodal(prompt_tokens, input.images);</span></span>
+<span id="L797"><span class="lineNum">     797</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     if (!prefill_result.ok()) {</span></span>
+<span id="L798"><span class="lineNum">     798</span>                 :<span class="tlaUNC">           0 :         return prefill_result.status();</span></span>
+<span id="L799"><span class="lineNum">     799</span>                 :             :     }</span>
+<span id="L800"><span class="lineNum">     800</span>                 :<span class="tlaUNC">           0 :     auto prefill_end = Clock::now();</span></span>
+<span id="L801"><span class="lineNum">     801</span>                 :<span class="tlaUNC">           0 :     perf_.prefill_ms = elapsed_ms(prefill_start, prefill_end);</span></span>
+<span id="L802"><span class="lineNum">     802</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     perf_.prompt_tokens = prefill_result.value().prompt_rows;</span></span>
+<span id="L803"><span class="lineNum">     803</span>                 :             : </span>
+<span id="L804"><span class="lineNum">     804</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     return DecodeStage(prefill_result.value().hidden,</span></span>
+<span id="L805"><span class="lineNum">     805</span>                 :             :                        prompt_tokens,</span>
+<span id="L806"><span class="lineNum">     806</span>                 :<span class="tlaUNC">           0 :                        prefill_result.value().prompt_rows,</span></span>
+<span id="L807"><span class="lineNum">     807</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                        prefill_result.value().mrope_delta,</span></span>
+<span id="L808"><span class="lineNum">     808</span>                 :             :                        params,</span>
+<span id="L809"><span class="lineNum">     809</span>                 :             :                        t_start,</span>
+<span id="L810"><span class="lineNum">     810</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC">           0 :                        on_piece);</span></span>
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span>]
+<span id="L811"><span class="lineNum">     811</span>                 :             : }</span>
+<span id="L812"><span class="lineNum">     812</span>                 :             : </span>
+<span id="L813"><span class="lineNum">     813</span>                 :<span class="tlaGNC tlaBgGNC">          12 : Status Engine::DecodeStage(TensorView hidden_state,</span></span>
+<span id="L814"><span class="lineNum">     814</span>                 :             :                            std::span&lt;const int32_t&gt; prompt_tokens,</span>
+<span id="L815"><span class="lineNum">     815</span>                 :             :                            int32_t prompt_rows,</span>
+<span id="L816"><span class="lineNum">     816</span>                 :             :                            int64_t mrope_delta,</span>
+<span id="L817"><span class="lineNum">     817</span>                 :             :                            GenerateParams params,</span>
+<span id="L818"><span class="lineNum">     818</span>                 :             :                            std::chrono::steady_clock::time_point t_start,</span>
+<span id="L819"><span class="lineNum">     819</span>                 :             :                            const std::function&lt;bool(std::string_view, int32_t)&gt;&amp; on_piece) {</span>
+<span id="L820"><span class="lineNum">     820</span>                 :             :     auto&amp; impl = *impl_;</span>
+<span id="L821"><span class="lineNum">     821</span>                 :<span class="tlaGNC">          12 :     const int32_t hidden = impl.config.hidden_size;</span></span>
+<span id="L822"><span class="lineNum">     822</span>                 :<span class="tlaGNC">          12 :     const int32_t vocab = impl.config.vocab_size;</span></span>
+<span id="L823"><span class="lineNum">     823</span>                 :             : </span>
+<span id="L824"><span class="lineNum">     824</span>                 :             :     // Set up sampler.</span>
+<span id="L825"><span class="lineNum">     825</span>                 :             :     SamplerParams sp;</span>
+<span id="L826"><span class="lineNum">     826</span>                 :<span class="tlaGNC">          12 :     sp.temperature = params.temperature;</span></span>
+<span id="L827"><span class="lineNum">     827</span>                 :<span class="tlaGNC">          12 :     sp.top_k = params.top_k;</span></span>
+<span id="L828"><span class="lineNum">     828</span>                 :<span class="tlaGNC">          12 :     sp.top_p = params.top_p;</span></span>
+<span id="L829"><span class="lineNum">     829</span>                 :<span class="tlaGNC">          12 :     sp.repeat_penalty = params.repeat_penalty;</span></span>
+<span id="L830"><span class="lineNum">     830</span>                 :<span class="tlaGNC">          12 :     sp.seed = params.seed;</span></span>
+<span id="L831"><span class="lineNum">     831</span>                 :<span class="tlaGNC">          12 :     Sampler sampler(sp);</span></span>
+<span id="L832"><span class="lineNum">     832</span>                 :             : </span>
+<span id="L833"><span class="lineNum">     833</span>                 :             :     // Logits buffer.</span>
+<span id="L834"><span class="lineNum">     834</span>                 :<span class="tlaGNC">          12 :     auto logits_buf_result = OwnedBuffer::AllocateCpu(static_cast&lt;size_t&gt;(vocab) * 4, 64);</span></span>
+<span id="L835"><span class="lineNum">     835</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span>]:<span class="tlaGNC">          12 :     if (!logits_buf_result.ok()) {</span></span>
+<span id="L836"><span class="lineNum">     836</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return logits_buf_result.status();</span></span>
+<span id="L837"><span class="lineNum">     837</span>                 :             :     }</span>
+<span id="L838"><span class="lineNum">     838</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          12 :     auto logits_owned = std::move(logits_buf_result).value();</span></span>
+<span id="L839"><span class="lineNum">     839</span>                 :<span class="tlaGNC">          12 :     TensorView logits(logits_owned.data(), DType::kF32, {1, vocab});</span></span>
+<span id="L840"><span class="lineNum">     840</span>                 :             : </span>
+<span id="L841"><span class="lineNum">     841</span>                 :             :     // Decode loop: each step samples from the current hidden state, then</span>
+<span id="L842"><span class="lineNum">     842</span>                 :             :     // embeds the sampled token and forwards it to produce the next one.</span>
+<span id="L843"><span class="lineNum">     843</span>                 :<span class="tlaGNC">          12 :     std::vector&lt;int32_t&gt; generated;</span></span>
+<span id="L844"><span class="lineNum">     844</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :     generated.reserve(static_cast&lt;size_t&gt;(params.max_tokens));</span></span>
+<span id="L845"><span class="lineNum">     845</span>                 :             :     // Scratch for the repetition-penalty context window (only touched when</span>
+<span id="L846"><span class="lineNum">     846</span>                 :             :     // repeat_penalty is enabled).</span>
+<span id="L847"><span class="lineNum">     847</span>                 :<span class="tlaGNC">          12 :     std::vector&lt;int32_t&gt; penalty_ctx;</span></span>
+<span id="L848"><span class="lineNum">     848</span>                 :             :     // Physical sequence index of the next appended token; its rope position</span>
+<span id="L849"><span class="lineNum">     849</span>                 :             :     // is mrope_delta + seq_pos (identical to seq_pos for text-only models).</span>
+<span id="L850"><span class="lineNum">     850</span>                 :<span class="tlaGNC">          12 :     int64_t seq_pos = prompt_rows;</span></span>
+<span id="L851"><span class="lineNum">     851</span>                 :             : </span>
+<span id="L852"><span class="lineNum">     852</span>                 :<span class="tlaGNC">          12 :     auto decode_start = Clock::now();</span></span>
+<span id="L853"><span class="lineNum">     853</span>                 :             :     bool first_token = true;</span>
+<span id="L854"><span class="lineNum">     854</span>                 :             : </span>
+<span id="L855"><span class="lineNum">     855</span>         [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          86 :     for (int32_t step = 0; step &lt; params.max_tokens; ++step) {</span></span>
+<span id="L856"><span class="lineNum">     856</span>                 :             :         // Compute logits from the current hidden state. The arena is NOT</span>
+<span id="L857"><span class="lineNum">     857</span>                 :             :         // reset between Forward and ComputeLogits: `hidden_state` lives in</span>
+<span id="L858"><span class="lineNum">     858</span>                 :             :         // the arena and ComputeLogits' scratch allocations follow it.</span>
+<span id="L859"><span class="lineNum">     859</span>   [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 86 times"> + </span>]:<span class="tlaGNC">          86 :         if (auto s = impl.model-&gt;ComputeLogits(hidden_state, logits, *impl.backend, *impl.arena);</span></span>
+<span id="L860"><span class="lineNum">     860</span>                 :             :             !s.ok()) {</span>
+<span id="L861"><span class="lineNum">     861</span>                 :             :             return s;</span>
+<span id="L862"><span class="lineNum">     862</span>                 :             :         }</span>
+<span id="L863"><span class="lineNum">     863</span>                 :             : </span>
+<span id="L864"><span class="lineNum">     864</span>                 :             :         // The sampler reads logits on the host.</span>
+<span id="L865"><span class="lineNum">     865</span>   [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 86 times"> + </span>]:<span class="tlaGNC">          86 :         if (auto s = impl.backend-&gt;SyncToHost(logits); !s.ok()) {</span></span>
+<span id="L866"><span class="lineNum">     866</span>                 :             :             return s;</span>
+<span id="L867"><span class="lineNum">     867</span>                 :             :         }</span>
+<span id="L868"><span class="lineNum">     868</span>                 :             : </span>
+<span id="L869"><span class="lineNum">     869</span>                 :             :         // Sample. The repetition penalty applies to the recent context:</span>
+<span id="L870"><span class="lineNum">     870</span>                 :             :         // prompt tail + generated tokens, capped at a 64-token window</span>
+<span id="L871"><span class="lineNum">     871</span>                 :             :         // (llama.cpp's penalty_last_n default).</span>
+<span id="L872"><span class="lineNum">     872</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 86 times"> + </span>]:<span class="tlaGNC">          86 :         if (params.repeat_penalty != 1.0f) {</span></span>
+<span id="L873"><span class="lineNum">     873</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             constexpr size_t kPenaltyLastN = 64;</span></span>
+<span id="L874"><span class="lineNum">     874</span>                 :             :             // Only the last kPenaltyLastN tokens of (prompt + generated)</span>
+<span id="L875"><span class="lineNum">     875</span>                 :             :             // matter; build the window directly instead of copying both</span>
+<span id="L876"><span class="lineNum">     876</span>                 :             :             // full vectors (O(window) instead of O(context) per step).</span>
+<span id="L877"><span class="lineNum">     877</span>                 :             :             const size_t take_gen = std::min(kPenaltyLastN, generated.size());</span>
+<span id="L878"><span class="lineNum">     878</span>                 :             :             size_t take_prompt = prompt_tokens.size();</span>
+<span id="L879"><span class="lineNum">     879</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             if (take_gen + take_prompt &gt; kPenaltyLastN) {</span></span>
+<span id="L880"><span class="lineNum">     880</span>                 :<span class="tlaUNC">           0 :                 take_prompt = kPenaltyLastN - take_gen;</span></span>
+<span id="L881"><span class="lineNum">     881</span>                 :             :             }</span>
+<span id="L882"><span class="lineNum">     882</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             penalty_ctx.assign(prompt_tokens.end() - take_prompt, prompt_tokens.end());</span></span>
+<span id="L883"><span class="lineNum">     883</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :             penalty_ctx.insert(penalty_ctx.end(), generated.end() - take_gen, generated.end());</span></span>
+<span id="L884"><span class="lineNum">     884</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             sampler.set_penalty_tokens(std::span&lt;const int32_t&gt;(penalty_ctx));</span></span>
+<span id="L885"><span class="lineNum">     885</span>                 :             :         }</span>
+<span id="L886"><span class="lineNum">     886</span>         [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          86 :         int32_t next = sampler.Sample(logits.span_as&lt;float&gt;());</span></span>
+<span id="L887"><span class="lineNum">     887</span>                 :             : </span>
+<span id="L888"><span class="lineNum">     888</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 74 times"> + </span>]:<span class="tlaGNC">          86 :         if (first_token) {</span></span>
+<span id="L889"><span class="lineNum">     889</span>                 :<span class="tlaGNC">          12 :             perf_.time_to_first_token_ms = elapsed_ms(t_start, Clock::now());</span></span>
+<span id="L890"><span class="lineNum">     890</span>                 :             :             first_token = false;</span>
 <span id="L891"><span class="lineNum">     891</span>                 :             :         }</span>
 <span id="L892"><span class="lineNum">     892</span>                 :             : </span>
-<span id="L893"><span class="lineNum">     893</span>                 :             :         // No point forwarding a token nobody will sample from.</span>
-<span id="L894"><span class="lineNum">     894</span>         [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          86 :         if (step + 1 == params.max_tokens) {</span></span>
+<span id="L893"><span class="lineNum">     893</span>                 :             :         // EOS check.</span>
+<span id="L894"><span class="lineNum">     894</span>         [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          86 :         if (next == impl.tokenizer.eos_id()) {</span></span>
 <span id="L895"><span class="lineNum">     895</span>                 :             :             break;</span>
 <span id="L896"><span class="lineNum">     896</span>                 :             :         }</span>
 <span id="L897"><span class="lineNum">     897</span>                 :             : </span>
-<span id="L898"><span class="lineNum">     898</span>                 :             :         // Embed the sampled token into a writable arena buffer (dequantized)</span>
-<span id="L899"><span class="lineNum">     899</span>                 :             :         // and forward it at the next position.</span>
-<span id="L900"><span class="lineNum">     900</span>   [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 74 times"> + </span>]:<span class="tlaGNC">          74 :         if (next &lt; 0 || next &gt;= vocab) {</span></span>
-<span id="L901"><span class="lineNum">     901</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             return Status::Error(ErrorCode::kInternal, &quot;token out of range&quot;);</span></span>
-<span id="L902"><span class="lineNum">     902</span>                 :             :         }</span>
-<span id="L903"><span class="lineNum">     903</span>                 :             : </span>
-<span id="L904"><span class="lineNum">     904</span>                 :             :         impl.arena-&gt;Reset();</span>
-<span id="L905"><span class="lineNum">     905</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 74 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          74 :         auto embd_buf = impl.arena-&gt;AllocateTensor({1, hidden}, DType::kF32);</span></span>
-<span id="L906"><span class="lineNum">     906</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 74 times"> + </span>]:<span class="tlaGNC">          74 :         if (!embd_buf.ok())</span></span>
-<span id="L907"><span class="lineNum">     907</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return embd_buf.status();</span></span>
-<span id="L908"><span class="lineNum">     908</span>   [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC tlaBgGNC">          74 :         if (auto s = embedding_row(impl.token_embd, next, hidden, embd_buf.value()); !s.ok()) {</span></span>
+<span id="L898"><span class="lineNum">     898</span>         [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          86 :         generated.push_back(next);</span></span>
+<span id="L899"><span class="lineNum">     899</span>                 :             : </span>
+<span id="L900"><span class="lineNum">     900</span>                 :             :         // Decode and stream.</span>
+<span id="L901"><span class="lineNum">     901</span>         [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          86 :         auto text_result = impl.tokenizer.DecodeOne(next);</span></span>
+<span id="L902"><span class="lineNum">     902</span>         [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          86 :         if (text_result.ok()) {</span></span>
+<span id="L903"><span class="lineNum">     903</span>   [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          86 :             if (!on_piece(text_result.value(), next)) {</span></span>
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 86 times"> + </span>]
+<span id="L904"><span class="lineNum">     904</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :                 return Status::Error(ErrorCode::kCancelled, &quot;cancelled by callback&quot;);</span></span>
+<span id="L905"><span class="lineNum">     905</span>                 :             :             }</span>
+<span id="L906"><span class="lineNum">     906</span>                 :             :         }</span>
+<span id="L907"><span class="lineNum">     907</span>                 :             : </span>
+<span id="L908"><span class="lineNum">     908</span>                 :             :         // No point forwarding a token nobody will sample from.</span>
+<span id="L909"><span class="lineNum">     909</span>         [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          86 :         if (step + 1 == params.max_tokens) {</span></span>
+<span id="L910"><span class="lineNum">     910</span>                 :             :             break;</span>
+<span id="L911"><span class="lineNum">     911</span>                 :             :         }</span>
+<span id="L912"><span class="lineNum">     912</span>                 :             : </span>
+<span id="L913"><span class="lineNum">     913</span>                 :             :         // Embed the sampled token into a writable arena buffer (dequantized)</span>
+<span id="L914"><span class="lineNum">     914</span>                 :             :         // and forward it at the next position.</span>
+<span id="L915"><span class="lineNum">     915</span>   [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 74 times"> + </span>]:<span class="tlaGNC">          74 :         if (next &lt; 0 || next &gt;= vocab) {</span></span>
+<span id="L916"><span class="lineNum">     916</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             return Status::Error(ErrorCode::kInternal, &quot;token out of range&quot;);</span></span>
+<span id="L917"><span class="lineNum">     917</span>                 :             :         }</span>
+<span id="L918"><span class="lineNum">     918</span>                 :             : </span>
+<span id="L919"><span class="lineNum">     919</span>                 :             :         impl.arena-&gt;Reset();</span>
+<span id="L920"><span class="lineNum">     920</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 74 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          74 :         auto embd_buf = impl.arena-&gt;AllocateTensor({1, hidden}, DType::kF32);</span></span>
+<span id="L921"><span class="lineNum">     921</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 74 times"> + </span>]:<span class="tlaGNC">          74 :         if (!embd_buf.ok())</span></span>
+<span id="L922"><span class="lineNum">     922</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return embd_buf.status();</span></span>
+<span id="L923"><span class="lineNum">     923</span>   [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC tlaBgGNC">          74 :         if (auto s = embedding_row(impl.token_embd, next, hidden, embd_buf.value()); !s.ok()) {</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 74 times"> + </span>]
-<span id="L909"><span class="lineNum">     909</span>                 :             :             return s;</span>
-<span id="L910"><span class="lineNum">     910</span>                 :             :         }</span>
-<span id="L911"><span class="lineNum">     911</span>                 :             :         // The embedding write happened on the host, outside the backend.</span>
-<span id="L912"><span class="lineNum">     912</span>   [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          74 :         if (auto s = impl.backend-&gt;NotifyHostWrite(embd_buf.value()); !s.ok()) {</span></span>
+<span id="L924"><span class="lineNum">     924</span>                 :             :             return s;</span>
+<span id="L925"><span class="lineNum">     925</span>                 :             :         }</span>
+<span id="L926"><span class="lineNum">     926</span>                 :             :         // The embedding write happened on the host, outside the backend.</span>
+<span id="L927"><span class="lineNum">     927</span>   [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          74 :         if (auto s = impl.backend-&gt;NotifyHostWrite(embd_buf.value()); !s.ok()) {</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 74 times"> + </span>]
-<span id="L913"><span class="lineNum">     913</span>                 :             :             return s;</span>
-<span id="L914"><span class="lineNum">     914</span>                 :             :         }</span>
-<span id="L915"><span class="lineNum">     915</span>                 :             : </span>
-<span id="L916"><span class="lineNum">     916</span>                 :             :         // Ring mode + device KV: make room in the device window for this</span>
-<span id="L917"><span class="lineNum">     917</span>                 :             :         // token before the model appends (host caches compact themselves).</span>
-<span id="L918"><span class="lineNum">     918</span>                 :             :         // Addressing is physical (seq_pos); the rope position additionally</span>
-<span id="L919"><span class="lineNum">     919</span>                 :             :         // carries the multimodal delta.</span>
-<span id="L920"><span class="lineNum">     920</span>   [<span class="tlaGBC" title="Branch 0 was taken 45 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 29 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 45 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          74 :         if (impl.ring &amp;&amp; impl.backend-&gt;HasDeviceKV()) {</span></span>
+<span id="L928"><span class="lineNum">     928</span>                 :             :             return s;</span>
+<span id="L929"><span class="lineNum">     929</span>                 :             :         }</span>
+<span id="L930"><span class="lineNum">     930</span>                 :             : </span>
+<span id="L931"><span class="lineNum">     931</span>                 :             :         // Ring mode + device KV: make room in the device window for this</span>
+<span id="L932"><span class="lineNum">     932</span>                 :             :         // token before the model appends (host caches compact themselves).</span>
+<span id="L933"><span class="lineNum">     933</span>                 :             :         // Addressing is physical (seq_pos); the rope position additionally</span>
+<span id="L934"><span class="lineNum">     934</span>                 :             :         // carries the multimodal delta.</span>
+<span id="L935"><span class="lineNum">     935</span>   [<span class="tlaGBC" title="Branch 0 was taken 45 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 29 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 45 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          74 :         if (impl.ring &amp;&amp; impl.backend-&gt;HasDeviceKV()) {</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 45 times"> + </span>]
-<span id="L921"><span class="lineNum">     921</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             if (auto s = EnsureDeviceKvRoom(impl, seq_pos, 1); !s.ok()) {</span></span>
-<span id="L922"><span class="lineNum">     922</span>                 :             :                 return s;</span>
-<span id="L923"><span class="lineNum">     923</span>                 :             :             }</span>
-<span id="L924"><span class="lineNum">     924</span>                 :             :         }</span>
-<span id="L925"><span class="lineNum">     925</span>                 :             : </span>
-<span id="L926"><span class="lineNum">     926</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 74 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          74 :         if (auto s = impl.model-&gt;Forward(</span></span>
-<span id="L927"><span class="lineNum">     927</span>   [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          74 :                 embd_buf.value(), mrope_delta + seq_pos, *impl.cache, *impl.backend, *impl.arena);</span></span>
-<span id="L928"><span class="lineNum">     928</span>                 :             :             !s.ok()) {</span>
-<span id="L929"><span class="lineNum">     929</span>                 :             :             return s;</span>
-<span id="L930"><span class="lineNum">     930</span>                 :             :         }</span>
-<span id="L931"><span class="lineNum">     931</span>                 :             :         // Forward updates the buffer in place; it is now the hidden state</span>
-<span id="L932"><span class="lineNum">     932</span>                 :             :         // for the next sampling step.</span>
-<span id="L933"><span class="lineNum">     933</span>         [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          74 :         hidden_state = embd_buf.value();</span></span>
-<span id="L934"><span class="lineNum">     934</span>                 :<span class="tlaGNC">          74 :         ++seq_pos;</span></span>
-<span id="L935"><span class="lineNum">     935</span>                 :             :     }</span>
-<span id="L936"><span class="lineNum">     936</span>                 :             : </span>
-<span id="L937"><span class="lineNum">     937</span>                 :<span class="tlaGNC">          12 :     auto decode_end = Clock::now();</span></span>
-<span id="L938"><span class="lineNum">     938</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :     perf_.decode_ms = elapsed_ms(decode_start, decode_end);</span></span>
-<span id="L939"><span class="lineNum">     939</span>                 :<span class="tlaGNC">          12 :     perf_.generated_tokens = static_cast&lt;int32_t&gt;(generated.size());</span></span>
-<span id="L940"><span class="lineNum">     940</span>                 :<span class="tlaGNC">          12 :     perf_.total_ms = elapsed_ms(t_start, decode_end);</span></span>
-<span id="L941"><span class="lineNum">     941</span>   [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          12 :     if (perf_.generated_tokens &gt; 0 &amp;&amp; perf_.decode_ms &gt; 0) {</span></span>
-<span id="L942"><span class="lineNum">     942</span>                 :<span class="tlaGNC">          12 :         perf_.tok_per_sec = perf_.generated_tokens / (perf_.decode_ms / 1000.0);</span></span>
-<span id="L943"><span class="lineNum">     943</span>                 :             :     }</span>
-<span id="L944"><span class="lineNum">     944</span>                 :             : </span>
-<span id="L945"><span class="lineNum">     945</span>                 :             :     return {};</span>
-<span id="L946"><span class="lineNum">     946</span>                 :<span class="tlaGNC">          12 : }</span></span>
-<span id="L947"><span class="lineNum">     947</span>                 :             : </span>
-<span id="L948"><span class="lineNum">     948</span>                 :             : } // namespace pl::mllm</span>
+<span id="L936"><span class="lineNum">     936</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             if (auto s = EnsureDeviceKvRoom(impl, seq_pos, 1); !s.ok()) {</span></span>
+<span id="L937"><span class="lineNum">     937</span>                 :             :                 return s;</span>
+<span id="L938"><span class="lineNum">     938</span>                 :             :             }</span>
+<span id="L939"><span class="lineNum">     939</span>                 :             :         }</span>
+<span id="L940"><span class="lineNum">     940</span>                 :             : </span>
+<span id="L941"><span class="lineNum">     941</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 74 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          74 :         if (auto s = impl.model-&gt;Forward(</span></span>
+<span id="L942"><span class="lineNum">     942</span>   [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          74 :                 embd_buf.value(), mrope_delta + seq_pos, *impl.cache, *impl.backend, *impl.arena);</span></span>
+<span id="L943"><span class="lineNum">     943</span>                 :             :             !s.ok()) {</span>
+<span id="L944"><span class="lineNum">     944</span>                 :             :             return s;</span>
+<span id="L945"><span class="lineNum">     945</span>                 :             :         }</span>
+<span id="L946"><span class="lineNum">     946</span>                 :             :         // Forward updates the buffer in place; it is now the hidden state</span>
+<span id="L947"><span class="lineNum">     947</span>                 :             :         // for the next sampling step.</span>
+<span id="L948"><span class="lineNum">     948</span>         [<span class="tlaGBC" title="Branch 0 was taken 74 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          74 :         hidden_state = embd_buf.value();</span></span>
+<span id="L949"><span class="lineNum">     949</span>                 :<span class="tlaGNC">          74 :         ++seq_pos;</span></span>
+<span id="L950"><span class="lineNum">     950</span>                 :             :     }</span>
+<span id="L951"><span class="lineNum">     951</span>                 :             : </span>
+<span id="L952"><span class="lineNum">     952</span>                 :<span class="tlaGNC">          12 :     auto decode_end = Clock::now();</span></span>
+<span id="L953"><span class="lineNum">     953</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :     perf_.decode_ms = elapsed_ms(decode_start, decode_end);</span></span>
+<span id="L954"><span class="lineNum">     954</span>                 :<span class="tlaGNC">          12 :     perf_.generated_tokens = static_cast&lt;int32_t&gt;(generated.size());</span></span>
+<span id="L955"><span class="lineNum">     955</span>                 :<span class="tlaGNC">          12 :     perf_.total_ms = elapsed_ms(t_start, decode_end);</span></span>
+<span id="L956"><span class="lineNum">     956</span>   [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          12 :     if (perf_.generated_tokens &gt; 0 &amp;&amp; perf_.decode_ms &gt; 0) {</span></span>
+<span id="L957"><span class="lineNum">     957</span>                 :<span class="tlaGNC">          12 :         perf_.tok_per_sec = perf_.generated_tokens / (perf_.decode_ms / 1000.0);</span></span>
+<span id="L958"><span class="lineNum">     958</span>                 :             :     }</span>
+<span id="L959"><span class="lineNum">     959</span>                 :             : </span>
+<span id="L960"><span class="lineNum">     960</span>                 :             :     return {};</span>
+<span id="L961"><span class="lineNum">     961</span>                 :<span class="tlaGNC">          12 : }</span></span>
+<span id="L962"><span class="lineNum">     962</span>                 :             : </span>
+<span id="L963"><span class="lineNum">     963</span>                 :             : } // namespace pl::mllm</span>
         </pre>
               </td>
             </tr>
