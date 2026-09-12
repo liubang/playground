@@ -16,7 +16,7 @@ import AppKit
 /// window routes GLOBAL mouse events (cross-screen drags and sessions
 /// where another app owns focus) through handleGlobalMouse.
 final class SelectionView: NSView {
-    /// Xnip's selection frame blue (≈ system blue on a light base).
+    /// The selection frame blue (≈ system blue on a light base).
     private static let selectionBlue = NSColor(red: 0.04, green: 0.52, blue: 1.0, alpha: 1)
 
     // MARK: - Dependencies (set at arm time)
@@ -36,6 +36,11 @@ final class SelectionView: NSView {
         case resize(handle: Handle, original: CGRect)
         case move(offset: CGPoint)
         case annotate(start: CGPoint)
+        /// Fine-tuning an already-placed mosaic region: drag one of
+        /// its 8 handles / drag the region itself. The patch is drawn
+        /// stretched during the gesture and re-baked on mouse-up.
+        case mosaicResize(handle: Handle, index: Int)
+        case mosaicMove(index: Int, offset: CGPoint)
     }
 
     private enum Handle: CaseIterable {
@@ -55,9 +60,15 @@ final class SelectionView: NSView {
     private(set) var annotations: [Annotation] = []
     private var activeTool: AnnotationTool?
 
+    /// Index of the still-editable mosaic region (dotted outline +
+    /// 8 handles). Set when a mosaic drag commits; cleared when the
+    /// user clicks elsewhere, switches tools or starts over.
+    private var activeMosaicIndex: Int?
+
     /// Outlets for the window/controller layer.
     var onConfirm: (() -> Void)? // copy + close
     var onSave: (() -> Void)?
+    var onOcr: (() -> Void)?
     var onCancel: (() -> Void)?
 
     var currentSelection: CGRect? { selection }
@@ -97,14 +108,18 @@ final class SelectionView: NSView {
 
         palette.isHidden = true
         palette.onChange = { [weak self] in
+            guard let self else { return }
             // Live-update an open text editor; future strokes pick the
             // new attributes up at creation time.
-            guard let self, let editor = textEditor else { return }
-            editor.textColor = palette.currentColor
-            editor.font = .boldSystemFont(ofSize: palette.currentFontSize)
-            var frame = editor.frame
-            frame.size.height = palette.currentFontSize * 1.6
-            editor.frame = frame
+            if let editor = textEditor {
+                editor.textColor = palette.currentColor
+                editor.font = palette.currentFont()
+                var frame = editor.frame
+                frame.size.height = palette.currentFontSize * 1.6
+                editor.frame = frame
+            }
+            // Mosaic intensity changes re-bake the active region.
+            rebakeActiveMosaic()
         }
         addSubview(palette)
     }
@@ -138,6 +153,9 @@ final class SelectionView: NSView {
     func undoAnnotation() {
         guard !annotations.isEmpty else { return }
         annotations.removeLast()
+        if let index = activeMosaicIndex, index >= annotations.count {
+            activeMosaicIndex = nil
+        }
         needsDisplay = true
     }
 
@@ -155,7 +173,12 @@ final class SelectionView: NSView {
             undoAnnotation()
         case .clearAll:
             annotations.removeAll()
+            activeMosaicIndex = nil
             needsDisplay = true
+        case .ocr:
+            if let selection, selection.width >= 3, selection.height >= 3 {
+                onOcr?()
+            }
         case .cancel:
             onCancel?()
         case .save:
@@ -216,7 +239,7 @@ final class SelectionView: NSView {
         let field = NSTextField(frame: CGRect(
             x: p.x, y: p.y - fontSize * 0.4, width: 180, height: fontSize * 1.6,
         ))
-        field.font = .boldSystemFont(ofSize: fontSize)
+        field.font = palette.currentFont()
         field.textColor = palette.currentColor
         field.isBezeled = false
         field.drawsBackground = true
@@ -244,6 +267,7 @@ final class SelectionView: NSView {
                 text: text,
                 color: palette.currentColor,
                 fontSize: palette.currentFontSize,
+                fontName: palette.currentFont().fontName,
             ))
             needsDisplay = true
         }
@@ -303,6 +327,13 @@ final class SelectionView: NSView {
         // selection → start over".
         if !toolbar.isHidden, toolbar.frame.contains(p) { return }
         if !palette.isHidden, palette.frame.contains(p) { return }
+        // The white ✕ badge at the selection's top-right cancels the
+        // whole session.
+        if mode == .editing, let sel = selection,
+           closeButtonRect(sel).insetBy(dx: -6, dy: -6).contains(p) {
+            onCancel?()
+            return
+        }
         endTextEdit(commit: true)
         cursor = p
 
@@ -316,6 +347,26 @@ final class SelectionView: NSView {
             if clickCount == 2, sel.contains(effectivePoint: p), activeTool == nil {
                 confirmSelection()
                 return
+            }
+            // An active mosaic region wins the hit-test: its handles
+            // resize it, its body moves it, anything else finalizes it
+            // and falls through to whatever the click means.
+            if let index = activeMosaicIndex, index < annotations.count {
+                let region = annotations[index].rect
+                if let handle = hitHandle(p, in: region) {
+                    dragKind = .mosaicResize(handle: handle, index: index)
+                    needsDisplay = true
+                    return
+                }
+                if region.contains(p) {
+                    dragKind = .mosaicMove(
+                        index: index,
+                        offset: CGPoint(x: p.x - region.minX, y: p.y - region.minY),
+                    )
+                    needsDisplay = true
+                    return
+                }
+                activeMosaicIndex = nil
             }
             if let handle = hitHandle(p, in: sel) {
                 dragKind = .resize(handle: handle, original: sel)
@@ -362,6 +413,20 @@ final class SelectionView: NSView {
             origin.x = min(max(origin.x, 0), bounds.maxX - sel.width)
             origin.y = min(max(origin.y, 0), bounds.maxY - sel.height)
             selection = CGRect(origin: origin, size: sel.size)
+        case let .mosaicResize(handle, index):
+            guard index < annotations.count, let sel = selection else { return }
+            let original = annotations[index].rect
+            let rect = resizedRect(original: original, handle: handle, to: clamp(clamped, to: sel))
+            annotations[index].start = rect.origin
+            annotations[index].end = CGPoint(x: rect.maxX, y: rect.maxY)
+        case let .mosaicMove(index, offset):
+            guard index < annotations.count, let sel = selection else { return }
+            let size = annotations[index].rect.size
+            var origin = CGPoint(x: clamped.x - offset.x, y: clamped.y - offset.y)
+            origin.x = min(max(origin.x, sel.minX), sel.maxX - size.width)
+            origin.y = min(max(origin.y, sel.minY), sel.maxY - size.height)
+            annotations[index].start = origin
+            annotations[index].end = CGPoint(x: origin.x + size.width, y: origin.y + size.height)
         case let .annotate(start):
             guard let tool = activeTool, let sel = selection else { return }
             let point = clamp(clamped, to: sel)
@@ -426,8 +491,17 @@ final class SelectionView: NSView {
                     )
                 }
                 annotations.append(pending)
+                // Fresh mosaics stay active (dotted outline + handles)
+                // so the region can be fine-tuned right away.
+                if pending.tool == .mosaic {
+                    activeMosaicIndex = annotations.count - 1
+                }
             }
             _ = start
+        case .mosaicResize, .mosaicMove:
+            // The patch was drawn STRETCHED during the gesture; re-bake
+            // the pixellation at full pixel resolution for the final rect.
+            rebakeActiveMosaic()
         }
         updateToolbarPlacement()
         needsDisplay = true
@@ -436,6 +510,17 @@ final class SelectionView: NSView {
     private func handleMoved(at p: CGPoint) {
         guard phase == .live, case .none = dragKind else { return }
         cursor = p
+        // The toolbar and palette float OUTSIDE the selection; without
+        // this early-out the editing branch below would keep slamming
+        // the crosshair cursor back on while hovering their buttons.
+        if !toolbar.isHidden, toolbar.frame.contains(p) {
+            NSCursor.arrow.set()
+            return
+        }
+        if !palette.isHidden, palette.frame.contains(p) {
+            NSCursor.arrow.set()
+            return
+        }
         switch mode {
         case .idle:
             hoverCandidate = candidateRects.first { $0.rect.contains(p) }
@@ -445,7 +530,13 @@ final class SelectionView: NSView {
         case .editing:
             hoverCandidate = nil
             if let sel = selection {
-                if hitHandle(p, in: sel) != nil {
+                if closeButtonRect(sel).insetBy(dx: -6, dy: -6).contains(p) {
+                    NSCursor.arrow.set()
+                } else if let index = activeMosaicIndex, index < annotations.count,
+                          hitHandle(p, in: annotations[index].rect) != nil
+                          || annotations[index].rect.contains(p) {
+                    NSCursor.arrow.set()
+                } else if hitHandle(p, in: sel) != nil {
                     NSCursor.arrow.set()
                 } else if activeTool == .text, sel.contains(effectivePoint: p) {
                     NSCursor.iBeam.set()
@@ -463,8 +554,9 @@ final class SelectionView: NSView {
         mode = .dragging
         dragKind = .newSelection(anchor: p)
         // Annotations and the armed tool belong to the old region; a
-        // fresh selection starts clean (Xnip behaves the same way).
+        // fresh selection starts clean.
         annotations.removeAll()
+        activeMosaicIndex = nil
         nextStepNumber = 1
         setTool(nil)
         palette.isHidden = true
@@ -479,6 +571,23 @@ final class SelectionView: NSView {
         activeTool = tool
         toolbar.setActiveTool(tool)
         palette.activate(tool)
+        // Switching tools finalizes the editable mosaic region.
+        activeMosaicIndex = nil
+    }
+
+    /// Re-renders the pixellated patch of the active mosaic region at
+    /// full pixel resolution (after resize/move gestures and palette
+    /// intensity changes).
+    private func rebakeActiveMosaic() {
+        guard let index = activeMosaicIndex, index < annotations.count,
+              annotations[index].tool == .mosaic, let display else { return }
+        annotations[index].patch = Mosaic.patch(
+            snapshot: display.snapshot.image,
+            viewRect: annotations[index].rect,
+            display: display,
+            scale: palette.currentMosaicScale,
+        )
+        needsDisplay = true
     }
 
     // MARK: - Handles
@@ -576,20 +685,45 @@ final class SelectionView: NSView {
             bounds.fill()
         }
 
-        // Veil with a cutout for the current selection.
-        let veil = NSBezierPath(rect: bounds)
+        // Veil with a cutout for the current selection — or, while
+        // hovering a window candidate in idle mode, for that window
+        // (previews the would-be capture at full brightness).
+        var cutout: CGRect?
         if let selection, selection.width > 0, selection.height > 0 {
-            veil.append(NSBezierPath(rect: selection))
+            cutout = selection
+        } else if let hoverCandidate {
+            cutout = hoverCandidate.rect
+        }
+        let veil = NSBezierPath(rect: bounds)
+        if let cutout {
+            veil.append(NSBezierPath(rect: cutout))
         }
         veil.windingRule = .evenOdd
-        NSColor.black.withAlphaComponent(0.35).setFill()
+        NSColor.black.withAlphaComponent(0.55).setFill()
         veil.fill()
+
+        // The blue halo hugging the cutout edge. Drawn before
+        // annotations so it only ever lands on the veil.
+        if let cutout {
+            drawSelectionGlow(cutout)
+        }
 
         // Annotations on top of the revealed region.
         for annotation in annotations {
             annotation.draw()
         }
         pendingAnnotation?.draw()
+
+        // Mosaic region chrome: the dotted outline + 8 grip dots, both
+        // DURING the initial drag (the patch doesn't exist yet —
+        // without this the gesture is invisible) and while the
+        // committed region is still editable.
+        if let pending = pendingAnnotation, pending.tool == .mosaic,
+           pending.rect.width >= 3, pending.rect.height >= 3 {
+            drawMosaicRegionChrome(pending.rect)
+        } else if let index = activeMosaicIndex, index < annotations.count {
+            drawMosaicRegionChrome(annotations[index].rect)
+        }
 
         if let hoverCandidate, selection == nil {
             drawHoverPreview(hoverCandidate)
@@ -602,29 +736,82 @@ final class SelectionView: NSView {
         }
     }
 
+    /// Dotted outline + 8 white grip dots around an editable mosaic
+    /// region — the visible affordance for "this region is still
+    /// adjustable".
+    private func drawMosaicRegionChrome(_ rect: CGRect) {
+        // Double-stroked dashes: the dark underlay keeps the light
+        // dashes readable on any content.
+        let outline = NSBezierPath(rect: rect)
+        outline.setLineDash([4, 3], count: 2, phase: 0)
+        NSColor.black.withAlphaComponent(0.55).setStroke()
+        outline.lineWidth = 2.8
+        outline.stroke()
+        NSColor.white.withAlphaComponent(0.95).setStroke()
+        outline.lineWidth = 1.4
+        outline.stroke()
+
+        for (_, point) in handlePoints(rect) {
+            let circle = NSBezierPath(ovalIn: CGRect(
+                x: point.x - 4, y: point.y - 4, width: 8, height: 8,
+            ))
+            NSColor.white.setFill()
+            circle.fill()
+            NSColor.black.withAlphaComponent(0.4).setStroke()
+            circle.lineWidth = 1
+            circle.stroke()
+        }
+    }
+
     private func drawHoverPreview(_ candidate: (rect: CGRect, name: String)) {
-        let path = NSBezierPath(rect: candidate.rect)
-        path.setLineDash([6, 4], count: 2, phase: 0)
-        path.lineWidth = 1
-        NSColor.white.withAlphaComponent(0.9).setStroke()
-        path.stroke()
+        // Same blue hairline as the selection frame; the cutout + halo
+        // are already handled in draw(_:).
+        let edge = NSBezierPath(rect: candidate.rect)
+        edge.lineWidth = 1.5
+        Self.selectionBlue.setStroke()
+        edge.stroke()
         drawChip(candidate.name, at: CGPoint(
             x: candidate.rect.minX,
             y: min(candidate.rect.maxY + 6, bounds.maxY - 24),
         ))
     }
 
+    /// The blue halo hugging the cutout's outer edge.
+    ///
+    /// Trick: clip EVERYTHING except the veil band around the rect,
+    /// then fill the rect with the frame blue under an NSShadow. The
+    /// fill itself is clipped away; only the glow that falls onto the
+    /// veil survives — the cut-out region never picks up a tint.
+    private func drawSelectionGlow(_ rect: CGRect) {
+        NSGraphicsContext.saveGraphicsState()
+        let clip = NSBezierPath(rect: bounds)
+        clip.append(NSBezierPath(rect: rect))
+        clip.windingRule = .evenOdd
+        clip.addClip()
+
+        let glow = NSShadow()
+        glow.shadowColor = Self.selectionBlue.withAlphaComponent(0.85)
+        glow.shadowBlurRadius = 12
+        glow.shadowOffset = .zero
+        glow.set()
+
+        Self.selectionBlue.setFill()
+        NSBezierPath(rect: rect).fill()
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
     private func drawSelectionChrome(_ sel: CGRect) {
-        // Xnip-style corner-bracket frame: hairline edges plus four
-        // thick, round-capped L marks at the corners. The mid-edge
-        // handles stay as invisible hit zones only.
+        // Frame: a crisp full-perimeter blue hairline (the soft
+        // halo behind it comes from drawSelectionGlow), plus four
+        // thick, round-capped L marks at the corners as the resize
+        // affordance. The mid-edge handles stay as invisible hit
+        // zones only.
         let edge = NSBezierPath(rect: sel)
-        edge.lineWidth = 1
-        Self.selectionBlue.withAlphaComponent(0.9).setStroke()
+        edge.lineWidth = 1.5
+        Self.selectionBlue.setStroke()
         edge.stroke()
 
         let arm: CGFloat = 11
-        Self.selectionBlue.setStroke()
         let corners: [(origin: CGPoint, dx: CGFloat, dy: CGFloat)] = [
             (CGPoint(x: sel.minX, y: sel.maxY), 1, -1), // top-left
             (CGPoint(x: sel.maxX, y: sel.maxY), -1, -1), // top-right
@@ -633,7 +820,7 @@ final class SelectionView: NSView {
         ]
         for (corner, dx, dy) in corners {
             let mark = NSBezierPath()
-            mark.lineWidth = 3
+            mark.lineWidth = 3.5
             mark.lineCapStyle = .round
             mark.lineJoinStyle = .round
             mark.move(to: CGPoint(x: corner.x + dx * arm, y: corner.y))
@@ -642,15 +829,72 @@ final class SelectionView: NSView {
             mark.stroke()
         }
 
-        let label = "\(Int(sel.width)) × \(Int(sel.height))  ·  ⏎ 复制  ⌘S 保存  Esc 取消"
-        drawChip(label, at: CGPoint(
-            x: sel.minX,
-            y: min(sel.maxY + 6, bounds.maxY - 24),
-        ))
+        drawSizeCapsule(sel)
+        drawCloseButton(sel)
+    }
 
-        // Resize affordances are the corner brackets themselves
-        // (Xnip draws no separate handle glyphs); hit-testing keeps
-        // using the invisible 8-handle geometry.
+    /// Blue capsule above the selection's top-left corner with the
+    /// live dimensions ("715 × 399 pt").
+    private func drawSizeCapsule(_ sel: CGRect) {
+        let text = "\(Int(sel.width)) × \(Int(sel.height)) pt"
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+            .foregroundColor: NSColor.white,
+        ]
+        let textSize = text.size(withAttributes: attrs)
+        let size = CGSize(width: textSize.width + 20, height: textSize.height + 10)
+        var origin = CGPoint(x: sel.minX, y: sel.maxY + 8)
+        if origin.y + size.height > bounds.maxY - 4 {
+            // No room above: tuck it inside the selection's top-left.
+            origin.y = max(sel.maxY - size.height - 8, sel.minY + 4)
+        }
+        origin.x = min(max(origin.x, 4), bounds.maxX - size.width - 4)
+        let rect = CGRect(origin: origin, size: size)
+        let capsule = NSBezierPath(
+            roundedRect: rect, xRadius: size.height / 2, yRadius: size.height / 2,
+        )
+        Self.selectionBlue.setFill()
+        capsule.fill()
+        text.draw(
+            at: CGPoint(x: rect.minX + 10, y: rect.minY + 5),
+            withAttributes: attrs,
+        )
+    }
+
+    /// White ✕ badge floating off the selection's top-right corner;
+    /// clicking it cancels the session.
+    private static let closeButtonDiameter: CGFloat = 24
+
+    private func closeButtonRect(_ sel: CGRect) -> CGRect {
+        let d = Self.closeButtonDiameter
+        var center = CGPoint(x: sel.maxX + d / 2 + 4, y: sel.maxY + d / 2 + 4)
+        center.x = min(center.x, bounds.maxX - d / 2 - 2)
+        center.y = min(center.y, bounds.maxY - d / 2 - 2)
+        return CGRect(x: center.x - d / 2, y: center.y - d / 2, width: d, height: d)
+    }
+
+    private func drawCloseButton(_ sel: CGRect) {
+        let rect = closeButtonRect(sel)
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
+        shadow.shadowBlurRadius = 6
+        shadow.shadowOffset = NSSize(width: 0, height: -1)
+        shadow.set()
+        NSColor.white.setFill()
+        NSBezierPath(ovalIn: rect).fill()
+        NSGraphicsContext.restoreGraphicsState()
+
+        let inset = rect.insetBy(dx: 7.5, dy: 7.5)
+        let cross = NSBezierPath()
+        cross.lineWidth = 2
+        cross.lineCapStyle = .round
+        cross.move(to: CGPoint(x: inset.minX, y: inset.minY))
+        cross.line(to: CGPoint(x: inset.maxX, y: inset.maxY))
+        cross.move(to: CGPoint(x: inset.minX, y: inset.maxY))
+        cross.line(to: CGPoint(x: inset.maxX, y: inset.minY))
+        NSColor(white: 0.25, alpha: 1).setStroke()
+        cross.stroke()
     }
 
     /// Loupe: zoomed pixels around the cursor with a pixel grid,

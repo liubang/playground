@@ -13,6 +13,7 @@ final class OverlayWindow: NSPanel {
     private let onCancel: () -> Void
     private var onConfirm: (() -> Void)?
     private var onSaveKey: (() -> Void)?
+    private var onOcr: (() -> Void)?
     private var globalMonitor: Any?
 
     init(screen: NSScreen, onCancel: @escaping () -> Void) {
@@ -46,11 +47,14 @@ final class OverlayWindow: NSPanel {
         isPrimaryScreen: Bool,
         onConfirm: @escaping () -> Void,
         onSave: @escaping () -> Void,
+        onOcr: @escaping () -> Void,
     ) {
         self.onConfirm = onConfirm
+        self.onOcr = onOcr
         onSaveKey = onSave
         selectionView.onConfirm = onConfirm
         selectionView.onSave = onSave
+        selectionView.onOcr = onOcr
         selectionView.onCancel = onCancel
         selectionView.arm(canvas: canvas, display: display)
         if isPrimaryScreen {

@@ -7,20 +7,25 @@ import AppKit
 final class StatusItemController: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let onCapture: () -> Void
+    private let onOCR: () -> Void
     private let onSettings: () -> Void
 
-    init(onCapture: @escaping () -> Void, onSettings: @escaping () -> Void) {
+    init(onCapture: @escaping () -> Void, onOCR: @escaping () -> Void, onSettings: @escaping () -> Void) {
         self.onCapture = onCapture
+        self.onOCR = onOCR
         self.onSettings = onSettings
         super.init()
 
         // A stable autosave name lets Tahoe persist this item's
         // menubar position/visibility across launches.
         statusItem.autosaveName = "AuraShot"
+        // camera.viewfinder's default metrics leave generous padding
+        // inside the glyph box — bump the point size and weight so it
+        // reads as large as the other menu-bar icons it sits next to.
         statusItem.button?.image = NSImage(
             systemSymbolName: "camera.viewfinder",
             accessibilityDescription: "AuraShot",
-        )
+        )?.withSymbolConfiguration(.init(pointSize: 17, weight: .medium))
         statusItem.button?.image?.isTemplate = true
 
         let menu = NSMenu()
@@ -30,9 +35,8 @@ final class StatusItemController: NSObject {
         let capture = NSMenuItem(title: "截图（⌘⇧X）", action: #selector(captureClicked), keyEquivalent: "")
         capture.target = self
         menu.addItem(capture)
-        // OCR 选字在 M4 接入 PaddleOCR-VL 后启用；常驻占位避免菜单结构变动。
-        let ocr = NSMenuItem(title: "截图并识别文字（⌘⇧O，即将推出）", action: nil, keyEquivalent: "")
-        ocr.isEnabled = false
+        let ocr = NSMenuItem(title: "截图并识别文字（⌘⇧O）", action: #selector(ocrClicked), keyEquivalent: "")
+        ocr.target = self
         menu.addItem(ocr)
         menu.addItem(.separator())
         let settings = NSMenuItem(title: "偏好设置…", action: #selector(settingsClicked), keyEquivalent: ",")
@@ -51,6 +55,10 @@ final class StatusItemController: NSObject {
 
     @objc private func settingsClicked() {
         onSettings()
+    }
+
+    @objc private func ocrClicked() {
+        onOCR()
     }
 
     @objc private func quitClicked() {

@@ -53,7 +53,10 @@ final class Settings {
         static let ocrCombo = "hotkey.ocr"
         static let saveDirectoryPath = "save.directoryPath"
         static let autoSave = "save.autoSave"
+        static let borderShadow = "output.borderShadow"
         static let filenamePattern = "save.filenamePattern"
+        static let ocrCliPath = "ocr.cliPath"
+        static let ocrModelDir = "ocr.modelDir"
     }
 
     static let defaultFilenamePattern = "'AuraShot'-yyyyMMdd-HHmmss"
@@ -108,6 +111,14 @@ final class Settings {
         set { defaults.set(newValue, forKey: Key.autoSave) }
     }
 
+    /// Output framing (transparent padding + drop shadow +
+    /// hairline border) applied to copy/save results. Defaults to ON —
+    /// the key is absent until the user flips the checkbox once.
+    var borderShadow: Bool {
+        get { defaults.object(forKey: Key.borderShadow) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Key.borderShadow) }
+    }
+
     /// DateFormatter pattern used for output file names.
     var filenamePattern: String {
         get {
@@ -115,6 +126,27 @@ final class Settings {
             return value.isEmpty ? Self.defaultFilenamePattern : value
         }
         set { defaults.set(newValue, forKey: Key.filenamePattern) }
+    }
+
+    // MARK: - OCR engine paths
+
+    /// Explicit mllm_cli path; empty = use the well-known location
+    /// (~/Library/Application Support/AuraShot/mllm_cli).
+    nonisolated var ocrCliPath: String {
+        get { UserDefaults.standard.string(forKey: Key.ocrCliPath) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: Key.ocrCliPath) }
+    }
+
+    /// Directory holding PaddleOCR-VL-1.6-GGUF{,-mmproj}.gguf.
+    nonisolated var ocrModelDir: URL {
+        get {
+            if let path = UserDefaults.standard.string(forKey: Key.ocrModelDir), !path.isEmpty {
+                return URL(fileURLWithPath: path, isDirectory: true)
+            }
+            return URL(fileURLWithPath: NSHomeDirectory())
+                .appendingPathComponent("models/paddleocr-vl-1.6", isDirectory: true)
+        }
+        set { UserDefaults.standard.set(newValue.path, forKey: Key.ocrModelDir) }
     }
 
     /// Renders the pattern into a concrete file name, sanitized for the

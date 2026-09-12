@@ -1,6 +1,6 @@
 import AppKit
 
-/// AuraShot — a menu-bar screenshot tool (Xnip-style), with a local
+/// AuraShot — a menu-bar screenshot tool, with a local
 /// PaddleOCR engine planned on top of cpp/pl/mllm.
 ///
 /// Pure AppKit entry point: the app owns no persistent windows, only a

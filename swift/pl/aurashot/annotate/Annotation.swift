@@ -1,7 +1,7 @@
 import AppKit
 
-/// The annotation tools offered by the toolbar (Xnip parity set:
-/// shapes, freehand, pixelate, text, numbered step markers).
+/// The annotation tools offered by the toolbar: shapes, freehand,
+/// pixelate, text, numbered step markers.
 enum AnnotationTool: String, CaseIterable {
     case rectangle
     case ellipse
@@ -29,6 +29,9 @@ struct Annotation {
     var color: NSColor = .systemRed
     var lineWidth: CGFloat = 2.5
     var fontSize: CGFloat = 16
+    /// PostScript name of the font chosen in the palette; nil keeps
+    /// the historical default (bold system font).
+    var fontName: String?
 
     /// Freehand only: the stroke's sample points.
     var points: [CGPoint] = []
@@ -101,8 +104,10 @@ struct Annotation {
             }
             path.stroke()
         case .text:
+            let font = fontName.flatMap { NSFont(name: $0, size: fontSize) }
+                ?? NSFont.boldSystemFont(ofSize: fontSize)
             let attributes: [NSAttributedString.Key: Any] = [
-                .font: NSFont.boldSystemFont(ofSize: fontSize),
+                .font: font,
                 .foregroundColor: color,
             ]
             text.draw(at: start, withAttributes: attributes)
@@ -132,7 +137,7 @@ struct Annotation {
         path.stroke()
     }
 
-    /// Xnip-style numbered marker: filled color circle, bold white
+    /// Numbered marker: filled color circle, bold white
     /// number centered inside.
     private static func drawStepMarker(number: Int, at center: CGPoint, color: NSColor) {
         let radius: CGFloat = 9

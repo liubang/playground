@@ -1,7 +1,7 @@
 import AppKit
 
 /// The second panel under the toolbar while an annotation tool is
-/// active. Xnip-style, refined:
+/// active. Design:
 ///
 ///   - The TOP row adapts to the active tool: stroke-width previews for
 ///     shapes/freehand, A-size presets for text, pixel-block previews
@@ -20,6 +20,9 @@ final class AnnotationPaletteView: NSView {
         var lineWidth: CGFloat = AnnotationPaletteView.widths[1]
         var fontSize: CGFloat = AnnotationPaletteView.fontSizes[1]
         var mosaicLevel: Int = 1
+        /// Font choice for the text tool (see `fonts` below).
+        var fontFamily: String = "system"
+        var fontBold: Bool = true
     }
 
     var onChange: (() -> Void)?
@@ -35,10 +38,28 @@ final class AnnotationPaletteView: NSView {
         .systemGreen, .systemBlue, .systemPurple,
     ]
 
+    /// Text-tool font menu: curated families guaranteed on any macOS
+    /// install. nil PostScript names mean "system font with weight".
+    static let fonts: [(id: String, title: String, regular: String?, bold: String?)] = [
+        ("system", "系统默认", nil, nil),
+        ("pingfang", "苹方", "PingFangSC-Regular", "PingFangSC-Semibold"),
+        ("helvetica", "Helvetica Neue", "HelveticaNeue", "HelveticaNeue-Bold"),
+        ("times", "Times", "TimesNewRomanPSMT", "TimesNewRomanPS-BoldMT"),
+        ("menlo", "Menlo", "Menlo-Regular", "Menlo-Bold"),
+    ]
+
     private(set) var activeTool: AnnotationTool?
     private var styles: [AnnotationTool: ToolStyle] = [:]
     private var customColor: NSColor?
     private var hoverIndex: Int? // encoded: 0..2 variant, 100+ color row, 99 = "+"
+
+    // Font pickers: real AppKit controls on the custom-drawn panel,
+    // shown only while the text tool is armed.
+    private let fontFamilyPopUp = NSPopUpButton()
+    private let fontStylePopUp = NSPopUpButton()
+    private let familyPopUpWidth: CGFloat = 104
+    private let stylePopUpWidth: CGFloat = 72
+    private let popUpHeight: CGFloat = 22
 
     // Layout metrics (points).
     private let rowHeight: CGFloat = 30
@@ -55,7 +76,12 @@ final class AnnotationPaletteView: NSView {
     func activate(_ tool: AnnotationTool?) {
         activeTool = tool
         hoverIndex = nil
+        if let index = Self.fonts.firstIndex(where: { $0.id == style.fontFamily }) {
+            fontFamilyPopUp.selectItem(at: index)
+        }
+        fontStylePopUp.selectItem(at: style.fontBold ? 1 : 0)
         invalidateIntrinsicContentSize()
+        needsLayout = true
         needsDisplay = true
     }
 
@@ -63,6 +89,19 @@ final class AnnotationPaletteView: NSView {
     var currentLineWidth: CGFloat { style.lineWidth }
     var currentFontSize: CGFloat { style.fontSize }
     var currentMosaicScale: CGFloat { Self.mosaicScales[style.mosaicLevel] }
+
+    /// Resolves the text tool's family + weight choice into a font.
+    /// Unknown family names fall back to the system font rather than
+    /// a broken document.
+    func currentFont(size: CGFloat? = nil) -> NSFont {
+        let size = size ?? style.fontSize
+        let family = Self.fonts.first { $0.id == style.fontFamily } ?? Self.fonts[0]
+        let name = style.fontBold ? family.bold : family.regular
+        if let name, let font = NSFont(name: name, size: size) {
+            return font
+        }
+        return NSFont.systemFont(ofSize: size, weight: style.fontBold ? .bold : .regular)
+    }
 
     private var style: ToolStyle {
         guard let activeTool else { return ToolStyle() }
@@ -88,8 +127,12 @@ final class AnnotationPaletteView: NSView {
     override var intrinsicContentSize: CGSize {
         let variantCells = hasVariantRow ? 3 : 0
         let rowCount = hasVariantRow ? 2 : 1
+        var variantWidth = CGFloat(variantCells) * cellWidth
+        if activeTool == .text {
+            variantWidth += 8 + familyPopUpWidth + 6 + stylePopUpWidth
+        }
         let width = max(
-            CGFloat(variantCells) * cellWidth,
+            variantWidth,
             CGFloat(colorCellCount) * cellWidth,
         ) + padding * 2
         let height = padding * 2 + CGFloat(rowCount) * rowHeight
@@ -107,6 +150,52 @@ final class AnnotationPaletteView: NSView {
         shadow.shadowOffset = NSSize(width: 0, height: -2)
         shadow.shadowBlurRadius = 12
         self.shadow = shadow
+        buildFontPopUps()
+    }
+
+    private func buildFontPopUps() {
+        for popUp in [fontFamilyPopUp, fontStylePopUp] {
+            popUp.pullsDown = false
+            popUp.isBordered = false
+            popUp.font = .systemFont(ofSize: 11)
+            popUp.isHidden = true
+            addSubview(popUp)
+        }
+        for family in Self.fonts {
+            fontFamilyPopUp.addItem(withTitle: family.title)
+        }
+        fontStylePopUp.addItems(withTitles: ["常规", "粗体"])
+        fontFamilyPopUp.target = self
+        fontFamilyPopUp.action = #selector(fontFamilyChanged(_:))
+        fontStylePopUp.target = self
+        fontStylePopUp.action = #selector(fontStyleChanged(_:))
+    }
+
+    @objc private func fontFamilyChanged(_ sender: NSPopUpButton) {
+        let index = min(max(sender.indexOfSelectedItem, 0), Self.fonts.count - 1)
+        mutateStyle { $0.fontFamily = Self.fonts[index].id }
+        onChange?()
+        needsDisplay = true
+    }
+
+    @objc private func fontStyleChanged(_ sender: NSPopUpButton) {
+        mutateStyle { $0.fontBold = (sender.indexOfSelectedItem == 1) }
+        onChange?()
+        needsDisplay = true
+    }
+
+    /// The popups sit in the variant row, right of the size presets.
+    override func layout() {
+        super.layout()
+        let show = (activeTool == .text)
+        fontFamilyPopUp.isHidden = !show
+        fontStylePopUp.isHidden = !show
+        guard show else { return }
+        let y = bounds.maxY - padding - rowHeight + (rowHeight - popUpHeight) / 2
+        var x = padding + 3 * cellWidth + 8
+        fontFamilyPopUp.frame = CGRect(x: x, y: y, width: familyPopUpWidth, height: popUpHeight)
+        x += familyPopUpWidth + 6
+        fontStylePopUp.frame = CGRect(x: x, y: y, width: stylePopUpWidth, height: popUpHeight)
     }
 
     @available(*, unavailable)
@@ -255,7 +344,7 @@ final class AnnotationPaletteView: NSView {
             case .text:
                 let size = Self.fontSizes[index]
                 let attributes: [NSAttributedString.Key: Any] = [
-                    .font: NSFont.systemFont(ofSize: size, weight: .semibold),
+                    .font: currentFont(size: size),
                     .foregroundColor: style.color,
                 ]
                 let glyph = "A"

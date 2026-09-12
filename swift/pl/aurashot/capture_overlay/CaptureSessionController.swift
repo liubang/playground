@@ -10,12 +10,16 @@ import AppKit
 /// desktop covered by inert black windows that look like a hang.
 @MainActor
 final class CaptureSessionController {
-    private enum OutputAction { case copy, save }
+    private enum OutputAction { case copy, save, ocr }
 
     private var windows: [OverlayWindow] = []
     private var displays: [DisplayContext] = []
     private var previousApp: NSRunningApplication?
     private(set) var isActive = false
+    /// OCR sessions (⌘⇧O / menu) make the confirm action mean
+    /// "recognize text" instead of "copy image".
+    private var ocrSession = false
+    private let ocrEngine = MllmOcrEngine()
     /// Global ESC monitor, installed only for the frozen phase: activation
     /// is deferred to arm() so .transient popovers (e.g. AuraBar's) survive
     /// into the snapshot — but that leaves our nonactivating overlays
@@ -24,13 +28,14 @@ final class CaptureSessionController {
     private var frozenEscMonitor: Any?
 
     /// Starts a capture session. No-op while one is already up.
-    func begin() {
+    func begin(ocr: Bool = false) {
         guard !isActive else { return }
         guard CapturePermissions.hasAccess() else {
             CapturePermissions.showGuidance()
             return
         }
         isActive = true
+        ocrSession = ocr
 
         // Remember who owned the keyboard so teardown can give it back —
         // AuraShot is an accessory app and would otherwise leave the
@@ -108,6 +113,7 @@ final class CaptureSessionController {
         windows.first?.makeKeyAndOrderFront(nil)
 
         let canvas = Canvas(displays: displays, windowCandidates: candidates)
+        let confirmAction: OutputAction = ocrSession ? .ocr : .copy
         for (index, window) in windows.enumerated() {
             let display = displays[index]
             window.arm(
@@ -115,10 +121,13 @@ final class CaptureSessionController {
                 display: display,
                 isPrimaryScreen: index == 0,
                 onConfirm: { [weak self] in
-                    self?.finish(in: display, action: .copy)
+                    self?.finish(in: display, action: confirmAction)
                 },
                 onSave: { [weak self] in
                     self?.finish(in: display, action: .save)
+                },
+                onOcr: { [weak self] in
+                    self?.finish(in: display, action: .ocr)
                 },
             )
         }
@@ -153,9 +162,22 @@ final class CaptureSessionController {
             teardown()
             return
         }
+
+        // Output framing (border + drop shadow on
+        // transparent padding). OCR keeps the RAW bitmap: the padding
+        // is dead pixels for the recognizer and the shadow can only
+        // confuse it.
+        let output: CGImage
+        if action == .ocr || !Settings.shared.borderShadow {
+            output = image
+        } else {
+            let scale = CGFloat(crop.width) / selection.width
+            output = FrameDecorator.apply(to: image, scale: scale) ?? image
+        }
+
         switch action {
         case .copy:
-            ClipboardWriter.write(image)
+            ClipboardWriter.write(output)
             teardown()
         case .save:
             // Save FIRST tears the session down, then shows the panel:
@@ -164,7 +186,33 @@ final class CaptureSessionController {
             // The frame gap lets the overlays fully detach.
             teardown()
             DispatchQueue.main.async {
-                FileSaver.save(image)
+                FileSaver.save(output)
+            }
+        case .ocr:
+            // Same teardown-first discipline as save, then hand the
+            // bitmap to the mllm engine; progress/result surface in a
+            // transient HUD.
+            teardown()
+            runOcr(on: output)
+        }
+    }
+
+    // MARK: - OCR
+
+    private func runOcr(on image: CGImage) {
+        OcrHud.show("正在识别文字…", spinner: true)
+        let engine = ocrEngine
+        Task { @MainActor in
+            do {
+                let blocks = try await engine.recognize(image)
+                let text = blocks.map(\.text).joined(separator: "\n")
+                ClipboardWriter.writeText(text)
+                OcrHud.show("已复制识别结果（\(text.count) 字）", spinner: false)
+                OcrHud.dismiss(after: 1.4)
+            } catch {
+                NSLog("AuraShot: OCR failed: \(error.localizedDescription)")
+                OcrHud.show(error.localizedDescription, spinner: false)
+                OcrHud.dismiss(after: 3)
             }
         }
     }
