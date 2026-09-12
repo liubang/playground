@@ -8,6 +8,13 @@ import AppKit
 ///
 /// Value strings never contain descenders (digits, %, K/M/G/T, arrows),
 /// so the two text lines can be packed tightly without clipping.
+///
+/// Glyph sizing: every icon is drawn to a common optical envelope, so
+/// even though the modules occupy identical boxes, no single glyph reads
+/// bigger or smaller than its neighbors — round glyphs (CPU donut, GPU
+/// fan) are 13.6pt circles, wide glyphs (battery, drive) are ~12.4×9,
+/// the memory vessel is ~10.5×12.4. makeSymbol applies the same box to
+/// SF Symbols so the weather module joins the family.
 enum StatsGlyphs {
     private static let height: CGFloat = 18
     private static let iconBox: CGFloat = 16
@@ -28,7 +35,7 @@ enum StatsGlyphs {
     static func makeCPU(fraction: Double, value: String) -> NSImage {
         let fraction = min(max(fraction, 0), 1)
         return makeLabeled(caption: "CPU", value: value, valueWidthReference: "100%") { rect in
-            let inset = rect.insetBy(dx: 1.7, dy: 1.7)
+            let inset = rect.insetBy(dx: 1.2, dy: 1.2)
             let center = NSPoint(x: inset.midX, y: inset.midY)
             let radius = inset.width / 2
 
@@ -61,7 +68,7 @@ enum StatsGlyphs {
         // formatter drops the decimal ("128G"), and the dot in "99.9G"
         // is narrower than a digit. 1TB+ RAM reads "1.5T" — shorter.
         makeLabeled(caption: "MEM", value: value, valueWidthReference: "888G") { rect in
-            let inset = rect.insetBy(dx: 3.0, dy: 1.4)
+            let inset = rect.insetBy(dx: 2.75, dy: 1.8)
             let vessel = NSBezierPath(roundedRect: inset, xRadius: 2.4, yRadius: 2.4)
             vessel.lineWidth = 1.5
             NSColor.black.setStroke()
@@ -91,14 +98,14 @@ enum StatsGlyphs {
     static func makeBattery(fraction: Double, charging: Bool, value: String) -> NSImage {
         let fraction = min(max(fraction, 0), 1)
         return makeLabeled(caption: "BAT", value: value, valueWidthReference: "100%") { rect in
-            let body = rect.insetBy(dx: 1.2, dy: 4.2)
+            let body = rect.insetBy(dx: 1.8, dy: 3.5)
             let outline = NSBezierPath(roundedRect: body, xRadius: 2.2, yRadius: 2.2)
             outline.lineWidth = 1.4
             NSColor.black.setStroke()
             outline.stroke()
 
-            // Nub on the right edge.
-            let nub = NSRect(x: body.maxX + 0.6, y: body.midY - 1.8, width: 1.4, height: 3.6)
+            // Nub on the right edge, kept inside the icon box.
+            let nub = NSRect(x: body.maxX + 0.5, y: body.midY - 1.9, width: 1.3, height: 3.8)
             NSColor.black.setFill()
             NSBezierPath(roundedRect: nub, xRadius: 0.7, yRadius: 0.7).fill()
 
@@ -146,7 +153,7 @@ enum StatsGlyphs {
         let fraction = min(max(fraction, 0), 1)
         return makeLabeled(caption: "GPU", value: value, valueWidthReference: "100%") { rect in
             let center = NSPoint(x: rect.midX, y: rect.midY)
-            let radius = min(rect.width, rect.height) / 2 - 1.1
+            let radius = min(rect.width, rect.height) / 2 - 1.2
 
             NSColor.black.withAlphaComponent(0.3 + 0.7 * fraction).setFill()
             // Three blades: 95° wedges around the hub with 25° gaps.
@@ -249,7 +256,7 @@ enum StatsGlyphs {
     /// Internal-drive silhouette: horizontal rounded rectangle with a
     /// slot line near the bottom edge.
     private static func drawDrive(_ rect: NSRect) {
-        let body = rect.insetBy(dx: 1.4, dy: 3.4)
+        let body = rect.insetBy(dx: 1.8, dy: 3.3)
         let outline = NSBezierPath(roundedRect: body, xRadius: 2.4, yRadius: 2.4)
         outline.lineWidth = 1.4
         NSColor.black.setStroke()
@@ -268,6 +275,41 @@ enum StatsGlyphs {
         ).fill()
     }
 
+    // MARK: - SF Symbol (shared box)
+
+    /// An SF Symbol rendered into the same geometry the hand-drawn
+    /// glyphs use: 16pt centered box inside an 18pt-tall template image
+    /// with the uniform edge margin on both sides. Raw
+    /// `NSImage(systemSymbolName:)` sizes each symbol to its own
+    /// natural metrics, which made the weather item read bigger than
+    /// the neighboring glyphs and skip the shared edge margin.
+    static func makeSymbol(_ name: String, pointSize: CGFloat = 13) -> NSImage {
+        let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .medium)
+        let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(config)
+        let width = edgeMargin + iconBox + edgeMargin
+        let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
+            guard let symbol else { return true }
+            // Fit into the box, shrinking only: symbols narrower than
+            // the box stay at their natural size so like-for-like
+            // conditions keep a stable look.
+            let scale = min(1, iconBox / symbol.size.width, iconBox / symbol.size.height)
+            let size = NSSize(
+                width: symbol.size.width * scale,
+                height: symbol.size.height * scale,
+            )
+            symbol.draw(in: NSRect(
+                x: (width - size.width) / 2,
+                y: (height - size.height) / 2,
+                width: size.width,
+                height: size.height,
+            ))
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
     // MARK: - Composite layout
 
     /// Icon on the left, caption over value on the right. The image
@@ -275,7 +317,10 @@ enum StatsGlyphs {
     /// can show), not the current value: with monospaced digits the
     /// value's width changes with its length, and hugging it would make
     /// the status item — and everything to its left — jump every time a
-    /// reading crosses 9%→10%. Text is left-aligned as before.
+    /// reading crosses 9%→10%. Both text lines are centered in that
+    /// reserved column: left-aligning a short value ("7%" in a "100%"
+    /// column) parks all the slack on the right, where it reads as a
+    /// wider gap to the next module; centering splits it evenly.
     private static func makeLabeled(
         caption: String,
         value: String,
@@ -283,7 +328,8 @@ enum StatsGlyphs {
         drawIcon: @escaping (NSRect) -> Void,
     ) -> NSImage {
         let valueAttrs = valueAttributes(size: 9.5, dimmed: false)
-        let width = edgeMargin + iconBox + gap + textWidth(valueWidthReference, valueAttrs) + edgeMargin
+        let columnWidth = textWidth(valueWidthReference, valueAttrs)
+        let width = edgeMargin + iconBox + gap + columnWidth + edgeMargin
         let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
             let iconRect = NSRect(
                 x: edgeMargin,
@@ -294,8 +340,12 @@ enum StatsGlyphs {
             drawIcon(iconRect)
 
             let textX = edgeMargin + iconBox + gap
-            drawFlipped(caption, topLeft: NSPoint(x: textX, y: 10.2), attributes: captionAttributes)
-            drawFlipped(value, topLeft: NSPoint(x: textX, y: 0.2), attributes: valueAttrs)
+            // Clamped at 0: a value wider than the reference (shouldn't
+            // happen) stays left-aligned instead of clipping the icon.
+            let captionX = textX + max(0, (columnWidth - textWidth(caption, captionAttributes)) / 2)
+            let valueX = textX + max(0, (columnWidth - textWidth(value, valueAttrs)) / 2)
+            drawFlipped(caption, topLeft: NSPoint(x: captionX, y: 10.2), attributes: captionAttributes)
+            drawFlipped(value, topLeft: NSPoint(x: valueX, y: 0.2), attributes: valueAttrs)
             return true
         }
         image.isTemplate = true

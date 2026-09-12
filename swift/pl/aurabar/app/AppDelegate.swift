@@ -61,12 +61,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ofSize: NSFont.systemFontSize,
                 weight: .regular,
             )
-            let image = NSImage(
-                systemSymbolName: snapshot?.current.condition.symbolName ?? "cloud",
-                accessibilityDescription: nil,
+            // Rendered into the shared 16pt box + edge margin the stats
+            // glyphs use, so it matches their optical size and spacing.
+            button.image = StatsGlyphs.makeSymbol(
+                snapshot?.current.condition.symbolName ?? "cloud",
             )
-            image?.isTemplate = true
-            button.image = image
             button.title = snapshot.map { "\(Int($0.current.temperature.rounded()))°" } ?? "--°"
             button.toolTip = snapshot.map {
                 "\($0.location.name) · \($0.current.condition.label) \(Int($0.current.temperature.rounded()))°"
