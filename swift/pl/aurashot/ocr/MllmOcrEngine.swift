@@ -120,6 +120,18 @@ final class MllmOcrEngine: OcrEngine, @unchecked Sendable {
         return url
     }
 
+    /// PaddleOCR-VL was trained behind this exact chat template (see the
+    /// GGUF's tokenizer.chat_template: "<|begin_of_sentence|>User: ...\n"
+    /// "Assistant:\n"). Sending the bare task prefix "OCR:" puts the model
+    /// off-distribution: it never emits EOS and hallucinates page after page
+    /// of garbage until the token cap — that was both the slowness and the
+    /// garbled output. With the full template it stops right after the real
+    /// text (~3x faster and clean output, verified on doc + screenshot
+    /// samples).
+    private static let ocrPrompt =
+        "<|begin_of_sentence|>User: <|IMAGE_START|><|IMAGE_PLACEHOLDER|><|IMAGE_END|>"
+            + "OCR:\nAssistant:\n"
+
     private static func runCLI(cli: String, model: String, mmproj: String, image: URL) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
             let process = Process()
@@ -127,7 +139,7 @@ final class MllmOcrEngine: OcrEngine, @unchecked Sendable {
             process.arguments = [
                 "-m", model,
                 "--mmproj", mmproj,
-                "-p", "OCR:",
+                "-p", ocrPrompt,
                 "--image", image.path,
                 "-n", "2048",
                 "--backend", "metal",
