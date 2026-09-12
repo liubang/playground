@@ -139,7 +139,8 @@ final class CaptureSessionController {
     /// produces the final bitmap (design doc §5 output stage).
     private func finish(in display: DisplayContext, action: OutputAction) {
         guard let index = displays.firstIndex(where: { $0.frameNS == display.frameNS }),
-              index < windows.count else {
+              index < windows.count
+        else {
             teardown()
             return
         }
@@ -149,7 +150,8 @@ final class CaptureSessionController {
 
         let crop = display.cropRectPixels(forSelectionPoints: selection)
         guard crop.width >= 2, crop.height >= 2,
-              let base = display.snapshot.image.cropping(to: crop) else {
+              let base = display.snapshot.image.cropping(to: crop)
+        else {
             teardown()
             return
         }

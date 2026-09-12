@@ -85,10 +85,21 @@ final class AnnotationPaletteView: NSView {
         needsDisplay = true
     }
 
-    var currentColor: NSColor { style.color }
-    var currentLineWidth: CGFloat { style.lineWidth }
-    var currentFontSize: CGFloat { style.fontSize }
-    var currentMosaicScale: CGFloat { Self.mosaicScales[style.mosaicLevel] }
+    var currentColor: NSColor {
+        style.color
+    }
+
+    var currentLineWidth: CGFloat {
+        style.lineWidth
+    }
+
+    var currentFontSize: CGFloat {
+        style.fontSize
+    }
+
+    var currentMosaicScale: CGFloat {
+        Self.mosaicScales[style.mosaicLevel]
+    }
 
     /// Resolves the text tool's family + weight choice into a font.
     /// Unknown family names fall back to the system font rather than
@@ -122,7 +133,9 @@ final class AnnotationPaletteView: NSView {
         return activeTool != .step
     }
 
-    private var colorCellCount: Int { Self.colors.count + 1 } // +1 custom
+    private var colorCellCount: Int {
+        Self.colors.count + 1
+    } // +1 custom
 
     override var intrinsicContentSize: CGSize {
         let variantCells = hasVariantRow ? 3 : 0
@@ -371,9 +384,9 @@ final class AnnotationPaletteView: NSView {
 
     private func isVariantSelected(_ index: Int) -> Bool {
         switch activeTool {
-        case .text: return Self.fontSizes[index] == style.fontSize
-        case .mosaic: return index == style.mosaicLevel
-        default: return Self.widths[index] == style.lineWidth
+        case .text: Self.fontSizes[index] == style.fontSize
+        case .mosaic: index == style.mosaicLevel
+        default: Self.widths[index] == style.lineWidth
         }
     }
 

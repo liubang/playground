@@ -7,7 +7,9 @@ struct DisplayContext {
     let frameNS: NSRect
     let snapshot: ScreenSnapshot
 
-    var scale: CGFloat { snapshot.scale }
+    var scale: CGFloat {
+        snapshot.scale
+    }
 
     /// Maps a selection rect (view/canvas space = screen points, origin
     /// bottom-left) into a pixel crop rect inside `snapshot.image` —

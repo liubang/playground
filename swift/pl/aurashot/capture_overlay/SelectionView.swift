@@ -71,8 +71,13 @@ final class SelectionView: NSView {
     var onOcr: (() -> Void)?
     var onCancel: (() -> Void)?
 
-    var currentSelection: CGRect? { selection }
-    var currentAnnotations: [Annotation] { annotations }
+    var currentSelection: CGRect? {
+        selection
+    }
+
+    var currentAnnotations: [Annotation] {
+        annotations
+    }
 
     // MARK: - Subviews
 
@@ -325,12 +330,17 @@ final class SelectionView: NSView {
         // Global-monitor events skip hit-testing: a click that lands on
         // the toolbar or palette must not be read as "outside the
         // selection → start over".
-        if !toolbar.isHidden, toolbar.frame.contains(p) { return }
-        if !palette.isHidden, palette.frame.contains(p) { return }
+        if !toolbar.isHidden, toolbar.frame.contains(p) {
+            return
+        }
+        if !palette.isHidden, palette.frame.contains(p) {
+            return
+        }
         // The white ✕ badge at the selection's top-right cancels the
         // whole session.
         if mode == .editing, let sel = selection,
-           closeButtonRect(sel).insetBy(dx: -6, dy: -6).contains(p) {
+           closeButtonRect(sel).insetBy(dx: -6, dy: -6).contains(p)
+        {
             onCancel?()
             return
         }
@@ -534,7 +544,8 @@ final class SelectionView: NSView {
                     NSCursor.arrow.set()
                 } else if let index = activeMosaicIndex, index < annotations.count,
                           hitHandle(p, in: annotations[index].rect) != nil
-                          || annotations[index].rect.contains(p) {
+                          || annotations[index].rect.contains(p)
+                {
                     NSCursor.arrow.set()
                 } else if hitHandle(p, in: sel) != nil {
                     NSCursor.arrow.set()
@@ -610,7 +621,9 @@ final class SelectionView: NSView {
         for (handle, point) in handlePoints(sel) {
             let rect = CGRect(x: point.x - hitSize / 2, y: point.y - hitSize / 2,
                               width: hitSize, height: hitSize)
-            if rect.contains(p) { return handle }
+            if rect.contains(p) {
+                return handle
+            }
         }
         return nil
     }
@@ -628,8 +641,12 @@ final class SelectionView: NSView {
         case .bottomCenter: minY = p.y
         case .bottomRight: maxX = p.x; minY = p.y
         }
-        if minX > maxX { swap(&minX, &maxX) }
-        if minY > maxY { swap(&minY, &maxY) }
+        if minX > maxX {
+            swap(&minX, &maxX)
+        }
+        if minY > maxY {
+            swap(&minY, &maxY)
+        }
         let rect = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
         guard rect.width >= 3, rect.height >= 3 else { return original }
         return rect.intersection(bounds)
@@ -645,11 +662,15 @@ final class SelectionView: NSView {
         for (rect, _) in candidateRects where rect.insetBy(dx: -36, dy: -36).contains(p) {
             for edgeX in [rect.minX, rect.maxX] {
                 let d = abs(p.x - edgeX)
-                if d < bestX { bestX = d; result.x = edgeX }
+                if d < bestX {
+                    bestX = d; result.x = edgeX
+                }
             }
             for edgeY in [rect.minY, rect.maxY] {
                 let d = abs(p.y - edgeY)
-                if d < bestY { bestY = d; result.y = edgeY }
+                if d < bestY {
+                    bestY = d; result.y = edgeY
+                }
             }
         }
         return clampToBounds(result)
@@ -719,7 +740,8 @@ final class SelectionView: NSView {
         // without this the gesture is invisible) and while the
         // committed region is still editable.
         if let pending = pendingAnnotation, pending.tool == .mosaic,
-           pending.rect.width >= 3, pending.rect.height >= 3 {
+           pending.rect.width >= 3, pending.rect.height >= 3
+        {
             drawMosaicRegionChrome(pending.rect)
         } else if let index = activeMosaicIndex, index < annotations.count {
             drawMosaicRegionChrome(annotations[index].rect)
@@ -911,8 +933,12 @@ final class SelectionView: NSView {
               let tile = display.snapshot.image.cropping(to: crop) else { return }
 
         var dest = CGRect(x: p.x + 24, y: p.y + 24, width: side, height: side)
-        if dest.maxX > bounds.maxX - 8 { dest.origin.x = p.x - 24 - side }
-        if dest.maxY > bounds.maxY - 8 { dest.origin.y = p.y - 24 - side }
+        if dest.maxX > bounds.maxX - 8 {
+            dest.origin.x = p.x - 24 - side
+        }
+        if dest.maxY > bounds.maxY - 8 {
+            dest.origin.y = p.y - 24 - side
+        }
 
         NSGraphicsContext.saveGraphicsState()
         NSBezierPath(rect: dest).addClip()
@@ -995,7 +1021,9 @@ final class SelectionView: NSView {
         addCursorRect(bounds, cursor: .crosshair)
     }
 
-    override var acceptsFirstResponder: Bool { true }
+    override var acceptsFirstResponder: Bool {
+        true
+    }
 }
 
 private extension CGRect {

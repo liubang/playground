@@ -87,7 +87,8 @@ enum ScreenCapture {
     private static func backingScale(for displayID: CGDirectDisplayID) -> CGFloat {
         for screen in NSScreen.screens {
             if let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID,
-               number == displayID {
+               number == displayID
+            {
                 return screen.backingScaleFactor
             }
         }

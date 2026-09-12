@@ -8,6 +8,7 @@ final class HotkeyRecorderView: NSView {
     var combo: KeyCombo {
         didSet { needsDisplay = true }
     }
+
     var onChange: ((KeyCombo) -> Void)?
 
     private var recording = false {
@@ -27,7 +28,9 @@ final class HotkeyRecorderView: NSView {
         fatalError("init(coder:) is not supported")
     }
 
-    override var acceptsFirstResponder: Bool { true }
+    override var acceptsFirstResponder: Bool {
+        true
+    }
 
     override func mouseDown(with _: NSEvent) {
         recording = true

@@ -11,7 +11,8 @@ enum FileSaver {
     @discardableResult
     static func save(_ image: CGImage) -> Bool {
         guard let png = NSBitmapImageRep(cgImage: image)
-            .representation(using: .png, properties: [:]) else {
+            .representation(using: .png, properties: [:])
+        else {
             NSLog("AuraShot: PNG encoding failed")
             return false
         }
@@ -51,7 +52,7 @@ enum FileSaver {
 
         let stem = url.deletingPathExtension().lastPathComponent
         let ext = url.pathExtension
-        for index in 2...99 {
+        for index in 2 ... 99 {
             let candidate = folder.appendingPathComponent("\(stem) \(index).\(ext)")
             if !FileManager.default.fileExists(atPath: candidate.path) {
                 return candidate

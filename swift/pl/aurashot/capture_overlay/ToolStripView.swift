@@ -190,10 +190,14 @@ final class ToolStripView: NSView {
 
             // Accent color: red cancel; everything else stays neutral.
             var tint = NSColor(white: 0.22, alpha: 1)
-            if case .cancel = action { tint = NSColor(red: 0.85, green: 0.16, blue: 0.18, alpha: 1) }
+            if case .cancel = action {
+                tint = NSColor(red: 0.85, green: 0.16, blue: 0.18, alpha: 1)
+            }
 
             var active = false
-            if case let .tool(t) = action, t == activeTool { active = true }
+            if case let .tool(t) = action, t == activeTool {
+                active = true
+            }
 
             if active {
                 button.layer?.backgroundColor = Self.selectionBlue.withAlphaComponent(0.14).cgColor

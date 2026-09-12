@@ -66,9 +66,9 @@ struct Annotation {
     /// The meaningful minimum; tinier drags count as clicks.
     var isSubstantial: Bool {
         switch tool {
-        case .text, .step: return true
-        case .freehand: return points.count >= 2
-        default: return rect.width >= 3 || rect.height >= 3
+        case .text, .step: true
+        case .freehand: points.count >= 2
+        default: rect.width >= 3 || rect.height >= 3
         }
     }
 

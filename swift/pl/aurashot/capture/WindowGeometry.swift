@@ -36,16 +36,17 @@ enum WindowGeometry {
             return []
         }
         let ownPID = ProcessInfo.processInfo.processIdentifier
-        let excludedOwners: Set<String> = [
+        let excludedOwners: Set = [
             "Window Server", "Dock", "Control Center", "Notification Center", "Spotlight", "Siri",
         ]
         return list.compactMap { info in
             guard let layer = info[kCGWindowLayer] as? Int,
-                  layer >= 0, layer < 10_000,
+                  layer >= 0, layer < 10000,
                   let bounds = info[kCGWindowBounds] as? [String: CGFloat],
                   let pid = info[kCGWindowOwnerPID] as? pid_t,
                   pid != ownPID,
-                  let alpha = info[kCGWindowAlpha] as? Double, alpha > 0 else {
+                  let alpha = info[kCGWindowAlpha] as? Double, alpha > 0
+            else {
                 return nil
             }
             let ownerName = info[kCGWindowOwnerName] as? String ?? ""

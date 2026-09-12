@@ -29,5 +29,7 @@ protocol OcrEngine: Sendable {
 
 /// M0–M3 placeholder: always empty. Replaced by PaddleOcrEngine at M4.
 struct NullOcrEngine: OcrEngine {
-    func recognize(_: CGImage) async throws -> [OcrBlock] { [] }
+    func recognize(_: CGImage) async throws -> [OcrBlock] {
+        []
+    }
 }
