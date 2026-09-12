@@ -29,13 +29,23 @@ extension Notification.Name {
 /// spins the main runloop rebuilding the application menu on macOS 26
 /// (100% CPU), and the status items never even appear.
 ///
-/// Dismissal: .transient alone misses clicks that land on "windowless"
-/// targets (Finder desktop, wallpaper) — the popover then needs a second
-/// click to go away. And since a transient popover never really activates
-/// the app, listening for deactivation doesn't fire either. The robust
-/// fix is a global mouse monitor while the popover is shown: any click
-/// delivered to *another* app (desktop included) closes it. Mouse global
-/// monitors need no accessibility permission.
+/// Behavior: .transient is unusable here — it closes the popover on ANY
+/// keyboard event routed elsewhere, including AuraClip's global capture
+/// hotkey (the key event goes to the hotkey target, counts as
+/// "interaction outside the popover", and the popover is gone before
+/// AuraClip can freeze it into a screenshot). .applicationDefined gives
+/// us full manual control, and dismissal is already covered:
+///
+/// - clicks outside the popover: the global mouse monitor below (this
+///   also covers "windowless" targets like the Finder desktop, which
+///   .transient itself famously misses);
+/// - ESC: the local key monitor;
+/// - app deactivation without a click (⌘Tab, Spotlight, another app
+///   activating): the didResignActive observer.
+///
+/// The popover is meant to survive another app's *keyboard-only* events
+/// so screen-capture tools can include it; everything the user perceives
+/// as "I moved on" still closes it.
 @MainActor
 final class StatusItemController: NSObject {
     private let autosaveName: String
@@ -89,7 +99,7 @@ final class StatusItemController: NSObject {
 
         let host = NSHostingController(rootView: content)
         host.sizingOptions = .preferredContentSize
-        popover.behavior = .transient
+        popover.behavior = .applicationDefined
         popover.contentViewController = host
 
         NotificationCenter.default
@@ -111,6 +121,19 @@ final class StatusItemController: NSObject {
         // and a popover left floating above it would be in the way).
         center.addObserver(
             forName: .statusItemPopoverCloseRequest,
+            object: nil,
+            queue: .main,
+        ) { [weak self] _ in
+            Task { @MainActor in self?.closePopover() }
+        }
+        // Deactivation without a click (⌘Tab, Spotlight, anything that
+        // activates another app). Clicks are already handled by the
+        // global mouse monitor; this catches the rest so a popover
+        // can't linger above a newly active app. Screenshot tools are
+        // unaffected: by the time they activate, their frozen snapshot
+        // and geometry are already taken.
+        center.addObserver(
+            forName: NSApplication.didResignActiveNotification,
             object: nil,
             queue: .main,
         ) { [weak self] _ in

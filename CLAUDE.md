@@ -42,6 +42,16 @@ bazel run //:format.check        # check only (CI gate: .github/workflows/format
 
 Tests always run with `-c opt` (see `.bazelrc`). Locally, tests re-run every time (`--nocache_test_results`); CI caches test results (`--config=ci`).
 
+## macOS App Discipline (swift/pl/*)
+
+Hard rule, learned the expensive way (AuraBar, then AuraClip's `cc.liubang.auraclip` — both bundle IDs permanently ruined):
+
+**Never launch an LSUIElement / menu-bar app as a host child process.** That means no direct execution of the product binary from a terminal, no `swift script.swift` runtime probes of our own apps, no running the app from inside another IDE session. Acceptable launch paths are `bazel run //swift/pl/<app>:install` followed by `open /Applications/<app>.app` (LaunchServices-owned launch) — and end-to-end verification should be done by the user, not by the agent.
+
+Why: macOS Tahoe attributes a menu-bar app's status-item registration to the process chain that spawned it; an IDE/terminal-spawned instance gets its icon grouped under the host app in Control Center, and if the user ever hides that group, the app's bundle ID is unrecoverably marked hidden (the binding lives in SIP-protected secure prefs and is re-added on every launch — plist surgery does not survive).
+
+If runtime instrumentation is unavoidable, build a throwaway **DEBUG bundle ID** (e.g. `cc.liubang.aurashot.dbg`) whose poisoning would be harmless, never the production ID.
+
 ## Architecture
 
 ### Language layout

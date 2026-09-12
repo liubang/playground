@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PLIST-1.0.dtd">
+<!-- AuraShot needs no restricted entitlements: screen recording is a
+     TCC permission driven by NSScreenCaptureUsageDescription in the
+     Info.plist, not an entitlement. The file exists so install.sh can
+     pass an explicit entitlements argument and keep re-signing
+     deterministic. -->
+<plist version="1.0">
+<dict/>
+</plist>
