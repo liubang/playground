@@ -212,17 +212,16 @@ enum StatsGlyphs {
         // not "↑888M": rates between 10 and 99.9 of a unit keep one
         // decimal ("36.2M"), and the dot makes that shape ~3pt wider
         // than the integer one — "↑888M" let the ink touch the image's
-        // right edge. Lines are centered in the reserved column so the
-        // slack splits evenly (same rule makeLabeled applies); hugging
-        // the current text would shift the neighbors as rates cross
-        // 10 or 100 of a unit. Baselines match makeLabeled's rows.
+        // right edge. Both lines are LEFT-aligned so the ↑/↓ arrows
+        // always share an edge — centering the lines made the arrows
+        // stagger whenever the two widths differed. Hugging the current
+        // text would shift the neighbors as rates cross 10 or 100 of a
+        // unit. Baselines match makeLabeled's rows.
         let width = edgeMargin + textWidth("↑99.9M", upAttrs) + edgeMargin
 
         let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
-            let upX = (width - textWidth(upText, upAttrs)) / 2
-            let downX = (width - textWidth(downText, downAttrs)) / 2
-            drawFlipped(upText, topLeft: NSPoint(x: upX, y: 9.6), attributes: upAttrs)
-            drawFlipped(downText, topLeft: NSPoint(x: downX, y: 0.2), attributes: downAttrs)
+            drawFlipped(upText, topLeft: NSPoint(x: edgeMargin, y: 9.6), attributes: upAttrs)
+            drawFlipped(downText, topLeft: NSPoint(x: edgeMargin, y: 0.2), attributes: downAttrs)
             return true
         }
         image.isTemplate = true
@@ -312,7 +311,12 @@ enum StatsGlyphs {
             return NSImage()
         }
         let ink = inkBounds(of: symbol) ?? NSRect(origin: .zero, size: symbol.size)
-        let targetInkHeight: CGFloat = 12.5
+        // 14pt lands the sun/moon at a rendered ~13.4pt ink — what the
+        // un-normalized rendering produced — matching the donut/fan
+        // (14pt ink). NSSymbolImageRep scales slightly nonlinearly, so
+        // the rendered result runs ~5% under the target. The width cap
+        // keeps flat shapes like cloud.fill inside the box.
+        let targetInkHeight: CGFloat = 14
         let maxInkWidth: CGFloat = 15.5
         let scale = min(targetInkHeight / ink.height, maxInkWidth / ink.width)
         let width = edgeMargin + iconBox + edgeMargin
