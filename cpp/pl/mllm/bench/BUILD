@@ -20,6 +20,10 @@ load("//cpp:copts/configure_copts.bzl", "COPTS", "LINKOPTS")
 
 package(default_visibility = ["//visibility:public"])
 
+# Deterministic OCR test-image generator, consumed by the e2e golden
+# regression (//cpp/pl/mllm/e2e:e2e_golden_ocr).
+exports_files(["testdata/gen_doc_images.py"])
+
 # End-to-end decode benchmark (SPEC §13.1): prefill/decode throughput, tok/s,
 # peak RSS, backend, git commit.
 cc_binary(

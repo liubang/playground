@@ -23,3 +23,22 @@ sh_test(
     data = ["//cpp/pl/mllm/cli:mllm_cli"],
     tags = ["manual"],
 )
+
+# Real-model golden regression (PaddleOCR-VL LM + mmproj): frozen stdout
+# hashes plus known-image-text assertions, with perf timings printed as a
+# markdown table. Tagged "manual": requires the GGUF weights (see the
+# script header); excluded from the default test suite and CI on purpose.
+#   bazel test //cpp/pl/mllm/e2e:e2e_golden_ocr --config=release --test_output=all
+sh_test(
+    name = "e2e_golden_ocr",
+    srcs = ["golden_ocr_regression.sh"],
+    args = [
+        "$(rootpath //cpp/pl/mllm/cli:mllm_cli)",
+        "$(rootpath //cpp/pl/mllm/bench:testdata/gen_doc_images.py)",
+    ],
+    data = [
+        "//cpp/pl/mllm/bench:testdata/gen_doc_images.py",
+        "//cpp/pl/mllm/cli:mllm_cli",
+    ],
+    tags = ["manual"],
+)

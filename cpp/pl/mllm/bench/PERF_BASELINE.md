@@ -23,6 +23,20 @@ bazel build //cpp/pl/mllm/cli:mllm_cli //cpp/pl/mllm/bench:bench_decode //cpp/pl
 bazel test //cpp/pl/mllm/... --config=release --test_output=errors
 ```
 
+### 1.5 真实模型 golden 回归（自动化）
+
+`//cpp/pl/mllm/e2e:e2e_golden_ocr`（manual tag）：用真实 LM + mmproj 跑
+text_short / text_long / ocr_small / ocr_large 四个用例，断言 (a) stdout
+SHA-256 等于冻结的 golden hash，(b) OCR 输出正确转写出测试图像中的已知文字
+（绝对答案，而非仅 backend 间相对一致），并打印性能表：
+
+```bash
+bazel test //cpp/pl/mllm/e2e:e2e_golden_ocr --config=release --test_output=all \
+    --test_env=MLLM_MODELS_DIR=$MODELS
+# 或直接：MLLM_MODELS_DIR=$MODELS ./cpp/pl/mllm/e2e/golden_ocr_regression.sh \
+#          ./bazel-bin/cpp/pl/mllm/cli/mllm_cli
+```
+
 ### 2. 正确性（CPU vs Metal 输出对比）
 
 ```bash
@@ -67,6 +81,32 @@ LONGP="OCR: The quick brown fox jumps over the lazy dog. Invoices total one thou
 ### 单元测试
 
 `//cpp/pl/mllm/...` — **12/12 PASSED**（含新增 `MetalParityTest.AttentionFullParityPaddleOcrDims`，hd=72/n=632 真实 ViT 维度）。
+
+### 真实模型 golden 回归（e2e_golden_ocr）
+
+**6/6 PASSED**（Metal backend，commit `979aa3d32`）：
+
+| 检查 | 结果 |
+|---|---|
+| text_short / text_long stdout SHA-256 == golden | PASS |
+| ocr_small stdout SHA-256 == golden | PASS |
+| ocr_small 语义：转写出图中已知文字（"The quick brown fox…"，"$1,024.50"） | PASS |
+| ocr_large stdout SHA-256 == golden | PASS |
+| ocr_large 心智检查：非空、无 `<unk>` | PASS |
+
+golden hash 冻结于 Metal + Apple M4 Pro + `--config=release`（见
+`e2e/golden_ocr_regression.sh` 头部注释），重复运行逐字节稳定。text_long /
+ocr_small / ocr_large 在 CPU 上 hash 同样成立（两后端字节一致）；text_short
+在 CPU 上降为 WARN（f16 漂移，见「已知良性差异」）。
+
+单次冷进程性能（回归脚本输出，参考值；正式对比用下文 warm 中位数）：
+
+| case | backend | prompt tok | gen tok | prefill ms | decode ms | tok/s |
+|---|---|---|---|---|---|---|
+| text_short | metal | 5 | 32 | 44.56 | 165.20 | 193.71 |
+| text_long | metal | 175 | 32 | 67.40 | 187.54 | 170.63 |
+| ocr_small | metal | 197 | 48 | 601.69 | 324.01 | 148.14 |
+| ocr_large | metal | 869 | 48 | 2763.63 | 404.89 | 118.55 |
 
 ### 正确性
 
