@@ -21,11 +21,12 @@ mllm 是一个面向 Apple Silicon 的本地 LLM 推理引擎，使用 C++20（M
   - qwen2：Q/K/V projection 附加 bias。
   - qwen3：RoPE 前逐 head Q/K RMSNorm，且支持与 head 数解耦的显式 head_dim。
 - 量化：F32、F16、Q8_0、Q4_0（Q8_0/Q4_0 为 block-wise 量化，block size 32）。K-quants 不支持。
-- 请求模式：单进程、单模型、单请求流式生成。
+- 请求模式：单进程、单模型；CLI 为单请求流式生成，HTTP 服务为串行多请求（见 §11）。
 - KV cache：连续预分配窗口；strict 模式超限报错，ring（滑动窗口）模式超窗自动丢弃最旧 token，可无限长度生成。
 - Tokenizer：GGUF 内嵌 BPE；llama（SentencePiece-style byte fallback）与 gpt2（Qwen2/Qwen3 的 byte-level BPE）两个族。
-- Chat 模板：ChatML（Qwen）/ Llama-2 / Llama-3 家族，取自 GGUF 元数据。
-- 前端：CLI。
+- Chat 模板：ChatML（Qwen）/ PaddleOCR-VL / Llama-2 / Llama-3 家族，取自 GGUF 元数据。
+- 多模态：PaddleOCR-VL 视觉塔（vision/）与图像预处理（media/），mmproj GGUF 承载视觉权重（见 §9）。
+- 前端：CLI 与 OpenAI 兼容 HTTP 服务（server/）。
 - 后端：Metal（GPU，decode 优化）优先，CPU（参考实现，只用于 correctness/debug）。
 
 暂不做：
@@ -33,7 +34,7 @@ mllm 是一个面向 Apple Silicon 的本地 LLM 推理引擎，使用 C++20（M
 - continuous batching。
 - paged KV cache。
 - speculative decoding。
-- OpenAI HTTP server。
+- 流式 HTTP 响应（/v1/chat/completions 当前仅非流式）。
 - MoE / MLA 等非 dense 架构族（注册表已预留 dense_decoder == false 的接入点，模型工厂按架构分发）。
 - 多模型热切换。
 - Windows/Linux/Intel Mac 支持。
@@ -44,7 +45,7 @@ mllm 是一个面向 Apple Silicon 的本地 LLM 推理引擎，使用 C++20（M
 
 1. bazel test //cpp/pl/mllm/... 通过。
 2. 能加载 GGUF 模型，完成 prompt prefill（batched）和流式 decode。
-3. 固定 seed、greedy sampling 下，前若干 token 与 llama.cpp 同模型同 prompt 对齐（e2e 将输出空白归一后逐字节比对，见 12.3）。
+3. 固定 seed、greedy sampling 下，前若干 token 与 llama.cpp 同模型同 prompt 对齐（e2e 将输出空白归一后逐字节比对，见 14.3）。
 4. 无 AddressSanitizer 可见悬垂指针、越界访问、double free。
 5. bench_decode 输出 tok/s、峰值内存、time-to-first-token，并记录 llama.cpp 同机 baseline。
 
@@ -65,16 +66,17 @@ mllm 是一个面向 Apple Silicon 的本地 LLM 推理引擎，使用 C++20（M
 
 ### 1.1 分层
 
-![mllm System Architecture](doc/system_architecture.svg)
+![mllm System Architecture](system_architecture.svg)
 
 ```
-cli
+cli  server
  └── engine
       ├── tokenizer
       ├── loader
       ├── model
       │    ├── kv_cache
       │    └── sampler
+      ├── vision ── media
       └── backend
            ├── metal
            └── cpu
@@ -84,26 +86,29 @@ core
 职责边界：
 
 - core：纯 C++20。定义 DType、Shape、TensorView、OwnedBuffer、ScratchArena、Status/Result 等基础类型，不包含 Metal/Objective-C 类型。
-- loader：解析 GGUF，拥有 mmap 生命周期，提供权重表与类型化元数据访问。
+- loader：解析 GGUF，拥有 mmap 生命周期，提供权重表与类型化元数据访问（文本模型与 mmproj 视觉权重共用）。
 - backend：执行算子；Metal backend 隔离在 .mm 文件与 opaque Impl 里，public header 保持纯 C++。
 - model：架构注册表 + 组织 transformer 计算图，不直接知道 Metal API。
-- engine：管理模型、tokenizer、sampler、生成循环、chat 模板与 perf 统计。
-- cli：薄封装，不放推理逻辑。
+- media：图像表示与预处理（RGB f32、smart resize、双线性/双三次缩放、归一化），解码由宿主完成。
+- vision：视觉塔抽象 + PaddleOCR-VL 实现，把图像编码为 LM 空间 token embedding。
+- engine：管理 model、vision、tokenizer、sampler、生成循环、多模态拼接、chat 模板与 perf 统计。
+- cli / server：薄封装，不放推理逻辑；server 是 OpenAI 兼容 HTTP 服务。
 
 ### 1.2 端到端数据流
 
-![mllm Inference Pipeline](doc/inference_pipeline.svg)
+![mllm Inference Pipeline](inference_pipeline.svg)
 
 ```
-model.gguf
+model.gguf (+ mmproj.gguf)
   -> MappedFile
   -> GGUFFile parses metadata / tensor directory
-  -> Model resolves WeightEntry views into the mmap
+  -> Model / VisionTower resolves WeightEntry views into the mmap
   -> Backend imports weights (CPU 引用 mmap / Metal 上传为 device buffer)
-  -> Engine tokenizes prompt
+  -> Engine tokenizes prompt（文本）；media 解码图像 -> vision Encode 生成视觉 token
+  -> Engine 把视觉 token 拼接到 prompt 序列（多模态）
   -> Model::Prefill 按块前向，更新 KV cache
   -> Decode loop: token -> logits -> sampler -> token
-  -> CLI detokenizes streamed pieces
+  -> CLI / server detokenizes streamed pieces
 ```
 
 CPU 后端直接引用 mmap 权重，Metal 后端在初始化时做一次权重导入与布局转换（量化权重按需 dequant，f16 原样上传）。零拷贝是 backend 内部优化细节，不影响上层生命周期。
@@ -633,7 +638,7 @@ public:
 12. down projection。
 13. residual add。
 
-Batched prefill（ForwardBatch / Model::Prefill）按 n 个 token 一块前向：每层 K/V 批量 append（AppendBatch），行 b 以 start_pos + b 的绝对位置做 causal attention（AttentionPrefillKV），块结束后 Advance(n)。Engine 把 prompt 切成 64 token 的 chunk（kPrefillChunk）摊销权重 dequant 与 dispatch 成本。
+Batched prefill（ForwardBatch / Model::Prefill）按 n 个 token 一块前向：每层 K/V 批量 append（AppendBatch），行 b 以 start_pos + b 的绝对位置做 causal attention（AttentionPrefillKV），块结束后 Advance(n)。Engine 把 prompt 切成 256 token 的 chunk（kPrefillChunk）摊销权重 dequant 与 dispatch 成本。
 
 ---
 
@@ -749,9 +754,78 @@ public:
 
 ---
 
-## 9. Engine 与生成接口
+## 9. 多模态视觉
 
-### 9.1 Engine
+### 9.1 图像表示（media）
+
+media 模块提供值语义的 RGB 图像表示与预处理，刻意保持 decode-free：宿主负责把文件/截屏解码为原始像素（macOS 用 ImageIO / ScreenCaptureKit），核心库保持纯 C++20、零第三方依赖。
+
+```cpp
+struct Image {
+    int32_t width = 0;
+    int32_t height = 0;
+    std::vector<float> pixels;   // row-major HWC，f32，值域 [0,1]，size = w*h*3
+
+    bool valid() const;
+    const float* row(int32_t y) const;
+    static Result<Image> FromRgb8(const uint8_t* data, int32_t w, int32_t h, int32_t stride_px = 0);
+    static Result<Image> FromRgba8(const uint8_t* data, int32_t w, int32_t h, int32_t stride_px = 0);
+};
+
+std::pair<int32_t,int32_t> SmartResize(int32_t w, int32_t h, int32_t factor,
+                                       int64_t min_pixels = 0, int64_t max_pixels = 0);
+Result<Image> ResizeBilinear(const Image& src, int32_t dst_w, int32_t dst_h);
+Result<Image> ResizeBicubic(const Image& src, int32_t dst_w, int32_t dst_h);  // PIL 兼容，a=-0.5
+void NormalizeInPlace(Image& img, const float mean[3], const float stddev[3]);
+```
+
+- SmartResize 是 Qwen2-VL 家族「smart resize」：两维变为 factor（patch_size × spatial_merge_size）的倍数，面积夹在 [min_pixels, max_pixels]，尽量保持宽高比；极端宽高比（>200:1）返回 {0,0}。
+- ResizeBicubic 匹配 Qwen2-VL / PaddleOCR-VL image processor 的默认重采样。
+
+### 9.2 视觉塔（vision）
+
+VisionTower 是文本 Model 的视觉对偶：权重按名解析，计算经同一 Backend 派发，Engine 把其输出当作另一种 embedding 来源。
+
+```cpp
+struct VisionOutput {
+    OwnedBuffer storage;     // 拥有 f32 嵌入矩阵
+    TensorView embeddings;   // [n_tokens, output_dim] 视图
+    int32_t n_tokens;        // spatial merge 后的 token 数
+    int32_t grid_h, grid_w;  // merge 前的 patch 网格
+};
+
+class VisionTower {
+public:
+    virtual Result<VisionOutput> Encode(const media::Image&, Backend&) const = 0;
+    virtual Result<int32_t> TokenCount(int32_t width, int32_t height) const = 0;
+    virtual const VisionConfig& config() const = 0;
+    virtual std::vector<std::string> weight_names() const = 0;
+};
+
+Result<std::unique_ptr<VisionTower>> CreateVisionTower(
+    const GGUFFile& mmproj, std::span<const WeightEntry> weights);
+```
+
+- mmproj 是独立 GGUF，`clip.projector_type` 元数据选择塔族；视觉权重带 `v.` 前缀，与文本权重命名空间不冲突。
+- Engine 一次性导入文本 + 视觉权重；塔的 mmap 生命周期由 Engine 持有的 GGUFFile 保活。
+
+### 9.3 PaddleOCR-VL
+
+`PaddleOcrTower` 是当前唯一实现，参考 HF transformers `models/paddleocr_vl` 与 llama.cpp `tools/mtmd/models/paddleocr.cpp`：
+
+- 编码器：SigLIP-derived NaViT——变分辨率图像、conv patchify、双线性插值的可学习位置编码、ViT block 使用 2D RoPE（Qwen2-VL vision 约定，neox 配对，h/w 频率各半）。
+- 投影器：「mlp_AR」——LayerNorm → 2×2 空间合并 → Linear → GELU → Linear，映射到 LM 隐层空间。
+- 视觉 MRoPE：`clip.vision.*` 元数据给出图像预处理界与 rope base；LM 侧 MRoPE 的 (t,h,w) 段切分可用 `--mrope-section` 覆盖。
+
+### 9.4 多模态拼接（Engine 侧）
+
+Engine 的 RunPrefillMultimodal：对每张图 Encode → 把视觉 token 拼到 prompt 行序列的占位符位置 → 构建 MRoPE 位置几何 → 按拼接后的序列 prefill。prompt 中每个 `image_placeholder`（默认 `<|IMAGE_PLACEHOLDER|>`）对应一张图；纯文本 prompt 即 images 为空的 GenerateInput。
+
+---
+
+## 10. Engine 与生成接口
+
+### 10.1 Engine
 
 ```cpp
 enum class BackendKind { kCpu, kMetal };   // kMetal 非 macOS 返回 kUnsupported
@@ -763,6 +837,11 @@ struct GenerateParams {
     float top_p = 1.0f;
     float repeat_penalty = 1.0f;
     uint64_t seed = 0;
+};
+
+struct GenerateInput {
+    std::string prompt;               // 须含 images.size() 个 image_placeholder
+    std::vector<media::Image> images; // 纯文本即 images 为空
 };
 
 struct PerfStats {
@@ -782,6 +861,9 @@ public:
         int32_t max_context = 4096;      // strict 为容量上限；ring 为窗口大小
         BackendKind backend = BackendKind::kCpu;
         bool ring = false;               // true = KVCacheMode::kRing（§7.1）
+        std::string mmproj_path;         // 视觉塔权重（mmproj GGUF）；空 = 纯文本
+        std::string image_placeholder = "<|IMAGE_PLACEHOLDER|>";
+        std::array<int32_t, 3> mrope_section{0, 0, 0};  // 覆盖 GGUF 的 (t,h,w) 段切分
     };
 
     static Result<std::unique_ptr<Engine>> Create(Options options);
@@ -790,40 +872,79 @@ public:
     // 非流式：返回生成的 token id（不含 prompt）
     Result<std::vector<int32_t>> GenerateTokens(std::string_view prompt,
                                                 GenerateParams params);
+    Result<std::vector<int32_t>> GenerateTokens(const GenerateInput& input,
+                                                GenerateParams params);
     // 流式：每个解码文本片段回调一次（片段 + token id）；
     // on_piece 返回 false 取消生成
     Status GenerateStream(std::string_view prompt, GenerateParams params,
                           std::function<bool(std::string_view, int32_t)> on_piece);
+    Status GenerateStream(const GenerateInput& input, GenerateParams params,
+                          std::function<bool(std::string_view, int32_t)> on_piece);
 
+    bool has_vision() const noexcept;    // 是否加载了视觉塔（mmproj）
     const PerfStats& last_perf_stats() const noexcept;
 
     // 用模型 GGUF tokenizer.chat_template 渲染 user/system 消息
-    // （ChatML / Llama-2 / Llama-3 家族；无模板时原样返回）
+    // （ChatML / PaddleOCR-VL / Llama-2 / Llama-3 家族；无模板时原样返回）
     std::string FormatChatPrompt(std::string_view user,
                                  std::string_view system = {}) const;
     bool has_chat_template() const noexcept;
 };
 ```
 
-Engine 拥有 model（含 GGUFFile shared_ptr）、tokenizer、sampler、backend、KV cache（host 或 shell + device）。取消用 callback 返回 false 表达，不使用 coroutine。prompt 超过容量（strict）或模型不兼容等错误在 Create/生成期返回 Status。
+Engine 拥有 model（含 GGUFFile shared_ptr）、vision tower、tokenizer、sampler、backend、KV cache（host 或 shell + device）。取消用 callback 返回 false 表达，不使用 coroutine。prompt 超过容量（strict）或模型不兼容等错误在 Create/生成期返回 Status。内部 kPrefillChunk=256 控制 batched prefill 分块。
 
-### 9.2 取消与错误
+### 10.2 取消与错误
 
-on_piece 返回 false 时 Engine 返回 Status{ErrorCode::kCancelled, "cancelled by callback"}（engine.cpp 实现），CLI 收到非 ok 状态后打印并以非零码退出。GPU 错误、context overflow、tokenizer 错误都返回到 CLI，不允许 abort()。
+on_piece 返回 false 时 Engine 返回 Status{ErrorCode::kCancelled, "cancelled by callback"}（engine.cpp 实现），CLI/server 收到非 ok 状态后打印并以非零码退出。GPU 错误、context overflow、tokenizer 错误都返回到调用方，不允许 abort()。
 
 ---
 
-## 10. 内存管理
+## 11. HTTP 服务（server）
 
-![mllm Memory and Ownership Model](doc/memory_ownership.svg)
+### 11.1 概述
 
-### 10.1 层次
+server/ 提供 OpenAI 兼容(ish) 的 HTTP 服务，跑在单个 Engine 实例上。Engine 非线程安全（GPU 并发也无益），因此所有生成在 mutex 上串行：并发请求排队而非破坏 KV cache。
+
+proto 层用空 message + brpc RESTful wiring：请求体直接读写 controller attachment（API 是 OpenAI 形状 JSON，非 protobuf）。
+
+### 11.2 端点
+
+| 端点                      | 说明                                                         |
+| ------------------------- | ------------------------------------------------------------ |
+| GET /healthz              | 健康检查，返回 `{"status":"ok"}`                             |
+| GET /v1/models            | OpenAI 模型列表（单条）                                      |
+| POST /v1/ocr              | 图像 OCR：`{"image":"<base64                                 | data-url>","prompt":"OCR:"?,"max_tokens":N?}`→`{"text","usage","perf"}` |
+| POST /v1/chat/completions | OpenAI 对话（content 可含 image_url data URL；当前仅非流式） |
+
+### 11.3 关键配置（ServerConfig）
+
+- model_name：/v1/models 报告并在响应回显；默认取模型文件 basename（去 .gguf）。
+- image_placeholder：与 Engine Options 一致（默认 `<|IMAGE_PLACEHOLDER|>`）。
+- ocr_template：/v1/ocr 的 prompt 脚手架，默认是 PaddleOCR-VL 训练所用的 chat 模板（裸 task 前缀会让模型 off-distribution、永不吐 EOS）。
+- ocr_task：请求缺省 prompt 时的默认任务串（默认 "OCR:"）。
+- default_max_tokens：缺省生成上限（默认 2048）。
+- max_images_per_request：护栏（默认 8）。
+
+### 11.4 启动参数
+
+gflags：--model（必填）、--mmproj、--backend、--ring、--ctx、--image_token、--mrope_section、--listen（默认 127.0.0.1）、--port（默认 8310）、--model_name、--ocr_template、--ocr_task、--default_max_tokens、--log_file / --log_max_size_mb / --log_max_files（自管理轮转日志）。
+
+SIGINT/SIGTERM 优雅停机（brpc 默认不装信号处理器，需自装）。
+
+---
+
+## 12. 内存管理
+
+![mllm Memory and Ownership Model](memory_ownership.svg)
+
+### 12.1 层次
 
 - 权重：GGUFFile mmap。CPU backend 直接引用；Metal backend 初始化导入（f16 原样上传 / 量化按需 dequant），device 存储保活到 backend 析构。
 - KV cache：主机侧 OwnedBuffer（strict/ring host 模式）或 device MTLBuffer + shell 记账（Metal）。
 - 中间激活：ScratchArena 预分配，decode 每 token Reset，prefill 每层 Reset。
 
-### 10.2 规则
+### 12.2 规则
 
 - layer 内部不 new 中间 tensor。
 - KV cache 与权重不来自 scratch。
@@ -831,9 +952,9 @@ on_piece 返回 false 时 Engine 返回 Status{ErrorCode::kCancelled, "cancelled
 
 ---
 
-## 11. Metal Kernel 交付状态
+## 13. Metal Kernel 交付状态
 
-### 11.1 已交付 kernel（核心算子均有 CPU reference 一致性测试，见 metal_backend_test.mm）
+### 13.1 已交付 kernel（核心算子均有 CPU reference 一致性测试，见 metal_backend_test.mm）
 
 1. add_in_place（残差相加）。
 2. rmsnorm 与 add_rmsnorm（RmsNormAdd 的 fused residual-add + RMSNorm）。
@@ -848,7 +969,7 @@ on_piece 返回 false 时 Engine 返回 Status{ErrorCode::kCancelled, "cancelled
 
 辅助 kernel：dequant_q8_0 / dequant_q8_0_f16 / dequant_q4_0_f16、cvt_f32_to_f16 / cvt_f16_to_f32 等。
 
-### 11.2 暂缓
+### 13.2 暂缓
 
 - FlashAttention v2。
 - simdgroup_matrix 自研 GEMM。
@@ -859,9 +980,9 @@ on_piece 返回 false 时 Engine 返回 Status{ErrorCode::kCancelled, "cancelled
 
 ---
 
-## 12. 测试策略
+## 14. 测试策略
 
-### 12.1 单元测试
+### 14.1 单元测试
 
 ```
 core_test             Shape / TensorView / Result / ScratchArena / DType
@@ -869,17 +990,22 @@ gguf_loader_test      header / metadata / tensor directory / bad files
 tokenizer_test        llama 与 gpt2 两个族的 encode/decode（fixture 对齐）
 sampler_test          greedy / seeded random / top-k / top-p / repeat penalty
 kv_cache_test         strict append / ring shift / batch / shell / 溢出语义
-backend_cpu_test      reference ops（含 batched prefill 路径）
-backend_metal_test    Metal ops vs CPU reference（含错误注入）
+cpu_backend_test      reference ops（含 batched prefill 路径）
+metal_backend_test    Metal ops vs CPU reference（含错误注入）
+image_test            图像表示/预处理（FromRgb8 / SmartResize / ResizeBicubic）
+mrope_test            MRoPE 位置几何（多模态 rope 段切分）
+vision_tower_test     PaddleOCR-VL 视觉塔编码（fixture mmproj）
 model_test            tiny config 与 CPU reference 对齐（Qwen2 bias / Qwen3 qk_norm + 解耦 head_dim / Q4 权重 / 缺权重负例）
-engine_test           tiny model fixture 端到端（batched prefill、greedy 确定性 / strict / ring / Metal-CPU 一致性 / 不支持架构拒绝）
+engine_test           tiny model fixture 端到端（batched prefill、greedy 确定性 / strict / ring / Metal-CPU 一致性 / 多模态 / 不支持架构拒绝）
 ```
 
-### 12.2 Golden 测试
+### 14.2 Golden 测试
 
 tools/make_tiny_model 生成小模型 fixture：固定 config、权重与 prompt，保存逐层关键 tensor checksum/logits；每次修改 backend/kernel 都跑 golden。tools/dump_logits 用于导出 logits 对比。
 
-### 12.3 与 llama.cpp 对齐（e2e）
+真实模型 golden 回归（e2e/e2e_golden_ocr，manual）：用真实 LM + mmproj 跑 text_short / text_long / ocr_small / ocr_large 四个用例，断言 stdout SHA-256 等于冻结 golden hash 且 OCR 语义正确（绝对答案，而非仅 backend 间一致），并打印性能表。详见 [PERF_BASELINE.md](PERF_BASELINE.md)。
+
+### 14.3 与 llama.cpp 对齐（e2e）
 
 e2e/parity_vs_llamacpp.sh 用真实 GGUF 模型对比 mllm_cli 与 llama-cli 的 greedy 输出：文本先做空白归一（collapse 到单空格）再逐字节比对。前置缺失时（llama-cli 不在 PATH、模型目录 /tmp/mllm_models 不存在、cli 未构建）自动 SKIP 并以 0 退出。用例覆盖：raw-prompt 与 --chat 模板的 byte-identical、Metal/CPU 一致性（共享前缀）。target 带 manual tag，不进默认测试集与 CI：
 
@@ -889,9 +1015,9 @@ bazel test //cpp/pl/mllm/e2e:e2e_llama_parity --config=release --test_output=all
 
 ---
 
-## 13. Benchmark 策略
+## 15. Benchmark 策略
 
-### 13.1 bench_decode
+### 15.1 bench_decode
 
 端到端 decode benchmark，输出：
 
@@ -899,7 +1025,7 @@ bazel test //cpp/pl/mllm/e2e:e2e_llama_parity --config=release --test_output=all
 - prefill ms、decode ms、total ms、tok/s、TTFT。
 - peak RSS、backend、git commit。
 
-### 13.2 bench_ops
+### 15.2 bench_ops
 
 每个 kernel 单独 benchmark，--backend cpu|metal 可选：
 
@@ -907,21 +1033,20 @@ bazel test //cpp/pl/mllm/e2e:e2e_llama_parity --config=release --test_output=all
 - GEMV rows/cols 与目标模型匹配。
 - Attention seq lengths: 128, 512, 2048, 4096。
 
-### 13.3 性能决策规则
+### 15.3 性能决策规则
 
 只有当 profiler 证明某模块超过总耗时 10%，才允许引入更复杂实现。优化必须附带 benchmark before/after、correctness test、fallback 行为。
 
 ---
 
-## 14. Bazel 结构
+## 16. Bazel 结构
 
 实际目录：
 
 ```
 cpp/pl/mllm/
 ├── BUILD
-├── README.md
-├── SPEC.md
+├── README.md       用户手册
 ├── core/           DType / Shape / TensorView / OwnedBuffer / ScratchArena / Status
 ├── loader/         MappedFile / GGUFFile
 ├── tokenizer/      llama + gpt2 BPE
@@ -932,13 +1057,16 @@ cpp/pl/mllm/
 │   ├── cpu/        CpuBackend（reference）
 │   └── metal/      MetalBackend（.mm + shader_source.h）
 ├── model/          架构注册表 / config / dense decoder / transformer layer
+├── vision/         视觉塔（PaddleOCR-VL）
+├── media/          图像表示与预处理
 ├── engine/         Engine（pimpl）
 ├── cli/            mllm_cli
+├── server/         mllm_server（OpenAI 兼容 HTTP）
 ├── bench/          bench_decode / bench_ops
 ├── tools/          make_tiny_model / dump_logits
-├── e2e/            llama.cpp parity（manual）
+├── e2e/            llama.cpp parity + golden OCR（manual）
 ├── ut/             各模块单测 + testdata（gguf_writer fixture 生成器）
-└── doc/            架构 / pipeline / 内存所有权示意图
+└── docs/           SPEC / PERF_BASELINE / 架构示意图
 ```
 
 关键点：
@@ -950,48 +1078,51 @@ cpp/pl/mllm/
 
 ---
 
-## 15. 分阶段计划与状态
+## 17. 分阶段计划与状态
 
-| 阶段 | 内容 | 状态 |
-|---|---|---|
-| Phase 1 | core（Status/Result/Shape/TensorView/OwnedBuffer/ScratchArena）、loader（MappedFile/GGUF）、Bazel 跑通 | 完成 |
-| Phase 2 | tokenizer（llama + gpt2）、sampler（全参数）、CPU reference ops | 完成 |
-| Phase 3 | 架构注册表、ModelConfig validate、TransformerLayer、KV cache（strict + ring）、tiny model E2E | 完成 |
-| Phase 4 | Metal device/queue/pipeline、elementwise kernel、device-resident KV、Engine 接入 | 完成 |
-| Phase 5 | Q8_0/Q4_0 fused GEMV、decode attention kernel、batched prefill、bench vs llama.cpp | 完成 |
-| Phase 6 | Q4_0、Qwen2/Qwen3 族支持、chat 模板、ring 滑窗、流式 callback 精化 | 完成 |
-| 后续候选 | FlashAttention、simdgroup GEMM、K-quants、paged cache、HTTP server、MoE/MLA | 未开始 |
+| 阶段     | 内容                                                                                                   | 状态   |
+| -------- | ------------------------------------------------------------------------------------------------------ | ------ |
+| Phase 1  | core（Status/Result/Shape/TensorView/OwnedBuffer/ScratchArena）、loader（MappedFile/GGUF）、Bazel 跑通 | 完成   |
+| Phase 2  | tokenizer（llama + gpt2）、sampler（全参数）、CPU reference ops                                        | 完成   |
+| Phase 3  | 架构注册表、ModelConfig validate、TransformerLayer、KV cache（strict + ring）、tiny model E2E          | 完成   |
+| Phase 4  | Metal device/queue/pipeline、elementwise kernel、device-resident KV、Engine 接入                       | 完成   |
+| Phase 5  | Q8_0/Q4_0 fused GEMV、decode attention kernel、batched prefill、bench vs llama.cpp                     | 完成   |
+| Phase 6  | Q4_0、Qwen2/Qwen3 族支持、chat 模板、ring 滑窗、流式 callback 精化                                     | 完成   |
+| Phase 7  | 多模态：media 图像预处理、vision 视觉塔（PaddleOCR-VL）、MRoPE、mmproj 加载                            | 完成   |
+| Phase 8  | OpenAI 兼容 HTTP 服务（server/）、OCR 端点、串行请求调度                                               | 完成   |
+| 后续候选 | FlashAttention、simdgroup GEMM、K-quants、paged cache、流式 HTTP 响应、MoE/MLA                         | 未开始 |
 
 每个后续候选都需要单独小设计文档与 benchmark 证明。
 
 ---
 
-## 16. 主要风险与应对
+## 18. 主要风险与应对
 
-| 风险 | 影响 | 应对 |
-|---|---|---|
-| GGUF/tokenizer 细节不兼容 | 输出完全不对 | 先与 llama.cpp token ids/tensor table 对齐（e2e parity） |
-| TensorView 悬垂 | 难查 crash | 强制 owner 文档；Model/Engine 持有 GGUFFile shared_ptr |
-| Metal kernel 正确性差 | 性能优化无意义 | 所有 kernel 必须 CPU reference 对比 |
-| 一开始优化过度 | 工期失控 | 主线禁止 FlashAttention/K-quants/continuous batching |
-| C++/ObjC++ 边界污染 | 构建困难 | core public header 禁止 Metal 类型；Metal 类型收敛在 .mm |
-| device 与 host KV 记账失步 | 静默错误输出 | ring + device KV 由 Engine 单一驱动（EnsureDeviceKvRoom/WindowShift） |
-| Qwen2 qkv_bias 路径 | Metal/CPU 与 llama.cpp 在早期 token 偶发分歧 | e2e 中作为 known issue 跟踪（qwen2-0.5b identity，expected-fail），定位中 |
-| 性能目标虚高 | 项目判断失真 | benchmark 只跟同机 llama.cpp baseline 比 |
+| 风险                              | 影响                                         | 应对                                                                      |
+| --------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------- |
+| GGUF/tokenizer 细节不兼容         | 输出完全不对                                 | 先与 llama.cpp token ids/tensor table 对齐（e2e parity）                  |
+| TensorView 悬垂                   | 难查 crash                                   | 强制 owner 文档；Model/Engine 持有 GGUFFile shared_ptr                    |
+| Metal kernel 正确性差             | 性能优化无意义                               | 所有 kernel 必须 CPU reference 对比                                       |
+| 一开始优化过度                    | 工期失控                                     | 主线禁止 FlashAttention/K-quants/continuous batching                      |
+| C++/ObjC++ 边界污染               | 构建困难                                     | core public header 禁止 Metal 类型；Metal 类型收敛在 .mm                  |
+| device 与 host KV 记账失步        | 静默错误输出                                 | ring + device KV 由 Engine 单一驱动（EnsureDeviceKvRoom/WindowShift）     |
+| Qwen2 qkv_bias 路径               | Metal/CPU 与 llama.cpp 在早期 token 偶发分歧 | e2e 中作为 known issue 跟踪（qwen2-0.5b identity，expected-fail），定位中 |
+| 视觉塔与文本 MRoPE 位置几何不一致 | 多模态输出乱码                               | golden OCR 回归 + mrope_test 覆盖                                         |
+| 性能目标虚高                      | 项目判断失真                                 | benchmark 只跟同机 llama.cpp baseline 比                                  |
 
 ---
 
-## 17. 参考实现
+## 19. 参考实现
 
-| 项目 | 用途 |
-|---|---|
-| llama.cpp | GGUF、tokenizer、量化、baseline |
-| MLX | Apple unified memory 和 Metal 设计参考 |
+| 项目             | 用途                                     |
+| ---------------- | ---------------------------------------- |
+| llama.cpp        | GGUF、tokenizer、量化、baseline          |
+| MLX              | Apple unified memory 和 Metal 设计参考   |
 | Apple Metal docs | Metal buffer、command queue、kernel 编译 |
 
 ---
 
-## 18. 设计决策摘要
+## 20. 设计决策摘要
 
 - 用 virtual backend 做 MVP，暂不使用 CRTP 作为主架构。
 - 错误处理不抛异常：Result/Status 贯穿，失败边界收敛为返回值。
@@ -1001,4 +1132,7 @@ cpp/pl/mllm/
 - Metal KV 常驻 device（HasDeviceKV），主机侧只留 metadata shell。
 - 架构差异用注册表 feature flag（qkv_bias / qk_norm / head_dim 解耦）表达，一族一个 dense decoder。
 - 不把零拷贝作为上层 API 承诺；mmap 引用（CPU）/ 上传（Metal）都是 backend 细节。
+- media 保持 decode-free，图像解码由宿主完成，核心库零第三方依赖。
+- 视觉塔与文本模型共用 Backend 抽象；视觉权重带 `v.` 前缀隔离命名空间。
+- HTTP 服务单 Engine 串行（mutex 排队），暂不做流式响应与 continuous batching。
 - 所有性能优化必须有 benchmark 和 correctness test。

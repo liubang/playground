@@ -3,7 +3,7 @@
 
 Renders realistic English document text with a system font so the
 PaddleOCR-VL model produces meaningful, stable transcriptions. Used by the
-mllm perf/correctness regression (see cpp/pl/mllm/bench/PERF_BASELINE.md).
+mllm perf/correctness regression (see cpp/pl/mllm/docs/PERF_BASELINE.md).
 
 Usage:
     python3 gen_doc_images.py [output_dir]   # default: /tmp

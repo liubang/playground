@@ -18,7 +18,7 @@
 #      answer check, not just backend-vs-backend agreement.
 #
 # Perf: timings are parsed from the CLI perf footer and printed as a
-# markdown table (append-ready for bench/PERF_BASELINE.md; also written to
+# markdown table (append-ready for docs/PERF_BASELINE.md; also written to
 # $PERF_MD when that variable points at a file).
 #
 # Requirements (the test SKIPS with exit 0 when absent):
@@ -85,7 +85,7 @@ fi
 
 # --- Frozen goldens (greedy, Metal, recorded 2026-09-12 on commit 979aa3d32)
 #
-# text_short is the exception called out in bench/PERF_BASELINE.md: the
+# text_short is the exception called out in docs/PERF_BASELINE.md: the
 # Metal f16 GEMM path drifts from the CPU fp32 path and the outputs fork
 # after ~24 tokens, so its hash is only enforced on Metal. The other cases
 # are byte-identical across CPU and Metal and their hashes hold on both.
@@ -133,7 +133,7 @@ run_case() {
             failures=$((failures + 1))
         else
             echo "WARN: $name diverged from the Metal golden (expected on $BACKEND:"
-            echo "      f16-vs-fp32 drift after ~24 tokens, see PERF_BASELINE.md)"
+            echo "      f16-vs-fp32 drift after ~24 tokens, see docs/PERF_BASELINE.md)"
         fi
     else
         echo "PASS: $name (golden hash match)"
