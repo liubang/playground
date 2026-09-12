@@ -17,40 +17,18 @@
 
 #pragma once
 
+#include <atomic>
 #include <brpc/controller.h>
+#include <bthread/mutex.h>
 #include <cstdint>
-#include <mutex>
+#include <memory>
 #include <string>
 
 #include "cpp/pl/mllm/engine/engine.h"
 #include "cpp/pl/mllm/server/mllm.pb.h"
+#include "cpp/pl/mllm/server/server_config.h"
 
 namespace pl::mllm::server {
-
-// Static, rarely-changing knobs for the HTTP surface. Dynamic per-request
-// parameters (temperature, max_tokens, ...) live in the request bodies.
-struct ServerConfig {
-    // Model id reported by /v1/models and echoed in chat-completion
-    // responses (OpenAI clients send it back but a single-model server
-    // ignores it).
-    std::string model_name = "mllm";
-    // Vocab piece marking an image slot in prompts (must match the engine's
-    // Options::image_placeholder).
-    std::string image_placeholder = "<|IMAGE_PLACEHOLDER|>";
-    // Prompt scaffold for /v1/ocr. "{IMAGE}" expands to the
-    // <|IMAGE_START|>placeholder<|IMAGE_END|> triple, "{TASK}" to the
-    // request's task string. The default is the exact chat template
-    // PaddleOCR-VL was trained behind (see its GGUF tokenizer.chat_template):
-    // sending the bare task prefix puts the model off-distribution (never
-    // emits EOS, hallucinates until the token cap).
-    std::string ocr_template = "<|begin_of_sentence|>User: {IMAGE}{TASK}\nAssistant:\n";
-    // Default task string for /v1/ocr when the request omits "prompt".
-    std::string ocr_task = "OCR:";
-    // Default generation cap when a request omits max_tokens.
-    int32_t default_max_tokens = 2048;
-    // Guardrail against pathological requests.
-    int32_t max_images_per_request = 8;
-};
 
 // OpenAI-compatible(ish) HTTP API over a single Engine instance.
 //
@@ -62,11 +40,21 @@ struct ServerConfig {
 //                                   => {"text": "...", "usage": {...}, "perf": {...}}
 //   POST /v1/chat/completions    -> OpenAI chat request (content parts may
 //                                   include image_url with data: URLs);
-//                                   non-streaming only for now.
+//                                   non-streaming, single-turn only.
+//   OPTIONS *                    -> CORS preflight
 //
-// The engine is not thread-safe (and the GPU wouldn't benefit anyway), so
-// all generations serialize on a mutex: concurrent requests queue rather
-// than corrupt the KV cache.
+// Concurrency model:
+// - The engine is not thread-safe (and the GPU wouldn't benefit anyway), so
+//   all generations serialize on `engine_mu_`. It is a bthread::Mutex (NOT
+//   std::mutex): queued requests merely suspend their bthread, keeping the
+//   underlying brpc worker threads free for /healthz and new connections.
+// - PerfStats are copied out while still holding the lock; the engine-owned
+//   copy is overwritten by the next generation, so reading it after the
+//   lock is released would race (and could return another request's stats).
+// - Both generation endpoints watch the client connection (via a
+//   ProgressiveAttachment's NotifyOnStopped): a disconnecting client flips
+//   an atomic flag that the streaming callback polls, cancelling generation
+//   instead of burning GPU on a response nobody will read.
 class MllmHttpService : public proto::MllmHttpService {
 public:
     MllmHttpService(Engine* engine, ServerConfig config);
@@ -78,17 +66,24 @@ public:
 
 private:
     void HandleHealthz(brpc::Controller* cntl);
+    void HandleCorsPreflight(brpc::Controller* cntl);
     void HandleListModels(brpc::Controller* cntl);
     void HandleOcr(brpc::Controller* cntl);
     void HandleChatCompletions(brpc::Controller* cntl);
 
     // Runs one generation under the engine mutex, collecting all streamed
-    // pieces into `out`.
-    Status Generate(const GenerateInput& input, GenerateParams params, std::string* out);
+    // pieces into `out`. The callback polls `cancel` (set by the
+    // client-disconnect watcher) and aborts when flipped. `out_stats` is
+    // checkpointed from the engine while the lock is still held.
+    Status Generate(const GenerateInput& input,
+                    GenerateParams params,
+                    const std::shared_ptr<std::atomic_bool>& cancel,
+                    std::string* out,
+                    PerfStats* out_stats);
 
     Engine* engine_; // not owned; owned by main()
     ServerConfig config_;
-    std::mutex engine_mu_;
+    bthread::Mutex engine_mu_;
 };
 
 } // namespace pl::mllm::server

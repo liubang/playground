@@ -64,6 +64,9 @@ private:
     std::mutex mu_;
     std::ofstream out_;
     int64_t written_ = 0;
+    // Set once we've told stderr the file is unusable (open/rotate failure),
+    // so the warning is emitted once per sink, not per log line.
+    bool warned_open_failed_ = false;
 };
 
 } // namespace pl::mllm::server

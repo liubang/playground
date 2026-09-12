@@ -17,7 +17,9 @@
 
 #include "cpp/pl/mllm/server/log_sink.h"
 
+#include <cerrno>
 #include <cstdio>
+#include <cstring>
 #include <sstream>
 #include <sys/stat.h>
 #include <utility>
@@ -38,12 +40,32 @@ int64_t FileSize(const std::string& path) {
     return static_cast<int64_t>(st.st_size);
 }
 
+void WarnOpenFailed(const std::string& path) {
+    // The whole point of a file sink is failing quietly must never be silent:
+    // startup errors (e.g. engine init failure) would vanish completely.
+    std::fprintf(stderr,
+                 "mllm: cannot open log file %s (%s); further logs go to the void\n",
+                 path.c_str(),
+                 std::strerror(errno));
+}
+
 } // namespace
 
 RotatingLogSink::RotatingLogSink(Options options) : options_(std::move(options)) {
+    // Degenerate configs would rotate on every write or leak generations.
+    if (options_.max_bytes < 1) {
+        options_.max_bytes = 1;
+    }
+    if (options_.max_generations < 1) {
+        options_.max_generations = 1;
+    }
     // Append across restarts; the size cap is enforced on the next write.
     written_ = FileSize(options_.path);
     out_.open(options_.path, std::ios::app);
+    if (!out_.is_open()) {
+        warned_open_failed_ = true;
+        WarnOpenFailed(options_.path);
+    }
 }
 
 RotatingLogSink::~RotatingLogSink() {
@@ -87,6 +109,10 @@ void RotatingLogSink::RotateLocked() {
     std::rename(options_.path.c_str(), GenerationPath(options_.path, 1).c_str());
     out_.open(options_.path, std::ios::trunc);
     written_ = 0;
+    if (!out_.is_open() && !warned_open_failed_) {
+        warned_open_failed_ = true;
+        WarnOpenFailed(options_.path);
+    }
 }
 
 } // namespace pl::mllm::server

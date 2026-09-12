@@ -1,14 +1,15 @@
 import AppKit
+import CoreGraphics
 
 // Generates resources/AppIcon.icns: an Everforest-styled aurora ring.
 //
 // Usage: swift tools/make-icon.swift [output.icns]
 //
 // The icon: Everforest Dark Hard gradient background with a soft center
-// glow, and a thick "aura" ring in a teal→aqua→green gradient — the same
+// glow, and a thick "aura" ring in a teal→aqua gradient — the same
 // donut-gauge language the app uses for its battery / CPU / memory menu
-// bar glyphs. A gap at the bottom-right with an accent dot keeps it from
-// looking like a plain circle.
+// bar glyphs. A gap at the bottom-right with an accent dot at the upper
+// right keeps it from looking like a plain circle.
 
 func color(_ hex: UInt32, _ alpha: CGFloat = 1) -> NSColor {
     NSColor(
@@ -25,8 +26,32 @@ let teal = color(0x7FBBB3) // Everforest teal — primary accent
 let aqua = color(0x83C092) // Everforest aqua
 let green = color(0xA7C080) // Everforest green
 
+func lerp(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat {
+    a + (b - a) * t
+}
+
+func mix(_ c1: NSColor, _ c2: NSColor, _ t: CGFloat) -> NSColor {
+    let a = c1.usingColorSpace(.deviceRGB)!
+    let b = c2.usingColorSpace(.deviceRGB)!
+    return NSColor(
+        red: lerp(a.redComponent, b.redComponent, t),
+        green: lerp(a.greenComponent, b.greenComponent, t),
+        blue: lerp(a.blueComponent, b.blueComponent, t),
+        alpha: 1,
+    )
+}
+
+// Ring geometry: sweeping 340° counterclockwise from -20° to 320° leaves
+// a 20° gap at the lower right, between 320° and 340°. The accent dot
+// sits at 40°, mirroring the gap across the +x axis.
+let arcStart: CGFloat = -20
+let arcEnd: CGFloat = 320
+let dotAngleDeg: CGFloat = 40
+
 func drawIcon(size: CGFloat) -> NSImage {
     NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+        let small = size <= 32
+
         // Background: macOS-style rounded rect with a vertical gradient.
         let bgPath = NSBezierPath(roundedRect: rect, xRadius: size * 0.2237, yRadius: size * 0.2237)
         NSGraphicsContext.saveGraphicsState()
@@ -35,43 +60,79 @@ func drawIcon(size: CGFloat) -> NSImage {
         NSGraphicsContext.restoreGraphicsState()
 
         // Soft radial glow behind the ring, like light bleeding out of
-        // the aura.
-        let glowRect = rect.insetBy(dx: size * 0.18, dy: size * 0.18)
-        let glow = NSGradient(
-            colors: [
-                teal.withAlphaComponent(0.35),
-                teal.withAlphaComponent(0.0),
-            ],
-        )
-        glow?.draw(in: glowRect, relativeCenterPosition: .zero)
-
-        // The aura ring. Angles are measured counterclockwise from the
-        // +x axis: sweeping 300° counterclockwise from -20° to 320°
-        // leaves a 60° gap on the right, between -20° and +40°. A short
-        // aqua overlay near the trailing end fakes a gradient without
-        // clip-path tricks (an open arc's implicit clip region leaks).
-        let center = NSPoint(x: rect.midX, y: rect.midY)
-        let ringRadius = size * 0.32
-        let ringWidth = size * 0.105
-
-        func arc(_ start: CGFloat, _ end: CGFloat) -> NSBezierPath {
-            let path = NSBezierPath()
-            path.appendArc(withCenter: center, radius: ringRadius, startAngle: start, endAngle: end, clockwise: false)
-            path.lineWidth = ringWidth
-            path.lineCapStyle = .round
-            return path
+        // the aura. CGContext.drawRadialGradient (unlike NSGradient)
+        // paints nothing past the end circle, so no faint square seam
+        // shows up at the bounds of the drawing rect. Skipped at small
+        // sizes, where it only muddies the center.
+        if !small, let ctx = NSGraphicsContext.current?.cgContext {
+            let glowCenter = CGPoint(x: rect.midX, y: rect.midY)
+            let glowRadius = size * 0.32
+            let glowColors = [
+                teal.withAlphaComponent(0.35).cgColor,
+                teal.withAlphaComponent(0).cgColor,
+            ] as CFArray
+            if let gradient = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: glowColors,
+                locations: [0, 1],
+            ) {
+                ctx.saveGState()
+                bgPath.addClip()
+                ctx.drawRadialGradient(
+                    gradient,
+                    startCenter: glowCenter, startRadius: 0,
+                    endCenter: glowCenter, endRadius: glowRadius,
+                    options: [],
+                )
+                ctx.restoreGState()
+            }
         }
 
-        teal.setStroke()
-        arc(-20, 320).stroke()
-        // A second teal pass over the bottom half with a softer alpha
-        // fakes a subtle gradient without an overlay stroke's cap
-        // artifact. The ring reads teal up top, mistier at the bottom.
-        aqua.withAlphaComponent(0.35).setStroke()
-        arc(160, 300).stroke()
+        let center = NSPoint(x: rect.midX, y: rect.midY)
+        let ringRadius = size * 0.335
+        let ringWidth = size * (small ? 0.12 : 0.11)
 
-        // Accent dot at the gap's upper end (40° position).
-        let dotAngle = CGFloat(40) * .pi / 180
+        if small {
+            // Single-color ring: at 16px the gradient is unreadable and
+            // the per-segment strokes alias into noise.
+            let path = NSBezierPath()
+            path.appendArc(
+                withCenter: center, radius: ringRadius,
+                startAngle: arcStart, endAngle: arcEnd, clockwise: false,
+            )
+            path.lineWidth = ringWidth
+            path.lineCapStyle = .round
+            teal.setStroke()
+            path.stroke()
+        } else {
+            // Real gradient ring: stroke the arc in short segments,
+            // blending teal → aqua from the top (90°) down to the bottom
+            // (270°) with a sinusoidal mapping (continuous all the way
+            // around). Segments overlap by half a step under round caps
+            // so no hairline cracks appear between them. An earlier
+            // version faked this with a 35%-alpha overlay arc whose
+            // round cap left a visible dome seam where it started.
+            let segments = 180
+            let step = (arcEnd - arcStart) / CGFloat(segments)
+            for i in 0 ..< segments {
+                let a0 = arcStart + step * CGFloat(i)
+                let a1 = a0 + step * 1.5 // overlap into the next segment
+                let mid = (a0 + a1) / 2
+                let t = (1 - cos((mid - 90) * .pi / 180)) / 2
+                let path = NSBezierPath()
+                path.appendArc(
+                    withCenter: center, radius: ringRadius,
+                    startAngle: a0, endAngle: a1, clockwise: false,
+                )
+                path.lineWidth = ringWidth
+                path.lineCapStyle = .round
+                mix(teal, aqua, t).setStroke()
+                path.stroke()
+            }
+        }
+
+        // Accent dot at 40° (upper right).
+        let dotAngle = dotAngleDeg * .pi / 180
         let dotCenter = NSPoint(
             x: center.x + ringRadius * cos(dotAngle),
             y: center.y + ringRadius * sin(dotAngle),

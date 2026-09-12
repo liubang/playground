@@ -12,9 +12,11 @@ import AppKit
 /// Glyph sizing: every icon is drawn to a common optical envelope, so
 /// even though the modules occupy identical boxes, no single glyph reads
 /// bigger or smaller than its neighbors — round glyphs (CPU donut, GPU
-/// fan) are 13.6pt circles, wide glyphs (battery, drive) are ~12.4×9,
-/// the memory vessel is ~10.5×12.4. makeSymbol applies the same box to
-/// SF Symbols so the weather module joins the family.
+/// fan) ink at 14pt diameter, wide glyphs (battery, drive) at ~14×10.5,
+/// the memory vessel and the calendar sheet at ~12.5×13.5. Every icon's
+/// left ink edge sits exactly 2pt from its image edge so the perceived
+/// inter-module spacing is even. makeSymbol normalizes SF Symbols to a
+/// fixed ink height so the weather module joins the family.
 enum StatsGlyphs {
     private static let height: CGFloat = 18
     private static let iconBox: CGFloat = 16
@@ -35,7 +37,9 @@ enum StatsGlyphs {
     static func makeCPU(fraction: Double, value: String) -> NSImage {
         let fraction = min(max(fraction, 0), 1)
         return makeLabeled(caption: "CPU", value: value, valueWidthReference: "100%") { rect in
-            let inset = rect.insetBy(dx: 1.2, dy: 1.2)
+            // Inset 2.1 + half the 2.2pt stroke puts the left ink edge
+            // at exactly 2pt, matching the other glyphs.
+            let inset = rect.insetBy(dx: 2.1, dy: 2.1)
             let center = NSPoint(x: inset.midX, y: inset.midY)
             let radius = inset.width / 2
 
@@ -64,11 +68,15 @@ enum StatsGlyphs {
 
     /// Level vessel + "MEM" caption + used-bytes value.
     static func makeMemory(fraction: Double, value: String) -> NSImage {
-        // "888G" is the widest bytes shape: at 100+ of a unit the
-        // formatter drops the decimal ("128G"), and the dot in "99.9G"
-        // is narrower than a digit. 1TB+ RAM reads "1.5T" — shorter.
-        makeLabeled(caption: "MEM", value: value, valueWidthReference: "888G") { rect in
-            let inset = rect.insetBy(dx: 2.75, dy: 1.8)
+        // "99.9G" is the widest bytes shape: between 10 and 99.9 of a
+        // unit the formatter keeps one decimal, and the dot makes that
+        // ~3pt wider than the 3-digit integer shape ("888G"). At 100+
+        // the decimal is dropped ("128G"); 1TB+ RAM reads "1.5T" —
+        // both shorter.
+        makeLabeled(caption: "MEM", value: value, valueWidthReference: "99.9G") { rect in
+            // Inset 1.75 + half the 1.5pt stroke puts the left ink edge
+            // at exactly 2pt, matching the other glyphs.
+            let inset = rect.insetBy(dx: 1.75, dy: 1.8)
             let vessel = NSBezierPath(roundedRect: inset, xRadius: 2.4, yRadius: 2.4)
             vessel.lineWidth = 1.5
             NSColor.black.setStroke()
@@ -153,7 +161,8 @@ enum StatsGlyphs {
         let fraction = min(max(fraction, 0), 1)
         return makeLabeled(caption: "GPU", value: value, valueWidthReference: "100%") { rect in
             let center = NSPoint(x: rect.midX, y: rect.midY)
-            let radius = min(rect.width, rect.height) / 2 - 1.2
+            // Radius 7: 14pt ink diameter, left ink edge at 2pt.
+            let radius = min(rect.width, rect.height) / 2 - 1.0
 
             NSColor.black.withAlphaComponent(0.3 + 0.7 * fraction).setFill()
             // Three blades: 95° wedges around the hub with 25° gaps.
@@ -177,13 +186,14 @@ enum StatsGlyphs {
                 path.fill()
             }
 
-            // Hub.
+            // Hub, sized to meet the blade roots (inner radius 2.6) so
+            // the fan reads as one mass instead of dot + ring + blades.
             NSColor.black.setFill()
             NSBezierPath(ovalIn: NSRect(
-                x: center.x - 1.7,
-                y: center.y - 1.7,
-                width: 3.4,
-                height: 3.4,
+                x: center.x - 2.6,
+                y: center.y - 2.6,
+                width: 5.2,
+                height: 5.2,
             )).fill()
         }
     }
@@ -198,16 +208,21 @@ enum StatsGlyphs {
         let downText = "↓\(Formatters.rate(down))"
         let upAttrs = valueAttributes(size: 8.5, dimmed: up < 1024)
         let downAttrs = valueAttributes(size: 8.5, dimmed: down < 1024)
-        // Fixed width from the widest possible text ("↑888M": the rate
-        // formatter never exceeds 3 digits + unit, and the integer shape
-        // beats "99.9M" since a dot is narrower than a digit). Hugging
-        // the current text would shift the neighbors as rates cross 10
-        // or 100 of a unit — same rule makeLabeled applies.
-        let width = edgeMargin + textWidth("↑888M", upAttrs) + edgeMargin
+        // Fixed width from the widest possible text. That is "↑99.9M",
+        // not "↑888M": rates between 10 and 99.9 of a unit keep one
+        // decimal ("36.2M"), and the dot makes that shape ~3pt wider
+        // than the integer one — "↑888M" let the ink touch the image's
+        // right edge. Lines are centered in the reserved column so the
+        // slack splits evenly (same rule makeLabeled applies); hugging
+        // the current text would shift the neighbors as rates cross
+        // 10 or 100 of a unit. Baselines match makeLabeled's rows.
+        let width = edgeMargin + textWidth("↑99.9M", upAttrs) + edgeMargin
 
         let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
-            drawFlipped(upText, topLeft: NSPoint(x: edgeMargin, y: 9.4), attributes: upAttrs)
-            drawFlipped(downText, topLeft: NSPoint(x: edgeMargin, y: 0.4), attributes: downAttrs)
+            let upX = (width - textWidth(upText, upAttrs)) / 2
+            let downX = (width - textWidth(downText, downAttrs)) / 2
+            drawFlipped(upText, topLeft: NSPoint(x: upX, y: 9.6), attributes: upAttrs)
+            drawFlipped(downText, topLeft: NSPoint(x: downX, y: 0.2), attributes: downAttrs)
             return true
         }
         image.isTemplate = true
@@ -229,10 +244,13 @@ enum StatsGlyphs {
         let writeAttrs = valueAttributes(size: 8.5, dimmed: write < 1024)
         let readAttrs = valueAttributes(size: 8.5, dimmed: read < 1024)
         let letterWidth = textWidth("W ", letterAttrs)
-        // Fixed value column from the widest rate shape, same as the
-        // network glyph: per-sample text width would jitter the item.
-        let valueWidth = textWidth("888M", writeAttrs)
-        let width = edgeMargin + iconBox + gap + letterWidth + valueWidth + edgeMargin
+        // Fixed value column from the widest rate shape — "99.9M", not
+        // "888M": rates between 10 and 99.9 of a unit keep one decimal
+        // ("42.9M"), which is wider than the integer shape (same fix as
+        // the network glyph). Values are right-aligned in the reserved
+        // column, so the module's right ink edge never moves.
+        let valueColumnWidth = textWidth("99.9M", writeAttrs)
+        let width = edgeMargin + iconBox + gap + letterWidth + valueColumnWidth + edgeMargin
 
         let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
             drawDrive(NSRect(
@@ -242,11 +260,13 @@ enum StatsGlyphs {
                 height: iconBox,
             ))
             let letterX = edgeMargin + iconBox + gap
-            let valueX = letterX + letterWidth
-            drawFlipped("W ", topLeft: NSPoint(x: letterX, y: 9.4), attributes: letterAttrs)
-            drawFlipped(writeText, topLeft: NSPoint(x: valueX, y: 9.4), attributes: writeAttrs)
-            drawFlipped("R ", topLeft: NSPoint(x: letterX, y: 0.4), attributes: letterAttrs)
-            drawFlipped(readText, topLeft: NSPoint(x: valueX, y: 0.4), attributes: readAttrs)
+            let valueRight = width - edgeMargin
+            let writeX = valueRight - textWidth(writeText, writeAttrs)
+            let readX = valueRight - textWidth(readText, readAttrs)
+            drawFlipped("W ", topLeft: NSPoint(x: letterX, y: 9.6), attributes: letterAttrs)
+            drawFlipped(writeText, topLeft: NSPoint(x: writeX, y: 9.6), attributes: writeAttrs)
+            drawFlipped("R ", topLeft: NSPoint(x: letterX, y: 0.2), attributes: letterAttrs)
+            drawFlipped(readText, topLeft: NSPoint(x: readX, y: 0.2), attributes: readAttrs)
             return true
         }
         image.isTemplate = true
@@ -277,37 +297,75 @@ enum StatsGlyphs {
 
     // MARK: - SF Symbol (shared box)
 
-    /// An SF Symbol rendered into the same geometry the hand-drawn
-    /// glyphs use: 16pt centered box inside an 18pt-tall template image
-    /// with the uniform edge margin on both sides. Raw
-    /// `NSImage(systemSymbolName:)` sizes each symbol to its own
-    /// natural metrics, which made the weather item read bigger than
-    /// the neighboring glyphs and skip the shared edge margin.
+    /// An SF Symbol normalized into the same optical envelope the
+    /// hand-drawn glyphs use. Raw `NSImage(systemSymbolName:)` sizes
+    /// each symbol to its own natural metrics — sun.max.fill inks at
+    /// ~13.4pt tall at 13pt while cloud.fill inks at ~9.3 — so the
+    /// weather icon used to change visual weight with the condition.
+    /// Here the symbol's ink bounding box is measured once and scaled
+    /// to a fixed ink height (capped by width), centered by its ink.
     static func makeSymbol(_ name: String, pointSize: CGFloat = 13) -> NSImage {
         let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .medium)
-        let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+        guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(config)
+        else {
+            return NSImage()
+        }
+        let ink = inkBounds(of: symbol) ?? NSRect(origin: .zero, size: symbol.size)
+        let targetInkHeight: CGFloat = 12.5
+        let maxInkWidth: CGFloat = 15.5
+        let scale = min(targetInkHeight / ink.height, maxInkWidth / ink.width)
         let width = edgeMargin + iconBox + edgeMargin
         let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
-            guard let symbol else { return true }
-            // Fit into the box, shrinking only: symbols narrower than
-            // the box stay at their natural size so like-for-like
-            // conditions keep a stable look.
-            let scale = min(1, iconBox / symbol.size.width, iconBox / symbol.size.height)
-            let size = NSSize(
+            symbol.draw(in: NSRect(
+                x: width / 2 - ink.midX * scale,
+                y: height / 2 - ink.midY * scale,
                 width: symbol.size.width * scale,
                 height: symbol.size.height * scale,
-            )
-            symbol.draw(in: NSRect(
-                x: (width - size.width) / 2,
-                y: (height - size.height) / 2,
-                width: size.width,
-                height: size.height,
             ))
             return true
         }
         image.isTemplate = true
         return image
+    }
+
+    /// The pixel bounding box of a symbol's ink, in the image's own
+    /// (y-up) coordinate space. Measured by rasterizing at 2x — done
+    /// once per weather-condition change, so the cost is irrelevant.
+    private static func inkBounds(of image: NSImage) -> NSRect? {
+        let scale: CGFloat = 2
+        let w = Int((image.size.width * scale).rounded(.up))
+        let h = Int((image.size.height * scale).rounded(.up))
+        guard w > 0, h > 0, let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: w, pixelsHigh: h,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0,
+        ) else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        image.draw(in: NSRect(x: 0, y: 0, width: CGFloat(w), height: CGFloat(h)))
+        NSGraphicsContext.restoreGraphicsState()
+        guard let data = rep.bitmapData else { return nil }
+        let bpp = rep.bitsPerPixel / 8
+        var minX = w, minY = h, maxX = -1, maxY = -1
+        for row in 0 ..< h {
+            for col in 0 ..< w {
+                if data[row * rep.bytesPerRow + col * bpp + 3] > 16 {
+                    minX = min(minX, col)
+                    maxX = max(maxX, col)
+                    minY = min(minY, row)
+                    maxY = max(maxY, row)
+                }
+            }
+        }
+        guard maxX >= minX, maxY >= minY else { return nil }
+        // Bitmap row 0 is the image's top edge; convert to y-up points.
+        return NSRect(
+            x: CGFloat(minX) / scale,
+            y: CGFloat(h - maxY - 1) / scale,
+            width: CGFloat(maxX - minX + 1) / scale,
+            height: CGFloat(maxY - minY + 1) / scale,
+        )
     }
 
     // MARK: - Composite layout

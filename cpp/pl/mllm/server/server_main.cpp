@@ -53,6 +53,13 @@ DEFINE_string(model_name,
               "",
               "Model id reported by /v1/models and echoed in responses; "
               "defaults to the model file's basename without .gguf");
+DEFINE_int32(max_body_mb, 64, "Max HTTP request body in MiB; larger bodies get 413");
+DEFINE_int32(max_image_mb, 32, "Max per-image decoded size in MiB; larger images get 400");
+DEFINE_int32(shutdown_close_wait_ms,
+             1000,
+             "Grace period on SIGINT/SIGTERM: in-flight HTTP requests get this "
+             "long to finish before connections are closed (long generations "
+             "are cancelled earlier via the disconnect watcher)");
 DEFINE_string(ocr_template,
               "<|begin_of_sentence|>User: {IMAGE}{TASK}\nAssistant:\n",
               "Prompt scaffold for /v1/ocr; {IMAGE} and {TASK} are substituted");
@@ -129,6 +136,8 @@ int main(int argc, char* argv[]) {
     config.ocr_template = FLAGS_ocr_template;
     config.ocr_task = FLAGS_ocr_task;
     config.default_max_tokens = FLAGS_default_max_tokens;
+    config.max_body_bytes = static_cast<int64_t>(FLAGS_max_body_mb) * 1024 * 1024;
+    config.max_image_bytes = static_cast<int64_t>(FLAGS_max_image_mb) * 1024 * 1024;
 
     // Kept for the startup log below; `config` itself is moved into the service.
     const std::string model_name = config.model_name;
@@ -167,7 +176,10 @@ int main(int argc, char* argv[]) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     LOG(INFO) << "shutting down...";
-    server.Stop(0);
+    // Give in-flight requests a short grace period to finish, then close
+    // connections; the disconnect watcher cancels abandoned generations so
+    // Join does not stall behind a long decode.
+    server.Stop(FLAGS_shutdown_close_wait_ms);
     server.Join();
     return 0;
 }

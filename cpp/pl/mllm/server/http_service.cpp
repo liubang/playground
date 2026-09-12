@@ -17,18 +17,22 @@
 
 #include "cpp/pl/mllm/server/http_service.h"
 
-#include <algorithm>
 #include <array>
 #include <atomic>
+#include <brpc/progressive_attachment.h>
 #include <butil/logging.h>
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
+#include <functional>
+#include <mutex>
 #include <simdjson.h>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "cpp/pl/mllm/media/image_io.h"
+#include "cpp/pl/mllm/server/http_util.h"
 
 namespace pl::mllm::server {
 
@@ -42,31 +46,52 @@ namespace {
 
 using JsonBuilder = simdjson::builtin::builder::string_builder;
 
-void SendJson(brpc::Controller* cntl, int status, std::string body) {
-    cntl->http_response().set_status_code(status);
-    cntl->http_response().set_content_type("application/json");
-    cntl->response_attachment().append(std::move(body));
+void SendJson(brpc::Controller* cntl,
+              int status,
+              std::string body,
+              brpc::ProgressiveAttachment* pa = nullptr) {
+    auto& res = cntl->http_response();
+    res.set_status_code(status);
+    res.set_content_type("application/json; charset=utf-8");
+    // Permissive CORS: the OpenAI surface is meant for local tooling and
+    // browser UIs alike.
+    res.SetHeader("Access-Control-Allow-Origin", "*");
+    if (pa != nullptr) {
+        // A created ProgressiveAttachment owns the response body (writes made
+        // before done are buffered and flushed after the headers).
+        // response_attachment() is IGNORED once one exists.
+        if (pa->Write(body.data(), body.size()) != 0) {
+            LOG(WARNING) << "progressive write failed (client gone?), errno=" << errno;
+        }
+    } else {
+        cntl->response_attachment().append(std::move(body));
+    }
 }
 
 // Serializes the builder content and sends it. The builder's only failure
 // mode is buffer allocation, mapped to a 500.
-void SendBuiltJson(brpc::Controller* cntl, int status, JsonBuilder* sb) {
+void SendBuiltJson(brpc::Controller* cntl,
+                   int status,
+                   JsonBuilder* sb,
+                   brpc::ProgressiveAttachment* pa = nullptr) {
     std::string_view sv;
     if (sb->view().get(sv) != simdjson::SUCCESS) {
         SendJson(
             cntl,
             500,
-            R"({"error":{"message":"json buffer allocation failed","type":"server_error","code":null}})");
+            R"({"error":{"message":"json buffer allocation failed","type":"server_error","code":null}})",
+            pa);
         return;
     }
-    SendJson(cntl, status, std::string(sv));
+    SendJson(cntl, status, std::string(sv), pa);
 }
 
 // OpenAI-style error body: {"error":{"message":...,"type":...,"code":null}}.
 void SendError(brpc::Controller* cntl,
                int status,
                std::string_view message,
-               std::string_view type = "invalid_request_error") {
+               std::string_view type = "invalid_request_error",
+               brpc::ProgressiveAttachment* pa = nullptr) {
     JsonBuilder sb;
     sb.start_object();
     sb.escape_and_append_with_quotes("error");
@@ -79,7 +104,22 @@ void SendError(brpc::Controller* cntl,
     sb.append_key_value("code", nullptr);
     sb.end_object();
     sb.end_object();
-    SendBuiltJson(cntl, status, &sb);
+    SendBuiltJson(cntl, status, &sb, pa);
+}
+
+// Maps a kernel-side Status to (HTTP status, OpenAI error type).
+void SendStatusError(brpc::Controller* cntl, const Status& status) {
+    switch (status.code) {
+        case ErrorCode::kInvalidArgument:
+            SendError(cntl, 400, status.message);
+            return;
+        case ErrorCode::kUnsupported:
+            SendError(cntl, 400, status.message, "unsupported_parameter");
+            return;
+        default:
+            SendError(cntl, 500, status.message, "server_error");
+            return;
+    }
 }
 
 int64_t NowUnixSeconds() {
@@ -99,115 +139,39 @@ std::string MakeCompletionId() {
     return buf.data();
 }
 
-// ---------------------------------------------------------------------------
-// base64 / data-URL helpers
-// ---------------------------------------------------------------------------
-
-// Decodes standard base64 (whitespace tolerated). Returns false on invalid
-// characters or truncated quantum.
-bool Base64Decode(std::string_view in, std::vector<uint8_t>* out) {
-    static const std::array<int8_t, 256> kTable = [] {
-        std::array<int8_t, 256> t{};
-        t.fill(-1);
-        for (int i = 0; i < 26; ++i) {
-            t[static_cast<size_t>('A' + i)] = static_cast<int8_t>(i);
-            t[static_cast<size_t>('a' + i)] = static_cast<int8_t>(26 + i);
-        }
-        for (int i = 0; i < 10; ++i) {
-            t[static_cast<size_t>('0' + i)] = static_cast<int8_t>(52 + i);
-        }
-        t[static_cast<size_t>('+')] = 62;
-        t[static_cast<size_t>('/')] = 63;
-        return t;
-    }();
-
-    out->clear();
-    out->reserve(in.size() * 3 / 4);
-    uint32_t acc = 0;
-    int bits = 0;
-    for (const char c : in) {
-        const auto uc = static_cast<unsigned char>(c);
-        if (c == '=') {
-            break; // padding: the quantum boundary check below rejects truncation
-        }
-        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
-            continue;
-        }
-        const int8_t v = kTable[uc];
-        if (v < 0) {
-            return false;
-        }
-        acc = (acc << 6) | static_cast<uint32_t>(v);
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out->push_back(static_cast<uint8_t>((acc >> bits) & 0xFF));
-        }
+// Self-deleting Closure wrapping a std::function (this repo's protobuf
+// NewCallback only binds plain functions/methods, not lambdas).
+class FunctionClosure : public google::protobuf::Closure {
+public:
+    explicit FunctionClosure(std::function<void()> fn) : fn_(std::move(fn)) {}
+    void Run() override {
+        fn_();
+        delete this;
     }
-    // Leftover bits must be a whole padding tail (2 or 4 bits), all zero.
-    if (bits >= 6 || ((acc & ((1u << bits) - 1u)) != 0)) {
-        return false;
-    }
-    return true;
-}
 
-// Accepts a raw base64 blob or a data URL ("data:image/png;base64,...."),
-// returning the decoded bytes.
-bool DecodeImagePayload(std::string_view payload, std::vector<uint8_t>* out) {
-    if (payload.starts_with("data:")) {
-        const size_t comma = payload.find(',');
-        if (comma == std::string_view::npos) {
-            return false;
-        }
-        payload = payload.substr(comma + 1);
-    }
-    return Base64Decode(payload, out);
-}
+private:
+    std::function<void()> fn_;
+};
 
-// ---------------------------------------------------------------------------
-// simdjson field readers (all optional-field tolerant)
-// ---------------------------------------------------------------------------
-
-bool ReadString(const simdjson::dom::element& obj, std::string_view key, std::string* out) {
-    std::string_view sv;
-    if (obj.at_key(key).get(sv) == simdjson::SUCCESS) {
-        *out = std::string(sv);
-        return true;
+// Sets up client-disconnect detection for a generation request: when the
+// connection dies, `cancel` is flipped and the engine's streaming callback
+// aborts on its next piece. The callback always runs (also on attachment
+// destruction); it is harmless after the request is done.
+//
+// Returns null when progressive attachments are unavailable (non-HTTP
+// protocol); caller then serves without cancellation. Note: once an
+// attachment exists, ALL response bodies must be written through it.
+butil::intrusive_ptr<brpc::ProgressiveAttachment> WatchClientClose(
+    brpc::Controller* cntl, const std::shared_ptr<std::atomic_bool>& cancel) {
+    butil::intrusive_ptr<brpc::ProgressiveAttachment> pa = cntl->CreateProgressiveAttachment();
+    if (pa == nullptr) {
+        LOG(WARNING) << "no progressive attachment (non-HTTP?); "
+                        "client-disconnect cancellation disabled";
+        return nullptr;
     }
-    return false;
-}
-
-bool ReadInt(const simdjson::dom::element& obj, std::string_view key, int64_t* out) {
-    int64_t v = 0;
-    if (obj.at_key(key).get(v) == simdjson::SUCCESS) {
-        *out = v;
-        return true;
-    }
-    return false;
-}
-
-bool ReadDouble(const simdjson::dom::element& obj, std::string_view key, double* out) {
-    double v = 0.0;
-    if (obj.at_key(key).get(v) == simdjson::SUCCESS) {
-        *out = v;
-        return true;
-    }
-    // OpenAI clients happily send integer literals (e.g. "temperature": 1).
-    int64_t iv = 0;
-    if (obj.at_key(key).get(iv) == simdjson::SUCCESS) {
-        *out = static_cast<double>(iv);
-        return true;
-    }
-    return false;
-}
-
-bool ReadBool(const simdjson::dom::element& obj, std::string_view key, bool* out) {
-    bool v = false;
-    if (obj.at_key(key).get(v) == simdjson::SUCCESS) {
-        *out = v;
-        return true;
-    }
-    return false;
+    pa->NotifyOnStopped(
+        new FunctionClosure([cancel] { cancel->store(true, std::memory_order_relaxed); }));
+    return pa;
 }
 
 // Appends "usage":{...} (OpenAI token accounting, from the engine's perf stats).
@@ -255,6 +219,17 @@ void MllmHttpService::default_method(google::protobuf::RpcController* controller
     const brpc::HttpMethod method = cntl->http_request().method();
     const std::string path = cntl->http_request().uri().path();
 
+    if (method == brpc::HTTP_METHOD_OPTIONS) {
+        HandleCorsPreflight(cntl);
+        return;
+    }
+    // Body size guardrail: reject before paying the parse cost.
+    if (method == brpc::HTTP_METHOD_POST &&
+        cntl->request_attachment().size() > static_cast<size_t>(config_.max_body_bytes)) {
+        SendError(cntl, 413, "request body too large");
+        return;
+    }
+
     if (method == brpc::HTTP_METHOD_GET && path == "/healthz") {
         HandleHealthz(cntl);
     } else if (method == brpc::HTTP_METHOD_GET && path == "/v1/models") {
@@ -270,6 +245,15 @@ void MllmHttpService::default_method(google::protobuf::RpcController* controller
 
 void MllmHttpService::HandleHealthz(brpc::Controller* cntl) {
     SendJson(cntl, 200, R"({"status":"ok"})");
+}
+
+void MllmHttpService::HandleCorsPreflight(brpc::Controller* cntl) {
+    auto& res = cntl->http_response();
+    res.set_status_code(204);
+    res.SetHeader("Access-Control-Allow-Origin", "*");
+    res.SetHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.SetHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.SetHeader("Access-Control-Max-Age", "86400");
 }
 
 void MllmHttpService::HandleListModels(brpc::Controller* cntl) {
@@ -296,13 +280,25 @@ void MllmHttpService::HandleListModels(brpc::Controller* cntl) {
 
 Status MllmHttpService::Generate(const GenerateInput& input,
                                  GenerateParams params,
-                                 std::string* out) {
-    std::lock_guard<std::mutex> lock(engine_mu_);
+                                 const std::shared_ptr<std::atomic_bool>& cancel,
+                                 std::string* out,
+                                 PerfStats* out_stats) {
+    std::lock_guard<bthread::Mutex> lock(engine_mu_);
     out->clear();
-    return engine_->GenerateStream(input, params, [out](std::string_view piece, int32_t) {
-        out->append(piece);
-        return true;
-    });
+    Status status =
+        engine_->GenerateStream(input, params, [&cancel, out](std::string_view piece, int32_t) {
+            if (cancel != nullptr && cancel->load(std::memory_order_relaxed)) {
+                return false;
+            }
+            out->append(piece);
+            return true;
+        });
+    // The engine-owned PerfStats is overwritten by the next generation, so it
+    // must be checkpointed while the lock is still held.
+    if (out_stats != nullptr) {
+        *out_stats = engine_->last_perf_stats();
+    }
+    return status;
 }
 
 void MllmHttpService::HandleOcr(brpc::Controller* cntl) {
@@ -314,24 +310,24 @@ void MllmHttpService::HandleOcr(brpc::Controller* cntl) {
     const std::string body_str = cntl->request_attachment().to_string();
     simdjson::dom::parser parser;
     simdjson::dom::element root;
-    if (parser.parse(body_str).get(root) != simdjson::SUCCESS || !root.is_object()) {
+    if (parser.parse(body_str).get(root) != simdjson::SUCCESS) {
         SendError(cntl, 400, "request body is not valid JSON");
         return;
     }
 
-    std::string image_payload;
-    if (!ReadString(root, "image", &image_payload) || image_payload.empty()) {
-        SendError(cntl, 400, "missing required field \"image\" (base64 or data URL)");
+    auto parsed = ParseOcrRequest(root, config_);
+    if (!parsed.ok()) {
+        SendStatusError(cntl, parsed.status());
         return;
     }
-    std::string task = config_.ocr_task;
-    ReadString(root, "prompt", &task);
-    int64_t max_tokens = config_.default_max_tokens;
-    ReadInt(root, "max_tokens", &max_tokens);
 
     std::vector<uint8_t> image_bytes;
-    if (!DecodeImagePayload(image_payload, &image_bytes) || image_bytes.empty()) {
+    if (!DecodeImagePayload(parsed.value().image_payload, &image_bytes) || image_bytes.empty()) {
         SendError(cntl, 400, "invalid base64 image payload");
+        return;
+    }
+    if (static_cast<int64_t>(image_bytes.size()) > config_.max_image_bytes) {
+        SendError(cntl, 400, "decoded image exceeds the size limit");
         return;
     }
     auto image = media::LoadImageData(image_bytes.data(), image_bytes.size());
@@ -342,33 +338,37 @@ void MllmHttpService::HandleOcr(brpc::Controller* cntl) {
 
     // Expand the OCR prompt scaffold: {IMAGE} -> the START/placeholder/END
     // triple (llama.cpp mtmd layout), {TASK} -> the request's task string.
-    std::string prompt = config_.ocr_template;
     const std::string image_slot = "<|IMAGE_START|>" + config_.image_placeholder + "<|IMAGE_END|>";
-    for (const auto& [marker, value] :
-         {std::pair{std::string_view{"{IMAGE}"}, std::string_view{image_slot}},
-          std::pair{std::string_view{"{TASK}"}, std::string_view{task}}}) {
-        size_t pos = 0;
-        while ((pos = prompt.find(marker, pos)) != std::string::npos) {
-            prompt.replace(pos, marker.size(), value);
-            pos += value.size();
-        }
-    }
+    std::string prompt = ExpandOcrTemplate(config_.ocr_template, image_slot, parsed.value().task);
 
     GenerateParams params;
-    params.max_tokens = static_cast<int32_t>(std::clamp<int64_t>(max_tokens, 1, 16384));
+    params.max_tokens = parsed.value().max_tokens;
 
     GenerateInput input;
     input.prompt = std::move(prompt);
     input.images.push_back(std::move(image).value());
 
+    auto cancel = std::make_shared<std::atomic_bool>(false);
+    auto pa = WatchClientClose(cntl, cancel);
+
     std::string text;
-    const Status status = Generate(input, params, &text);
+    PerfStats perf;
+    const Status status = Generate(input, params, cancel, &text, &perf);
+    if (cancel->load(std::memory_order_relaxed)) {
+        // Client is gone; no one will read the response.
+        LOG(INFO) << "/v1/ocr: client disconnected, generation "
+                  << (status.ok() ? "completed" : "cancelled") << " and response dropped";
+        return;
+    }
     if (!status.ok()) {
-        SendError(cntl, 500, "generation failed: " + status.message, "server_error");
+        SendError(cntl,
+                  status.code == ErrorCode::kCancelled ? 499 : 500,
+                  "generation failed: " + status.message,
+                  "server_error",
+                  pa.get());
         return;
     }
 
-    const PerfStats perf = engine_->last_perf_stats();
     JsonBuilder sb;
     sb.start_object();
     sb.append_key_value("text", text);
@@ -379,173 +379,90 @@ void MllmHttpService::HandleOcr(brpc::Controller* cntl) {
     sb.append_comma();
     AppendPerf(&sb, perf);
     sb.end_object();
-    SendBuiltJson(cntl, 200, &sb);
+    SendBuiltJson(cntl, 200, &sb, pa.get());
 }
 
 void MllmHttpService::HandleChatCompletions(brpc::Controller* cntl) {
     const std::string body_str = cntl->request_attachment().to_string();
     simdjson::dom::parser parser;
     simdjson::dom::element root;
-    if (parser.parse(body_str).get(root) != simdjson::SUCCESS || !root.is_object()) {
+    if (parser.parse(body_str).get(root) != simdjson::SUCCESS) {
         SendError(cntl, 400, "request body is not valid JSON");
         return;
     }
 
-    bool stream = false;
-    ReadBool(root, "stream", &stream);
-    if (stream) {
-        // SSE needs chunked progressive responses; queued behind OCR support.
-        SendError(cntl, 400, "\"stream\": true is not supported yet", "unsupported_parameter");
+    auto parsed = ParseChatRequest(root, config_);
+    if (!parsed.ok()) {
+        SendStatusError(cntl, parsed.status());
         return;
     }
 
-    simdjson::dom::array messages;
-    if (root.at_key("messages").get(messages) != simdjson::SUCCESS) {
-        SendError(cntl, 400, "missing required field \"messages\"");
-        return;
-    }
-
-    // Collapse the conversation into one user turn: concatenate all system
-    // messages into `system`, all user texts (in order) into `user_text`,
-    // and collect images from every content part. (Single-turn models like
-    // PaddleOCR-VL only ever see this flattened prompt; multi-turn chat
-    // templating is a later refinement.)
-    std::string system;
-    std::string user_text;
-    std::vector<media::Image> images;
-    std::vector<std::vector<uint8_t>> image_bytes; // backing storage alive until decode done
-
-    for (const simdjson::dom::element msg : messages) {
-        std::string_view role;
-        if (msg.at_key("role").get(role) != simdjson::SUCCESS) {
-            continue;
-        }
-        simdjson::dom::element content;
-        if (msg.at_key("content").get(content) != simdjson::SUCCESS) {
-            continue;
-        }
-
-        const auto append_text = [&](std::string_view text) {
-            if (role == "system") {
-                if (!system.empty()) {
-                    system += '\n';
-                }
-                system += text;
-            } else if (role == "user") {
-                if (!user_text.empty()) {
-                    user_text += '\n';
-                }
-                user_text += text;
-            }
-        };
-
-        if (content.is_string()) {
-            append_text(content.get_string().value());
-            continue;
-        }
-        if (!content.is_array()) {
-            continue;
-        }
-        for (const simdjson::dom::element part : content.get_array().value()) {
-            std::string_view type;
-            if (part.at_key("type").get(type) != simdjson::SUCCESS) {
-                continue;
-            }
-            if (type == "text") {
-                std::string_view text;
-                if (part.at_key("text").get(text) == simdjson::SUCCESS) {
-                    append_text(text);
-                }
-            } else if (type == "image_url" && role == "user") {
-                // OpenAI shape: {"type":"image_url","image_url":{"url":"data:..."}}
-                // (a bare string instead of the object is also accepted).
-                simdjson::dom::element iu;
-                std::string_view url;
-                if (part.at_key("image_url").get(iu) != simdjson::SUCCESS) {
-                    continue;
-                }
-                if (iu.is_string()) {
-                    url = iu.get_string().value();
-                } else if (iu.at_key("url").get(url) != simdjson::SUCCESS) {
-                    continue;
-                }
-                if (static_cast<int32_t>(images.size()) >= config_.max_images_per_request) {
-                    SendError(cntl, 400, "too many images in one request");
-                    return;
-                }
-                std::vector<uint8_t> bytes;
-                if (!DecodeImagePayload(url, &bytes) || bytes.empty()) {
-                    SendError(cntl, 400, "invalid image_url payload (expecting a data: URL)");
-                    return;
-                }
-                image_bytes.push_back(std::move(bytes));
-                const auto& back = image_bytes.back();
-                auto img = media::LoadImageData(back.data(), back.size());
-                if (!img.ok()) {
-                    SendError(cntl, 400, "cannot decode image: " + img.status().message);
-                    return;
-                }
-                images.push_back(std::move(img).value());
-            }
-        }
-    }
-
-    if (user_text.empty() && images.empty()) {
-        SendError(cntl, 400, "no user content found in \"messages\"");
-        return;
-    }
-    if (!images.empty() && !engine_->has_vision()) {
+    // Vision capability check before any decode work: on a text-only engine
+    // an image request fails fast here instead of after base64 + image decode.
+    if (!parsed.value().image_payloads.empty() && !engine_->has_vision()) {
         SendError(cntl, 503, "engine has no vision tower (start with --mmproj)", "server_error");
         return;
     }
 
+    std::vector<media::Image> images;
+    images.reserve(parsed.value().image_payloads.size());
+    for (const std::string& payload : parsed.value().image_payloads) {
+        std::vector<uint8_t> bytes;
+        if (!DecodeImagePayload(payload, &bytes) || bytes.empty()) {
+            SendError(cntl, 400, "invalid image_url payload (expecting a data: URL)");
+            return;
+        }
+        if (static_cast<int64_t>(bytes.size()) > config_.max_image_bytes) {
+            SendError(cntl, 400, "decoded image exceeds the size limit");
+            return;
+        }
+        auto img = media::LoadImageData(bytes.data(), bytes.size());
+        if (!img.ok()) {
+            SendError(cntl, 400, "cannot decode image: " + img.status().message);
+            return;
+        }
+        images.push_back(std::move(img).value());
+    }
+
     // Splice images into the user turn before templating, so the visual
     // tokens land inside the model's trained "User: <image>..." layout.
+    std::string user_text = std::move(parsed.value().user_text);
     if (!images.empty() && user_text.find(config_.image_placeholder) == std::string::npos) {
         std::string prefixed;
+        prefixed.reserve(images.size() * (config_.image_placeholder.size() + 32) +
+                         user_text.size());
         for (size_t i = 0; i < images.size(); ++i) {
             prefixed += "<|IMAGE_START|>" + config_.image_placeholder + "<|IMAGE_END|>";
         }
         user_text = prefixed + user_text;
     }
-    std::string prompt = engine_->FormatChatPrompt(user_text, system);
+    std::string prompt = engine_->FormatChatPrompt(user_text, parsed.value().system);
 
-    GenerateParams params;
-    int64_t max_tokens = 0;
-    if (ReadInt(root, "max_tokens", &max_tokens) ||
-        ReadInt(root, "max_completion_tokens", &max_tokens)) {
-        params.max_tokens = static_cast<int32_t>(std::clamp<int64_t>(max_tokens, 1, 16384));
-    } else {
-        params.max_tokens = config_.default_max_tokens;
-    }
-    double f = 0.0;
-    if (ReadDouble(root, "temperature", &f)) {
-        params.temperature = static_cast<float>(f);
-    }
-    if (ReadDouble(root, "top_p", &f)) {
-        params.top_p = static_cast<float>(f);
-    }
-    int64_t top_k = 0;
-    if (ReadInt(root, "top_k", &top_k)) {
-        params.top_k = static_cast<int32_t>(top_k);
-    }
-    int64_t seed = 0;
-    if (ReadInt(root, "seed", &seed)) {
-        params.seed = static_cast<uint64_t>(seed);
-    }
-
+    GenerateParams params = parsed.value().params;
     GenerateInput input;
     input.prompt = std::move(prompt);
     input.images = std::move(images);
 
+    auto cancel = std::make_shared<std::atomic_bool>(false);
+    auto pa = WatchClientClose(cntl, cancel);
+
     std::string text;
-    const Status status = Generate(input, params, &text);
+    PerfStats perf;
+    const Status status = Generate(input, params, cancel, &text, &perf);
+    if (cancel->load(std::memory_order_relaxed)) {
+        LOG(INFO) << "/v1/chat/completions: client disconnected, generation "
+                  << (status.ok() ? "completed" : "cancelled") << " and response dropped";
+        return;
+    }
     if (!status.ok()) {
-        SendError(cntl, 500, "generation failed: " + status.message, "server_error");
+        SendError(cntl,
+                  status.code == ErrorCode::kCancelled ? 499 : 500,
+                  "generation failed: " + status.message,
+                  "server_error",
+                  pa.get());
         return;
     }
 
-    const PerfStats perf = engine_->last_perf_stats();
     const std::string id = MakeCompletionId();
     JsonBuilder sb;
     sb.start_object();
@@ -571,13 +488,14 @@ void MllmHttpService::HandleChatCompletions(brpc::Controller* cntl) {
     sb.append_key_value("content", text);
     sb.end_object();
     sb.append_comma();
-    sb.append_key_value("finish_reason", "stop");
+    // OpenAI semantics: "length" iff the token cap was hit, else "stop".
+    sb.append_key_value("finish_reason", FinishReasonFor(perf, params.max_tokens));
     sb.end_object();
     sb.end_array();
     sb.append_comma();
     AppendUsage(&sb, perf);
     sb.end_object();
-    SendBuiltJson(cntl, 200, &sb);
+    SendBuiltJson(cntl, 200, &sb, pa.get());
 }
 
 } // namespace pl::mllm::server
