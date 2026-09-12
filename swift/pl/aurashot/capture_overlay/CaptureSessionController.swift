@@ -230,11 +230,7 @@ final class CaptureSessionController {
                 let blocks = try await engine.recognize(image)
                 let text = blocks.map(\.text).joined(separator: "\n")
                 ClipboardWriter.writeText(text)
-                OcrHud.dismiss()
-                // The text is already on the clipboard; the panel lets
-                // the user review/trim and re-copy instead of pasting
-                // blind.
-                OcrResultWindowController.shared.show(text: text)
+                OcrHud.toast("已复制识别结果（\(text.count) 字）")
             } catch {
                 NSLog("AuraShot: OCR failed: \(error.localizedDescription)")
                 OcrHud.show(error.localizedDescription, spinner: false)
