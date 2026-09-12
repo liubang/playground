@@ -1238,6 +1238,37 @@ TEST(MetalParityTest, AttentionFullParity) {
     expect_close(out_cpu.view, out_gpu.view, 1e-4f, 1e-3f);
 }
 
+// Same as above but at the real PaddleOCR-VL vision dims (heads=16,
+// head_dim=72) and a larger n spanning multiple 128-row tiles.
+TEST(MetalParityTest, AttentionFullParityPaddleOcrDims) {
+    REQUIRE_METAL();
+    const int n = 632, num_heads = 16, head_dim = 72;
+    auto q = HostTensor::alloc({n, num_heads, head_dim}, DType::kF32);
+    auto k = HostTensor::alloc({n, num_heads, head_dim}, DType::kF32);
+    auto v = HostTensor::alloc({n, num_heads, head_dim}, DType::kF32);
+    auto out_cpu = HostTensor::alloc({n, num_heads * head_dim}, DType::kF32);
+    auto out_gpu = HostTensor::alloc({n, num_heads * head_dim}, DType::kF32);
+    fill_random(q.view.data_as<float>(), n * num_heads * head_dim, 251);
+    fill_random(k.view.data_as<float>(), n * num_heads * head_dim, 252);
+    fill_random(v.view.data_as<float>(), n * num_heads * head_dim, 253);
+
+    AttentionConfig cfg{
+        .num_heads = num_heads,
+        .num_kv_heads = num_heads,
+        .head_dim = head_dim,
+        .scale = 1.0f / std::sqrt(static_cast<float>(head_dim)),
+    };
+
+    CpuBackend cpu;
+    ASSERT_TRUE(cpu.AttentionFull(out_cpu.view, q.view, k.view, v.view, cfg).ok());
+
+    MetalBackend gpu;
+    ASSERT_TRUE(gpu.AttentionFull(out_gpu.view, q.view, k.view, v.view, cfg).ok());
+    ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
+
+    expect_close(out_cpu.view, out_gpu.view, 1e-4f, 1e-3f);
+}
+
 // bf16 weight import: converted to f16 on the GPU; runs the decode GEMV and
 // a batched prefill GEMM, both must match the CPU bf16 reference.
 TEST(MetalParityTest, MatMulBf16WeightParity) {

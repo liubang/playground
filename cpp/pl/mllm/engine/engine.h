@@ -142,7 +142,7 @@ private:
     // Prompt tokens processed per batched-prefill forward pass. Larger
     // chunks amortize weight-dequant and dispatch cost but grow the scratch
     // arena (~per_layer_bytes * chunk * 2).
-    static constexpr int32_t kPrefillChunk = 64;
+    static constexpr int32_t kPrefillChunk = 256;
 
     // Run prefill: embed each token, forward through model in batched
     // chunks. Returns the final hidden state (a view into an engine-owned

@@ -1284,7 +1284,12 @@ kernel void mllm_gelu_inplace(
     float r;
     if (tanh_app != 0) {
         const float u = 0.7978845608028654f * (v + 0.044715f * v * v * v);
-        r = 0.5f * v * (1.0f + tanh(u));
+        // Metal's fast-math tanh overflows (exp(2u) > FLT_MAX) for |u| >~
+        // 44 and returns NaN — deep PaddleOCR-VL ViT layers hit activations
+        // >10 where u exceeds that. tanh is saturated to +-1 (error < 4e-7)
+        // for |u| > 15, so clamping is exact for practical purposes.
+        const float uc = clamp(u, -15.0f, 15.0f);
+        r = 0.5f * v * (1.0f + tanh(uc));
     } else {
         const float z = fabs(v) * 0.7071067811865476f;
         const float t = 1.0f / (1.0f + 0.3275911f * z);
@@ -1501,6 +1506,55 @@ kernel void mllm_gemm_f16(
         acc += xr[i] * (float)wr[i];
     }
     out[(size_t)r * out_dim + c] = acc;
+}
+
+// =========================================================================
+// Row-wise softmax over a pitched 2D buffer (for the MPS-tiled vision
+// attention): x[row, :] = softmax(x[row, :]) in place, columns [0, cols),
+// row stride = row_pitch floats (padded area unused). One threadgroup per
+// row; the max and sum reductions share one threadgroup scratch array.
+// =========================================================================
+kernel void mllm_row_softmax(
+    device float* x          [[buffer(0)]],
+    constant uint& cols      [[buffer(1)]],
+    constant uint& row_pitch [[buffer(2)]],
+    uint tid   [[thread_index_in_threadgroup]],
+    uint tgid  [[threadgroup_position_in_grid]],
+    uint tsize [[threads_per_threadgroup]],
+    threadgroup float* scratch [[threadgroup(0)]])
+{
+    device float* row = x + (size_t)tgid * row_pitch;
+
+    float m = -INFINITY;
+    for (uint i = tid; i < cols; i += tsize) {
+        m = max(m, row[i]);
+    }
+    scratch[tid] = m;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (uint s = tsize / 2; s > 0; s >>= 1) {
+        if (tid < s) scratch[tid] = max(scratch[tid], scratch[tid + s]);
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    const float row_max = scratch[0];
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    float s = 0.0f;
+    for (uint i = tid; i < cols; i += tsize) {
+        const float e = exp(row[i] - row_max);
+        row[i] = e;
+        s += e;
+    }
+    scratch[tid] = s;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (uint st = tsize / 2; st > 0; st >>= 1) {
+        if (tid < st) scratch[tid] += scratch[tid + st];
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    const float inv = 1.0f / scratch[0];
+
+    for (uint i = tid; i < cols; i += tsize) {
+        row[i] = row[i] * inv;
+    }
 }
 )msl";
 

@@ -141,6 +141,7 @@ struct MetalBackend::Impl {
     id<MTLComputePipelineState> attention_full_ps = nil;   // bidirectional vision attention
     id<MTLComputePipelineState> gemm_f32_ps = nil;         // MPS-unfriendly batched GEMM fallback
     id<MTLComputePipelineState> gemm_f16_ps = nil;
+    id<MTLComputePipelineState> row_softmax_ps = nil;      // pitched row softmax (MPS-tiled attention)
     id<MTLComputePipelineState> dequant_q8_0_f16_ps = nil; // q8_0 -> f16 for MPS prefill
     id<MTLComputePipelineState> dequant_q4_0_f16_ps = nil; // q4_0 -> f16 for MPS prefill
     id<MTLComputePipelineState> cvt_f32_to_f16_ps = nil;   // GEMM A conversion
@@ -186,6 +187,50 @@ struct MetalBackend::Impl {
     size_t mps_scratch_a_bytes_ = 0;
     id<MTLBuffer> mps_scratch_c_ = nil;
     size_t mps_scratch_c_bytes_ = 0;
+    // Score/probability scratch for the MPS-tiled vision attention
+    // (grow-on-demand: [tile_rows, pitched n] f32).
+    id<MTLBuffer> attn_scratch_ = nil;
+    size_t attn_scratch_bytes_ = 0;
+    // Cache of MPSMatrixMultiplication objects keyed by GEMM shape; creation
+    // is non-trivial per call and the tiled attention issues thousands of
+    // identically shaped GEMMs per image.
+    NSMutableDictionary<NSValue*, MPSMatrixMultiplication*>* mul_cache_ = nil;
+
+    // Fetch (or create) an MPS GEMM kernel for the given shape.
+    MPSMatrixMultiplication* mul_kernel(BOOL transpose_right,
+                                        int64_t rows,
+                                        int64_t cols,
+                                        int64_t interior,
+                                        double alpha) {
+        if (mul_cache_ == nil) {
+            mul_cache_ = [NSMutableDictionary new];
+        }
+        // Key: distinct bit mixes of every parameter.
+        uint64_t bits = (transpose_right ? 1ull : 0ull) ^
+                        (static_cast<uint64_t>(rows) * 0x9E3779B185EBCA87ull) ^
+                        (static_cast<uint64_t>(cols) * 0xC2B2AE3D27D4EB4Full) ^
+                        (static_cast<uint64_t>(interior) * 0x165667B19E3779F9ull) ^
+                        (static_cast<uint64_t>(lround(alpha * 4096.0)) *
+                         0x27D4EB2F165667C5ull);
+        NSValue* key = [NSValue valueWithBytes:&bits objCType:@encode(uint64_t)];
+        MPSMatrixMultiplication* mul = [mul_cache_ objectForKey:key];
+        if (mul != nil) {
+            return mul;
+        }
+        mul = [[MPSMatrixMultiplication alloc]
+            initWithDevice:device
+             transposeLeft:NO
+            transposeRight:transpose_right
+              resultRows:static_cast<NSUInteger>(rows)
+           resultColumns:static_cast<NSUInteger>(cols)
+         interiorColumns:static_cast<NSUInteger>(interior)
+                   alpha:alpha
+                    beta:0.0];
+        if (mul != nil) {
+            [mul_cache_ setObject:mul forKey:key];
+        }
+        return mul;
+    }
 
     // Returns `old` when it is big enough, otherwise allocates a fresh
     // buffer and updates `cap`.
@@ -294,6 +339,7 @@ private:
         attention_full_ps = make_ps("mllm_attention_full");
         gemm_f32_ps = make_ps("mllm_gemm_f32");
         gemm_f16_ps = make_ps("mllm_gemm_f16");
+        row_softmax_ps = make_ps("mllm_row_softmax");
         dequant_q8_0_f16_ps = make_ps("mllm_dequant_q8_0_f16");
         dequant_q4_0_f16_ps = make_ps("mllm_dequant_q4_0_f16");
         cvt_f32_to_f16_ps = make_ps("mllm_cvt_f32_to_f16");
@@ -310,7 +356,7 @@ private:
             !gemv_q8_0_fused_ps || !gemv_q4_0_fused_ps || !gemv_f16_fused_ps ||
             !gemv_f32_fused_ps ||
             !append_kv_ps || !layernorm_ps || !gelu_ps || !rope_apply_ps ||
-            !attention_full_ps || !gemm_f32_ps || !gemm_f16_ps ||
+            !attention_full_ps || !gemm_f32_ps || !gemm_f16_ps || !row_softmax_ps ||
             !dequant_q8_0_f16_ps || !dequant_q4_0_f16_ps ||
             !cvt_f32_to_f16_ps ||
             !cvt_f16_to_f32_ps) {
@@ -1487,6 +1533,125 @@ Status MetalBackend::AttentionFull(
         return Status::Error(ErrorCode::kBackendFailure, "AttentionFull: buffer alloc failed");
     }
 
+    // --- MPS-tiled path -----------------------------------------------------
+    // The previous one-threadgroup-per-(head, row) flash kernel runs vision
+    // attention at a fraction of peak: per 128-key block it pays 4
+    // threadgroup barriers and the V accumulation is a strided scalar
+    // dot per dimension. At n ~= 19k patches it profiles to >95% of vision
+    // tower time. Vision attention is bidirectional with no mask, so each
+    // query row's softmax is complete in a single row pass — no online
+    // softmax needed. Tiled GEMM formulation instead:
+    //   S[tile, n] = scale * Q[tile, :] @ K^T      (MPS GEMM, transposed B)
+    //   P          = rowsoftmax(S)                 (compute kernel)
+    //   O[tile, :] = P @ V                         (MPS GEMM)
+    // All three operands keep the interleaved [n, heads, head_dim] layout via
+    // strided MPS matrix descriptors (rowBytes = heads*head_dim*4), so no
+    // transpose/copy of the activations is required.
+    const size_t row_stride_bytes =
+        static_cast<size_t>(num_heads) * static_cast<size_t>(head_dim) * sizeof(float);
+    if ((row_stride_bytes % 16) == 0) {
+        constexpr int32_t kTileRows = 128;
+        const size_t pitch_bytes = align16(static_cast<size_t>(n) * sizeof(float));
+        const size_t pitch_elems = pitch_bytes / sizeof(float);
+        impl_->attn_scratch_ =
+            impl_->ensure_scratch(static_cast<size_t>(kTileRows) * pitch_bytes,
+                                  impl_->attn_scratch_,
+                                  impl_->attn_scratch_bytes_);
+        if (!impl_->attn_scratch_) {
+            return Status::Error(ErrorCode::kBackendFailure,
+                                 "AttentionFull: scratch alloc failed");
+        }
+
+        for (int32_t h = 0; h < num_heads; ++h) {
+            const size_t head_off = static_cast<size_t>(h) * head_dim * sizeof(float);
+            for (int32_t row0 = 0; row0 < n; row0 += kTileRows) {
+                const int32_t rt = std::min(kTileRows, n - row0);
+                const size_t a_off = static_cast<size_t>(row0) * row_stride_bytes + head_off;
+
+                // GEMM 1: S[rt, n] = Q_tile @ K^T * scale.
+                MPSMatrixDescriptor* a_desc =
+                    [MPSMatrixDescriptor matrixDescriptorWithRows:static_cast<NSUInteger>(rt)
+                                                          columns:static_cast<NSUInteger>(head_dim)
+                                                         rowBytes:row_stride_bytes
+                                                         dataType:MPSDataTypeFloat32];
+                MPSMatrixDescriptor* b_desc =
+                    [MPSMatrixDescriptor matrixDescriptorWithRows:static_cast<NSUInteger>(n)
+                                                          columns:static_cast<NSUInteger>(head_dim)
+                                                         rowBytes:row_stride_bytes
+                                                         dataType:MPSDataTypeFloat32];
+                MPSMatrixDescriptor* c_desc =
+                    [MPSMatrixDescriptor matrixDescriptorWithRows:static_cast<NSUInteger>(rt)
+                                                          columns:static_cast<NSUInteger>(n)
+                                                         rowBytes:pitch_bytes
+                                                         dataType:MPSDataTypeFloat32];
+                MPSMatrix* mA = [[MPSMatrix alloc] initWithBuffer:qbuf
+                                                           offset:a_off
+                                                       descriptor:a_desc];
+                MPSMatrix* mB = [[MPSMatrix alloc] initWithBuffer:kbuf
+                                                           offset:head_off
+                                                       descriptor:b_desc];
+                MPSMatrix* mC = [[MPSMatrix alloc] initWithBuffer:impl_->attn_scratch_
+                                                           offset:0
+                                                       descriptor:c_desc];
+                MPSMatrixMultiplication* mul = impl_->mul_kernel(TRUE, rt, n, head_dim, scale);
+                if (!mul || !mA || !mB || !mC) {
+                    return Status::Error(ErrorCode::kBackendFailure,
+                                         "AttentionFull: MPS init failed");
+                }
+                if (impl_->deferred_enc != nil) {
+                    [impl_->deferred_enc endEncoding];
+                    impl_->deferred_enc = nil;
+                }
+                if (impl_->deferred_cb == nil) {
+                    impl_->deferred_cb = [impl_->queue commandBuffer];
+                }
+                [mul encodeToCommandBuffer:impl_->deferred_cb
+                                leftMatrix:mA
+                               rightMatrix:mB
+                              resultMatrix:mC];
+
+                // Row softmax over the tile (P in place in the scratch).
+                const uint32_t cols = static_cast<uint32_t>(n);
+                const uint32_t pitch = static_cast<uint32_t>(pitch_elems);
+                id<MTLComputeCommandEncoder> enc = impl_->encoder();
+                [enc setComputePipelineState:impl_->row_softmax_ps];
+                [enc setBuffer:impl_->attn_scratch_ offset:0 atIndex:0];
+                [enc setBytes:&cols length:sizeof(cols) atIndex:1];
+                [enc setBytes:&pitch length:sizeof(pitch) atIndex:2];
+                [enc setThreadgroupMemoryLength:256 * sizeof(float) atIndex:0];
+                [enc dispatchThreadgroups:MTLSizeMake(static_cast<NSUInteger>(rt), 1, 1)
+                    threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
+
+                // GEMM 2: O_tile[rt, hd] = P @ V.
+                MPSMatrix* mS = [[MPSMatrix alloc] initWithBuffer:impl_->attn_scratch_
+                                                           offset:0
+                                                       descriptor:c_desc];
+                MPSMatrix* mV = [[MPSMatrix alloc] initWithBuffer:vbuf
+                                                           offset:head_off
+                                                       descriptor:b_desc];
+                MPSMatrix* mO = [[MPSMatrix alloc] initWithBuffer:obuf
+                                                           offset:a_off
+                                                       descriptor:a_desc];
+                MPSMatrixMultiplication* mul2 =
+                    impl_->mul_kernel(FALSE, rt, head_dim, n, 1.0);
+                if (!mul2 || !mS || !mV || !mO) {
+                    return Status::Error(ErrorCode::kBackendFailure,
+                                         "AttentionFull: MPS init failed");
+                }
+                if (impl_->deferred_enc != nil) {
+                    [impl_->deferred_enc endEncoding];
+                    impl_->deferred_enc = nil;
+                }
+                [mul2 encodeToCommandBuffer:impl_->deferred_cb
+                                 leftMatrix:mS
+                                rightMatrix:mV
+                               resultMatrix:mO];
+            }
+        }
+        return {};
+    }
+
+    // --- Legacy kernel fallback (row stride not 16-byte aligned) ------------
     const uint32_t nh = static_cast<uint32_t>(num_heads);
     const uint32_t hd = static_cast<uint32_t>(head_dim);
     const uint32_t sl = static_cast<uint32_t>(n);
@@ -1512,7 +1677,7 @@ Status MetalBackend::AttentionFull(
     // One threadgroup per (head, query row); 128 threads matches BLOCK.
     [enc dispatchThreadgroups:MTLSizeMake(static_cast<NSUInteger>(num_heads),
                                           static_cast<NSUInteger>(n), 1)
-         threadsPerThreadgroup:MTLSizeMake(128, 1, 1)];
+        threadsPerThreadgroup:MTLSizeMake(128, 1, 1)];
     return {};
 }
 

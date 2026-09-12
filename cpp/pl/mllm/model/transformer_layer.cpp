@@ -129,15 +129,20 @@ Status TransformerLayer::Forward(TensorView hidden,
         .scale = scale,
     };
     if (backend.HasDeviceKV()) {
-        // Device KV buffers are addressed physically: slot = absolute
-        // position - window origin (0 in strict mode, >0 after ring drops).
-        const int64_t phys_pos = position - cache.window_origin();
+        // Device KV buffers are addressed physically. The append slot is
+        // the current window length — NOT `position - origin`: `position`
+        // is the ROPE position, which for multimodal (mrope) models
+        // includes a delta (rope_pos = mrope_delta + seq_pos) and is
+        // therefore not a physical sequence index. Using it corrupted the
+        // cache (K/V written into the middle of the image-token region)
+        // whenever the delta was nonzero.
+        const int64_t phys_pos = cache.length();
         if (auto s =
                 backend.AppendKV(layer_index_, k_reshaped.value(), v_reshaped.value(), phys_pos);
             !s.ok()) {
             return s;
         }
-        // The query attends to positions [0, position] inclusive.
+        // The query attends to positions [0, phys_pos] inclusive.
         if (auto s = backend.AttentionKV(
                 attn_ctx_out, q_reshaped.value(), layer_index_, phys_pos + 1, attn_cfg);
             !s.ok()) {
