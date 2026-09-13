@@ -67,8 +67,18 @@ build:macos --cxxopt=-Wno-error=unused-but-set-parameter
 
 # for //go/pl/loom/cmd/loom-desktop (wails v2 requires the `production` build
 # tag; rules_go's per-target gotags attr does not propagate to external dep
-# compiles, so set it globally for desktop builds).
-# Usage: bazel build --config=desktop //go/pl/loom/cmd/loom-desktop:loom_desktop_app
+# compiles, so it has to be set globally — rules_go compiles only ever read
+# this one flag). Applied unconditionally: verified only wails keys off the
+# `production` tag in the whole Go dependency graph (go module cache scan,
+# 2026-09), so plain `bazel build //go/...` is unaffected; stamping only
+# touches targets that consume workspace status (loom binaries' x_defs,
+# loom-desktop's info_plist), which is always desired.
+build --@rules_go//go/config:tags=production
+build --stamp
+
+# Legacy alias for CI/scripts written against the old flag layout — the
+# two settings above are already global; this config is a no-op keepalive
+# so `--config=desktop` invocations don't break.
 build:desktop --@rules_go//go/config:tags=production
 build:desktop --stamp
 

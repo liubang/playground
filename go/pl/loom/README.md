@@ -27,6 +27,45 @@ cd go && go build ./pl/loom/cmd/loom
 bazel build //go/pl/loom/...
 ```
 
+### 安装与打包（Bazel）
+
+```bash
+# CLI：装入 GOBIN（$GOBIN > go env GOBIN > GOPATH/bin > ~/go/bin）
+bazel run //go/pl/loom/cmd/loom:install
+
+# WebUI（浏览器模式）：前端已以 embed.FS 内嵌进二进制，装完 CLI 即可
+loom serve                     # 默认 127.0.0.1:7680
+loom serve --listen <addr>     # 换地址/端口
+
+# 桌面应用（Wails，macOS）
+bazel run //go/pl/loom/cmd/loom-desktop:install          # 一键装入 /Applications/Loom.app 并稳定签名
+bazel run //go/pl/loom/cmd/loom-desktop:package_app      # 产物落 dist/Loom.app（检查/调试）
+bazel run //go/pl/loom/cmd/loom-desktop:package_release  # dist/ 下产出 macOS 双架构 DMG + Linux CLI deb
+bazel run //go/pl/loom/cmd/loom-desktop:make-signing-cert  # 创建本地稳定签名身份（幂等，一台机器一次；首次 install 也会自动补）
+
+open /Applications/Loom.app    # 安装后手动启动（不要用终端直接跑 bundle 内二进制）
+```
+
+要点：
+
+- **`--config=desktop` 已不再是必需**：`production` build tag 与 `--stamp` 已提为 `.bazelrc` 全局默认（2026-09）；`build:desktop` 保留为空转别名，老命令（CI/脚本）不受影响。
+- loom-desktop 整个包带 `tags = ["manual"]`，不进 `bazel build //go/...` 通配构建（CI 有独立 desktop job）。
+- **改了 WebUI 前端源码后**，须先重建前端再编 Go 侧（非 hermetic，需 node>=22 + pnpm；产物 `web/dist` 提交入库，由 embed.FS 消费）：
+
+```bash
+bazel run //go/pl/loom/internal/server/webui:build       # 等价于 pnpm build
+bazel build //go/pl/loom/...
+```
+
+- **单实例锁**：`loom serve` 与 Loom.app 共享数据目录 flock，同一 loom home 同时只能跑一个；install 会杀掉 `/Applications` 下正在运行的旧实例（不影响 `bazel run`/`dist/` 调试进程）。
+- 安装/签名相关环境变量：
+
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `LOOM_INSTALL_DIR` | `/Applications` | `:install` 的目标目录 |
+| `LOOM_SIGN_IDENTITY` | 自动发现/创建 | 显式指定 codesigning 身份 |
+| `LOOM_CERT_CN` | `Loom Dev (liubang)` | 自签身份 CN；材料存 `~/.config/loom/codesign/` |
+
 ### 配置
 
 ```bash

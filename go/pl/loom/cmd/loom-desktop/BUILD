@@ -183,6 +183,22 @@ sh_binary(
     tags = ["manual"],
 )
 
+# Installs the bundle into /Applications (LOOM_INSTALL_DIR to override):
+# unzips alongside the destination for an atomic mv, kills the running
+# installed instance, re-registers with LaunchServices, and signs with the
+# same stable identity resolution as package_app. Does NOT launch the app —
+# launch it yourself with `open /Applications/Loom.app`.
+# Usage: bazel run //go/pl/loom/cmd/loom-desktop:install
+sh_binary(
+    name = "install",
+    srcs = ["install.sh"],
+    data = [
+        ":loom_desktop_app",
+        ":make-signing-cert",
+    ],
+    tags = ["manual"],
+)
+
 # Generates the local self-signed codesigning identity used by package_app
 # (idempotent; prompts for the keychain password the first time).
 # Usage: bazel run --config=desktop //go/pl/loom/cmd/loom-desktop:make-signing-cert
