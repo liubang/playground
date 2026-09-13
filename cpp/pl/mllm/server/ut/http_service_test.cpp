@@ -775,8 +775,8 @@ TEST_F(HttpVisionServiceTest, ChatCompletionsWithImageSucceeds) {
                              kTinyPngBase64 + R"("}}
     ]}],"max_tokens":5})";
     const auto r = HttpDo(brpc::HTTP_METHOD_POST, "/v1/chat/completions", body);
-    ASSERT_TRUE(r.call_ok) << r.fail_text;
 #if defined(__APPLE__)
+    ASSERT_TRUE(r.call_ok) << r.fail_text;
     ASSERT_EQ(r.status, 200) << r.body;
 
     simdjson::dom::parser parser;
@@ -801,14 +801,12 @@ TEST_F(HttpVisionServiceTest, ChatCompletionsWithImageSucceeds) {
     // Apple-only), so the very same request must fail closed: 400 with the
     // OpenAI invalid_request_error type, never a crash and never a 200. The
     // success path above is covered by the macOS job.
-    EXPECT_EQ(r.status, 400) << r.body;
-    simdjson::dom::parser parser;
-    simdjson::dom::element root;
-    ASSERT_EQ(parser.parse(r.body).get(root), simdjson::SUCCESS) << r.body;
-    std::string_view type;
-    ASSERT_EQ(root["error"]["type"].get(type), simdjson::SUCCESS) << r.body;
-    EXPECT_EQ(type, "invalid_request_error") << r.body;
-    EXPECT_NE(r.body.find("cannot decode image"), std::string::npos) << r.body;
+    //
+    // call_ok is deliberately not asserted: brpc reports every non-2xx HTTP
+    // response as a failed call (E1010), so 400 => call_ok == false by design.
+    ASSERT_EQ(r.status, 400) << r.fail_text;
+    EXPECT_NE(r.fail_text.find("cannot decode image"), std::string::npos) << r.fail_text;
+    EXPECT_NE(r.fail_text.find("invalid_request_error"), std::string::npos) << r.fail_text;
 #endif
 }
 

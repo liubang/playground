@@ -108,6 +108,34 @@ void expect_close(const TensorView& cpu, const TensorView& gpu,
     }
 }
 
+// Whole-tensor parity check: relative L2 (Frobenius) error against the CPU
+// reference, |a - b|_2 / |a|_2.
+//
+// expect_close's per-element abs/rel test is the wrong tool for the f16
+// prefill GEMM. Its rounding error is dominated by the f16 quantization of the
+// inputs, so the per-element error is an absolute quantity that grows with the
+// reduction length in_dim while the output magnitude only grows with
+// sqrt(in_dim): at in_dim=1024 the error is ~0.012 regardless of whether the
+// output element is 10.0 or 0.01. A relative tolerance is therefore
+// meaningless for near-zero outputs and the check flips on whatever rounding
+// a given GPU happens to pick (it is green on an M4 Pro and red on the CI
+// runners, at a different index each run). The L2 error is scale-free and
+// sits ~2.6e-4 for that same case, so a 1e-2 budget keeps a ~39x margin.
+void expect_close_norm(const TensorView& cpu, const TensorView& gpu, float rel_tol) {
+    ASSERT_EQ(cpu.shape(), gpu.shape());
+    const int64_t n = cpu.shape().numel();
+    double diff_sq = 0.0;
+    double ref_sq = 0.0;
+    for (int64_t i = 0; i < n; ++i) {
+        const double a = cpu.data_as<float>()[static_cast<size_t>(i)];
+        const double b = gpu.data_as<float>()[static_cast<size_t>(i)];
+        diff_sq += (a - b) * (a - b);
+        ref_sq += a * a;
+    }
+    const double rel = std::sqrt(diff_sq) / std::sqrt(ref_sq);
+    EXPECT_LE(rel, rel_tol) << "relative L2 error over " << n << " elements";
+}
+
 struct Q8Block {
     uint16_t scale;
     int8_t qs[32];
@@ -689,14 +717,10 @@ TEST(MetalParityTest, MatMulQ8_0BatchPrefillRealDims) {
     ASSERT_TRUE(gpu.MatMul(out_gpu.view, x.view, "w0").ok());
     ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
 
-    // f16 prefill error budget: this path rounds x and the dequantized Q8_0
-    // weights to f16 (shader_source.h mllm_dequant_q8_0_f16) and materializes
-    // C as f16 before converting back, so identical inputs take a different
-    // rounding path than the f32 CPU reference. At in_dim=1024 that is
-    // |delta| <= sum(|x_i * w_i|) * 2^-11 ~= 0.012 for this fixture -- right at
-    // the limit of the 1e-2 rel_tol the small prefill cases use, which made
-    // the case machine-dependent (flaky on CI GPUs, green on an Apple M4 Pro).
-    expect_close(out_cpu.view, out_gpu.view, 1e-2f, 3e-2f);
+    // Batched prefill routes through f16 (x and the dequantized Q8_0 weights
+    // are rounded to f16, C materializes as f16); see expect_close_norm for
+    // why the per-element abs/rel form check is unstable at this in_dim.
+    expect_close_norm(out_cpu.view, out_gpu.view, 1e-2f);
 }
 
 // Batched Q4_0 GEMM parity: the prefill path lazily dequantizes the
