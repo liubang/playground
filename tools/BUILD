@@ -12,10 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
 # Build-time version stamping helpers (see .bazelrc
-# --workspace_status_command and tools/version_status.bzl).
+# --workspace_status_command and tools/version_status.bzl),
+# 以及 clangd 编辑器诊断的一键体检脚本（CDB/路径/resource-dir/配置）。
 
 exports_files([
+    "clangd_doctor.sh",
     "version_status.bzl",
     "workspace_status.sh",
 ])
+
+sh_binary(
+    name = "clangd_doctor",
+    srcs = ["clangd_doctor.sh"],
+)

@@ -76,7 +76,7 @@ bazel/           Build patches for third-party deps (brpc, braft, faiss)
 - **Headers-only libs:** Libraries like `cpp/meta` expose `hdrs` only via `cc_library(name = "meta", hdrs = glob(["*.h"]), ...)`.
 - **Test libs:** Tests use `cc_test` with `TEST_COPTS`, deps on `@googletest//:gtest_main`. Tests live alongside sources or under `ut/` subdirs.
 - **Format:** clang-format via `.clang-format` (4-space indent, 100-char column limit, C++20).
-- **clangd:** Configured in `.clangd` — strict unused includes, modernize+performance clang-tidy checks. Run `bazel run :refresh_compile_commands` to regenerate `compile_commands.json`.
+- **clangd:** Configured in `.clangd` — strict unused includes, modernize+performance clang-tidy checks. Run `bazel run :refresh_compile_commands` to regenerate `compile_commands.json`. If the editor shows nonsense diagnostics on correct code (`unknown type name 'size_t'` / `std::string_view (aka 'int')`), run `tools/clangd_doctor.sh [源文件]` (or `bazel run //tools:clangd_doctor`) to check the CDB, the SDK/bazel-out paths clangd actually resolves, and the clangd configs. Never hard-code versioned paths (`-resource-dir=…/lib/clang/<N>`, `-isysroot`, `Compiler:`) in clangd configs — a `brew upgrade llvm` silently invalidates them.
 
 ### Key C++ subprojects
 | Path | Description |
