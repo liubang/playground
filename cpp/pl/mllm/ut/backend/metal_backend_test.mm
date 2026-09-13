@@ -689,7 +689,14 @@ TEST(MetalParityTest, MatMulQ8_0BatchPrefillRealDims) {
     ASSERT_TRUE(gpu.MatMul(out_gpu.view, x.view, "w0").ok());
     ASSERT_TRUE(gpu.SyncToHost(out_gpu.view).ok());
 
-    expect_close(out_cpu.view, out_gpu.view, 1e-2f, 1e-2f);
+    // f16 prefill error budget: this path rounds x and the dequantized Q8_0
+    // weights to f16 (shader_source.h mllm_dequant_q8_0_f16) and materializes
+    // C as f16 before converting back, so identical inputs take a different
+    // rounding path than the f32 CPU reference. At in_dim=1024 that is
+    // |delta| <= sum(|x_i * w_i|) * 2^-11 ~= 0.012 for this fixture -- right at
+    // the limit of the 1e-2 rel_tol the small prefill cases use, which made
+    // the case machine-dependent (flaky on CI GPUs, green on an Apple M4 Pro).
+    expect_close(out_cpu.view, out_gpu.view, 1e-2f, 3e-2f);
 }
 
 // Batched Q4_0 GEMM parity: the prefill path lazily dequantizes the

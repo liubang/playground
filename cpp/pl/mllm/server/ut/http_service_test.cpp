@@ -776,6 +776,7 @@ TEST_F(HttpVisionServiceTest, ChatCompletionsWithImageSucceeds) {
     ]}],"max_tokens":5})";
     const auto r = HttpDo(brpc::HTTP_METHOD_POST, "/v1/chat/completions", body);
     ASSERT_TRUE(r.call_ok) << r.fail_text;
+#if defined(__APPLE__)
     ASSERT_EQ(r.status, 200) << r.body;
 
     simdjson::dom::parser parser;
@@ -795,6 +796,20 @@ TEST_F(HttpVisionServiceTest, ChatCompletionsWithImageSucceeds) {
     EXPECT_GE(prompt, 1);
     EXPECT_GE(completion, 1);
     EXPECT_EQ(total, prompt + completion);
+#else
+    // media::image_io resolves to the unsupported stub off macOS (ImageIO is
+    // Apple-only), so the very same request must fail closed: 400 with the
+    // OpenAI invalid_request_error type, never a crash and never a 200. The
+    // success path above is covered by the macOS job.
+    EXPECT_EQ(r.status, 400) << r.body;
+    simdjson::dom::parser parser;
+    simdjson::dom::element root;
+    ASSERT_EQ(parser.parse(r.body).get(root), simdjson::SUCCESS) << r.body;
+    std::string_view type;
+    ASSERT_EQ(root["error"]["type"].get(type), simdjson::SUCCESS) << r.body;
+    EXPECT_EQ(type, "invalid_request_error") << r.body;
+    EXPECT_NE(r.body.find("cannot decode image"), std::string::npos) << r.body;
+#endif
 }
 
 } // namespace
