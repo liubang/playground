@@ -157,3 +157,86 @@ ocr_small / ocr_large 在 CPU 上 hash 同样成立（两后端字节一致）�
 
 - 纯文本短 prompt 在第 ~24 token 后 CPU/Metal 分叉：Metal MatMul 走 f16 GEMM，logits 接近时 argmax 翻转属预期精度漂移，与 HEAD 行为一致。
 - 首轮运行（Metal shader 冷编译）prefill 慢 ~1.2-1.4x，性能数字取预热后运行。
+
+---
+
+## 基线 2026-09-13（fused flash attention kernel + host 预处理优化 + MPS GEMM 缓存）
+
+**环境**: Apple M4 Pro, macOS (darwin_arm64), `--config=release`，PaddleOCR-VL-1.6 GGUF，base commit `d56e5720d` + 本节所列改动（工作区未提交）。
+
+改动内容：
+
+1. **`mllm_attention_full_fused`（v5）**：单 dispatch 融合双向 vision attention
+   （flash 风格，f32，无 causal mask）。S^T = K·Q^T 用 simdgroup 8x8 f32
+   矩阵 fragment 计算（**完全不用 transpose 版 `simdgroup_load`**——Apple GPU
+   f32 transpose load 返回乱序 fragment，已实证）；O 累加器常驻寄存器，
+   online-softmax rescale 用对角矩阵 fragment 乘法（无 layout 假设），
+   行 max 未移动时跳过；threadgroup 内存从 v4 的 ~9.4KB 降至 ~4.9KB，
+   提高 occupancy。替代原 MPS-tiled host 循环（每 (head, tile) 一次 MPS GEMM）。
+2. **host 侧预处理（bit-exact）**：`build_rope2d_tables` 查表化
+   （inv_freq 与 cos/sin 按轴预计算，相同表达式相同输入，行填充改 4 段
+   memcpy）；`interpolate_pos_embd` x 方向索引/权重预计算（与 y 对称的
+   hoisting）。表达式与求值顺序不变，输出逐位相同。
+3. **MatMul MPS 对象缓存**：`MPSMatrixMultiplication` 按 (shape, 精度)
+   缓存（f16/f32 分 key），消除每次调用的 kernel 选择/调优固定开销。
+
+### 单元测试
+
+`//cpp/pl/mllm/...` — **15/15 PASSED**（含 `AttentionFullParity` /
+`AttentionFullParityPaddleOcrDims`：CPU vs Metal 1e-4/1e-3 容差内一致）。
+
+### 真实模型 golden 回归（e2e_golden_ocr）
+
+**6/6 PASSED**，且四个用例 stdout SHA-256 与上一基线（2026-09-12）冻结的
+golden **完全相同**——fused kernel、rope 查表化、interpolate 重排、MPS 缓存
+端到端逐字节等价（greedy decode）。
+
+单次冷进程性能（回归脚本输出，参考值）：
+
+| case       | backend | prompt tok | gen tok | prefill ms | decode ms | tok/s  |
+| ---------- | ------- | ---------- | ------- | ---------- | --------- | ------ |
+| text_short | metal   | 5          | 32      | 88.68      | 208.75    | 153.29 |
+| text_long  | metal   | 175        | 32      | 69.45      | 193.87    | 165.06 |
+| ocr_small  | metal   | 197        | 48      | 504.55     | 306.12    | 156.80 |
+| ocr_large  | metal   | 869        | 48      | 2260.89    | 391.80    | 122.51 |
+
+### 性能 — 端到端（CLI, warm 中位数）与上一基线对比
+
+| 用例                      | 2026-09-12 prefill | 本版 prefill      | 提升     | 本版 decode    |
+| ------------------------- | ------------------ | ----------------- | -------- | -------------- |
+| OCR doc_small (197 tok)   | 450–491 ms         | **319–330 ms**    | **1.4x** | ~92 ms /16 tok |
+| OCR doc_large (869 tok)   | 2386–2480 ms       | **1996–2083 ms**  | **1.2x** | ~124 ms/16 tok |
+| 纯文本长 prompt (175 tok) | 63–88 ms           | 65–68 ms（持平）  | —        | 171–174 tok/s  |
+
+### 性能 — op 微基准（bench_ops，vision attention）
+
+| op                       | MPS-tiled（上版） | fused v5（本版） | 提升     |
+| ------------------------ | ---------------- | ---------------- | -------- |
+| attn_full n=768 h=16 hd=72  | 6.4 ms           | **1.55–1.66 ms** | **3.9x** |
+| attn_full n=3456 h=16 hd=72 | 41.6 ms          | **32.5 ms**      | **1.3x** |
+
+fused kernel 达 1.69–1.75 TFLOP/s（f32）。剩余瓶颈：f32 simdgroup 矩阵吞吐
+为 f16 一半；保持 f32 是为与 CPU 参考逐位一致（OCR 用例 CPU/Metal 字节一致
+的 golden 特性依赖于此）。
+
+### 性能 — decode 微基准（bench_decode, n=64, EOS 于 8 token）
+
+| backend | tok/s              |
+| ------- | ------------------ |
+| Metal   | 159–164（warm）    |
+
+### vision tower 分层 profile（doc_large, n=3456, 总 1706 ms）
+
+| stage        | ms     | 备注                                  |
+| ------------ | ------ | ------------------------------------- |
+| blk_attn     | 760.3  | fused kernel + rope（27 层）          |
+| blk_mlp      | 543.6  | up/down GEMM + GELU                   |
+| blk_qkv      | 264.8  | LN + qkv GEMM + bias + rope           |
+| blk_oproj    | 88.5   |                                       |
+| patch_embed  | 21.2   | 上版 24.6（interpolate 直指针已生效） |
+| rope_tables  | 0.16   | 上版 0.9（查表化，5.6x）              |
+| 其余         | <10    | preprocess/patchify/merge/projector   |
+
+GEMM 类合计 ~897 ms（53%）：f32↔f16 转换 kernel 实测仅占 ~2%，不值得接口
+改动；MPS f16 GEMM 本身（in-repo ~4 TFLOP/s）是主要差距来源，MPS 对象缓存
+实测中性（保留，省 CPU 分配）。

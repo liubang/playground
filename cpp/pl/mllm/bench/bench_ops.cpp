@@ -367,6 +367,90 @@ void bench_attention(Backend& backend, int seq_len, int num_heads, int num_kv_he
     std::printf("attention %6d : %9.3f ms  %7.1f GFLOP/s\n", seq_len, ms, flops / (ms / 1e3) / 1e9);
 }
 
+// Batched GEMM (prefill MatMul path) at PaddleOCR-VL vision shapes.
+// weight [out_dim, in_dim] f16 (mmproj bf16 weights import as f16).
+
+void bench_gemm_f16(Backend& backend, int batch, int out_dim, int in_dim) {
+    static std::vector<BenchWeight> pool;
+    auto& w = pool.emplace_back(HostBuf::alloc({out_dim, in_dim}, DType::kF16),
+                                "g" + std::to_string(pool.size()));
+    auto x = HostBuf::alloc({batch, in_dim}, DType::kF32);
+    auto out = HostBuf::alloc({batch, out_dim}, DType::kF32);
+    x.fill_random(1);
+    // Deterministic f16 weights via f32 -> f16 conversion.
+    {
+        std::mt19937 rng(2);
+        std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+        auto* dst = static_cast<uint16_t*>(w.buf.view.data());
+        const int64_t n = static_cast<int64_t>(out_dim) * in_dim;
+        for (int64_t i = 0; i < n; ++i) {
+            dst[static_cast<size_t>(i)] = fp32_to_fp16(dist(rng));
+        }
+    }
+
+    std::array names = {std::string_view{w.name}};
+    std::array<TensorView, 1> views = {w.buf.view};
+    if (!backend.ImportWeights(views, names).ok()) {
+        std::fprintf(stderr, "gemm f16: import failed\n");
+        return;
+    }
+
+    const double ms = bench_ms(
+        [&] {
+            auto s = backend.MatMul(out.view, x.view, w.name);
+            if (!s.ok())
+                std::fprintf(stderr, "gemm f16 failed: %s\n", s.message.c_str());
+            sync_backend(backend);
+        },
+        20);
+
+    const double flops = 2.0 * static_cast<double>(batch) * out_dim * static_cast<double>(in_dim);
+    std::printf("gemm f16  %5d x %5d x %-6d : %9.3f ms  %8.2f TFLOP/s\n",
+                batch,
+                out_dim,
+                in_dim,
+                ms,
+                flops / (ms / 1e3) / 1e12);
+}
+
+// Vision bidirectional attention (AttentionFull path) at PaddleOCR-VL dims.
+
+void bench_attention_full(Backend& backend, int n, int num_heads, int head_dim) {
+    auto q = HostBuf::alloc({n, num_heads, head_dim}, DType::kF32);
+    auto k = HostBuf::alloc({n, num_heads, head_dim}, DType::kF32);
+    auto v = HostBuf::alloc({n, num_heads, head_dim}, DType::kF32);
+    auto out = HostBuf::alloc({n, num_heads * head_dim}, DType::kF32);
+    q.fill_random(1);
+    k.fill_random(2);
+    v.fill_random(3);
+
+    AttentionConfig cfg{
+        .num_heads = num_heads,
+        .num_kv_heads = num_heads,
+        .head_dim = head_dim,
+        .scale = 1.0f / std::sqrt(static_cast<float>(head_dim)),
+    };
+
+    const double ms = bench_ms(
+        [&] {
+            auto s = backend.AttentionFull(out.view, q.view, k.view, v.view, cfg);
+            if (!s.ok())
+                std::fprintf(stderr, "attention_full failed: %s\n", s.message.c_str());
+            sync_backend(backend);
+        },
+        20);
+
+    // FLOPs: QK^T (n*n*hd) + PV (n*n*hd) per head, x2 for MACs.
+    const double flops =
+        4.0 * static_cast<double>(num_heads) * static_cast<double>(n) * n * head_dim;
+    std::printf("attn_full n=%-6d h=%-3d hd=%-4d : %9.3f ms  %8.2f TFLOP/s\n",
+                n,
+                num_heads,
+                head_dim,
+                ms,
+                flops / (ms / 1e3) / 1e12);
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -438,6 +522,21 @@ int main(int argc, char** argv) {
     std::printf("# attention seq lengths (32 heads, 8 kv heads, head_dim 128)\n");
     for (int seq : {128, 512, 2048, 4096}) {
         bench_attention(*backend, seq, 32, 8, 128);
+    }
+    std::printf("# gemm f16 batched (PaddleOCR-VL vision shapes: qkv/o, mlp, patch_embd, proj)\n");
+    for (auto [b, o, i] : std::vector<std::tuple<int, int, int>>{{3456, 1152, 1152},
+                                                                 {3456, 4304, 1152},
+                                                                 {3456, 1152, 4304},
+                                                                 {3456, 1152, 588},
+                                                                 {864, 4608, 4608},
+                                                                 {864, 1024, 4608},
+                                                                 {768, 1152, 1152},
+                                                                 {768, 4304, 1152}}) {
+        bench_gemm_f16(*backend, b, o, i);
+    }
+    std::printf("# attention_full vision dims (16 heads, head_dim 72)\n");
+    for (int n : {768, 3456}) {
+        bench_attention_full(*backend, n, 16, 72);
     }
 
     return 0;

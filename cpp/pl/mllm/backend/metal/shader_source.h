@@ -1556,6 +1556,221 @@ kernel void mllm_row_softmax(
         row[i] = row[i] * inv;
     }
 }
+
+// =========================================================================
+// Fused bidirectional vision attention (flash-style, f32, no causal mask).
+//
+// One threadgroup handles a 16-row query tile for one head; the 2
+// simdgroups each own 8 rows. K/V stream by in 32-key blocks. The scores
+// are computed as S^T = K Q^T with simdgroup 8x8 f32 matrix fragments:
+// the K tiles load with the plain (non-transposed) simdgroup_load and
+// Q^T is staged once per threadgroup with scalar code. (The transpose
+// variant of simdgroup_load returns SCRAMBLED fragments for f32 on
+// Apple GPUs -- verified empirically -- so no transpose loads are used
+// anywhere in this kernel.)
+//
+// The S^T tile is staged key-major in threadgroup memory with a padded
+// stride (conflict-free strided softmax reads), softmaxed per query row
+// with simd reductions, and written back query-major so O += P V uses
+// plain row-major fragments. The O accumulator lives in REGISTERS as one
+// fragment per 8-wide dim tile; the online-softmax rescale by the per-row
+// corr factor is a layout-safe fragment multiply by a diagonal matrix,
+// skipped while no row max moved (corr == 1 for every row -- the common
+// steady state once the maxima have settled).
+//
+// Requires: head_dim % 8 == 0, head_dim <= 80,
+// n >= 8 (row-clamped fragment loads read 8 rows at a time).
+// Grid: (ceil(n / 16), num_heads); 64 threads per group.
+// q, k, v: [n, num_heads, head_dim]; out: [n, num_heads * head_dim].
+// The softmax scale is folded into the softmax stage (Q is loaded raw).
+// =========================================================================
+constant uint mllm_attn_full_kt [[function_constant(0)]]; // head_dim / 8
+
+kernel void mllm_attention_full_fused(
+    device float* out            [[buffer(0)]],
+    const device float* q        [[buffer(1)]],
+    const device float* keys     [[buffer(2)]],
+    const device float* values   [[buffer(3)]],
+    constant uint& num_heads     [[buffer(4)]],
+    constant uint& head_dim      [[buffer(5)]],
+    constant uint& seq_len       [[buffer(6)]],
+    constant float& scale        [[buffer(7)]],
+    uint2 tgid [[threadgroup_position_in_grid]],
+    uint lane [[thread_index_in_simdgroup]],
+    uint sg   [[simdgroup_index_in_threadgroup]],
+    threadgroup float* tg_s    [[threadgroup(0)]], // per-sg: Q^T staging / scores / epilogue
+    threadgroup float* tg_stat [[threadgroup(1)]]) // per-sg: [8 m][8 l][8 c][64 diag]
+{
+    constexpr uint BM = 16;
+    constexpr uint BN = 32;
+    constexpr uint KT = 10; // max supported head_dim / 8
+    constexpr uint SK = 9;  // padded key-major stride (bank-conflict free)
+
+    const uint n = seq_len;
+    const uint hd = head_dim;
+    const uint kt = mllm_attn_full_kt;
+    const uint h = tgid.y;
+    const uint row0 = tgid.x * BM;
+    const uint row_stride = num_heads * hd;
+    const uint max_n8 = n - 8; // host guarantees n >= 8
+
+    // Per-simdgroup views; every barrier below is simdgroup-local.
+    const uint sg_base = sg * 8;
+    const uint sg_s_stride = max(8 * hd, (uint)(BN * SK));
+    threadgroup float* my_s = tg_s + sg * sg_s_stride;
+    threadgroup float* my_m = tg_stat + sg * 88;
+    threadgroup float* my_l = my_m + 8;
+    threadgroup float* my_c = my_m + 16;
+    threadgroup float* my_d = my_m + 24; // 8x8 diagonal rescale matrix
+
+    if (lane < 8) {
+        my_m[lane] = -INFINITY;
+        my_l[lane] = 0.0f;
+    }
+    // Zero the diag staging; the O fragments are initialised from it.
+    for (uint e = lane; e < 64; e += 32) my_d[e] = 0.0f;
+
+    // Stage Q^T for this simdgroup's 8 query rows: my_s[d * 8 + i] holds
+    // Q[qr + i][d]. Edge tiles clamp the fragment base row; padded rows
+    // produce garbage that is never stored back.
+    const uint sg_row = row0 + sg_base;
+    const uint qr = min(sg_row, max_n8);
+    const device float* qb = q + (size_t)qr * row_stride + (size_t)h * hd;
+    for (uint e = lane; e < 8 * hd; e += 32) {
+        const uint i = e / hd;
+        const uint d = e - i * hd;
+        my_s[d * 8 + i] = qb[(size_t)i * row_stride + d];
+    }
+    simdgroup_barrier(mem_flags::mem_threadgroup);
+
+    // Q^T fragments (dim, query) and zeroed O fragments, all held in
+    // registers for the whole kernel.
+    simdgroup_float8x8 qt[KT];
+    simdgroup_float8x8 of[KT];
+    for (uint kk = 0; kk < kt; ++kk) {
+        simdgroup_load(qt[kk], my_s + kk * 64, 8);
+        simdgroup_load(of[kk], my_d, 8); // zeros
+    }
+    simdgroup_barrier(mem_flags::mem_threadgroup); // my_s: now the score tile
+
+    for (uint k0 = 0; k0 < n; k0 += BN) {
+        // S^T = K Q^T: each fragment holds (key, query). Stored key-major
+        // with the padded stride: my_s[(jj*8 + key) * SK + row].
+        simdgroup_float8x8 st[BN / 8];
+        for (uint jj = 0; jj < BN / 8; ++jj) {
+            const uint kr = min(k0 + jj * 8, max_n8);
+            const device float* kb = keys + (size_t)kr * row_stride + (size_t)h * hd;
+            for (uint kk = 0; kk < kt; ++kk) {
+                simdgroup_float8x8 kf;
+                simdgroup_load(kf, kb + kk * 8, row_stride);
+                if (kk == 0) {
+                    simdgroup_multiply(st[jj], kf, qt[kk]);
+                } else {
+                    simdgroup_multiply_accumulate(st[jj], kf, qt[kk], st[jj]);
+                }
+            }
+            simdgroup_store(st[jj], my_s + jj * 8 * SK, SK);
+        }
+        simdgroup_barrier(mem_flags::mem_threadgroup);
+
+        // Online softmax update: lane L owns score column L (key) of each
+        // row; row max / sumexp are simdgroup reductions.
+        //
+        // Validity mask: column c of sub-tile jj holds key kr + c where
+        // kr = min(k0 + jj*8, max_n8) may be clamped LEFT of the intended
+        // base near the sequence tail. A column is a fresh, not-yet-seen
+        // key iff c >= (k0 + jj*8) - kr; every key is covered exactly
+        // once (key < n is implied since kr + 7 <= n - 1 always). The P
+        // tile below pairs column jj*8+c with V row kr + c, so clamped
+        // columns stay consistent between P and V.
+        const uint lane_jj = lane >> 3;
+        const uint lane_kc = lane & 7;
+        const uint kbase = k0 + lane_jj * 8;
+        const uint kshift = (kbase > max_n8) ? (kbase - max_n8) : 0;
+        const bool key_valid = lane_kc >= kshift;
+        // The tile is key-major with stride SK (coprime with 32, so the
+        // strided per-row reads are bank-conflict free). Probs stay in
+        // registers first so the query-major write-back below can
+        // overwrite the key-major scores in place.
+        float probs[8];
+        for (uint r = 0; r < 8; ++r) {
+            const float srow = key_valid ? my_s[lane * SK + r] * scale : -INFINITY;
+            const float m_blk = simd_max(srow);
+            const float m_old = my_m[r];
+            const float m_new = max(m_old, m_blk);
+            const float corr = exp(m_old - m_new); // first block: exp(-inf) = 0
+            const float p = exp(srow - m_new);       // exp(-inf) = 0 on tail
+            const float sum = simd_sum(p);
+            probs[r] = p;
+            if (lane == 0) {
+                my_m[r] = m_new;
+                my_l[r] = my_l[r] * corr + sum;
+                my_c[r] = corr;
+            }
+        }
+        simdgroup_barrier(mem_flags::mem_threadgroup);
+
+        // Write back query-major for the P V matmul: my_s[row * BN + key].
+        // Safe in place: every score read above happened before the barrier.
+        for (uint r = 0; r < 8; ++r) {
+            my_s[r * BN + lane] = probs[r];
+        }
+        simdgroup_barrier(mem_flags::mem_threadgroup);
+
+        // Rescale the O fragments by the per-row corr via a diagonal
+        // matrix multiply -- layout-safe, and skipped while no row max
+        // moved (the common steady state).
+        bool rescale = false;
+        for (uint r = 0; r < 8; ++r) rescale = rescale || (my_c[r] != 1.0f);
+        if (rescale) {
+            for (uint e = lane; e < 64; e += 32) {
+                my_d[e] = (e % 9 == 0) ? my_c[e / 9] : 0.0f; // diag: e == 9 * row
+            }
+            simdgroup_barrier(mem_flags::mem_threadgroup);
+            simdgroup_float8x8 df;
+            simdgroup_load(df, my_d, 8);
+            for (uint dd = 0; dd < kt; ++dd) {
+                simdgroup_multiply(of[dd], df, of[dd]);
+            }
+        }
+
+        // O += P V. P fragments (query, key) come from the query-major
+        // tile; V fragments (key, dim) stream from device memory.
+        simdgroup_float8x8 pf[BN / 8];
+        for (uint jj = 0; jj < BN / 8; ++jj) {
+            simdgroup_load(pf[jj], my_s + jj * 8, BN);
+        }
+        for (uint dd = 0; dd < kt; ++dd) {
+            for (uint jj = 0; jj < BN / 8; ++jj) {
+                const uint vr = min(k0 + jj * 8, max_n8);
+                simdgroup_float8x8 vf;
+                simdgroup_load(vf,
+                               values + (size_t)vr * row_stride + (size_t)h * hd + dd * 8,
+                               row_stride);
+                simdgroup_multiply_accumulate(of[dd], pf[jj], vf, of[dd]);
+            }
+        }
+        simdgroup_barrier(mem_flags::mem_threadgroup); // my_s reuse next block
+    }
+
+    // Epilogue: stage O through my_s (dead after the last block), then
+    // write valid rows. Fragment row r holds query row qr + r (clamped
+    // near the tail); write only rows inside this tile's own window
+    // [sg_row, sg_row + 8) so every row is written exactly once.
+    for (uint dd = 0; dd < kt; ++dd) {
+        simdgroup_store(of[dd], my_s + dd * 8, hd);
+    }
+    simdgroup_barrier(mem_flags::mem_threadgroup);
+    for (uint r = 0; r < 8; ++r) {
+        const uint row = qr + r;
+        if (row >= sg_row && row < n) {
+            const float inv_l = 1.0f / my_l[r];
+            for (uint d = lane; d < hd; d += 32) {
+                out[(size_t)row * row_stride + (size_t)h * hd + d] = my_s[r * hd + d] * inv_l;
+            }
+        }
+    }
+}
 )msl";
 
 } // namespace pl::mllm::metal

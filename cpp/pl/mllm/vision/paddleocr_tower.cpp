@@ -18,8 +18,13 @@
 #include "cpp/pl/mllm/vision/paddleocr_tower.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -140,6 +145,12 @@ std::vector<float> patchify(const media::Image& img, int32_t patch) {
 
 // Bilinear interpolation of the learned position table from its square
 // reference grid onto the (gh, gw) patch grid (align_corners = false).
+//
+// Performance: the element loop is specialized per source dtype with raw
+// pointers (the PaddleOCR-VL table is f32); the generic path kept the
+// per-element dtype dispatch and was measurably slow (tens of ms for
+// 3.5k x 1152 elements). Bit-exactness: the f32 fast path computes the
+// identical scalar expression in the same order as the generic one.
 std::vector<float> interpolate_pos_embd(const TensorView& table,
                                         int32_t hidden,
                                         int32_t gh,
@@ -150,34 +161,66 @@ std::vector<float> interpolate_pos_embd(const TensorView& table,
                            static_cast<size_t>(hidden));
     const float sy = static_cast<float>(ref) / static_cast<float>(gh);
     const float sx = static_cast<float>(ref) / static_cast<float>(gw);
+
+    // Row/column indices and weights depend only on the grid — compute once.
+    std::vector<int32_t> y0s(static_cast<size_t>(gh));
+    std::vector<int32_t> y1s(static_cast<size_t>(gh));
+    std::vector<float> wys(static_cast<size_t>(gh));
     for (int32_t y = 0; y < gh; ++y) {
         const float fy = (static_cast<float>(y) + 0.5f) * sy - 0.5f;
         const int32_t y0 = std::clamp(static_cast<int32_t>(std::floor(fy)), 0, ref - 1);
-        const int32_t y1 = std::min(y0 + 1, ref - 1);
-        const float wy = std::clamp(fy - static_cast<float>(y0), 0.0f, 1.0f);
+        y0s[static_cast<size_t>(y)] = y0;
+        y1s[static_cast<size_t>(y)] = std::min(y0 + 1, ref - 1);
+        wys[static_cast<size_t>(y)] = std::clamp(fy - static_cast<float>(y0), 0.0f, 1.0f);
+    }
+    std::vector<int32_t> x0s(static_cast<size_t>(gw));
+    std::vector<int32_t> x1s(static_cast<size_t>(gw));
+    std::vector<float> wxs(static_cast<size_t>(gw));
+    for (int32_t x = 0; x < gw; ++x) {
+        const float fx = (static_cast<float>(x) + 0.5f) * sx - 0.5f;
+        const int32_t x0 = std::clamp(static_cast<int32_t>(std::floor(fx)), 0, ref - 1);
+        x0s[static_cast<size_t>(x)] = x0;
+        x1s[static_cast<size_t>(x)] = std::min(x0 + 1, ref - 1);
+        wxs[static_cast<size_t>(x)] = std::clamp(fx - static_cast<float>(x0), 0.0f, 1.0f);
+    }
+
+    const int64_t e_row = static_cast<int64_t>(ref) * static_cast<int64_t>(hidden);
+    for (int32_t y = 0; y < gh; ++y) {
+        const int64_t y0_base = static_cast<int64_t>(y0s[static_cast<size_t>(y)]) * e_row;
+        const int64_t y1_base = static_cast<int64_t>(y1s[static_cast<size_t>(y)]) * e_row;
+        const float wy = wys[static_cast<size_t>(y)];
         for (int32_t x = 0; x < gw; ++x) {
-            const float fx = (static_cast<float>(x) + 0.5f) * sx - 0.5f;
-            const int32_t x0 = std::clamp(static_cast<int32_t>(std::floor(fx)), 0, ref - 1);
-            const int32_t x1 = std::min(x0 + 1, ref - 1);
-            const float wx = std::clamp(fx - static_cast<float>(x0), 0.0f, 1.0f);
-            const size_t out_row =
-                (static_cast<size_t>(y) * static_cast<size_t>(gw) + static_cast<size_t>(x)) *
-                static_cast<size_t>(hidden);
-            float* dst = out.data() + out_row;
-            const int64_t e_row = static_cast<int64_t>(ref) * static_cast<int64_t>(hidden);
-            const int64_t x0h = static_cast<int64_t>(x0) * hidden;
-            const int64_t x1h = static_cast<int64_t>(x1) * hidden;
-            const int64_t r00 = static_cast<int64_t>(y0) * e_row + x0h;
-            const int64_t r01 = static_cast<int64_t>(y0) * e_row + x1h;
-            const int64_t r10 = static_cast<int64_t>(y1) * e_row + x0h;
-            const int64_t r11 = static_cast<int64_t>(y1) * e_row + x1h;
-            for (int32_t d = 0; d < hidden; ++d) {
-                const float p00 = elem_f32(table, r00 + d);
-                const float p01 = elem_f32(table, r01 + d);
-                const float p10 = elem_f32(table, r10 + d);
-                const float p11 = elem_f32(table, r11 + d);
-                dst[d] = (p00 * (1.0f - wx) + p01 * wx) * (1.0f - wy) +
-                         (p10 * (1.0f - wx) + p11 * wx) * wy;
+            const float wx = wxs[static_cast<size_t>(x)];
+            float* dst = out.data() + (static_cast<size_t>(y) * static_cast<size_t>(gw) +
+                                       static_cast<size_t>(x)) *
+                                          static_cast<size_t>(hidden);
+            const int64_t r00 =
+                y0_base + static_cast<int64_t>(x0s[static_cast<size_t>(x)]) * hidden;
+            const int64_t r01 =
+                y0_base + static_cast<int64_t>(x1s[static_cast<size_t>(x)]) * hidden;
+            const int64_t r10 =
+                y1_base + static_cast<int64_t>(x0s[static_cast<size_t>(x)]) * hidden;
+            const int64_t r11 =
+                y1_base + static_cast<int64_t>(x1s[static_cast<size_t>(x)]) * hidden;
+            if (table.dtype() == DType::kF32) {
+                const float* src = table.data_as<const float>();
+                const float* p00 = src + r00;
+                const float* p01 = src + r01;
+                const float* p10 = src + r10;
+                const float* p11 = src + r11;
+                for (int32_t d = 0; d < hidden; ++d) {
+                    dst[d] = (p00[d] * (1.0f - wx) + p01[d] * wx) * (1.0f - wy) +
+                             (p10[d] * (1.0f - wx) + p11[d] * wx) * wy;
+                }
+            } else {
+                for (int32_t d = 0; d < hidden; ++d) {
+                    const float p00 = elem_f32(table, r00 + d);
+                    const float p01 = elem_f32(table, r01 + d);
+                    const float p10 = elem_f32(table, r10 + d);
+                    const float p11 = elem_f32(table, r11 + d);
+                    dst[d] = (p00 * (1.0f - wx) + p01 * wx) * (1.0f - wy) +
+                             (p10 * (1.0f - wx) + p11 * wx) * wy;
+                }
             }
         }
     }
@@ -200,25 +243,59 @@ void build_rope2d_tables(const VisionConfig& cfg,
     const size_t row = static_cast<size_t>(hd);
     cos_out.resize(n * row);
     sin_out.resize(n * row);
+
+    // Frequency of pair i within its half: inv_freq = theta^(-2i/hd_half).
+    // Depends only on j = i % sect — compute once. Same pow expression as
+    // the per-element version, so the table values are bit-identical.
+    std::vector<float> inv_freq(static_cast<size_t>(sect));
+    for (int32_t j = 0; j < sect; ++j) {
+        inv_freq[static_cast<size_t>(j)] =
+            std::pow(cfg.rope_freq_base, -2.0f * static_cast<float>(j) / static_cast<float>(pairs));
+    }
+
+    // cos/sin depend on (coord, j) only: the angle of row pair j is gy*inv[j]
+    // and of column pair j is gx*inv[j]. Tabulate per axis (gh+gw)*sect
+    // evaluations instead of n*pairs; identical expression and inputs give
+    // bit-identical values.
+    const size_t ss = static_cast<size_t>(sect);
+    std::vector<float> cy(static_cast<size_t>(gh) * ss), sy_(static_cast<size_t>(gh) * ss);
+    std::vector<float> cx(static_cast<size_t>(gw) * ss), sx_(static_cast<size_t>(gw) * ss);
     for (int32_t gy = 0; gy < gh; ++gy) {
+        for (int32_t j = 0; j < sect; ++j) {
+            const float angle = static_cast<float>(gy) * inv_freq[static_cast<size_t>(j)];
+            cy[static_cast<size_t>(gy) * ss + static_cast<size_t>(j)] = std::cos(angle);
+            sy_[static_cast<size_t>(gy) * ss + static_cast<size_t>(j)] = std::sin(angle);
+        }
+    }
+    for (int32_t gx = 0; gx < gw; ++gx) {
+        for (int32_t j = 0; j < sect; ++j) {
+            const float angle = static_cast<float>(gx) * inv_freq[static_cast<size_t>(j)];
+            cx[static_cast<size_t>(gx) * ss + static_cast<size_t>(j)] = std::cos(angle);
+            sx_[static_cast<size_t>(gx) * ss + static_cast<size_t>(j)] = std::sin(angle);
+        }
+    }
+
+    // Each output row is [Y(sect) | X(sect) | Y(sect) | X(sect)] (the
+    // rotate-half doubling); fill with four section copies per row.
+    const size_t sec_bytes = ss * sizeof(float);
+    for (int32_t gy = 0; gy < gh; ++gy) {
+        const float* cy_row = cy.data() + static_cast<size_t>(gy) * ss;
+        const float* sy_row = sy_.data() + static_cast<size_t>(gy) * ss;
         for (int32_t gx = 0; gx < gw; ++gx) {
+            const float* cx_row = cx.data() + static_cast<size_t>(gx) * ss;
+            const float* sx_row = sx_.data() + static_cast<size_t>(gx) * ss;
             const size_t base =
                 (static_cast<size_t>(gy) * static_cast<size_t>(gw) + static_cast<size_t>(gx)) * row;
-            for (int32_t i = 0; i < pairs; ++i) {
-                // Frequency of pair i within its half: inv_freq = theta^(-2i/hd_half)
-                const int32_t j = i % sect;
-                const float inv = std::pow(
-                    cfg.rope_freq_base, -2.0f * static_cast<float>(j) / static_cast<float>(pairs));
-                const float angle =
-                    (i < sect ? static_cast<float>(gy) : static_cast<float>(gx)) * inv;
-                const size_t idx = base + static_cast<size_t>(i);
-                const float c = std::cos(angle);
-                const float s = std::sin(angle);
-                cos_out[idx] = c;
-                cos_out[idx + static_cast<size_t>(pairs)] = c;
-                sin_out[idx] = s;
-                sin_out[idx + static_cast<size_t>(pairs)] = s;
-            }
+            float* crow = cos_out.data() + base;
+            float* srow = sin_out.data() + base;
+            std::memcpy(crow, cy_row, sec_bytes);
+            std::memcpy(crow + ss, cx_row, sec_bytes);
+            std::memcpy(crow + 2 * ss, cy_row, sec_bytes);
+            std::memcpy(crow + 3 * ss, cx_row, sec_bytes);
+            std::memcpy(srow, sy_row, sec_bytes);
+            std::memcpy(srow + ss, sx_row, sec_bytes);
+            std::memcpy(srow + 2 * ss, sy_row, sec_bytes);
+            std::memcpy(srow + 3 * ss, sx_row, sec_bytes);
         }
     }
 }
@@ -247,6 +324,56 @@ std::vector<float> merge_patches(
     }
     return out;
 }
+
+// ---------------------------------------------------------------------------
+// Optional per-stage profiler (MLLM_VISION_PROFILE=1). When enabled, every
+// mark() syncs the backend (flush + wait) and attributes the elapsed wall
+// time to the named stage; when disabled, mark() is a single branch. The
+// summary is printed to stderr at scope exit.
+// ---------------------------------------------------------------------------
+struct VisionProfiler {
+    bool on = false;
+    std::chrono::steady_clock::time_point last;
+    std::vector<std::string> order;
+    std::unordered_map<std::string, double> acc;
+    std::chrono::steady_clock::time_point t0;
+
+    VisionProfiler() {
+        const char* e = std::getenv("MLLM_VISION_PROFILE");
+        on = (e != nullptr && e[0] == '1');
+        t0 = std::chrono::steady_clock::now();
+        last = t0;
+    }
+
+    void mark(Backend& backend, const char* stage) {
+        if (!on)
+            return;
+        // Attribute true GPU time: flush the deferred command stream and wait.
+        (void)backend.Synchronize();
+        const auto now = std::chrono::steady_clock::now();
+        const double ms = std::chrono::duration<double, std::milli>(now - last).count();
+        last = now;
+        auto it = acc.find(stage);
+        if (it == acc.end()) {
+            order.emplace_back(stage);
+            acc.emplace(stage, ms);
+        } else {
+            it->second += ms;
+        }
+    }
+
+    ~VisionProfiler() {
+        if (!on)
+            return;
+        const double total =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0)
+                .count();
+        std::fprintf(stderr, "[vision-profile] total %.2f ms\n", total);
+        for (const auto& name : order) {
+            std::fprintf(stderr, "[vision-profile] %-14s %9.2f ms\n", name.c_str(), acc[name]);
+        }
+    }
+};
 
 } // namespace
 
@@ -447,6 +574,7 @@ Result<VisionOutput> PaddleOcrTower::Encode(const media::Image& image, Backend& 
     }
     const PatchGeometry geo = geo_result.value();
     const int32_t n = geo.n_patches;
+    VisionProfiler prof;
 
     // 1. Preprocess: smart resize (bicubic) + CLIP normalization.
     auto resized = media::ResizeBicubic(image, geo.width, geo.height);
@@ -454,9 +582,11 @@ Result<VisionOutput> PaddleOcrTower::Encode(const media::Image& image, Backend& 
         return resized.status();
     }
     media::NormalizeInPlace(resized.value(), cfg.image_mean, cfg.image_std);
+    prof.mark(backend, "preprocess");
 
     // 2. Patchify and embed: x = patches @ Wp^T + bp  (+ interpolated pos emb)
     std::vector<float> patches = patchify(resized.value(), cfg.patch_size);
+    prof.mark(backend, "patchify");
     std::vector<float> x(static_cast<size_t>(n) * static_cast<size_t>(hidden));
     {
         TensorView pv = view2d(patches, n, 3 * cfg.patch_size * cfg.patch_size);
@@ -473,12 +603,14 @@ Result<VisionOutput> PaddleOcrTower::Encode(const media::Image& image, Backend& 
             return s;
         }
     }
+    prof.mark(backend, "patch_embed");
 
     // 3. 2D rope tables for this grid.
     std::vector<float> rope_cos, rope_sin;
     build_rope2d_tables(cfg, geo.grid_h, geo.grid_w, rope_cos, rope_sin);
     TensorView cos_v = view2d(rope_cos, n, hd);
     TensorView sin_v = view2d(rope_sin, n, hd);
+    prof.mark(backend, "rope_tables");
 
     // 4. ViT blocks.
     const auto rows = [](int64_t count, int64_t width) {
@@ -529,6 +661,7 @@ Result<VisionOutput> PaddleOcrTower::Encode(const media::Image& image, Backend& 
             if (auto s = backend.RopeApply(q3, k3, cos_v, sin_v); !s.ok()) {
                 return s;
             }
+            prof.mark(backend, "blk_qkv");
             TensorView av = view2d(attn, n, heads * hd);
             AttentionConfig acfg{
                 .num_heads = heads,
@@ -539,6 +672,7 @@ Result<VisionOutput> PaddleOcrTower::Encode(const media::Image& image, Backend& 
             if (auto s = backend.AttentionFull(av, q3, k3, v3, acfg); !s.ok()) {
                 return s;
             }
+            prof.mark(backend, "blk_attn");
             TensorView pv = view2d(proj, n, hidden);
             if (auto s = backend.MatMul(pv, av, lw.o_w); !s.ok()) {
                 return s;
@@ -549,6 +683,7 @@ Result<VisionOutput> PaddleOcrTower::Encode(const media::Image& image, Backend& 
             if (auto s = backend.AddInPlace(xv, pv); !s.ok()) {
                 return s;
             }
+            prof.mark(backend, "blk_oproj");
         }
         // ln2 -> up (+bias) -> gelu -> down (+bias) -> residual
         {
@@ -577,6 +712,7 @@ Result<VisionOutput> PaddleOcrTower::Encode(const media::Image& image, Backend& 
             if (auto s = backend.AddInPlace(xv, ov); !s.ok()) {
                 return s;
             }
+            prof.mark(backend, "blk_mlp");
         }
     }
 
@@ -605,7 +741,9 @@ Result<VisionOutput> PaddleOcrTower::Encode(const media::Image& image, Backend& 
         if (auto s = backend.SyncToHost(hv); !s.ok()) {
             return s;
         }
+        prof.mark(backend, "post_ln_sync");
         merged = merge_patches(hbuf, geo.grid_h, geo.grid_w, hidden, m);
+        prof.mark(backend, "merge_patches");
     }
     const int32_t n_merged = geo.n_merged;
     const int32_t merged_dim = m * m * hidden;
@@ -641,6 +779,7 @@ Result<VisionOutput> PaddleOcrTower::Encode(const media::Image& image, Backend& 
     if (auto s = backend.SyncToHost(view2d(out, n_merged, cfg.output_dim)); !s.ok()) {
         return s;
     }
+    prof.mark(backend, "projector");
 
     // Move the result into an owned buffer for the caller.
     auto buf = OwnedBuffer::AllocateCpu(out.size() * sizeof(float), 64);

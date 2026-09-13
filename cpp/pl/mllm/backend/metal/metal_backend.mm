@@ -196,17 +196,50 @@ struct MetalBackend::Impl {
     // identically shaped GEMMs per image.
     NSMutableDictionary<NSValue*, MPSMatrixMultiplication*>* mul_cache_ = nil;
 
-    // Fetch (or create) an MPS GEMM kernel for the given shape.
+    // Fused vision-attention pipeline variants, one per head_dim/8
+    // (compiled with a function constant so the fragment loops unroll).
+    // Created lazily; a nil entry after a failed compile just means the
+    // caller uses the tiled/legacy fallback instead.
+    std::array<id<MTLComputePipelineState>, 11> attn_full_fused_ps_{};
+
+    id<MTLComputePipelineState> attn_full_fused_ps(int32_t kt) {
+        if (kt < 1 || kt > 10) {
+            return nil;
+        }
+        if (attn_full_fused_ps_[static_cast<size_t>(kt)] != nil) {
+            return attn_full_fused_ps_[static_cast<size_t>(kt)];
+        }
+        MTLFunctionConstantValues* fc = [[MTLFunctionConstantValues alloc] init];
+        uint32_t v = static_cast<uint32_t>(kt);
+        [fc setConstantValue:&v type:MTLDataTypeUInt atIndex:0];
+        NSError* err = nil;
+        id<MTLFunction> fn = [library newFunctionWithName:@"mllm_attention_full_fused"
+                                           constantValues:fc
+                                                    error:&err];
+        id<MTLComputePipelineState> ps = nil;
+        if (fn != nil) {
+            ps = [device newComputePipelineStateWithFunction:fn error:&err];
+        }
+        attn_full_fused_ps_[static_cast<size_t>(kt)] = ps;
+        return ps;
+    }
+
+    // Fetch (or create) an MPS GEMM kernel for the given shape. `f16`
+    // distinguishes the operand precision: MPS picks its internal kernel
+    // variant from the matrix data type at encode time, so keep separate
+    // cache entries per precision to never mix f16/f32 on one object.
     MPSMatrixMultiplication* mul_kernel(BOOL transpose_right,
                                         int64_t rows,
                                         int64_t cols,
                                         int64_t interior,
-                                        double alpha) {
+                                        double alpha,
+                                        bool f16 = false) {
         if (mul_cache_ == nil) {
             mul_cache_ = [NSMutableDictionary new];
         }
         // Key: distinct bit mixes of every parameter.
         uint64_t bits = (transpose_right ? 1ull : 0ull) ^
+                        (f16 ? 2ull : 0ull) ^
                         (static_cast<uint64_t>(rows) * 0x9E3779B185EBCA87ull) ^
                         (static_cast<uint64_t>(cols) * 0xC2B2AE3D27D4EB4Full) ^
                         (static_cast<uint64_t>(interior) * 0x165667B19E3779F9ull) ^
@@ -818,15 +851,11 @@ if (auto s = ensure_ready(*impl_); !s.ok()) return s;
     MPSMatrix* mB = [[MPSMatrix alloc] initWithBuffer:b_mps descriptor:b_desc];
     MPSMatrix* mC = [[MPSMatrix alloc] initWithBuffer:c_mps descriptor:c_desc];
 
-    MPSMatrixMultiplication* mul = [[MPSMatrixMultiplication alloc]
-        initWithDevice:impl_->device
-         transposeLeft:NO
-        transposeRight:YES
-          resultRows:static_cast<NSUInteger>(batch)
-       resultColumns:static_cast<NSUInteger>(out_dim)
-     interiorColumns:static_cast<NSUInteger>(in_dim)
-                alpha:1.0
-                 beta:0.0];
+    // Cached per (shape, precision): MPSMatrixMultiplication creation picks
+    // and tunes the internal kernel, a non-trivial fixed cost that the
+    // per-layer GEMMs of a model would otherwise pay on every single call.
+    MPSMatrixMultiplication* mul =
+        impl_->mul_kernel(YES, batch, out_dim, in_dim, 1.0, f16_mode);
     if (!mul) {
         return Status::Error(ErrorCode::kBackendFailure, "MatMul: MPS init failed");
     }
@@ -1531,6 +1560,46 @@ Status MetalBackend::AttentionFull(
     id<MTLBuffer> obuf = impl_->get_or_alloc_output(out.data(), out_bytes);
     if (!qbuf || !kbuf || !vbuf || !obuf) {
         return Status::Error(ErrorCode::kBackendFailure, "AttentionFull: buffer alloc failed");
+    }
+
+    // --- Fused flash-style kernel ------------------------------------------
+    // Single dispatch for the whole attention: one threadgroup per (16-row
+    // query tile, head) computes S = Q K^T, the online softmax and O += P V
+    // with simdgroup matrix fragments. Same f32 math as the tiled path up
+    // to accumulation order; replaces the per-(head, tile) MPS GEMM churn.
+    if ((head_dim % 8) == 0 && head_dim <= 80 && n >= 8) {
+        id<MTLComputePipelineState> ps = impl_->attn_full_fused_ps(head_dim / 8);
+        if (ps != nil) {
+            // Per simdgroup the score buffer doubles as the Q^T staging
+            // area ([head_dim][8]) and then holds the 32x8 score tile
+            // (key-major stride 9 / query-major 32x8); the stride is the
+            // larger of the two. The stat buffer packs [8 m][8 l][8 corr]
+            // [64 diag] per simdgroup.
+            const NSUInteger hd_ns = static_cast<NSUInteger>(head_dim);
+            const NSUInteger sg_stride = 8 * hd_ns > 288 ? 8 * hd_ns : 288;
+            const NSUInteger tg_s_bytes = 2 * sg_stride * sizeof(float);
+            const NSUInteger tg_stat_bytes = 2 * 88 * sizeof(float);
+            const uint32_t nh = static_cast<uint32_t>(num_heads);
+            const uint32_t hd = static_cast<uint32_t>(head_dim);
+            const uint32_t sl = static_cast<uint32_t>(n);
+            id<MTLComputeCommandEncoder> enc = impl_->encoder();
+            [enc setComputePipelineState:ps];
+            [enc setBuffer:obuf offset:0 atIndex:0];
+            [enc setBuffer:qbuf offset:0 atIndex:1];
+            [enc setBuffer:kbuf offset:0 atIndex:2];
+            [enc setBuffer:vbuf offset:0 atIndex:3];
+            [enc setBytes:&nh length:sizeof(nh) atIndex:4];
+            [enc setBytes:&hd length:sizeof(hd) atIndex:5];
+            [enc setBytes:&sl length:sizeof(sl) atIndex:6];
+            [enc setBytes:&scale length:sizeof(scale) atIndex:7];
+            [enc setThreadgroupMemoryLength:tg_s_bytes atIndex:0];
+            [enc setThreadgroupMemoryLength:tg_stat_bytes atIndex:1];
+            [enc dispatchThreadgroups:MTLSizeMake(
+                                          static_cast<NSUInteger>((n + 15) / 16),
+                                          static_cast<NSUInteger>(num_heads), 1)
+                threadsPerThreadgroup:MTLSizeMake(64, 1, 1)];
+            return {};
+        }
     }
 
     // --- MPS-tiled path -----------------------------------------------------
