@@ -333,5 +333,130 @@ TEST(ParserTest, Explain) {
               dump_statement("EXPLAIN (TYPE LOGICAL, FORMAT JSON) SELECT 1"));
 }
 
+TEST(ParserTest, BooleanTest) {
+    EXPECT_EQ("(istrue x)", dump_expression("x IS TRUE"));
+    EXPECT_EQ("(notistrue x)", dump_expression("x IS NOT TRUE"));
+    EXPECT_EQ("(isfalse x)", dump_expression("x IS FALSE"));
+    EXPECT_EQ("(notisunknown x)", dump_expression("x IS NOT UNKNOWN"));
+}
+
+TEST(ParserTest, Trim) {
+    EXPECT_EQ("(trim both ' abc ')", dump_expression("TRIM(' abc ')"));
+    EXPECT_EQ("(trim both ' abc ')", dump_expression("TRIM(FROM ' abc ')"));
+    EXPECT_EQ("(trim leading ' abc ')", dump_expression("TRIM(LEADING FROM ' abc ')"));
+    EXPECT_EQ("(trim trailing ' ' ' abc ')", dump_expression("TRIM(TRAILING ' ' FROM ' abc ')"));
+    EXPECT_EQ("(trim both 'x' col)", dump_expression("TRIM(BOTH 'x' FROM col)"));
+}
+
+TEST(ParserTest, SubstringSpecialForm) {
+    EXPECT_EQ("(substr 'abc' 2)", dump_expression("SUBSTRING('abc' FROM 2)"));
+    EXPECT_EQ("(substr 'abc' 2 1)", dump_expression("SUBSTRING('abc' FROM 2 FOR 1)"));
+    EXPECT_EQ("(substr col a (+ b 1))", dump_expression("SUBSTRING(col FROM a FOR b + 1)"));
+    EXPECT_EQ("(call SUBSTRING 'abc' 2 1)", dump_expression("SUBSTRING('abc', 2, 1)"));
+}
+
+TEST(ParserTest, PositionSpecialForm) {
+    EXPECT_EQ("(position 'a' 'abc')", dump_expression("POSITION('a' IN 'abc')"));
+    EXPECT_EQ("(position x y)", dump_expression("position(x in y)"));
+}
+
+TEST(ParserTest, OverlaySpecialForm) {
+    EXPECT_EQ("(overlay 'abc' 'X' 2)", dump_expression("OVERLAY('abc' PLACING 'X' FROM 2)"));
+    EXPECT_EQ("(overlay 'abc' 'XY' 2 1)",
+              dump_expression("OVERLAY('abc' PLACING 'XY' FROM 2 FOR 1)"));
+}
+
+TEST(ParserTest, AtTimeZone) {
+    EXPECT_EQ(
+        "(attz TIMESTAMP '2012-10-31 01:00 UTC' 'America/Los_Angeles')",
+        dump_expression("TIMESTAMP '2012-10-31 01:00 UTC' AT TIME ZONE 'America/Los_Angeles'"));
+    EXPECT_EQ("(+ (attz x (interval '1' HOUR)) y)",
+              dump_expression("x AT TIME ZONE INTERVAL '1' HOUR + y"));
+}
+
+TEST(ParserTest, QuantifiedComparison) {
+    EXPECT_EQ("(qcmp = any x (query (spec (select (col y)) (from (table t)))))",
+              dump_expression("x = ANY (SELECT y FROM t)"));
+    EXPECT_EQ("(qcmp < some x (query (spec (select (col y)))))",
+              dump_expression("x < SOME (SELECT y)"));
+    EXPECT_EQ("(qcmp <> all x (query (spec (select (col y)))))",
+              dump_expression("x <> ALL (SELECT y)"));
+}
+
+TEST(ParserTest, Parameter) {
+    EXPECT_EQ("(query (spec (select (col ?) (col ?)) (from (table foo))))",
+              dump_statement("SELECT ?, ? FROM foo"));
+}
+
+TEST(ParserTest, FilterClause) {
+    EXPECT_EQ("(call array_agg x (filter (= x 1)))",
+              dump_expression("array_agg(x) FILTER (WHERE x = 1)"));
+}
+
+TEST(ParserTest, AggregateOrderBy) {
+    EXPECT_EQ("(call array_agg x (ord (item t.y)))", dump_expression("array_agg(x ORDER BY t.y)"));
+}
+
+TEST(ParserTest, NamedWindow) {
+    EXPECT_EQ(
+        "(query (spec (select (col (call rank (over w)))) (from (table t)) "
+        "(win (wdef w (over (part x) (order (item y)))))))",
+        dump_statement("SELECT rank() OVER w FROM t WINDOW w AS (PARTITION BY x ORDER BY y)"));
+    EXPECT_EQ("(query (spec (select (col (call sum x (over (part a))))) (from (table t)) "
+              "(win (wdef w (over (part a))) (wdef w2 (over (part b))))))",
+              dump_statement("SELECT sum(x) OVER (PARTITION BY a) FROM t "
+                             "WINDOW w AS (PARTITION BY a), w2 AS (PARTITION BY b)"));
+}
+
+TEST(ParserTest, FetchClause) {
+    EXPECT_EQ("(query (spec (select *) (from (table t))) (fetch 2))",
+              dump_statement("SELECT * FROM t FETCH FIRST 2 ROWS ONLY"));
+    EXPECT_EQ("(query (spec (select *) (from (table t))) (fetch 3 ties))",
+              dump_statement("SELECT * FROM t FETCH NEXT 3 ROWS WITH TIES"));
+    EXPECT_EQ("(query (spec (select *) (from (table t))) (offset 2) (fetch 1))",
+              dump_statement("SELECT * FROM t OFFSET 2 ROWS FETCH FIRST 1 ROW ONLY"));
+}
+
+TEST(ParserTest, GroupingSets) {
+    EXPECT_EQ("(query (spec (select (col a)) (from (table t)) "
+              "(group (call GROUPING SETS (row a b) (row) (row c)))))",
+              dump_statement("SELECT a FROM t GROUP BY GROUPING SETS ((a, b), (), (c))"));
+    EXPECT_EQ("(query (spec (select (col a)) (from (table t)) (group (row))))",
+              dump_statement("SELECT a FROM t GROUP BY ()"));
+}
+
+TEST(ParserTest, Corresponding) {
+    EXPECT_EQ("(query (union corresponding (spec (select (col a))) (spec (select (col a)))))",
+              dump_statement("SELECT a UNION CORRESPONDING SELECT a"));
+    EXPECT_EQ("(query (intersect corresponding (x y) (spec (select (col a))) "
+              "(spec (select (col a)))))",
+              dump_statement("SELECT a INTERSECT CORRESPONDING BY (x, y) SELECT a"));
+}
+
+TEST(ParserTest, GroupingOperation) {
+    EXPECT_EQ("(grouping a b)", dump_expression("GROUPING(a, b)"));
+    EXPECT_EQ("(query (spec (select (col (grouping a b))) (from (table t)) "
+              "(group (call GROUPING SETS (row a) (row b)))))",
+              dump_statement("SELECT GROUPING(a, b) FROM t GROUP BY GROUPING SETS ((a), (b))"));
+}
+
+TEST(ParserTest, NullifAsFunction) {
+    EXPECT_EQ("(call nullif 42 87)", dump_expression("nullif(42, 87)"));
+}
+
+TEST(ParserTest, WindowInheritance) {
+    EXPECT_EQ("(query (spec (select (col (call rank (over w)))) (from (table t)) "
+              "(win (wdef w (over (part a))) (wdef w2 (over w (order (item b)))))))",
+              dump_statement("SELECT rank() OVER w FROM t "
+                             "WINDOW w AS (PARTITION BY a), w2 AS (w ORDER BY b)"));
+}
+
+TEST(ParserTest, OffsetNotSwallowedAsAlias) {
+    EXPECT_EQ("(query (spec (select *) (from (table table1))) (offset 2))",
+              dump_statement("SELECT * FROM table1 OFFSET 2 ROWS"));
+    EXPECT_EQ("(query (spec (select *) (from (table table1))) (fetch 2))",
+              dump_statement("SELECT * FROM table1 FETCH FIRST 2 ROWS ONLY"));
+}
+
 } // namespace
 } // namespace pl::prism::syntax

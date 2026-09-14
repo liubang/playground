@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -40,6 +41,23 @@ struct ParseResult {
 
     [[nodiscard]] bool ok() const { return errors.empty(); }
 };
+
+// ASCII case-insensitive comparison used for soft keywords and type names.
+inline char ascii_lower(char c) {
+    return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+}
+
+inline bool iequals(std::string_view a, std::string_view b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (ascii_lower(a[i]) != ascii_lower(b[i])) {
+            return false;
+        }
+    }
+    return true;
+}
 
 // Recursive-descent parser for Trino SQL (P0 scope: expressions + SELECT core
 // including JOIN/CTE/window/UNNEST/subqueries/set operations).
@@ -80,7 +98,15 @@ private:
     template <typename T, typename... Args> T* make(SourceLocation loc, Args&&... args) {
         return arena_.template allocate_object<T>(loc, std::forward<Args>(args)...);
     }
-    template <typename T> AstList<T> make_list(const std::vector<T>& items);
+    template <typename T> AstList<T> make_list(const std::vector<T>& items) {
+        AstList<T> out;
+        out.size = static_cast<uint32_t>(items.size());
+        if (!items.empty()) {
+            out.data = static_cast<T*>(arena_.allocate(sizeof(T) * items.size(), alignof(T)));
+            std::copy(items.begin(), items.end(), out.data);
+        }
+        return out;
+    }
     AstList<NamePart> single_name(std::string_view text);
 
     // Names.
@@ -105,6 +131,16 @@ private:
     Expression* parse_cast(SourceLocation loc, bool try_cast);
     Expression* parse_interval(SourceLocation loc);
     Expression* parse_function_call(SourceLocation loc, AstList<NamePart> name);
+    Expression* finish_function_call(SourceLocation loc,
+                                     AstList<NamePart> name,
+                                     bool distinct,
+                                     bool wildcard,
+                                     std::vector<Expression*> args,
+                                     std::vector<SortItem*> order_by);
+    Expression* parse_trim(SourceLocation loc);
+    Expression* parse_substring_special(SourceLocation loc, std::string_view word);
+    Expression* parse_position_special(SourceLocation loc);
+    Expression* parse_overlay_special(SourceLocation loc);
     TypeName* parse_type();
     Window* parse_window();
     WindowFrame* parse_frame();
@@ -122,6 +158,7 @@ private:
     Node* parse_values();
     SelectItem* parse_select_item();
     Expression* parse_group_by_item();
+    void parse_corresponding(bool& corresponding, std::vector<NamePart>& corresponding_by);
     std::vector<SortItem*> parse_sort_list();
 
     // Relations.

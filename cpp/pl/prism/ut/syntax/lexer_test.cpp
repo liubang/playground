@@ -153,6 +153,20 @@ TEST(LexerTest, Numbers) {
     EXPECT_EQ(expected, types(result));
 }
 
+TEST(LexerTest, NumbersWithSeparatorsAndBases) {
+    auto result = lex("1_000 123_456.789_0123 1_000e1_0 0x123_abc_def 0XAB 0o17 0O7_7 0b101 0B1_0");
+    EXPECT_TRUE(result.errors.empty());
+    std::vector<TokenType> expected(9, TokenType::kNumber);
+    expected.push_back(TokenType::kEof);
+    EXPECT_EQ(expected, types(result));
+}
+
+TEST(LexerTest, BasePrefixWithoutDigitsIsIllegal) {
+    auto result = lex("0x");
+    ASSERT_EQ(1, result.errors.size());
+    EXPECT_EQ(TokenType::kIllegal, result.tokens[0].type);
+}
+
 TEST(LexerTest, NumberFollowedByIdentifier) {
     // "1e" is not a valid exponent: lexes as number "1" then identifier "e".
     auto result = lex("1e");
@@ -243,18 +257,18 @@ TEST(LexerTest, LineAndColumnTracking) {
 
 TEST(LexerTest, AllReservedKeywords) {
     constexpr std::string_view source =
-        "ALL ALTER ANALYZE AND ARRAY AS BETWEEN BY CASE CAST CONSTRAINT CREATE CROSS CUBE "
+        "ALL ALTER ANALYZE AND ARRAY AS AT BETWEEN BY CASE CAST CONSTRAINT CREATE CROSS CUBE "
         "CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_PATH CURRENT_ROLE CURRENT_SCHEMA "
         "CURRENT_TIME CURRENT_TIMESTAMP CURRENT_USER DEALLOCATE DELETE DESCRIBE "
         "DISTINCT DROP ELSE END ESCAPE EXCEPT EXECUTE EXISTS EXPLAIN EXTRACT FALSE FOR "
         "FROM FULL GROUP GROUPING HAVING IN INNER INSERT INTERSECT INTERVAL INTO IS JOIN "
         "JSON_ARRAY JSON_EXISTS JSON_OBJECT JSON_QUERY JSON_TABLE JSON_VALUE "
-        "LEFT LIKE LIMIT LISTAGG LOCALTIME LOCALTIMESTAMP NATURAL NORMALIZE NOT NULL NULLIF "
-        "ON OR ORDER OUTER PREPARE RECURSIVE RIGHT ROLLUP SELECT SKIP TABLE THEN TO "
-        "TRIM TRUE UESCAPE UNION UNNEST USING VALUES WHEN WHERE WITH";
+        "LEFT LIKE LIMIT LISTAGG LOCALTIME LOCALTIMESTAMP NATURAL NORMALIZE NOT NULL "
+        "ON OR ORDER OUTER PREPARE RECURSIVE RIGHT ROLLUP SELECT TABLE THEN TO "
+        "TRUE UESCAPE UNION UNNEST USING VALUES WHEN WHERE WITH";
     auto result = lex(source);
     EXPECT_TRUE(result.errors.empty());
-    ASSERT_EQ(92, result.tokens.size()); // 91 keywords + EOF
+    ASSERT_EQ(90, result.tokens.size()); // 89 keywords + EOF
     for (size_t i = 0; i + 1 < result.tokens.size(); ++i) {
         EXPECT_NE(TokenType::kIdentifier, result.tokens[i].type)
             << "keyword not recognized: " << result.tokens[i].text(source);

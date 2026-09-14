@@ -60,6 +60,7 @@ constexpr std::array kKeywords = std::to_array<KeywordEntry>({
     {"AND", TokenType::kKwAnd},
     {"ARRAY", TokenType::kKwArray},
     {"AS", TokenType::kKwAs},
+    {"AT", TokenType::kKwAt},
     {"BETWEEN", TokenType::kKwBetween},
     {"BY", TokenType::kKwBy},
     {"CASE", TokenType::kKwCase},
@@ -121,7 +122,6 @@ constexpr std::array kKeywords = std::to_array<KeywordEntry>({
     {"NORMALIZE", TokenType::kKwNormalize},
     {"NOT", TokenType::kKwNot},
     {"NULL", TokenType::kKwNull},
-    {"NULLIF", TokenType::kKwNullif},
     {"ON", TokenType::kKwOn},
     {"OR", TokenType::kKwOr},
     {"ORDER", TokenType::kKwOrder},
@@ -131,11 +131,9 @@ constexpr std::array kKeywords = std::to_array<KeywordEntry>({
     {"RIGHT", TokenType::kKwRight},
     {"ROLLUP", TokenType::kKwRollup},
     {"SELECT", TokenType::kKwSelect},
-    {"SKIP", TokenType::kKwSkip},
     {"TABLE", TokenType::kKwTable},
     {"THEN", TokenType::kKwThen},
     {"TO", TokenType::kKwTo},
-    {"TRIM", TokenType::kKwTrim},
     {"TRUE", TokenType::kKwTrue},
     {"UESCAPE", TokenType::kKwUescape},
     {"UNION", TokenType::kKwUnion},
@@ -318,6 +316,9 @@ Token Lexer::next_token() {
         case '%':
             advance();
             return make_token(TokenType::kPercent, start, line, column);
+        case '?':
+            advance();
+            return make_token(TokenType::kQuestion, start, line, column);
         case '=':
             advance();
             if (peek() == '>') {
@@ -382,20 +383,52 @@ Token Lexer::lex_number() {
     const uint32_t line = line_;
     const uint32_t column = column_;
 
+    // Consumes a run of digits with optional single '_' separators between
+    // digits (Trino 445+): 1_000 is one token, 1__0 and 1_ are not.
+    const auto consume_digits = [this](bool (*pred)(char)) {
+        while (!eof() && (pred(peek()) || (peek() == '_' && pred(peek(1))))) {
+            advance();
+        }
+    };
+
+    // Base-prefixed literals: 0x..., 0o..., 0b...
+    if (peek() == '0' && pos_ + 1 < source_.size()) {
+        const char kind = peek(1);
+        if (kind == 'x' || kind == 'X' || kind == 'o' || kind == 'O' || kind == 'b' ||
+            kind == 'B') {
+            advance();
+            advance();
+            switch (kind) {
+                case 'x':
+                case 'X':
+                    consume_digits([](char c) {
+                        return is_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+                    });
+                    break;
+                case 'o':
+                case 'O':
+                    consume_digits([](char c) { return c >= '0' && c <= '7'; });
+                    break;
+                default:
+                    consume_digits([](char c) { return c == '0' || c == '1'; });
+                    break;
+            }
+            if (pos_ - start == 2) {
+                report(start, line, column, "expected digits after base prefix");
+                return make_token(TokenType::kIllegal, start, line, column);
+            }
+            return make_token(TokenType::kNumber, start, line, column);
+        }
+    }
+
     if (peek() == '.') {
         advance();
-        while (is_digit(peek())) {
-            advance();
-        }
+        consume_digits(is_digit);
     } else {
-        while (is_digit(peek())) {
-            advance();
-        }
+        consume_digits(is_digit);
         if (peek() == '.') {
             advance();
-            while (is_digit(peek())) {
-                advance();
-            }
+            consume_digits(is_digit);
         }
     }
 
@@ -404,15 +437,11 @@ Token Lexer::lex_number() {
     if (peek() == 'e' || peek() == 'E') {
         if (is_digit(peek(1))) {
             advance();
-            while (is_digit(peek())) {
-                advance();
-            }
+            consume_digits(is_digit);
         } else if ((peek(1) == '+' || peek(1) == '-') && is_digit(peek(2))) {
             advance();
             advance();
-            while (is_digit(peek())) {
-                advance();
-            }
+            consume_digits(is_digit);
         }
     }
 

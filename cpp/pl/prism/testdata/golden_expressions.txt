@@ -1,0 +1,294 @@
+# Golden corpus: expressions from Trino's TestSqlParser (482) that prism parses.
+# Regenerate: extract_golden_corpus.py TestSqlParser.java | corpus_classify
+position('a' in 'b')
+position('a' in ('b'))
+42
+x.length()
+(((((((((((((((((((((((((((true)))))))))))))))))))))))))))
+( 1 * -1 + 1 * -2 + 1 * -3 + 1 * -4 + 1 * -5 + 1 * -6 + 1 * -7 + 1 * -8 + 1 * -9 + 1 * -10 + 1 * -11 + 1 * -12 )
+a.b.c.d
+DATE
+'abc'
+x' '
+x''
+X'abcdef1234567890ABCDEF'
+abcdef1234567890ABCDEF
+X'a b c'
+X'a z'
+TIME 'abc'
+TIME
+TIMESTAMP 'abc'
+INTERVAL '33' day
+33
+INTERVAL '33' day to second
+9223372036854775807
+9223372036854775808
+-9223372036854775808
+-9223372036854775809
+1E5
+1E-5
+.1E5
+.1E-5
+1.1E5
+1.1E-5
+-1E5
+-1E-5
+-.1E5
+-.1E-5
+-1.1E5
+-1.1E-5
+.1
+1.2
+-1.2
+123_456_789
+123_456.789_0123
+123_456._789_0123
+0x123_abc_def
+0X123_ABC_DEF
+-0x123_abc_def
+-0X123_ABC_DEF
+0O012_345
+0o012_345
+-0O012_345
+-0o012_345
+0B110_010
+0b110_010
+-0B110_010
+-0b110_010
+_123_456
+_0x123_ABC_DEF
+_0o012_345
+_0b110_010
+ARRAY []
+ARRAY [1, 2]
+ARRAY [1e0, 2.5e0]
+1.0
+2.5
+ARRAY ['hi']
+ARRAY ['hi', 'hello']
+ARRAY [1, 2][1]
+CASE WHEN TRUE THEN ARRAY[1,2] END[1]
+ROW (1, 'a', true)[1]
+f1
+f2
+f3
+123E7
+123.E7
+123.0E7
+123E+7
+123E-7
+123.456E7
+123.456E+7
+123.456E-7
+.4E42
+.4E+42
+.4E-42
++9
++ 9
+++9
++ +9
++ + 9
++++9
++ + +9
++ + + 9
+-9
+- 9
+- + 9
+-+9
++ - + 9
++-+9
+- -9
+- - 9
+- + - + 9
+-+-+9
++ - + - + 9
++-+-+9
+- - -9
+- - - 9
+coalesce()
+coalesce(5)
+coalesce(1, 2) filter (where true)
+coalesce(1, 2) OVER ()
+coalesce(13, 42)
+13
+coalesce(6, 7, 8)
+coalesce(13, null)
+coalesce(null, 13)
+coalesce(null, null)
+if(true, 1, 0)
+if(true, 3, null)
+if(false, null, 4)
+if(false, null, null)
+if(true, 3)
+IF(true)
+IF(true, 1, 0) FILTER (WHERE true)
+IF(true, 1, 0) OVER()
+nullif(42, 87)
+87
+nullif(42, null)
+nullif(null, null)
+nullif(1)
+nullif(1, 2, 3)
+nullif(42, 87) filter (where true)
+nullif(42, 87) OVER ()
+123
+1 BETWEEN 2 AND 3
+1 NOT BETWEEN 2 AND 3
+a IS TRUE
+a IS NOT TRUE
+a IS FALSE
+a IS NOT FALSE
+a IS UNKNOWN
+a IS NOT UNKNOWN
+table1
+2.2
+3.3
+1 AND 2 AND 3 AND 4
+1 OR 2 OR 3 OR 4
+1 AND 2 AND 3 OR 4 AND 5 AND 6 OR 7 AND 8 AND 9
+1 AND 2 OR 3
+1 OR 2 AND 3
+NOT 1 AND 2
+NOT 1 OR 2
+-1 + 2
+-1
+1 - 2 - 3
+1 / 2 / 3
+1 + 2 * 3
+INTERVAL '123' YEAR
+INTERVAL '123-3' YEAR TO MONTH
+123-3
+INTERVAL '123' MONTH
+INTERVAL '123' DAY
+INTERVAL '123 23:58:53.456' DAY TO SECOND
+INTERVAL '123' HOUR
+INTERVAL '23:59' HOUR TO MINUTE
+INTERVAL '123' MINUTE
+INTERVAL '123' SECOND
+12.34
+12.
+12
+.34
++12.34
++12
+-12.34
+-12
++.34
+-.34
+123.
+123.0
+.5
+123.5
+TIME '03:04:05'
+trim(BOTH FROM ' abc ')
+trim(LEADING FROM ' abc ')
+trim(TRAILING FROM ' abc ')
+trim(BOTH ' ' FROM ' abc ')
+trim(LEADING ' ' FROM ' abc ')
+trim(TRAILING ' ' FROM ' abc ')
+trim(FROM ' abc ')
+format()
+CASE 1 IS NULL WHEN true THEN 2 ELSE 3 END
+CASE WHEN a > 3 THEN 23 WHEN b = a THEN 33 END
+23
+foo-bar
+property_1
+value_1
+from_branch
+to_branch
+col1
+col2
+col3
+col4
+11
+COL0
+COL1
+col0
+U&''
+U&'hello\6d4B\8Bd5\+10FFFFworld\7F16\7801'
+U&'测试ABC\6d4B\8Bd5'
+u&'测试ABC\6d4B\8Bd5'
+u&'测试ABC\\'
+u&'测试ABC\'
+u&'测试ABC\+'
+U&'hello\6dB\8Bd5'
+U&'hello\6D4B\8Bd'
+U&'hello\K6B\8Bd5'
+U&'hello\+FFFFFD\8Bd5'
+U&'hello\DBFF'
+U&'hello\+00DBFF'
+LZ4
+like_table
+v1
+v2
+b/y
+b/c
+c1
+c2
+456
+c.d
+b.c
+17
+property_2
+FUNKY_ENTITY
+AUTO_GYRATE
+America/Los_Angeles
+concat_ws
+Los_Angeles
+10
+x -> sin(x)
+(x, y) -> mod(x, y)
+AB01
+statement1
+catalog-test
+s.t
+c.s.t
+col1 < ANY (SELECT col2 FROM table1)
+col1 = ALL (VALUES ROW(1), ROW(2))
+col1 >= SOME (SELECT 10)
+array_agg(x ORDER BY x DESC)
+array_agg
+role1
+role2
+admin1
+my_catalog
+user1
+role3
+user2
+role4
+catalog2
+schema2
+partitioned_by
+rank() OVER someWindow
+rank() OVER (someWindow PARTITION BY x ORDER BY y ROWS CURRENT ROW)
+rank() OVER (PARTITION BY x ORDER BY y ROWS CURRENT ROW)
+MATCH_NUMBER
+match_no
+last_z
+foo_table
+3.1415
+version1
+some_ptf
+arg1
+arg2
+arg3
+arg4
+json_column
+start_parameter
+start_column
+end_parameter
+end_column
+5e0
+key2
+10.0
+key_column
+value_column
+key_column_1
+key_literal
+key_column_2
+ordinal_number
+customer_name
+customer_countries
+customer_regions
+user-a
+null

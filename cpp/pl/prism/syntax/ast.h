@@ -81,6 +81,15 @@ enum class NodeKind : uint16_t {
     kArrayConstructor,
     kSubqueryExpression,
     kTypeName,
+    kParameter,
+    kBooleanTest,
+    kTrim,
+    kSubstring,
+    kPosition,
+    kOverlay,
+    kAtTimeZone,
+    kQuantifiedComparison,
+    kGroupingOperation,
     // Select items
     kSingleColumn,
     kAllColumns,
@@ -100,6 +109,7 @@ enum class NodeKind : uint16_t {
     kWith,
     kWithQuery,
     kSortItem,
+    kWindowDefinition,
     // Statements
     kExplain,
 };
@@ -146,6 +156,12 @@ enum class FrameBoundType : uint8_t {
 enum class TimeZoneSpec : uint8_t { kNone, kWith, kWithout };
 
 enum class SampleType : uint8_t { kBernoulli, kSystem };
+
+enum class BooleanTestType : uint8_t { kTrue, kFalse, kUnknown };
+
+enum class TrimSpec : uint8_t { kBoth, kLeading, kTrailing };
+
+enum class Quantifier : uint8_t { kAny, kSome, kAll };
 
 struct Query;
 struct SortItem;
@@ -423,15 +439,32 @@ struct FunctionCall final : Expression {
     bool distinct;
     bool wildcard; // f(*)
     AstList<Expression*> args;
-    Window* window; // nullptr when no OVER clause
+    Expression* filter;          // FILTER (WHERE ...), nullptr when absent
+    AstList<SortItem*> order_by; // aggregate-internal ORDER BY, e.g. array_agg(x ORDER BY y)
+    Window* window;              // OVER (...), nullptr when absent
+    NamePart window_ref;         // OVER window_name
+    bool has_window_ref;
 
     FunctionCall(SourceLocation loc,
                  AstList<NamePart> n,
                  bool d,
                  bool w,
                  AstList<Expression*> a,
-                 Window* win)
-        : Expression(kKind, loc), name(n), distinct(d), wildcard(w), args(a), window(win) {}
+                 Expression* f,
+                 AstList<SortItem*> o,
+                 Window* win,
+                 NamePart wr,
+                 bool hwr)
+        : Expression(kKind, loc),
+          name(n),
+          distinct(d),
+          wildcard(w),
+          args(a),
+          filter(f),
+          order_by(o),
+          window(win),
+          window_ref(wr),
+          has_window_ref(hwr) {}
 };
 
 struct FrameBound {
@@ -452,12 +485,24 @@ struct WindowFrame final : Node {
 
 struct Window final : Node {
     static constexpr NodeKind kKind = NodeKind::kWindow;
+    NamePart existing_window; // named window referenced by a derived specification
+    bool has_existing_window;
     AstList<Expression*> partition_by;
     AstList<SortItem*> order_by;
     WindowFrame* frame; // nullptr when absent
 
-    Window(SourceLocation loc, AstList<Expression*> p, AstList<SortItem*> o, WindowFrame* f)
-        : Node(kKind, loc), partition_by(p), order_by(o), frame(f) {}
+    Window(SourceLocation loc,
+           NamePart ew,
+           bool hew,
+           AstList<Expression*> p,
+           AstList<SortItem*> o,
+           WindowFrame* f)
+        : Node(kKind, loc),
+          existing_window(ew),
+          has_existing_window(hew),
+          partition_by(p),
+          order_by(o),
+          frame(f) {}
 };
 
 struct SubscriptExpression final : Expression {
@@ -500,6 +545,101 @@ struct SubqueryExpression final : Expression {
     Query* query;
 
     SubqueryExpression(SourceLocation loc, Query* q) : Expression(kKind, loc), query(q) {}
+};
+
+// Parameter placeholder (?) in prepared statements.
+struct ParameterExpression final : Expression {
+    static constexpr NodeKind kKind = NodeKind::kParameter;
+
+    explicit ParameterExpression(SourceLocation loc) : Expression(kKind, loc) {}
+};
+
+// x IS [NOT] TRUE / FALSE / UNKNOWN
+struct BooleanTestPredicate final : Expression {
+    static constexpr NodeKind kKind = NodeKind::kBooleanTest;
+    Expression* value;
+    BooleanTestType test;
+    bool negated;
+
+    BooleanTestPredicate(SourceLocation loc, Expression* v, BooleanTestType t, bool n)
+        : Expression(kKind, loc), value(v), test(t), negated(n) {}
+};
+
+// TRIM([BOTH | LEADING | TRAILING] [chars] FROM source)
+struct TrimExpression final : Expression {
+    static constexpr NodeKind kKind = NodeKind::kTrim;
+    TrimSpec spec;
+    Expression* source;
+    Expression* chars; // nullptr when absent
+
+    TrimExpression(SourceLocation loc, TrimSpec sp, Expression* s, Expression* c)
+        : Expression(kKind, loc), spec(sp), source(s), chars(c) {}
+};
+
+// SUBSTRING(value FROM start [FOR length])
+struct SubstringExpression final : Expression {
+    static constexpr NodeKind kKind = NodeKind::kSubstring;
+    Expression* value;
+    Expression* start;
+    Expression* length; // nullptr when absent
+
+    SubstringExpression(SourceLocation loc, Expression* v, Expression* s, Expression* l)
+        : Expression(kKind, loc), value(v), start(s), length(l) {}
+};
+
+// POSITION(needle IN haystack)
+struct PositionExpression final : Expression {
+    static constexpr NodeKind kKind = NodeKind::kPosition;
+    Expression* needle;
+    Expression* haystack;
+
+    PositionExpression(SourceLocation loc, Expression* n, Expression* h)
+        : Expression(kKind, loc), needle(n), haystack(h) {}
+};
+
+// OVERLAY(value PLACING replacement FROM start [FOR length])
+struct OverlayExpression final : Expression {
+    static constexpr NodeKind kKind = NodeKind::kOverlay;
+    Expression* value;
+    Expression* replacement;
+    Expression* start;
+    Expression* length; // nullptr when absent
+
+    OverlayExpression(
+        SourceLocation loc, Expression* v, Expression* r, Expression* s, Expression* l)
+        : Expression(kKind, loc), value(v), replacement(r), start(s), length(l) {}
+};
+
+// value AT TIME ZONE zone
+struct AtTimeZone final : Expression {
+    static constexpr NodeKind kKind = NodeKind::kAtTimeZone;
+    Expression* value;
+    Expression* zone;
+
+    AtTimeZone(SourceLocation loc, Expression* v, Expression* z)
+        : Expression(kKind, loc), value(v), zone(z) {}
+};
+
+// value op ANY | SOME | ALL (subquery)
+struct QuantifiedComparisonExpression final : Expression {
+    static constexpr NodeKind kKind = NodeKind::kQuantifiedComparison;
+    ComparisonOp op;
+    Expression* value;
+    Quantifier quantifier;
+    Query* subquery;
+
+    QuantifiedComparisonExpression(
+        SourceLocation loc, ComparisonOp o, Expression* v, Quantifier q, Query* s)
+        : Expression(kKind, loc), op(o), value(v), quantifier(q), subquery(s) {}
+};
+
+// GROUPING(a, b, ...) — tests which grouping-set columns are aggregated.
+struct GroupingOperation final : Expression {
+    static constexpr NodeKind kKind = NodeKind::kGroupingOperation;
+    AstList<Expression*> args;
+
+    GroupingOperation(SourceLocation loc, AstList<Expression*> a)
+        : Expression(kKind, loc), args(a) {}
 };
 
 // Select items.
@@ -634,6 +774,16 @@ struct SortItem final : Node {
         : Node(kKind, loc), sort_key(k), ordering(o), null_ordering(n) {}
 };
 
+// WINDOW name AS (window specification)
+struct WindowDefinition final : Node {
+    static constexpr NodeKind kKind = NodeKind::kWindowDefinition;
+    NamePart name;
+    Window* window;
+
+    WindowDefinition(SourceLocation loc, NamePart n, Window* w)
+        : Node(kKind, loc), name(n), window(w) {}
+};
+
 struct WithQuery final : Node {
     static constexpr NodeKind kKind = NodeKind::kWithQuery;
     NamePart name;
@@ -661,6 +811,7 @@ struct QuerySpecification final : Node {
     Expression* where;       // nullptr when absent
     Expression* having;      // nullptr when absent
     AstList<Expression*> group_by;
+    AstList<WindowDefinition*> window_definitions;
 
     QuerySpecification(SourceLocation loc,
                        bool d,
@@ -668,14 +819,16 @@ struct QuerySpecification final : Node {
                        AstList<Relation*> f,
                        Expression* w,
                        Expression* h,
-                       AstList<Expression*> g)
+                       AstList<Expression*> g,
+                       AstList<WindowDefinition*> wd)
         : Node(kKind, loc),
           distinct(d),
           select_items(si),
           from(f),
           where(w),
           having(h),
-          group_by(g) {}
+          group_by(g),
+          window_definitions(wd) {}
 };
 
 struct SetOperation final : Node {
@@ -684,26 +837,46 @@ struct SetOperation final : Node {
     Node* left;
     Node* right;
     bool all; // false = DISTINCT (also the default when unspecified)
+    bool corresponding;
+    AstList<NamePart> corresponding_by;
 
-    SetOperation(SourceLocation loc, SetOp o, Node* l, Node* r, bool a)
-        : Node(kKind, loc), op(o), left(l), right(r), all(a) {}
+    SetOperation(
+        SourceLocation loc, SetOp o, Node* l, Node* r, bool a, bool c, AstList<NamePart> cb)
+        : Node(kKind, loc),
+          op(o),
+          left(l),
+          right(r),
+          all(a),
+          corresponding(c),
+          corresponding_by(cb) {}
 };
 
 struct Query final : Node {
     static constexpr NodeKind kKind = NodeKind::kQuery;
     With* with; // nullptr when absent
-    Node* body; // QuerySpecification / SetOperation / Values / Query
+    Node* body; // QuerySpecification / SetOperation / Values / Query / Table
     AstList<SortItem*> order_by;
-    Expression* offset; // nullptr when absent
-    Expression* limit;  // nullptr when absent or LIMIT ALL
+    Expression* offset;      // nullptr when absent
+    Expression* limit;       // nullptr when absent or LIMIT ALL
+    Expression* fetch_first; // FETCH FIRST/NEXT count; nullptr when absent (or count defaults to 1)
+    bool fetch_with_ties;
 
     Query(SourceLocation loc,
           With* w,
           Node* b,
           AstList<SortItem*> o,
           Expression* off,
-          Expression* lim)
-        : Node(kKind, loc), with(w), body(b), order_by(o), offset(off), limit(lim) {}
+          Expression* lim,
+          Expression* ff,
+          bool fwt)
+        : Node(kKind, loc),
+          with(w),
+          body(b),
+          order_by(o),
+          offset(off),
+          limit(lim),
+          fetch_first(ff),
+          fetch_with_ties(fwt) {}
 };
 
 struct ExplainOption {

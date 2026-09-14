@@ -58,6 +58,7 @@ enum class TokenType : uint16_t {
     kConcat,
     kArrow,
     kFatArrow,
+    kQuestion,
 
     // Reserved keywords (Trino 476). Non-reserved keywords are emitted as
     // kIdentifier and disambiguated by the parser.
@@ -67,6 +68,7 @@ enum class TokenType : uint16_t {
     kKwAnd,
     kKwArray,
     kKwAs,
+    kKwAt,
     kKwBetween,
     kKwBy,
     kKwCase,
@@ -128,7 +130,6 @@ enum class TokenType : uint16_t {
     kKwNormalize,
     kKwNot,
     kKwNull,
-    kKwNullif,
     kKwOn,
     kKwOr,
     kKwOrder,
@@ -138,11 +139,9 @@ enum class TokenType : uint16_t {
     kKwRight,
     kKwRollup,
     kKwSelect,
-    kKwSkip,
     kKwTable,
     kKwThen,
     kKwTo,
-    kKwTrim,
     kKwTrue,
     kKwUescape,
     kKwUnion,

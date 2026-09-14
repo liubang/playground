@@ -406,9 +406,24 @@ private:
                     append(" distinct");
                 }
                 each<Expression*>(n->args, &Dumper::visit_expr);
+                if (!n->order_by.empty()) {
+                    append(" (ord");
+                    each<SortItem*>(n->order_by, &Dumper::visit_sort_item);
+                    out_.push_back(')');
+                }
+                if (n->filter != nullptr) {
+                    append(" (filter ");
+                    visit(n->filter);
+                    out_.push_back(')');
+                }
                 if (n->window != nullptr) {
                     space();
                     visit(n->window);
+                }
+                if (n->has_window_ref) {
+                    append(" (over ");
+                    append(n->window_ref.text);
+                    out_.push_back(')');
                 }
                 out_.push_back(')');
                 break;
@@ -416,6 +431,10 @@ private:
             case NodeKind::kWindow: {
                 const auto* n = node->as<Window>();
                 append("(over");
+                if (n->has_existing_window) {
+                    space();
+                    append(n->existing_window.text);
+                }
                 if (!n->partition_by.empty()) {
                     append(" (part");
                     each<Expression*>(n->partition_by, &Dumper::visit_expr);
@@ -494,6 +513,127 @@ private:
             case NodeKind::kTypeName:
                 type(node->as<TypeName>());
                 break;
+            case NodeKind::kParameter:
+                out_.push_back('?');
+                break;
+            case NodeKind::kBooleanTest: {
+                const auto* n = node->as<BooleanTestPredicate>();
+                out_.push_back('(');
+                if (n->negated) {
+                    append("not");
+                }
+                switch (n->test) {
+                    case BooleanTestType::kTrue:
+                        append("istrue ");
+                        break;
+                    case BooleanTestType::kFalse:
+                        append("isfalse ");
+                        break;
+                    case BooleanTestType::kUnknown:
+                        append("isunknown ");
+                        break;
+                }
+                visit(n->value);
+                out_.push_back(')');
+                break;
+            }
+            case NodeKind::kTrim: {
+                const auto* n = node->as<TrimExpression>();
+                append("(trim ");
+                switch (n->spec) {
+                    case TrimSpec::kBoth:
+                        append("both ");
+                        break;
+                    case TrimSpec::kLeading:
+                        append("leading ");
+                        break;
+                    case TrimSpec::kTrailing:
+                        append("trailing ");
+                        break;
+                }
+                if (n->chars != nullptr) {
+                    visit(n->chars);
+                    space();
+                }
+                visit(n->source);
+                out_.push_back(')');
+                break;
+            }
+            case NodeKind::kSubstring: {
+                const auto* n = node->as<SubstringExpression>();
+                append("(substr ");
+                visit(n->value);
+                space();
+                visit(n->start);
+                if (n->length != nullptr) {
+                    space();
+                    visit(n->length);
+                }
+                out_.push_back(')');
+                break;
+            }
+            case NodeKind::kPosition: {
+                const auto* n = node->as<PositionExpression>();
+                append("(position ");
+                visit(n->needle);
+                space();
+                visit(n->haystack);
+                out_.push_back(')');
+                break;
+            }
+            case NodeKind::kOverlay: {
+                const auto* n = node->as<OverlayExpression>();
+                append("(overlay ");
+                visit(n->value);
+                space();
+                visit(n->replacement);
+                space();
+                visit(n->start);
+                if (n->length != nullptr) {
+                    space();
+                    visit(n->length);
+                }
+                out_.push_back(')');
+                break;
+            }
+            case NodeKind::kAtTimeZone: {
+                const auto* n = node->as<AtTimeZone>();
+                append("(attz ");
+                visit(n->value);
+                space();
+                visit(n->zone);
+                out_.push_back(')');
+                break;
+            }
+            case NodeKind::kGroupingOperation: {
+                const auto* n = node->as<GroupingOperation>();
+                append("(grouping");
+                each<Expression*>(n->args, &Dumper::visit_expr);
+                out_.push_back(')');
+                break;
+            }
+            case NodeKind::kQuantifiedComparison: {
+                const auto* n = node->as<QuantifiedComparisonExpression>();
+                append("(qcmp ");
+                append(comparison_op_symbol(n->op));
+                space();
+                switch (n->quantifier) {
+                    case Quantifier::kAny:
+                        append("any ");
+                        break;
+                    case Quantifier::kSome:
+                        append("some ");
+                        break;
+                    case Quantifier::kAll:
+                        append("all ");
+                        break;
+                }
+                visit(n->value);
+                space();
+                visit(n->subquery);
+                out_.push_back(')');
+                break;
+            }
             case NodeKind::kSingleColumn: {
                 const auto* n = node->as<SingleColumn>();
                 append("(col ");
@@ -608,6 +748,15 @@ private:
             case NodeKind::kSortItem:
                 sort_item(node->as<SortItem>());
                 break;
+            case NodeKind::kWindowDefinition: {
+                const auto* n = node->as<WindowDefinition>();
+                append("(wdef ");
+                append(n->name.text);
+                space();
+                visit(n->window);
+                out_.push_back(')');
+                break;
+            }
             case NodeKind::kWithQuery: {
                 const auto* n = node->as<WithQuery>();
                 append("(wq ");
@@ -662,6 +811,11 @@ private:
                     visit(n->having);
                     out_.push_back(')');
                 }
+                if (!n->window_definitions.empty()) {
+                    append(" (win");
+                    each<WindowDefinition*>(n->window_definitions, &Dumper::visit_window_def);
+                    out_.push_back(')');
+                }
                 out_.push_back(')');
                 break;
             }
@@ -671,6 +825,19 @@ private:
                 append(set_op_name(n->op));
                 if (n->all) {
                     append(" all");
+                }
+                if (n->corresponding) {
+                    append(" corresponding");
+                    if (!n->corresponding_by.empty()) {
+                        append(" (");
+                        for (uint32_t i = 0; i < n->corresponding_by.size; ++i) {
+                            if (i > 0) {
+                                space();
+                            }
+                            append(n->corresponding_by[i].text);
+                        }
+                        out_.push_back(')');
+                    }
                 }
                 space();
                 visit(n->left);
@@ -701,6 +868,17 @@ private:
                 if (n->limit != nullptr) {
                     append(" (limit ");
                     visit(n->limit);
+                    out_.push_back(')');
+                }
+                if (n->fetch_first != nullptr || n->fetch_with_ties) {
+                    append(" (fetch");
+                    if (n->fetch_first != nullptr) {
+                        space();
+                        visit(n->fetch_first);
+                    }
+                    if (n->fetch_with_ties) {
+                        append(" ties");
+                    }
                     out_.push_back(')');
                 }
                 out_.push_back(')');
@@ -737,6 +915,7 @@ private:
     void visit_select_item(SelectItem* n) { visit(n); }
     void visit_relation(Relation* n) { visit(n); }
     void visit_with_query(WithQuery* n) { visit(n); }
+    void visit_window_def(WindowDefinition* n) { visit(n); }
 
     std::string out_;
 };

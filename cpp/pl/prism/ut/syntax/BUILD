@@ -43,3 +43,16 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "corpus_test",
+    srcs = ["corpus_test.cpp"],
+    copts = TEST_COPTS,
+    data = ["//cpp/pl/prism/testdata:golden"],
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/prism/syntax",
+        "@bazel_tools//tools/cpp/runfiles",
+        "@googletest//:gtest_main",
+    ],
+)

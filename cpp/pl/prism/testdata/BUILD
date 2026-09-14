@@ -13,36 +13,10 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/09/13 13:24
+# Created: 2026/09/14 10:05
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
-load(
-    "//cpp:copts/configure_copts.bzl",
-    "COPTS",
-    "LINKOPTS",
-)
-
-package(default_visibility = ["//visibility:public"])
-
-cc_library(
-    name = "syntax",
-    srcs = [
-        "ast_dump.cpp",
-        "lexer.cpp",
-        "parser.cpp",
-        "parser_expression.cpp",
-        "parser_query.cpp",
-    ],
-    hdrs = [
-        "ast.h",
-        "ast_dump.h",
-        "lexer.h",
-        "parser.h",
-        "token.h",
-    ],
-    copts = COPTS,
-    linkopts = LINKOPTS,
-    deps = [
-        "//cpp/pl/arena",
-    ],
+filegroup(
+    name = "golden",
+    srcs = glob(["*.txt"]),
+    visibility = ["//visibility:public"],
 )
