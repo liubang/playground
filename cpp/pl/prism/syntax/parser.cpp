@@ -15,9 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/09/13 13:24
 
-// Parser core: token navigation, error handling, AST construction helpers and
-// name parsing. Expression parsing lives in parser_expression.cpp, query and
-// relation parsing in parser_query.cpp.
+// Parser core: token navigation, error handling, AST construction helpers,
+// name parsing and the statement/expression entry points. Member functions
+// are spread across translation units by grammar domain; parser.h lists the
+// file layout and the P1/P2 extension seams.
 
 #include "cpp/pl/prism/syntax/parser.h"
 

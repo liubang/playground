@@ -31,7 +31,10 @@ cc_library(
         "lexer.cpp",
         "parser.cpp",
         "parser_expression.cpp",
+        "parser_function.cpp",
         "parser_query.cpp",
+        "parser_relation.cpp",
+        "parser_special_form.cpp",
     ],
     hdrs = [
         "ast.h",

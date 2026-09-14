@@ -64,19 +64,36 @@ inline bool iequals(std::string_view a, std::string_view b) {
 //
 // The AST is arena-allocated and stays valid as long as the Parser object and
 // the source text are alive.
+//
+// A single Parser class parses the whole grammar because expressions and
+// queries are mutually recursive (subqueries inside expressions, expressions
+// inside queries). Member functions are spread across translation units by
+// grammar domain, and the declaration sections below double as the index:
+//
+//   parser.cpp               token navigation, errors, helpers, names, entry
+//   parser_expression.cpp    precedence chain and primary expressions
+//   parser_special_form.cpp  TRIM/SUBSTRING/CASE/CAST/INTERVAL and type names
+//   parser_function.cpp      function calls, FILTER/OVER, window specs
+//   parser_query.cpp         query structure, set operations, sort items
+//   parser_relation.cpp      joins and table primaries
+//
+// P1 extension seams (new files, no edits to existing ones):
+//   parser_ddl.cpp, parser_dml.cpp, parser_session.cpp
+// P2 extension seams:
+//   parser_json.cpp, parser_match_recognize.cpp, parser_table_function.cpp
 class Parser {
 public:
     explicit Parser(std::string_view source);
 
     // Parses a single statement (a Query in P0 scope), optionally followed by
-    // a semicolon.
+    // a semicolon. P1 turns this into a dispatch over statement families.
     ParseResult parse_statement();
 
     // Parses a single expression; useful for tests and tooling.
     ParseResult parse_expression();
 
 private:
-    // Token navigation.
+    // Token navigation (parser.cpp).
     [[nodiscard]] const Token& cur() const { return tokens_[pos_]; }
     [[nodiscard]] const Token& peek(uint32_t n) const;
     const Token& advance();
@@ -94,7 +111,7 @@ private:
 
     [[noreturn]] void fail(const Token& token, std::string message);
 
-    // AST construction helpers.
+    // AST construction helpers (parser.cpp).
     template <typename T, typename... Args> T* make(SourceLocation loc, Args&&... args) {
         return arena_.template allocate_object<T>(loc, std::forward<Args>(args)...);
     }
@@ -109,11 +126,11 @@ private:
     }
     AstList<NamePart> single_name(std::string_view text);
 
-    // Names.
+    // Names (parser.cpp).
     NamePart parse_name_part();
     AstList<NamePart> parse_qualified_name();
 
-    // Expressions.
+    // Expression precedence chain (parser_expression.cpp).
     Expression* parse_expr();
     Expression* parse_or();
     Expression* parse_and();
@@ -127,9 +144,19 @@ private:
     Expression* parse_primary();
     Expression* parse_paren(SourceLocation loc);
     Expression* parse_named_primary(SourceLocation loc);
+    [[nodiscard]] bool looks_like_lambda() const;
+
+    // Special forms and type names (parser_special_form.cpp).
     Expression* parse_case(SourceLocation loc);
     Expression* parse_cast(SourceLocation loc, bool try_cast);
     Expression* parse_interval(SourceLocation loc);
+    Expression* parse_trim(SourceLocation loc);
+    Expression* parse_substring_special(SourceLocation loc, std::string_view word);
+    Expression* parse_position_special(SourceLocation loc);
+    Expression* parse_overlay_special(SourceLocation loc);
+    TypeName* parse_type();
+
+    // Function calls and window specifications (parser_function.cpp).
     Expression* parse_function_call(SourceLocation loc, AstList<NamePart> name);
     Expression* finish_function_call(SourceLocation loc,
                                      AstList<NamePart> name,
@@ -137,17 +164,11 @@ private:
                                      bool wildcard,
                                      std::vector<Expression*> args,
                                      std::vector<SortItem*> order_by);
-    Expression* parse_trim(SourceLocation loc);
-    Expression* parse_substring_special(SourceLocation loc, std::string_view word);
-    Expression* parse_position_special(SourceLocation loc);
-    Expression* parse_overlay_special(SourceLocation loc);
-    TypeName* parse_type();
     Window* parse_window();
     WindowFrame* parse_frame();
     FrameBound parse_frame_bound();
-    [[nodiscard]] bool looks_like_lambda() const;
 
-    // Queries and statements.
+    // Query structure (parser_query.cpp).
     Query* parse_query();
     Node* parse_explain();
     With* parse_with();
@@ -161,7 +182,7 @@ private:
     void parse_corresponding(bool& corresponding, std::vector<NamePart>& corresponding_by);
     std::vector<SortItem*> parse_sort_list();
 
-    // Relations.
+    // Relations (parser_relation.cpp).
     Relation* parse_relation();
     Relation* parse_relation_primary();
     Relation* maybe_alias(Relation* relation);
