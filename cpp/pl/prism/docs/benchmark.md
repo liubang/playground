@@ -75,3 +75,42 @@ bazel-bin/cpp/pl/prism/benchmark/parser_benchmark
 ```
 
 注意：不要用默认配置跑（默认开启 ASan 且为 debug 编译，数字会差 5–10 倍）。
+
+## 与 Trino parser 的对比（2026-09-14 采集）
+
+对照组：`io.trino:trino-parser:468`（ANTLR4 生成解析器），跑**完全相同的
+7 个 workload**（`--dump` 导出的 `cpp/pl/prism/benchmark/workloads/*.sql`，
+Java 侧经 runfiles 读取）。Trino 不暴露独立的 lexer 阶段，`trino-parser`
+artifact 也没有逻辑计划层，因此只对比 parse 与 parse+print 两段。
+
+- 基准程序：`java/pl/prism/TrinoParserBenchmark.java`
+- 运行：`bazel run //java/pl/prism:trino_parser_benchmark --java_runtime_version=remotejdk_25`
+  （trino-parser:468 的 class file 需要 JDK 23+，默认运行时 toolchain 是 JDK 21）
+- JDK：OpenJDK 25（Temurin，rules_java remotejdk25），同一台 Apple M4 Pro
+- 方法：JIT 预热 1s，5 个 epoch（每个 ~200ms）取中位数
+
+| workload | Prism parse | Trino parse | 倍数 | Prism parse+print | Trino parse+format | 倍数 |
+|---|---:|---:|---:|---:|---:|---:|
+| dashboard_s | 12.67 ns/B | 120.37 ns/B | **9.5x** | 14.50 ns/B | 216.57 ns/B | **14.9x** |
+| dashboard_m | 13.69 ns/B | 118.54 ns/B | 8.7x | 15.37 ns/B | 212.07 ns/B | 13.8x |
+| dashboard_l | 14.15 ns/B | 117.34 ns/B | 8.3x | 15.90 ns/B | 215.67 ns/B | 13.6x |
+| union_report_m | 13.66 ns/B | 117.15 ns/B | 8.6x | 15.36 ns/B | 222.41 ns/B | 14.5x |
+| union_report_l | 13.98 ns/B | 119.56 ns/B | 8.6x | 15.94 ns/B | 226.36 ns/B | 14.2x |
+| expr_deep | 13.65 ns/B | 340.17 ns/B | **24.9x** | 15.38 ns/B | 392.83 ns/B | **25.5x** |
+| subquery_nest | 13.20 ns/B | 125.11 ns/B | 9.5x | 14.56 ns/B | 206.19 ns/B | 14.2x |
+
+换算吞吐：Trino parse ~8.0–8.5 MB/s（expr_deep 2.9 MB/s），Prism ~70–79 MB/s。
+
+### 对比观察
+
+- **常量差约 9 倍**：常规形态下 Trino 稳定在 ~117–125 ns/B。差距来源主要
+  是解析器生成方式（ANTLR ALL(*) 预测 vs 手写递归下降 + 关键字二分）和内存
+  模型（每节点堆分配 + GC vs arena 块分配）。
+- **深表达式放大到 25 倍**：expr_deep（深度 11 的嵌套表达式）上 Trino 恶化
+  到 340 ns/B，Prism 仍是 13.65 ns/B——ANTLR 的自适应预测在深嵌套文法上
+  代价显著，而 Prism 的 precedence climbing 每字节成本与嵌套深度无关。
+- Trino 的 formatter 增量（~95 ns/B）远大于 Prism printer（~1.3 ns/B），
+  因为 SqlFormatter 做完整的美化布局，而 Prism printer 只做优先级最小
+  括号化的线性输出——两者定位不同，此项仅供参考。
+- 公平性说明：JVM 侧已充分预热（数字为 JIT 稳态），GC 默认参数；
+  Trino 侧字节数含 dump 文件末尾换行（+1B，可忽略）。

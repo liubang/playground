@@ -29,6 +29,8 @@
 #define ANKERL_NANOBENCH_IMPLEMENT
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <nanobench.h>
 #include <random>
@@ -314,7 +316,7 @@ bool validate(const Workload& w) {
 
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
     Gen gen(20260914);
     const std::vector<Workload> workloads = {
         {"dashboard_s", gen.dashboard(12, 2, 3)},
@@ -330,6 +332,19 @@ int main() {
         if (!validate(w)) {
             return 1;
         }
+    }
+
+    // Dump the workloads as .sql files (checked in under benchmark/workloads/
+    // so other implementations, e.g. the Trino parser comparison benchmark
+    // under //java/pl/prism, can run against the exact same inputs).
+    if (argc >= 3 && std::string(argv[1]) == "--dump") {
+        const std::filesystem::path dir(argv[2]);
+        std::filesystem::create_directories(dir);
+        for (const Workload& w : workloads) {
+            std::ofstream out(dir / (w.name + ".sql"));
+            out << w.sql << '\n';
+        }
+        return 0;
     }
 
     std::cout << "| workload | bytes |\n|---|---:|\n";

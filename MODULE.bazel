@@ -258,6 +258,8 @@ maven.install(
         "org.apache.spark:spark-sql_2.13:4.0.2",
         "org.apache.spark:spark-hive_2.13:4.0.2",
         "io.trino:trino-spi:468",
+        # 仅供 //java/pl/prism 的 Trino parser 对比 benchmark 使用
+        "io.trino:trino-parser:468",
         "io.airlift:slice:2.3",
         # 仅供 //tools/format 的 google-java-format wrapper 使用（不参与业务代码编译）
         "com.google.googlejavaformat:google-java-format:1.36.1",
