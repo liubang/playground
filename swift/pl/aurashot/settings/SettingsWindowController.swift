@@ -10,6 +10,7 @@ final class SettingsWindowController: NSObject {
     static let shared = SettingsWindowController()
 
     private var window: NSWindow?
+    private var grid: NSGridView?
     private var pathLabel: NSTextField?
     private var autoSaveCheckbox: NSButton?
     private var borderShadowCheckbox: NSButton?
@@ -17,10 +18,10 @@ final class SettingsWindowController: NSObject {
     private var patternPreview: NSTextField?
     private var ocrEngineLabel: NSTextField?
     private var ocrModelLabel: NSTextField?
-    private var ocrStatusLabel: NSTextField?
     private var ocrServerStatusLabel: NSTextField?
     private var ocrServerRestartButton: NSButton?
     private var hotkeyWarningLabel: NSTextField?
+    private var hotkeyWarningRow: NSGridRow?
 
     func show() {
         if window == nil {
@@ -72,11 +73,11 @@ final class SettingsWindowController: NSObject {
             settings.ocrCombo = combo
         }
 
-        // Inline hotkey conflict warning (hidden until needed).
+        // Inline hotkey conflict warning. The whole grid ROW is hidden
+        // (not just the label) so it leaves no gap in the layout.
         let hotkeyWarning = NSTextField(labelWithString: "")
         hotkeyWarning.font = .systemFont(ofSize: 11)
         hotkeyWarning.textColor = .systemRed
-        hotkeyWarning.isHidden = true
         hotkeyWarningLabel = hotkeyWarning
 
         // Save folder row.
@@ -164,30 +165,55 @@ final class SettingsWindowController: NSObject {
         serverRow.alignment = .firstBaseline
         serverRow.spacing = 8
 
-        let status = NSTextField(labelWithString: "")
-        status.font = .systemFont(ofSize: 11)
-        ocrStatusLabel = status
-
-        // Form grid.
-        let grid = NSGridView(views: [
-            [label("截图快捷键"), captureRecorder],
-            [label("OCR 快捷键"), ocrRecorder],
-            [NSGridCell.emptyContentView, hotkeyWarning],
-            [label("保存位置"), pathRow],
-            [NSGridCell.emptyContentView, autoSave],
-            [NSGridCell.emptyContentView, borderShadow],
-            [label("文件名规则"), pattern],
-            [NSGridCell.emptyContentView, preview],
-            [label("OCR 引擎"), ocrEngineRow],
-            [label("OCR 模型目录"), ocrModelRow],
-            [label("OCR 服务"), serverRow],
-            [NSGridCell.emptyContentView, status],
-        ])
-        grid.column(at: 0).xPlacement = .trailing
+        // Form grid, grouped into three sections (截图 / 存储 / OCR).
+        // Section headers sit in the content column; the label column
+        // stays empty for those rows.
+        let grid = NSGridView()
         grid.rowAlignment = .firstBaseline
         grid.rowSpacing = 12
         grid.columnSpacing = 10
         grid.translatesAutoresizingMaskIntoConstraints = false
+
+        @discardableResult
+        func addRow(_ views: [NSView]) -> Int {
+            grid.addRow(with: views)
+            return grid.numberOfRows - 1
+        }
+
+        /// Rows whose content should span the full content-column width
+        /// (path/pattern/server rows); everything else is leading-aligned
+        /// at its natural size (hotkey recorders, checkboxes, hints).
+        func addFillRow(_ views: [NSView]) {
+            let row = addRow(views)
+            grid.cell(atColumnIndex: 1, rowIndex: row).xPlacement = .fill
+        }
+
+        func addSection(_ title: String, topPadding: CGFloat) {
+            let row = addRow([NSGridCell.emptyContentView, sectionHeader(title)])
+            grid.row(at: row).topPadding = topPadding
+        }
+
+        addSection("截图", topPadding: 0)
+        addRow([label("截图快捷键"), captureRecorder])
+        addRow([label("OCR 快捷键"), ocrRecorder])
+        hotkeyWarningRow = grid.row(at: addRow([NSGridCell.emptyContentView, hotkeyWarning]))
+        hotkeyWarningRow?.isHidden = true
+        addRow([NSGridCell.emptyContentView, borderShadow])
+
+        addSection("存储", topPadding: 10)
+        addFillRow([label("保存位置"), pathRow])
+        addRow([NSGridCell.emptyContentView, autoSave])
+        addFillRow([label("文件名规则"), pattern])
+        addRow([NSGridCell.emptyContentView, preview])
+
+        addSection("OCR", topPadding: 10)
+        addFillRow([label("OCR 引擎"), ocrEngineRow])
+        addFillRow([label("OCR 模型目录"), ocrModelRow])
+        addFillRow([label("OCR 服务"), serverRow])
+
+        grid.column(at: 0).xPlacement = .trailing
+        grid.column(at: 1).xPlacement = .leading
+        self.grid = grid
 
         let content = NSView()
         content.addSubview(grid)
@@ -195,12 +221,13 @@ final class SettingsWindowController: NSObject {
             grid.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
             grid.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
             grid.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
+            grid.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
         ])
         window.contentView = content
         // Rows were added over time; size the window to the grid.
         let fitting = grid.fittingSize
         window.setContentSize(NSSize(width: max(470, fitting.width + 40),
-                                     height: fitting.height + 44))
+                                     height: fitting.height + 40))
         self.window = window
     }
 
@@ -208,6 +235,12 @@ final class SettingsWindowController: NSObject {
         let label = NSTextField(labelWithString: text)
         label.alignment = .right
         return label
+    }
+
+    private func sectionHeader(_ text: String) -> NSTextField {
+        let header = NSTextField(labelWithString: text)
+        header.font = .boldSystemFont(ofSize: 13)
+        return header
     }
 
     // MARK: - Values
@@ -219,62 +252,87 @@ final class SettingsWindowController: NSObject {
         borderShadowCheckbox?.state = settings.borderShadow ? .on : .off
         patternField?.stringValue = settings.filenamePattern
         updatePatternPreview()
-        reloadOcrStatus()
-        updateServerStatusLabel()
+        updateOcrStatus()
         // Pick up crashed children / external servers asynchronously.
         Task {
             await MllmServerClient.shared.refresh()
             await MainActor.run { [weak self] in
-                self?.updateServerStatusLabel()
+                self?.updateOcrStatus()
             }
         }
     }
 
-    private func reloadOcrStatus() {
+    /// Single source of truth for the OCR rows: engine/model paths plus
+    /// one status line in the 服务 row, colored by health (green =
+    /// running, orange = degraded/booting, red = failed).
+    private func updateOcrStatus() {
         let settings = Settings.shared
         ocrEngineLabel?.stringValue = settings.ocrEnginePath.isEmpty
             ? "自动（应用内置 mllm_server）"
             : settings.ocrEnginePath
         ocrModelLabel?.stringValue = settings.ocrModelDir.path
+
+        // Static resolvability check, shown when nothing is running yet.
+        var standbyIssue: String?
         do {
             _ = try MllmOcrEngine.resolveModels()
-            if MllmOcrEngine.resolveServer() != nil {
-                ocrStatusLabel?.stringValue = "OCR 就绪（server 模式）"
-                ocrStatusLabel?.textColor = .systemGreen
-            } else {
+            if MllmOcrEngine.resolveServer() == nil {
                 _ = try MllmOcrEngine.resolveCLI()
-                ocrStatusLabel?.stringValue = "未找到 mllm_server，回退一次性 CLI（每次识别较慢）"
-                ocrStatusLabel?.textColor = .systemOrange
+                standbyIssue = "未找到 mllm_server，回退一次性 CLI（每次识别较慢）"
             }
         } catch {
-            ocrStatusLabel?.stringValue = error.localizedDescription
-            ocrStatusLabel?.textColor = .systemOrange
+            standbyIssue = error.localizedDescription
         }
-    }
 
-    private func updateServerStatusLabel() {
         let status = MllmServerClient.shared.status
+        let text: String
+        let color: NSColor
         switch status.phase {
         case .running:
-            ocrServerStatusLabel?.stringValue = "运行中（本应用启动，端口 8310）"
+            text = "运行中（本应用启动，端口 8310）"
+            color = .systemGreen
         case .booting:
-            ocrServerStatusLabel?.stringValue = "启动中（模型加载可能需要几十秒）…"
+            text = "启动中（模型加载可能需要几十秒）…"
+            color = .systemOrange
         case .failed:
-            ocrServerStatusLabel?.stringValue = "启动失败：\(status.detail)"
+            text = "启动失败：\(status.detail)"
+            color = .systemRed
         case .stopped:
             if status.healthyExternal {
-                ocrServerStatusLabel?.stringValue = "运行中（外部进程，端口 8310；重启按钮仅控制本应用启动的进程）"
+                text = "运行中（外部进程，端口 8310；重启按钮仅控制本应用启动的进程）"
+                color = .systemGreen
+            } else if let standbyIssue {
+                text = standbyIssue
+                color = .systemOrange
             } else if status.detail.isEmpty {
-                ocrServerStatusLabel?.stringValue = "未运行（首次 OCR 时自动启动）"
+                text = "就绪，未运行（首次 OCR 时自动启动）"
+                color = .secondaryLabelColor
             } else {
-                ocrServerStatusLabel?.stringValue = "未运行（\(status.detail)）"
+                text = "未运行（\(status.detail)）"
+                color = .systemOrange
             }
         }
+        ocrServerStatusLabel?.stringValue = text
+        ocrServerStatusLabel?.textColor = color
     }
 
     private func showHotkeyConflict(_ message: String?) {
         hotkeyWarningLabel?.stringValue = message ?? ""
-        hotkeyWarningLabel?.isHidden = (message == nil)
+        hotkeyWarningRow?.isHidden = (message == nil)
+        resizeToFitContent()
+    }
+
+    /// The warning row appears/disappears after the window is built, so
+    /// the initial content size would clip it — re-fit, keeping the top
+    /// edge of the window in place.
+    private func resizeToFitContent() {
+        guard let window, let grid else { return }
+        let fitting = grid.fittingSize
+        let size = NSSize(width: max(470, fitting.width + 40), height: fitting.height + 40)
+        var frame = window.frame
+        frame.origin.y -= size.height - frame.height
+        frame.size = size
+        window.setFrame(frame, display: true, animate: true)
     }
 
     private func updatePatternPreview() {
@@ -321,13 +379,14 @@ final class SettingsWindowController: NSObject {
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             Settings.shared.ocrEnginePath = url.path
-            self?.reloadOcrStatus()
+            self?.updateOcrStatus()
         }
     }
 
     @objc private func restartOcrServer() {
         guard let binary = MllmOcrEngine.resolveServer() else {
             ocrServerStatusLabel?.stringValue = "未找到 mllm_server 二进制"
+            ocrServerStatusLabel?.textColor = .systemOrange
             return
         }
         let model: String
@@ -336,15 +395,17 @@ final class SettingsWindowController: NSObject {
             (model, mmproj) = try MllmOcrEngine.resolveModels()
         } catch {
             ocrServerStatusLabel?.stringValue = error.localizedDescription
+            ocrServerStatusLabel?.textColor = .systemOrange
             return
         }
         ocrServerRestartButton?.isEnabled = false
         ocrServerStatusLabel?.stringValue = "启动中（模型加载可能需要几十秒）…"
+        ocrServerStatusLabel?.textColor = .systemOrange
         Task {
             _ = await MllmServerClient.shared.restart(binary: binary, model: model, mmproj: mmproj)
             await MainActor.run { [weak self] in
                 self?.ocrServerRestartButton?.isEnabled = true
-                self?.updateServerStatusLabel()
+                self?.updateOcrStatus()
             }
         }
     }
@@ -359,7 +420,7 @@ final class SettingsWindowController: NSObject {
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             Settings.shared.ocrModelDir = url
-            self?.reloadOcrStatus()
+            self?.updateOcrStatus()
         }
     }
 

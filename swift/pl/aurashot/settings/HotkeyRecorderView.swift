@@ -32,6 +32,15 @@ final class HotkeyRecorderView: NSView {
         true
     }
 
+    /// The settings grid aligns rows by first text baseline. A plain
+    /// NSView reports its BOTTOM edge as the baseline, which drops the
+    /// row label a few points below the recorder — report the baseline
+    /// of the vertically-centered text we draw in draw(_:) instead.
+    override var firstBaselineOffsetFromTop: CGFloat {
+        let font = NSFont.systemFont(ofSize: 13)
+        return (bounds.height + font.ascender + font.descender) / 2
+    }
+
     override func mouseDown(with _: NSEvent) {
         recording = true
         window?.makeFirstResponder(self)
