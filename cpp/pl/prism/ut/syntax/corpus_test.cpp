@@ -21,6 +21,8 @@
 #include <string>
 #include <vector>
 
+#include "cpp/pl/prism/printer/sql_printer.h"
+#include "cpp/pl/prism/syntax/ast_dump.h"
 #include "cpp/pl/prism/syntax/parser.h"
 #include "gtest/gtest.h"
 #include "tools/cpp/runfiles/runfiles.h"
@@ -86,6 +88,74 @@ TEST(GoldenCorpus, ExpressionsParse) {
     ASSERT_FALSE(lines.empty());
     const std::string failures =
         collect_failures(lines, [](Parser& p) { return p.parse_expression(); });
+    EXPECT_TRUE(failures.empty()) << failures;
+}
+
+// Round-trip invariant for the trino dialect over the whole pass corpus:
+// parse -> print -> re-parse must yield an identical AST (compared via
+// dump()) and printing must be idempotent.
+std::string collect_roundtrip_failures(const std::vector<std::string>& lines,
+                                       const std::function<ParseResult(Parser&)>& parse) {
+    std::string detail;
+    size_t failed = 0;
+    for (const std::string& sql : lines) {
+        Parser parser(sql);
+        ParseResult first = parse(parser);
+        if (!first.ok()) {
+            ++failed;
+            if (failed <= 10) {
+                detail += "  " + sql + "\n    -> parse failed\n";
+            }
+            continue;
+        }
+        const std::string printed = printer::print(first.root);
+        Parser second(printed);
+        ParseResult reparsed = parse(second);
+        if (!reparsed.ok()) {
+            ++failed;
+            if (failed <= 10) {
+                detail += "  " + sql + "\n    print -> " + printed +
+                          "\n    -> re-parse failed: " + reparsed.errors[0].message + "\n";
+            }
+            continue;
+        }
+        if (dump(first.root) != dump(reparsed.root)) {
+            ++failed;
+            if (failed <= 10) {
+                detail += "  " + sql + "\n    print -> " + printed + "\n    -> AST drift:\n      " +
+                          dump(first.root) + "\n      " + dump(reparsed.root) + "\n";
+            }
+            continue;
+        }
+        const std::string reprinted = printer::print(reparsed.root);
+        if (reprinted != printed) {
+            ++failed;
+            if (failed <= 10) {
+                detail += "  " + sql + "\n    print not idempotent:\n      " + printed +
+                          "\n      " + reprinted + "\n";
+            }
+        }
+    }
+    if (failed == 0) {
+        return {};
+    }
+    return std::to_string(failed) + " of " + std::to_string(lines.size()) +
+           " entries failed round-trip:\n" + detail;
+}
+
+TEST(GoldenCorpus, StatementRoundTrip) {
+    const std::vector<std::string> lines = read_corpus("golden_statements.txt");
+    ASSERT_FALSE(lines.empty());
+    const std::string failures =
+        collect_roundtrip_failures(lines, [](Parser& p) { return p.parse_statement(); });
+    EXPECT_TRUE(failures.empty()) << failures;
+}
+
+TEST(GoldenCorpus, ExpressionRoundTrip) {
+    const std::vector<std::string> lines = read_corpus("golden_expressions.txt");
+    ASSERT_FALSE(lines.empty());
+    const std::string failures =
+        collect_roundtrip_failures(lines, [](Parser& p) { return p.parse_expression(); });
     EXPECT_TRUE(failures.empty()) << failures;
 }
 

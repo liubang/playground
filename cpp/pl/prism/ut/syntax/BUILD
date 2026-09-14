@@ -51,8 +51,22 @@ cc_test(
     data = ["//cpp/pl/prism/testdata:golden"],
     linkopts = LINKOPTS,
     deps = [
+        "//cpp/pl/prism/printer",
         "//cpp/pl/prism/syntax",
         "@bazel_tools//tools/cpp/runfiles",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "printer_test",
+    srcs = ["printer_test.cpp"],
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/prism/dialect",
+        "//cpp/pl/prism/printer",
+        "//cpp/pl/prism/syntax",
         "@googletest//:gtest_main",
     ],
 )
