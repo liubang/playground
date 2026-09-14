@@ -26,6 +26,65 @@
 
 namespace pl::prism::syntax {
 
+Expression* Parser::parse_listagg(SourceLocation loc) {
+    advance(); // LISTAGG
+    expect(TokenType::kLParen, "'(' after LISTAGG");
+    const bool distinct = match(TokenType::kKwDistinct);
+    Expression* value = parse_expr();
+    Expression* separator = nullptr;
+    OverflowBehavior overflow = OverflowBehavior::kUnspecified;
+    std::string_view overflow_filler;
+    OverflowCount overflow_count = OverflowCount::kUnspecified;
+    if (match(TokenType::kComma)) {
+        separator = parse_expr();
+        if (match(TokenType::kKwOn)) {
+            if (!match_soft("overflow")) {
+                fail(cur(), "expected OVERFLOW after ON");
+            }
+            if (match_soft("error")) {
+                overflow = OverflowBehavior::kError;
+            } else if (match_soft("truncate")) {
+                overflow = OverflowBehavior::kTruncate;
+                if (at(TokenType::kString)) {
+                    overflow_filler = cur_text();
+                    advance();
+                }
+                if (match(TokenType::kKwWith)) {
+                    if (!match_soft("count")) {
+                        fail(cur(), "expected COUNT after WITH");
+                    }
+                    overflow_count = OverflowCount::kWith;
+                } else if (match_soft("without")) {
+                    if (!match_soft("count")) {
+                        fail(cur(), "expected COUNT after WITHOUT");
+                    }
+                    overflow_count = OverflowCount::kWithout;
+                }
+            } else {
+                fail(cur(), "expected ERROR or TRUNCATE after ON OVERFLOW");
+            }
+        }
+    }
+    expect(TokenType::kRParen, "')' after LISTAGG arguments");
+    if (!match_soft("within")) {
+        fail(cur(), "expected WITHIN GROUP after LISTAGG");
+    }
+    expect(TokenType::kKwGroup, "GROUP after WITHIN");
+    expect(TokenType::kLParen, "'(' after WITHIN GROUP");
+    expect(TokenType::kKwOrder, "ORDER in WITHIN GROUP");
+    expect(TokenType::kKwBy, "BY after ORDER");
+    std::vector<SortItem*> order_by = parse_sort_list();
+    expect(TokenType::kRParen, "')' after WITHIN GROUP");
+    return make<ListaggExpression>(loc,
+                                   distinct,
+                                   value,
+                                   separator,
+                                   overflow,
+                                   overflow_filler,
+                                   overflow_count,
+                                   make_list(order_by));
+}
+
 Expression* Parser::parse_function_call(SourceLocation loc, AstList<NamePart> name) {
     expect(TokenType::kLParen, "'(' after function name");
     bool distinct = false;

@@ -45,7 +45,7 @@ Query* Parser::parse_query() {
     Expression* fetch_first = nullptr;
     bool fetch_with_ties = false;
     if (match(TokenType::kKwLimit)) {
-        if (!match(TokenType::kKwAll)) {
+        if (!match_soft("all")) {
             limit = parse_expr();
         }
     } else if (at_soft("fetch")) {
@@ -123,7 +123,7 @@ Node* Parser::parse_set_operation() {
     while (at(TokenType::kKwUnion) || at(TokenType::kKwExcept)) {
         const SetOp op = at(TokenType::kKwUnion) ? SetOp::kUnion : SetOp::kExcept;
         const SourceLocation loc = loc_of(advance());
-        const bool all = match(TokenType::kKwAll);
+        const bool all = match_soft("all");
         if (!all) {
             match(TokenType::kKwDistinct);
         }
@@ -156,7 +156,7 @@ Node* Parser::parse_intersect() {
     Node* left = parse_query_term();
     while (at(TokenType::kKwIntersect)) {
         const SourceLocation loc = loc_of(advance());
-        const bool all = match(TokenType::kKwAll);
+        const bool all = match_soft("all");
         if (!all) {
             match(TokenType::kKwDistinct);
         }
@@ -197,7 +197,12 @@ Node* Parser::parse_query_term() {
 Node* Parser::parse_query_specification() {
     const SourceLocation loc = loc_of(advance()); // SELECT
     bool distinct = false;
-    if (!match(TokenType::kKwAll)) {
+    // ALL is a soft keyword: a set quantifier only when a select item
+    // follows, otherwise an identifier (SELECT ALL, SOME, ANY FROM t).
+    if (at_soft("all") && peek(1).type != TokenType::kComma && peek(1).type != TokenType::kKwFrom &&
+        peek(1).type != TokenType::kEof && peek(1).type != TokenType::kSemicolon) {
+        advance();
+    } else {
         distinct = match(TokenType::kKwDistinct);
     }
 
@@ -219,8 +224,28 @@ Node* Parser::parse_query_specification() {
         where = parse_expr();
     }
     std::vector<Expression*> group_by;
+    bool group_by_distinct = false;
     if (match(TokenType::kKwGroup)) {
         expect(TokenType::kKwBy, "BY after GROUP");
+        if (match(TokenType::kKwDistinct)) {
+            group_by_distinct = true;
+        } else if (at_soft("all")) {
+            // ALL quantifies the grouping sets only when a grouping element
+            // follows; otherwise it is an ordinary column name.
+            const Token& next = peek(1);
+            const std::string_view text =
+                next.type == TokenType::kIdentifier ? next.text(source_) : std::string_view{};
+            const bool element_follows =
+                next.type != TokenType::kComma && next.type != TokenType::kEof &&
+                next.type != TokenType::kSemicolon && next.type != TokenType::kRParen &&
+                next.type != TokenType::kKwHaving && next.type != TokenType::kKwOrder &&
+                next.type != TokenType::kKwLimit && next.type != TokenType::kKwUnion &&
+                next.type != TokenType::kKwIntersect && next.type != TokenType::kKwExcept &&
+                !iequals(text, "offset") && !iequals(text, "fetch") && !iequals(text, "window");
+            if (element_follows) {
+                advance();
+            }
+        }
         group_by.push_back(parse_group_by_item());
         while (match(TokenType::kComma)) {
             group_by.push_back(parse_group_by_item());
@@ -248,6 +273,7 @@ Node* Parser::parse_query_specification() {
                                     where,
                                     having,
                                     make_list(group_by),
+                                    group_by_distinct,
                                     make_list(window_definitions));
 }
 
@@ -276,7 +302,7 @@ Node* Parser::parse_values() {
 SelectItem* Parser::parse_select_item() {
     const SourceLocation loc = loc_of(cur());
     if (match(TokenType::kStar)) {
-        return make<AllColumns>(loc, AstList<NamePart>{});
+        return make<AllColumns>(loc, AstList<NamePart>{}, nullptr, AstList<NamePart>{});
     }
     // prefix.* — only when a name chain is directly followed by '.' '*'
     if (at_name()) {
@@ -298,12 +324,31 @@ SelectItem* Parser::parse_select_item() {
             parts.push_back(parse_name_part());
         }
         if (prefixed_star) {
-            return make<AllColumns>(loc, make_list(parts));
+            return make<AllColumns>(loc, make_list(parts), nullptr, AstList<NamePart>{});
         }
         pos_ = saved;
     }
 
     Expression* expr = parse_expr();
+    // (expression).* — the target must be a primary-level expression so that
+    // `SELECT 1 + A.*` stays a syntax error, matching Trino.
+    if (at(TokenType::kDot) && peek(1).type == TokenType::kStar &&
+        (expr->kind == NodeKind::kRow || expr->kind == NodeKind::kIdentifier ||
+         expr->kind == NodeKind::kDereference || expr->kind == NodeKind::kSubqueryExpression)) {
+        advance(); // '.'
+        advance(); // '*'
+        std::vector<NamePart> aliases;
+        if (match(TokenType::kKwAs)) {
+            expect(TokenType::kLParen, "'(' after AS");
+            aliases.push_back(parse_name_part());
+            while (match(TokenType::kComma)) {
+                aliases.push_back(parse_name_part());
+            }
+            expect(TokenType::kRParen, "')' after column aliases");
+        }
+        return make<AllColumns>(loc, AstList<NamePart>{}, expr, make_list(aliases));
+    }
+
     NamePart alias{};
     bool has_alias = false;
     if (match(TokenType::kKwAs)) {
@@ -317,6 +362,11 @@ SelectItem* Parser::parse_select_item() {
 }
 
 Expression* Parser::parse_group_by_item() {
+    // GROUP BY AUTO derives the grouping sets from the select items.
+    if (at_soft("auto")) {
+        const SourceLocation loc = loc_of(advance());
+        return make<GroupingAuto>(loc);
+    }
     // GROUP BY () is a single empty grouping set.
     if (at(TokenType::kLParen) && peek(1).type == TokenType::kRParen) {
         const SourceLocation loc = loc_of(advance());

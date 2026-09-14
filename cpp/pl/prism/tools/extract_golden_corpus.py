@@ -164,6 +164,27 @@ def looks_like_sql(s):
     # Error message templates and prose, not SQL.
     if "%s" in s or "mismatched input" in lowered or lowered.startswith("line "):
         return False
+    # Expected-error messages captured from assertInvalid* message arguments.
+    if (
+        lowered.startswith(("invalid ", "incomplete ", "unexpected "))
+        or " not supported" in lowered
+        or " not valid" in lowered
+        or " must have" in lowered
+        or " must contain" in lowered
+        or " not allowed" in lowered
+        or " did you mean" in lowered
+    ):
+        return False
+    # Non-SQL literals from expected-AST construction (identifier strings like
+    # order"2); real SQL containing quoted names always has a SQL keyword.
+    if '"' in s and not re.search(
+        r"\b(select|from|where|values|table|join|cast|case|insert|update|delete|"
+        r"create|alter|drop|set|grant|revoke|deny|analyze|refresh|comment|"
+        r"prepare|execute|describe|show|use|reset|start|commit|rollback|call|"
+        r"explain|truncate|deallocate|role|schema|catalog|view|session|path)\b",
+        lowered,
+    ):
+        return False
     if re.match(r"^[a-z ]+[.?!]?$", lowered) and not re.search(
         r"\b(select|from|where|values|table|join|cast|case|and|or|not|null|in|"
         r"is|like|between|as|by|on|over|row|array|interval|date|time|exists)\b",

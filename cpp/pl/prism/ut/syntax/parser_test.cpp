@@ -458,5 +458,127 @@ TEST(ParserTest, OffsetNotSwallowedAsAlias) {
               dump_statement("SELECT * FROM table1 FETCH FIRST 2 ROWS ONLY"));
 }
 
+TEST(ParserTest, IntervalFieldPrecision) {
+    EXPECT_EQ("(interval '1' YEAR(1))", dump_expression("INTERVAL '1' YEAR(1)"));
+    EXPECT_EQ("(interval '1' YEAR(1) TO MONTH)", dump_expression("INTERVAL '1' YEAR(1) TO MONTH"));
+    EXPECT_EQ("(interval '1' DAY(1) TO SECOND(2))",
+              dump_expression("INTERVAL '1' DAY(1) TO SECOND(2)"));
+    EXPECT_EQ("(interval '1' SECOND(1, 2))", dump_expression("INTERVAL '1' SECOND(1, 2)"));
+}
+
+TEST(ParserTest, DecimalTypedLiteral) {
+    EXPECT_EQ("DECIMAL '12.34'", dump_expression("DECIMAL '12.34'"));
+    EXPECT_EQ("DECIMAL '+.34'", dump_expression("DECIMAL '+.34'"));
+    EXPECT_EQ("DECIMAL '-12'", dump_expression("DECIMAL '-12'"));
+}
+
+TEST(ParserTest, UnicodeStringWithUescape) {
+    EXPECT_EQ("U&'hello!6d4B' UESCAPE '!'", dump_expression("U&'hello!6d4B' UESCAPE '!'"));
+    EXPECT_EQ("U&'' UESCAPE ')'", dump_expression("U&'' UESCAPE ')'"));
+    EXPECT_EQ("U&'hello\\8Bd5'", dump_expression("U&'hello\\8Bd5'"));
+    for (std::string_view invalid : {"U&'hello\\8Bd5' UESCAPE ''",
+                                     "U&'hello\\8Bd5' UESCAPE '%%'",
+                                     "U&'hello\\8Bd5' UESCAPE ' '",
+                                     "U&'hello\\8Bd5' UESCAPE '1'",
+                                     "U&'hello\\8Bd5' UESCAPE '+'",
+                                     "U&'hello\\8Bd5' UESCAPE ''''",
+                                     "'abc' UESCAPE 'x'"}) {
+        Parser parser(invalid);
+        EXPECT_FALSE(parser.parse_expression().ok()) << invalid;
+    }
+}
+
+TEST(ParserTest, BetweenSymmetry) {
+    EXPECT_EQ("(between 1 2 3)", dump_expression("1 BETWEEN ASYMMETRIC 2 AND 3"));
+    EXPECT_EQ("(between sym 1 2 3)", dump_expression("1 BETWEEN SYMMETRIC 2 AND 3"));
+    EXPECT_EQ("(notbetween sym 1 2 3)", dump_expression("1 NOT BETWEEN SYMMETRIC 2 AND 3"));
+}
+
+TEST(ParserTest, AtLocal) {
+    EXPECT_EQ("(atlocal TIMESTAMP '2012-10-31 01:00 UTC')",
+              dump_expression("TIMESTAMP '2012-10-31 01:00 UTC' AT LOCAL"));
+}
+
+TEST(ParserTest, Listagg) {
+    EXPECT_EQ("(listagg x (ord (item x)))",
+              dump_expression("LISTAGG(x) WITHIN GROUP (ORDER BY x)"));
+    EXPECT_EQ("(listagg distinct x (ord (item x)))",
+              dump_expression("LISTAGG( DISTINCT x) WITHIN GROUP (ORDER BY x)"));
+    EXPECT_EQ("(listagg x ',' (ord (item y)))",
+              dump_expression("LISTAGG(x, ',') WITHIN GROUP (ORDER BY y)"));
+    EXPECT_EQ("(listagg x ',' (overflow error) (ord (item x)))",
+              dump_expression("LISTAGG(x, ',' ON OVERFLOW ERROR) WITHIN GROUP (ORDER BY x)"));
+    EXPECT_EQ("(listagg x ',' (overflow truncate with) (ord (item x)))",
+              dump_expression(
+                  "LISTAGG(x, ',' ON OVERFLOW TRUNCATE WITH COUNT) WITHIN GROUP (ORDER BY x)"));
+    EXPECT_EQ("(listagg x ',' (overflow truncate 'HIDDEN' without) (ord (item x)))",
+              dump_expression("LISTAGG(x, ',' ON OVERFLOW TRUNCATE 'HIDDEN' WITHOUT COUNT) "
+                              "WITHIN GROUP (ORDER BY x)"));
+}
+
+TEST(ParserTest, GroupByQuantifier) {
+    EXPECT_EQ("(query (spec (select *) (from (table table1)) (group (auto))))",
+              dump_statement("SELECT * FROM table1 GROUP BY ALL AUTO"));
+    EXPECT_EQ("(query (spec (select *) (from (table table1)) (group distinct (auto))))",
+              dump_statement("SELECT * FROM table1 GROUP BY DISTINCT AUTO"));
+    EXPECT_EQ(
+        "(query (spec (select *) (from (table table1)) "
+        "(group (call GROUPING SETS (row a b) (row a) (row)) (call CUBE c) (call ROLLUP d))))",
+        dump_statement("SELECT * FROM table1 GROUP BY ALL GROUPING SETS ((a, b), (a), ()), "
+                       "CUBE (c), ROLLUP (d)"));
+    EXPECT_EQ("(query (spec (select (col all)) (from (table t)) (group all)))",
+              dump_statement("SELECT all FROM t GROUP BY all"));
+}
+
+TEST(ParserTest, AllSomeAnyAsIdentifiers) {
+    EXPECT_EQ("(query (spec (select (col ALL) (col SOME) (col ANY)) (from (table t))))",
+              dump_statement("SELECT ALL, SOME, ANY FROM t"));
+    EXPECT_EQ("(query (spec (select (col x)) (from (table t))))",
+              dump_statement("SELECT ALL x FROM t"));
+    EXPECT_EQ("(query (spec (select (col all)) (from (table t))))",
+              dump_statement("SELECT all FROM t"));
+    EXPECT_EQ("(qcmp = all x (query (spec (select (col y)) (from (table t)))))",
+              dump_expression("x = ALL (SELECT y FROM t)"));
+}
+
+TEST(ParserTest, MatchPredicate) {
+    EXPECT_EQ("(match (row a b) (query (spec (select (col x) (col y)) (from (table t)))))",
+              dump_expression("ROW(a, b) MATCH (SELECT x, y FROM t)"));
+    EXPECT_EQ("(match simple (row a) (query (spec (select (col x)) (from (table t)))))",
+              dump_expression("ROW(a) MATCH SIMPLE (SELECT x FROM t)"));
+    EXPECT_EQ("(match partial (row a) (query (spec (select (col x)) (from (table t)))))",
+              dump_expression("ROW(a) MATCH PARTIAL (SELECT x FROM t)"));
+    EXPECT_EQ("(match unique (row a) (query (spec (select (col x)) (from (table t)))))",
+              dump_expression("ROW(a) MATCH UNIQUE (SELECT x FROM t)"));
+    EXPECT_EQ(
+        "(match unique full (row a b) (query (spec (select (col x) (col y)) (from (table t)))))",
+        dump_expression("ROW(a, b) MATCH UNIQUE FULL (SELECT x, y FROM t)"));
+}
+
+TEST(ParserTest, PartialWhenClause) {
+    EXPECT_EQ("(case x (when (> _ 5) 'big') (when 0 'zero'))",
+              dump_expression("CASE x WHEN > 5 THEN 'big' WHEN 0 THEN 'zero' END"));
+    EXPECT_EQ("(case x (when (notbetween _ 1 4) 'a') (when (notin _ (list 0)) 'b') "
+              "(when (notlike _ 'p') 'c') (when (notnull _) 'd') "
+              "(when (isnotdistinct _ 1) 'e') (else 'f'))",
+              dump_expression("CASE x WHEN NOT BETWEEN 1 AND 4 THEN 'a' WHEN NOT IN (0) THEN 'b' "
+                              "WHEN NOT LIKE 'p' THEN 'c' WHEN IS NOT NULL THEN 'd' "
+                              "WHEN IS NOT DISTINCT FROM 1 THEN 'e' ELSE 'f' END"));
+    EXPECT_EQ("(case x (when (isnull _) 'unk') (when (like _ 'a%') 'a') (else 'other'))",
+              dump_expression("CASE x WHEN IS NULL THEN 'unk' WHEN LIKE 'a%' THEN 'a' "
+                              "ELSE 'other' END"));
+}
+
+TEST(ParserTest, RowDereferenceStar) {
+    EXPECT_EQ("(query (spec (select (row 1 'a' true).*)))",
+              dump_statement("SELECT ROW (1, 'a', true).*"));
+    EXPECT_EQ("(query (spec (select (row 1 'a' true).* (as (f1 f2 f3)))))",
+              dump_statement("SELECT ROW (1, 'a', true).* AS (f1, f2, f3)"));
+    {
+        Parser parser("SELECT 1 + A.*");
+        EXPECT_FALSE(parser.parse_statement().ok());
+    }
+}
+
 } // namespace
 } // namespace pl::prism::syntax

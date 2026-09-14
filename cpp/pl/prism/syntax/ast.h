@@ -90,6 +90,9 @@ enum class NodeKind : uint16_t {
     kAtTimeZone,
     kQuantifiedComparison,
     kGroupingOperation,
+    kListagg,
+    kMatchPredicate,
+    kGroupingAuto,
     // Select items
     kSingleColumn,
     kAllColumns,
@@ -163,6 +166,14 @@ enum class TrimSpec : uint8_t { kBoth, kLeading, kTrailing };
 
 enum class Quantifier : uint8_t { kAny, kSome, kAll };
 
+enum class BetweenSymmetry : uint8_t { kAsymmetric, kSymmetric };
+
+enum class MatchType : uint8_t { kUnspecified, kSimple, kPartial, kFull };
+
+enum class OverflowBehavior : uint8_t { kUnspecified, kError, kTruncate };
+
+enum class OverflowCount : uint8_t { kUnspecified, kWith, kWithout };
+
 struct Query;
 struct SortItem;
 struct Window;
@@ -222,8 +233,10 @@ struct NumberLiteral final : Expression {
 struct StringLiteral final : Expression {
     static constexpr NodeKind kKind = NodeKind::kStringLiteral;
     std::string_view value; // raw source text, including quotes and any prefix
+    char escape;            // UESCAPE character for U&'...' strings, '\0' when absent
 
-    StringLiteral(SourceLocation loc, std::string_view v) : Expression(kKind, loc), value(v) {}
+    StringLiteral(SourceLocation loc, std::string_view v, char e)
+        : Expression(kKind, loc), value(v), escape(e) {}
 };
 
 struct BooleanLiteral final : Expression {
@@ -284,6 +297,10 @@ struct ArithmeticUnaryExpression final : Expression {
         : Expression(kKind, loc), negative(neg), value(v) {}
 };
 
+// The left operand (`left`, `value`) of the predicate nodes may be nullptr:
+// that marks a partial predicate, which only appears as the WHEN clause of a
+// simple CASE (CASE x WHEN > 5 THEN ...) and is bound to the CASE operand
+// during analysis.
 struct ComparisonExpression final : Expression {
     static constexpr NodeKind kKind = NodeKind::kComparison;
     ComparisonOp op;
@@ -310,9 +327,15 @@ struct BetweenPredicate final : Expression {
     Expression* min;
     Expression* max;
     bool negated;
+    BetweenSymmetry symmetry; // kAsymmetric is the default
 
-    BetweenPredicate(SourceLocation loc, Expression* v, Expression* lo, Expression* hi, bool n)
-        : Expression(kKind, loc), value(v), min(lo), max(hi), negated(n) {}
+    BetweenPredicate(SourceLocation loc,
+                     Expression* v,
+                     Expression* lo,
+                     Expression* hi,
+                     bool n,
+                     BetweenSymmetry s)
+        : Expression(kKind, loc), value(v), min(lo), max(hi), negated(n), symmetry(s) {}
 };
 
 struct InListExpression final : Expression {
@@ -610,14 +633,27 @@ struct OverlayExpression final : Expression {
         : Expression(kKind, loc), value(v), replacement(r), start(s), length(l) {}
 };
 
-// value AT TIME ZONE zone
+// value AT TIME ZONE zone | value AT LOCAL
 struct AtTimeZone final : Expression {
     static constexpr NodeKind kKind = NodeKind::kAtTimeZone;
     Expression* value;
-    Expression* zone;
+    Expression* zone; // nullptr for AT LOCAL
+    bool local;
 
-    AtTimeZone(SourceLocation loc, Expression* v, Expression* z)
-        : Expression(kKind, loc), value(v), zone(z) {}
+    AtTimeZone(SourceLocation loc, Expression* v, Expression* z, bool l)
+        : Expression(kKind, loc), value(v), zone(z), local(l) {}
+};
+
+// value MATCH [UNIQUE] [SIMPLE | PARTIAL | FULL] (subquery)
+struct MatchPredicate final : Expression {
+    static constexpr NodeKind kKind = NodeKind::kMatchPredicate;
+    Expression* value; // nullptr in a partial WHEN clause
+    bool unique;
+    MatchType match_type;
+    Query* subquery;
+
+    MatchPredicate(SourceLocation loc, Expression* v, bool u, MatchType t, Query* s)
+        : Expression(kKind, loc), value(v), unique(u), match_type(t), subquery(s) {}
 };
 
 // value op ANY | SOME | ALL (subquery)
@@ -642,6 +678,43 @@ struct GroupingOperation final : Expression {
         : Expression(kKind, loc), args(a) {}
 };
 
+// GROUP BY AUTO — derives the grouping sets from the select items.
+struct GroupingAuto final : Expression {
+    static constexpr NodeKind kKind = NodeKind::kGroupingAuto;
+
+    explicit GroupingAuto(SourceLocation loc) : Expression(kKind, loc) {}
+};
+
+// LISTAGG([DISTINCT] value [, separator [ON OVERFLOW overflow]])
+//     WITHIN GROUP (ORDER BY ...)
+struct ListaggExpression final : Expression {
+    static constexpr NodeKind kKind = NodeKind::kListagg;
+    bool distinct;
+    Expression* value;
+    Expression* separator; // nullptr when absent
+    OverflowBehavior overflow;
+    std::string_view overflow_filler; // raw string text, empty when absent
+    OverflowCount overflow_count;
+    AstList<SortItem*> order_by;
+
+    ListaggExpression(SourceLocation loc,
+                      bool d,
+                      Expression* v,
+                      Expression* s,
+                      OverflowBehavior ob,
+                      std::string_view of,
+                      OverflowCount oc,
+                      AstList<SortItem*> o)
+        : Expression(kKind, loc),
+          distinct(d),
+          value(v),
+          separator(s),
+          overflow(ob),
+          overflow_filler(of),
+          overflow_count(oc),
+          order_by(o) {}
+};
+
 // Select items.
 
 struct SelectItem : Node {
@@ -660,12 +733,15 @@ struct SingleColumn final : SelectItem {
         : SelectItem(kKind, loc), expression(e), alias(a), has_alias(ha) {}
 };
 
-// * or prefix.*
+// *, prefix.*, or (expression).* with optional column aliases.
 struct AllColumns final : SelectItem {
     static constexpr NodeKind kKind = NodeKind::kAllColumns;
-    AstList<NamePart> prefix; // empty for bare *
+    AstList<NamePart> prefix;  // empty for bare *
+    Expression* target;        // (expr).* form, nullptr for bare/prefixed star
+    AstList<NamePart> aliases; // AS (f1, f2, ...), empty when absent
 
-    AllColumns(SourceLocation loc, AstList<NamePart> p) : SelectItem(kKind, loc), prefix(p) {}
+    AllColumns(SourceLocation loc, AstList<NamePart> p, Expression* t, AstList<NamePart> a)
+        : SelectItem(kKind, loc), prefix(p), target(t), aliases(a) {}
 };
 
 // Relation nodes.
@@ -811,6 +887,7 @@ struct QuerySpecification final : Node {
     Expression* where;       // nullptr when absent
     Expression* having;      // nullptr when absent
     AstList<Expression*> group_by;
+    bool group_by_distinct; // GROUP BY DISTINCT (ALL/default is false)
     AstList<WindowDefinition*> window_definitions;
 
     QuerySpecification(SourceLocation loc,
@@ -820,6 +897,7 @@ struct QuerySpecification final : Node {
                        Expression* w,
                        Expression* h,
                        AstList<Expression*> g,
+                       bool gd,
                        AstList<WindowDefinition*> wd)
         : Node(kKind, loc),
           distinct(d),
@@ -828,6 +906,7 @@ struct QuerySpecification final : Node {
           where(w),
           having(h),
           group_by(g),
+          group_by_distinct(gd),
           window_definitions(wd) {}
 };
 

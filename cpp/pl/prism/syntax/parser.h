@@ -136,6 +136,12 @@ private:
     Expression* parse_and();
     Expression* parse_not();
     Expression* parse_predicate();
+    // Parses one predicate suffix applied to `left` (comparison, quantified
+    // comparison, IS ..., [NOT] BETWEEN/IN/LIKE/ILIKE, MATCH). `left` may be
+    // nullptr when parsing a partial WHEN clause of a simple CASE; the
+    // produced node then carries a null left operand. Returns nullptr when no
+    // predicate follows.
+    Expression* parse_predicate_tail(Expression* left);
     Expression* parse_concat();
     Expression* parse_additive();
     Expression* parse_multiplicative();
@@ -155,9 +161,14 @@ private:
     Expression* parse_position_special(SourceLocation loc);
     Expression* parse_overlay_special(SourceLocation loc);
     TypeName* parse_type();
+    std::string_view parse_interval_unit();
+    // Parses the UESCAPE 'c' suffix of a unicode string literal; validates
+    // that the escape is exactly one allowed character and returns it.
+    char parse_uescape_char();
 
     // Function calls and window specifications (parser_function.cpp).
     Expression* parse_function_call(SourceLocation loc, AstList<NamePart> name);
+    Expression* parse_listagg(SourceLocation loc);
     Expression* finish_function_call(SourceLocation loc,
                                      AstList<NamePart> name,
                                      bool distinct,

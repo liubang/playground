@@ -110,6 +110,16 @@ private:
     void append(std::string_view s) { out_.append(s); }
     void space() { out_.push_back(' '); }
 
+    // Partial predicates (a WHEN of a simple CASE) have a null left operand,
+    // printed as '_'.
+    void visit_opt(const Node* node) {
+        if (node == nullptr) {
+            out_.push_back('_');
+        } else {
+            visit(node);
+        }
+    }
+
     void name_parts(const AstList<NamePart>& parts) {
         for (uint32_t i = 0; i < parts.size; ++i) {
             if (i > 0) {
@@ -214,9 +224,16 @@ private:
             case NodeKind::kNumberLiteral:
                 append(node->as<NumberLiteral>()->value);
                 break;
-            case NodeKind::kStringLiteral:
-                append(node->as<StringLiteral>()->value);
+            case NodeKind::kStringLiteral: {
+                const auto* n = node->as<StringLiteral>();
+                append(n->value);
+                if (n->escape != '\0') {
+                    append(" UESCAPE '");
+                    out_.push_back(n->escape);
+                    out_.push_back('\'');
+                }
                 break;
+            }
             case NodeKind::kBooleanLiteral:
                 append(node->as<BooleanLiteral>()->value ? "true" : "false");
                 break;
@@ -273,7 +290,7 @@ private:
                     append(comparison_op_symbol(n->op));
                 }
                 space();
-                visit(n->left);
+                visit_opt(n->left);
                 space();
                 visit(n->right);
                 out_.push_back(')');
@@ -282,14 +299,17 @@ private:
             case NodeKind::kIsNull: {
                 const auto* n = node->as<IsNullPredicate>();
                 append(n->negated ? "(notnull " : "(isnull ");
-                visit(n->value);
+                visit_opt(n->value);
                 out_.push_back(')');
                 break;
             }
             case NodeKind::kBetween: {
                 const auto* n = node->as<BetweenPredicate>();
                 append(n->negated ? "(notbetween " : "(between ");
-                visit(n->value);
+                if (n->symmetry == BetweenSymmetry::kSymmetric) {
+                    append("sym ");
+                }
+                visit_opt(n->value);
                 space();
                 visit(n->min);
                 space();
@@ -307,7 +327,7 @@ private:
             case NodeKind::kInPredicate: {
                 const auto* n = node->as<InPredicate>();
                 append(n->negated ? "(notin " : "(in ");
-                visit(n->value);
+                visit_opt(n->value);
                 space();
                 visit(n->value_list);
                 out_.push_back(')');
@@ -320,7 +340,7 @@ private:
                     append("not");
                 }
                 append(n->case_insensitive ? "ilike " : "like ");
-                visit(n->value);
+                visit_opt(n->value);
                 space();
                 visit(n->pattern);
                 if (n->escape != nullptr) {
@@ -533,7 +553,7 @@ private:
                         append("isunknown ");
                         break;
                 }
-                visit(n->value);
+                visit_opt(n->value);
                 out_.push_back(')');
                 break;
             }
@@ -598,11 +618,77 @@ private:
             }
             case NodeKind::kAtTimeZone: {
                 const auto* n = node->as<AtTimeZone>();
-                append("(attz ");
-                visit(n->value);
+                if (n->local) {
+                    append("(atlocal ");
+                    visit(n->value);
+                    out_.push_back(')');
+                } else {
+                    append("(attz ");
+                    visit(n->value);
+                    space();
+                    visit(n->zone);
+                    out_.push_back(')');
+                }
+                break;
+            }
+            case NodeKind::kMatchPredicate: {
+                const auto* n = node->as<MatchPredicate>();
+                append("(match ");
+                if (n->unique) {
+                    append("unique ");
+                }
+                switch (n->match_type) {
+                    case MatchType::kSimple:
+                        append("simple ");
+                        break;
+                    case MatchType::kPartial:
+                        append("partial ");
+                        break;
+                    case MatchType::kFull:
+                        append("full ");
+                        break;
+                    case MatchType::kUnspecified:
+                        break;
+                }
+                visit_opt(n->value);
                 space();
-                visit(n->zone);
+                visit(n->subquery);
                 out_.push_back(')');
+                break;
+            }
+            case NodeKind::kGroupingAuto:
+                append("(auto)");
+                break;
+            case NodeKind::kListagg: {
+                const auto* n = node->as<ListaggExpression>();
+                append("(listagg");
+                if (n->distinct) {
+                    append(" distinct");
+                }
+                space();
+                visit(n->value);
+                if (n->separator != nullptr) {
+                    space();
+                    visit(n->separator);
+                }
+                if (n->overflow == OverflowBehavior::kError) {
+                    append(" (overflow error)");
+                } else if (n->overflow == OverflowBehavior::kTruncate) {
+                    append(" (overflow truncate");
+                    if (!n->overflow_filler.empty()) {
+                        space();
+                        append(n->overflow_filler);
+                    }
+                    if (n->overflow_count == OverflowCount::kWith) {
+                        append(" with");
+                    } else if (n->overflow_count == OverflowCount::kWithout) {
+                        append(" without");
+                    }
+                    out_.push_back(')');
+                }
+                append(" (ord");
+                each<SortItem*>(n->order_by, &Dumper::visit_sort_item);
+                append("))");
                 break;
             }
             case NodeKind::kGroupingOperation: {
@@ -628,7 +714,7 @@ private:
                         append("all ");
                         break;
                 }
-                visit(n->value);
+                visit_opt(n->value);
                 space();
                 visit(n->subquery);
                 out_.push_back(')');
@@ -647,11 +733,24 @@ private:
             }
             case NodeKind::kAllColumns: {
                 const auto* n = node->as<AllColumns>();
-                if (n->prefix.empty()) {
+                if (n->target != nullptr) {
+                    visit(n->target);
+                    append(".*");
+                } else if (n->prefix.empty()) {
                     out_.push_back('*');
                 } else {
                     name_parts(n->prefix);
                     append(".*");
+                }
+                if (!n->aliases.empty()) {
+                    append(" (as (");
+                    for (uint32_t i = 0; i < n->aliases.size; ++i) {
+                        if (i > 0) {
+                            space();
+                        }
+                        append(n->aliases[i].text);
+                    }
+                    append("))");
                 }
                 break;
             }
@@ -803,6 +902,9 @@ private:
                 }
                 if (!n->group_by.empty()) {
                     append(" (group");
+                    if (n->group_by_distinct) {
+                        append(" distinct");
+                    }
                     each<Expression*>(n->group_by, &Dumper::visit_expr);
                     out_.push_back(')');
                 }

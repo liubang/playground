@@ -257,7 +257,7 @@ TEST(LexerTest, LineAndColumnTracking) {
 
 TEST(LexerTest, AllReservedKeywords) {
     constexpr std::string_view source =
-        "ALL ALTER ANALYZE AND ARRAY AS AT BETWEEN BY CASE CAST CONSTRAINT CREATE CROSS CUBE "
+        "ALTER ANALYZE AND ARRAY AS AT BETWEEN BY CASE CAST CONSTRAINT CREATE CROSS CUBE "
         "CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_PATH CURRENT_ROLE CURRENT_SCHEMA "
         "CURRENT_TIME CURRENT_TIMESTAMP CURRENT_USER DEALLOCATE DELETE DESCRIBE "
         "DISTINCT DROP ELSE END ESCAPE EXCEPT EXECUTE EXISTS EXPLAIN EXTRACT FALSE FOR "
@@ -268,7 +268,7 @@ TEST(LexerTest, AllReservedKeywords) {
         "TRUE UESCAPE UNION UNNEST USING VALUES WHEN WHERE WITH";
     auto result = lex(source);
     EXPECT_TRUE(result.errors.empty());
-    ASSERT_EQ(90, result.tokens.size()); // 89 keywords + EOF
+    ASSERT_EQ(89, result.tokens.size()); // 88 keywords + EOF
     for (size_t i = 0; i + 1 < result.tokens.size(); ++i) {
         EXPECT_NE(TokenType::kIdentifier, result.tokens[i].type)
             << "keyword not recognized: " << result.tokens[i].text(source);

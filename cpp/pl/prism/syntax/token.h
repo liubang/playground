@@ -61,8 +61,8 @@ enum class TokenType : uint16_t {
     kQuestion,
 
     // Reserved keywords (Trino 476). Non-reserved keywords are emitted as
-    // kIdentifier and disambiguated by the parser.
-    kKwAll,
+    // kIdentifier and disambiguated by the parser. ALL is deliberately
+    // non-reserved in Trino (SELECT ALL, SOME, ANY FROM t is legal).
     kKwAlter,
     kKwAnalyze,
     kKwAnd,

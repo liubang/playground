@@ -54,7 +54,6 @@ struct KeywordEntry {
 // disambiguated contextually by the parser.
 // The longest entry, CURRENT_TIMESTAMP, is 17 characters.
 constexpr std::array kKeywords = std::to_array<KeywordEntry>({
-    {"ALL", TokenType::kKwAll},
     {"ALTER", TokenType::kKwAlter},
     {"ANALYZE", TokenType::kKwAnalyze},
     {"AND", TokenType::kKwAnd},

@@ -122,7 +122,15 @@ Expression* Parser::parse_case(SourceLocation loc) {
     std::vector<WhenClause*> whens;
     while (at(TokenType::kKwWhen)) {
         const SourceLocation when_loc = loc_of(advance());
-        Expression* when = parse_expr();
+        // A simple CASE allows partial predicates as WHEN operands:
+        // CASE x WHEN > 5 THEN ... WHEN BETWEEN 1 AND 4 THEN ...
+        Expression* when = nullptr;
+        if (operand != nullptr) {
+            when = parse_predicate_tail(nullptr);
+        }
+        if (when == nullptr) {
+            when = parse_expr();
+        }
         expect(TokenType::kKwThen, "THEN in CASE expression");
         Expression* result = parse_expr();
         whens.push_back(make<WhenClause>(when_loc, when, result));
@@ -221,6 +229,30 @@ TypeName* Parser::parse_type() {
         loc, name, make_list(type_args), make_list(num_args), make_list(field_names), tz);
 }
 
+std::string_view Parser::parse_interval_unit() {
+    const Token& start = cur();
+    parse_name_part();
+    // Field precision: YEAR(1), DAY(1) TO SECOND(2), SECOND(1, 2).
+    if (!at(TokenType::kLParen)) {
+        return start.text(source_);
+    }
+    advance();
+    const Token& precision = cur();
+    if (precision.type != TokenType::kNumber) {
+        fail(precision, "expected field precision in INTERVAL");
+    }
+    advance();
+    if (match(TokenType::kComma)) {
+        const Token& scale = cur();
+        if (scale.type != TokenType::kNumber) {
+            fail(scale, "expected fractional seconds precision in INTERVAL");
+        }
+        advance();
+    }
+    const Token& end = expect(TokenType::kRParen, "')' after INTERVAL field precision");
+    return source_.substr(start.offset, end.offset + end.length - start.offset);
+}
+
 Expression* Parser::parse_interval(SourceLocation loc) {
     const bool negative = match(TokenType::kMinus);
     if (!negative) {
@@ -231,12 +263,45 @@ Expression* Parser::parse_interval(SourceLocation loc) {
         fail(value, "expected string literal in INTERVAL");
     }
     advance();
-    const std::string_view from_unit = parse_name_part().text;
+    const std::string_view from_unit = parse_interval_unit();
     std::string_view to_unit;
     if (match(TokenType::kKwTo)) {
-        to_unit = parse_name_part().text;
+        to_unit = parse_interval_unit();
     }
     return make<IntervalLiteral>(loc, negative, value.text(source_), from_unit, to_unit);
+}
+
+char Parser::parse_uescape_char() {
+    const Token& token = cur();
+    if (token.type != TokenType::kString) {
+        fail(token, "expected string literal after UESCAPE");
+    }
+    const std::string_view raw = token.text(source_);
+    // Decode the quoted body; a doubled quote decodes to one quote.
+    char result = '\0';
+    uint32_t count = 0;
+    for (size_t i = 1; i + 1 < raw.size(); ++i) {
+        const char c = raw[i];
+        if (c == '\'' && raw[i + 1] == '\'') {
+            ++i;
+        }
+        result = c;
+        ++count;
+    }
+    if (count == 0) {
+        fail(token, "empty Unicode escape character");
+    }
+    if (count != 1) {
+        fail(token, "invalid Unicode escape character: must be a single character");
+    }
+    advance();
+    const char c = result;
+    const bool hex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    const bool space = c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
+    if (hex || c == '+' || c == '\'' || space) {
+        fail(token, "invalid Unicode escape character");
+    }
+    return c;
 }
 
 } // namespace pl::prism::syntax

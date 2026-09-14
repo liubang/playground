@@ -59,145 +59,177 @@ Expression* Parser::parse_not() {
 Expression* Parser::parse_predicate() {
     Expression* left = parse_concat();
     for (;;) {
-        const SourceLocation loc = loc_of(cur());
-
-        switch (cur().type) {
-            case TokenType::kEq:
-            case TokenType::kNeq:
-            case TokenType::kLt:
-            case TokenType::kGt:
-            case TokenType::kLte:
-            case TokenType::kGte: {
-                ComparisonOp op = ComparisonOp::kEqual;
-                switch (cur().type) {
-                    case TokenType::kEq:
-                        op = ComparisonOp::kEqual;
-                        break;
-                    case TokenType::kNeq:
-                        op = ComparisonOp::kNotEqual;
-                        break;
-                    case TokenType::kLt:
-                        op = ComparisonOp::kLessThan;
-                        break;
-                    case TokenType::kGt:
-                        op = ComparisonOp::kGreaterThan;
-                        break;
-                    case TokenType::kLte:
-                        op = ComparisonOp::kLessThanOrEqual;
-                        break;
-                    default:
-                        op = ComparisonOp::kGreaterThanOrEqual;
-                        break;
-                }
-                advance();
-                // Quantified comparison: value op ANY | SOME | ALL (subquery).
-                if (at_soft("any") || at_soft("some") || at(TokenType::kKwAll)) {
-                    Quantifier quantifier = Quantifier::kAny;
-                    if (at_soft("some")) {
-                        quantifier = Quantifier::kSome;
-                    } else if (at(TokenType::kKwAll)) {
-                        quantifier = Quantifier::kAll;
-                    }
-                    advance();
-                    expect(TokenType::kLParen, "'(' after quantifier");
-                    Query* subquery = parse_query();
-                    expect(TokenType::kRParen, "')' after quantified subquery");
-                    left =
-                        make<QuantifiedComparisonExpression>(loc, op, left, quantifier, subquery);
-                    continue;
-                }
-                left = make<ComparisonExpression>(loc, op, left, parse_concat(), false);
-                continue;
-            }
-            case TokenType::kKwIs: {
-                advance();
-                const bool negated = match(TokenType::kKwNot);
-                if (match(TokenType::kKwNull)) {
-                    left = make<IsNullPredicate>(loc, left, negated);
-                    continue;
-                }
-                if (match(TokenType::kKwDistinct)) {
-                    expect(TokenType::kKwFrom, "FROM after DISTINCT");
-                    left = make<ComparisonExpression>(
-                        loc, ComparisonOp::kIsDistinctFrom, left, parse_concat(), negated);
-                    continue;
-                }
-                if (at(TokenType::kKwTrue) || at(TokenType::kKwFalse) || at_soft("unknown")) {
-                    BooleanTestType test = BooleanTestType::kTrue;
-                    if (match(TokenType::kKwTrue)) {
-                        test = BooleanTestType::kTrue;
-                    } else if (match(TokenType::kKwFalse)) {
-                        test = BooleanTestType::kFalse;
-                    } else {
-                        advance();
-                        test = BooleanTestType::kUnknown;
-                    }
-                    left = make<BooleanTestPredicate>(loc, left, test, negated);
-                    continue;
-                }
-                fail(cur(), "expected NULL, DISTINCT, TRUE, FALSE or UNKNOWN after IS");
-            }
-            default:
-                break;
+        Expression* next = parse_predicate_tail(left);
+        if (next == nullptr) {
+            return left;
         }
-
-        // [NOT] BETWEEN / [NOT] IN / [NOT] LIKE / [NOT] ILIKE
-        bool negated = false;
-        if (at(TokenType::kKwNot)) {
-            const Token& next = peek(1);
-            const bool starts_predicate =
-                next.type == TokenType::kKwBetween || next.type == TokenType::kKwIn ||
-                next.type == TokenType::kKwLike ||
-                (next.type == TokenType::kIdentifier && iequals(next.text(source_), "ilike"));
-            if (!starts_predicate) {
-                return left;
-            }
-            advance();
-            negated = true;
-        }
-
-        if (match(TokenType::kKwBetween)) {
-            Expression* lo = parse_concat();
-            expect(TokenType::kKwAnd, "AND in BETWEEN predicate");
-            Expression* hi = parse_concat();
-            left = make<BetweenPredicate>(loc, left, lo, hi, negated);
-            continue;
-        }
-        if (match(TokenType::kKwIn)) {
-            expect(TokenType::kLParen, "'(' after IN");
-            Expression* value_list = nullptr;
-            if (is_query_start(0)) {
-                const SourceLocation sub_loc = loc_of(cur());
-                value_list = make<SubqueryExpression>(sub_loc, parse_query());
-            } else {
-                const SourceLocation list_loc = loc_of(cur());
-                std::vector<Expression*> items;
-                items.push_back(parse_expr());
-                while (match(TokenType::kComma)) {
-                    items.push_back(parse_expr());
-                }
-                value_list = make<InListExpression>(list_loc, make_list(items));
-            }
-            expect(TokenType::kRParen, "')' after IN list");
-            left = make<InPredicate>(loc, left, value_list, negated);
-            continue;
-        }
-        if (at(TokenType::kKwLike) || at_soft("ilike")) {
-            const bool ci = at(TokenType::kIdentifier);
-            advance();
-            Expression* pattern = parse_concat();
-            Expression* escape = nullptr;
-            if (match(TokenType::kKwEscape)) {
-                escape = parse_concat();
-            }
-            left = make<LikePredicate>(loc, left, pattern, escape, ci, negated);
-            continue;
-        }
-        if (negated) {
-            fail(cur(), "expected BETWEEN, IN or LIKE after NOT");
-        }
-        return left;
+        left = next;
     }
+}
+
+Expression* Parser::parse_predicate_tail(Expression* left) {
+    const SourceLocation loc = loc_of(cur());
+
+    switch (cur().type) {
+        case TokenType::kEq:
+        case TokenType::kNeq:
+        case TokenType::kLt:
+        case TokenType::kGt:
+        case TokenType::kLte:
+        case TokenType::kGte: {
+            ComparisonOp op = ComparisonOp::kEqual;
+            switch (cur().type) {
+                case TokenType::kEq:
+                    op = ComparisonOp::kEqual;
+                    break;
+                case TokenType::kNeq:
+                    op = ComparisonOp::kNotEqual;
+                    break;
+                case TokenType::kLt:
+                    op = ComparisonOp::kLessThan;
+                    break;
+                case TokenType::kGt:
+                    op = ComparisonOp::kGreaterThan;
+                    break;
+                case TokenType::kLte:
+                    op = ComparisonOp::kLessThanOrEqual;
+                    break;
+                default:
+                    op = ComparisonOp::kGreaterThanOrEqual;
+                    break;
+            }
+            advance();
+            // Quantified comparison: value op ANY | SOME | ALL (subquery). The
+            // parenthesis guard keeps `x = any` (column named any) parseable.
+            if ((at_soft("any") || at_soft("some") || at_soft("all")) &&
+                peek(1).type == TokenType::kLParen) {
+                Quantifier quantifier = Quantifier::kAny;
+                if (at_soft("some")) {
+                    quantifier = Quantifier::kSome;
+                } else if (at_soft("all")) {
+                    quantifier = Quantifier::kAll;
+                }
+                advance();
+                expect(TokenType::kLParen, "'(' after quantifier");
+                Query* subquery = parse_query();
+                expect(TokenType::kRParen, "')' after quantified subquery");
+                return make<QuantifiedComparisonExpression>(loc, op, left, quantifier, subquery);
+            }
+            return make<ComparisonExpression>(loc, op, left, parse_concat(), false);
+        }
+        case TokenType::kKwIs: {
+            advance();
+            const bool negated = match(TokenType::kKwNot);
+            if (match(TokenType::kKwNull)) {
+                return make<IsNullPredicate>(loc, left, negated);
+            }
+            if (match(TokenType::kKwDistinct)) {
+                expect(TokenType::kKwFrom, "FROM after DISTINCT");
+                return make<ComparisonExpression>(
+                    loc, ComparisonOp::kIsDistinctFrom, left, parse_concat(), negated);
+            }
+            if (at(TokenType::kKwTrue) || at(TokenType::kKwFalse) || at_soft("unknown")) {
+                BooleanTestType test = BooleanTestType::kTrue;
+                if (match(TokenType::kKwTrue)) {
+                    test = BooleanTestType::kTrue;
+                } else if (match(TokenType::kKwFalse)) {
+                    test = BooleanTestType::kFalse;
+                } else {
+                    advance();
+                    test = BooleanTestType::kUnknown;
+                }
+                return make<BooleanTestPredicate>(loc, left, test, negated);
+            }
+            fail(cur(), "expected NULL, DISTINCT, TRUE, FALSE or UNKNOWN after IS");
+        }
+        default:
+            break;
+    }
+
+    // [NOT] BETWEEN / [NOT] IN / [NOT] LIKE / [NOT] ILIKE
+    bool negated = false;
+    if (at(TokenType::kKwNot)) {
+        const Token& next = peek(1);
+        const bool starts_predicate =
+            next.type == TokenType::kKwBetween || next.type == TokenType::kKwIn ||
+            next.type == TokenType::kKwLike ||
+            (next.type == TokenType::kIdentifier && iequals(next.text(source_), "ilike"));
+        if (!starts_predicate) {
+            return nullptr;
+        }
+        advance();
+        negated = true;
+    }
+
+    if (match(TokenType::kKwBetween)) {
+        BetweenSymmetry symmetry = BetweenSymmetry::kAsymmetric;
+        if (match_soft("symmetric")) {
+            symmetry = BetweenSymmetry::kSymmetric;
+        } else {
+            match_soft("asymmetric");
+        }
+        Expression* lo = parse_concat();
+        expect(TokenType::kKwAnd, "AND in BETWEEN predicate");
+        Expression* hi = parse_concat();
+        return make<BetweenPredicate>(loc, left, lo, hi, negated, symmetry);
+    }
+    if (match(TokenType::kKwIn)) {
+        expect(TokenType::kLParen, "'(' after IN");
+        Expression* value_list = nullptr;
+        if (is_query_start(0)) {
+            const SourceLocation sub_loc = loc_of(cur());
+            value_list = make<SubqueryExpression>(sub_loc, parse_query());
+        } else {
+            const SourceLocation list_loc = loc_of(cur());
+            std::vector<Expression*> items;
+            items.push_back(parse_expr());
+            while (match(TokenType::kComma)) {
+                items.push_back(parse_expr());
+            }
+            value_list = make<InListExpression>(list_loc, make_list(items));
+        }
+        expect(TokenType::kRParen, "')' after IN list");
+        return make<InPredicate>(loc, left, value_list, negated);
+    }
+    if (at(TokenType::kKwLike) || at_soft("ilike")) {
+        const bool ci = at(TokenType::kIdentifier);
+        advance();
+        Expression* pattern = parse_concat();
+        Expression* escape = nullptr;
+        if (match(TokenType::kKwEscape)) {
+            escape = parse_concat();
+        }
+        return make<LikePredicate>(loc, left, pattern, escape, ci, negated);
+    }
+    // Row match predicate: value MATCH [UNIQUE] [SIMPLE | PARTIAL | FULL] (q).
+    if (!negated && at_soft("match")) {
+        const Token& next = peek(1);
+        const std::string_view text =
+            next.type == TokenType::kIdentifier ? next.text(source_) : std::string_view{};
+        const bool starts_match = next.type == TokenType::kLParen ||
+                                  next.type == TokenType::kKwFull || iequals(text, "unique") ||
+                                  iequals(text, "simple") || iequals(text, "partial");
+        if (starts_match) {
+            advance();
+            const bool unique = match_soft("unique");
+            MatchType match_type = MatchType::kUnspecified;
+            if (match_soft("simple")) {
+                match_type = MatchType::kSimple;
+            } else if (match_soft("partial")) {
+                match_type = MatchType::kPartial;
+            } else if (match(TokenType::kKwFull)) {
+                match_type = MatchType::kFull;
+            }
+            expect(TokenType::kLParen, "'(' after MATCH");
+            Query* subquery = parse_query();
+            expect(TokenType::kRParen, "')' after MATCH subquery");
+            return make<MatchPredicate>(loc, left, unique, match_type, subquery);
+        }
+    }
+    if (negated) {
+        fail(cur(), "expected BETWEEN, IN or LIKE after NOT");
+    }
+    return nullptr;
 }
 
 Expression* Parser::parse_concat() {
@@ -261,6 +293,11 @@ Expression* Parser::parse_postfix() {
             expr = make<SubscriptExpression>(loc, expr, index);
             continue;
         }
+        if (at(TokenType::kDot) && peek(1).type == TokenType::kStar) {
+            // Leave '.*' unconsumed: it terminates a select item (expr).* and
+            // is handled by parse_select_item.
+            break;
+        }
         if (match(TokenType::kDot)) {
             const SourceLocation loc = loc_of(cur());
             const NamePart field = parse_name_part();
@@ -269,10 +306,14 @@ Expression* Parser::parse_postfix() {
         }
         if (at(TokenType::kKwAt)) {
             const SourceLocation at_loc = loc_of(advance());
-            if (!match_soft("time") || !match_soft("zone")) {
-                fail(cur(), "expected TIME ZONE after AT");
+            if (match_soft("local")) {
+                expr = make<AtTimeZone>(at_loc, expr, nullptr, true);
+                continue;
             }
-            expr = make<AtTimeZone>(at_loc, expr, parse_primary());
+            if (!match_soft("time") || !match_soft("zone")) {
+                fail(cur(), "expected TIME ZONE or LOCAL after AT");
+            }
+            expr = make<AtTimeZone>(at_loc, expr, parse_primary(), false);
             continue;
         }
         break;
@@ -289,9 +330,18 @@ Expression* Parser::parse_primary() {
             return make<NumberLiteral>(loc, token.text(source_));
         case TokenType::kString:
         case TokenType::kUnicodeString:
-        case TokenType::kBinaryString:
+        case TokenType::kBinaryString: {
             advance();
-            return make<StringLiteral>(loc, token.text(source_));
+            char escape = '\0';
+            if (at(TokenType::kKwUescape)) {
+                if (token.type != TokenType::kUnicodeString) {
+                    fail(cur(), "UESCAPE is only valid after a U& string literal");
+                }
+                advance();
+                escape = parse_uescape_char();
+            }
+            return make<StringLiteral>(loc, token.text(source_), escape);
+        }
         case TokenType::kKwTrue:
             advance();
             return make<BooleanLiteral>(loc, true);
@@ -334,6 +384,8 @@ Expression* Parser::parse_primary() {
         case TokenType::kQuestion:
             advance();
             return make<ParameterExpression>(loc);
+        case TokenType::kKwListagg:
+            return parse_listagg(loc);
         case TokenType::kKwGrouping: {
             advance();
             expect(TokenType::kLParen, "'(' after GROUPING");
@@ -421,9 +473,9 @@ Expression* Parser::parse_named_primary(SourceLocation loc) {
             advance();
             return parse_cast(loc, true);
         }
-        // DATE 'x' / TIME 'x' / TIMESTAMP 'x'
-        if ((iequals(word, "date") || iequals(word, "time") || iequals(word, "timestamp")) &&
-            peek(1).type == TokenType::kString) {
+        // Any type name directly followed by a string literal is a typed
+        // literal in Trino: DATE 'x', TIMESTAMP 'x', DECIMAL '1.0'.
+        if (peek(1).type == TokenType::kString) {
             const Token& type_token = advance();
             const Token& value_token = advance();
             return make<TypedLiteral>(loc, type_token.text(source_), value_token.text(source_));
