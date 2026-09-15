@@ -1,0 +1,589 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - prism/syntax/cpp/pl/prism/syntax/lexer.cpp</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">prism/syntax/cpp/pl/prism/syntax</a> - lexer.cpp<span style="font-size: 80%;"> (source / <a href="lexer.cpp.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">240</td>
+            <td class="headerCovTableEntry">240</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-09-14 21:37:29</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">16</td>
+            <td class="headerCovTableEntry">16</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">93.9&nbsp;%</td>
+            <td class="headerCovTableEntry">181</td>
+            <td class="headerCovTableEntry">170</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/09/13 13:24</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : #include &quot;cpp/pl/prism/syntax/lexer.h&quot;</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : #include &lt;algorithm&gt;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : #include &lt;array&gt;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : </span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : namespace pl::prism::syntax {</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : </span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : namespace {</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : </span>
+<span id="L27"><span class="lineNum">      27</span>                 :<span class="tlaGNC tlaBgGNC">        3925 : constexpr bool is_digit(char c) {</span></span>
+<span id="L28"><span class="lineNum">      28</span>                 :<span class="tlaGNC">       24300 :     return c &gt;= '0' &amp;&amp; c &lt;= '9';</span></span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : }</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : </span>
+<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC">       85658 : constexpr bool is_ident_start(char c) {</span></span>
+<span id="L32"><span class="lineNum">      32</span>         [<span class="tlaGBC" title="Branch 0 was taken 65972 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 19686 times"> + </span>]:<span class="tlaGNC">       85658 :     return (c &gt;= 'a' &amp;&amp; c &lt;= 'z') || (c &gt;= 'A' &amp;&amp; c &lt;= 'Z') || c == '_';</span></span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : }</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : </span>
+<span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaGNC">       65304 : constexpr bool is_ident_part(char c) {</span></span>
+<span id="L36"><span class="lineNum">      36</span>   [<span class="tlaGBC" title="Branch 0 was taken 11732 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 53572 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 571 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 11161 times"> + </span> :<span class="tlaGNC">       65304 :     return is_ident_start(c) || is_digit(c) || c == '$';</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 5 was taken 11160 times"> + </span>]
+<span id="L37"><span class="lineNum">      37</span>                 :             : }</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : </span>
+<span id="L39"><span class="lineNum">      39</span>                 :             : constexpr char ascii_upper(char c) {</span>
+<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">       12188 :     return (c &gt;= 'a' &amp;&amp; c &lt;= 'z') ? static_cast&lt;char&gt;(c - 'a' + 'A') : c;</span></span>
+<span id="L41"><span class="lineNum">      41</span>                 :             : }</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             : </span>
+<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">       35111 : constexpr bool is_whitespace(char c) {</span></span>
+<span id="L44"><span class="lineNum">      44</span>   [<span class="tlaGBC" title="Branch 0 was taken 22925 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 12186 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 22922 times"> + </span> :<span class="tlaGNC">       35111 :     return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';</span></span>
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 22922 times"> + </span>]
+<span id="L45"><span class="lineNum">      45</span>                 :             : }</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             : </span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : struct KeywordEntry {</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             :     std::string_view text;</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :     TokenType type;</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             : };</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             : </span>
+<span id="L52"><span class="lineNum">      52</span>                 :             : // Reserved keywords of the Trino 476 grammar, sorted by text. Non-reserved</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             : // keywords are intentionally absent: they lex as kIdentifier and are</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             : // disambiguated contextually by the parser.</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             : // The longest entry, CURRENT_TIMESTAMP, is 17 characters.</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : constexpr std::array kKeywords = std::to_array&lt;KeywordEntry&gt;({</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             :     {&quot;ALTER&quot;, TokenType::kKwAlter},</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             :     {&quot;ANALYZE&quot;, TokenType::kKwAnalyze},</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             :     {&quot;AND&quot;, TokenType::kKwAnd},</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :     {&quot;ARRAY&quot;, TokenType::kKwArray},</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :     {&quot;AS&quot;, TokenType::kKwAs},</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             :     {&quot;AT&quot;, TokenType::kKwAt},</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :     {&quot;BETWEEN&quot;, TokenType::kKwBetween},</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :     {&quot;BY&quot;, TokenType::kKwBy},</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :     {&quot;CASE&quot;, TokenType::kKwCase},</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             :     {&quot;CAST&quot;, TokenType::kKwCast},</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             :     {&quot;CONSTRAINT&quot;, TokenType::kKwConstraint},</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             :     {&quot;CREATE&quot;, TokenType::kKwCreate},</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             :     {&quot;CROSS&quot;, TokenType::kKwCross},</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :     {&quot;CUBE&quot;, TokenType::kKwCube},</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             :     {&quot;CURRENT&quot;, TokenType::kKwCurrent},</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             :     {&quot;CURRENT_CATALOG&quot;, TokenType::kKwCurrentCatalog},</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             :     {&quot;CURRENT_DATE&quot;, TokenType::kKwCurrentDate},</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             :     {&quot;CURRENT_PATH&quot;, TokenType::kKwCurrentPath},</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             :     {&quot;CURRENT_ROLE&quot;, TokenType::kKwCurrentRole},</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             :     {&quot;CURRENT_SCHEMA&quot;, TokenType::kKwCurrentSchema},</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :     {&quot;CURRENT_TIME&quot;, TokenType::kKwCurrentTime},</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             :     {&quot;CURRENT_TIMESTAMP&quot;, TokenType::kKwCurrentTimestamp},</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             :     {&quot;CURRENT_USER&quot;, TokenType::kKwCurrentUser},</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             :     {&quot;DEALLOCATE&quot;, TokenType::kKwDeallocate},</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             :     {&quot;DELETE&quot;, TokenType::kKwDelete},</span>
+<span id="L82"><span class="lineNum">      82</span>                 :             :     {&quot;DESCRIBE&quot;, TokenType::kKwDescribe},</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             :     {&quot;DISTINCT&quot;, TokenType::kKwDistinct},</span>
+<span id="L84"><span class="lineNum">      84</span>                 :             :     {&quot;DROP&quot;, TokenType::kKwDrop},</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             :     {&quot;ELSE&quot;, TokenType::kKwElse},</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             :     {&quot;END&quot;, TokenType::kKwEnd},</span>
+<span id="L87"><span class="lineNum">      87</span>                 :             :     {&quot;ESCAPE&quot;, TokenType::kKwEscape},</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             :     {&quot;EXCEPT&quot;, TokenType::kKwExcept},</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             :     {&quot;EXECUTE&quot;, TokenType::kKwExecute},</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             :     {&quot;EXISTS&quot;, TokenType::kKwExists},</span>
+<span id="L91"><span class="lineNum">      91</span>                 :             :     {&quot;EXPLAIN&quot;, TokenType::kKwExplain},</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             :     {&quot;EXTRACT&quot;, TokenType::kKwExtract},</span>
+<span id="L93"><span class="lineNum">      93</span>                 :             :     {&quot;FALSE&quot;, TokenType::kKwFalse},</span>
+<span id="L94"><span class="lineNum">      94</span>                 :             :     {&quot;FOR&quot;, TokenType::kKwFor},</span>
+<span id="L95"><span class="lineNum">      95</span>                 :             :     {&quot;FROM&quot;, TokenType::kKwFrom},</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             :     {&quot;FULL&quot;, TokenType::kKwFull},</span>
+<span id="L97"><span class="lineNum">      97</span>                 :             :     {&quot;GROUP&quot;, TokenType::kKwGroup},</span>
+<span id="L98"><span class="lineNum">      98</span>                 :             :     {&quot;GROUPING&quot;, TokenType::kKwGrouping},</span>
+<span id="L99"><span class="lineNum">      99</span>                 :             :     {&quot;HAVING&quot;, TokenType::kKwHaving},</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             :     {&quot;IN&quot;, TokenType::kKwIn},</span>
+<span id="L101"><span class="lineNum">     101</span>                 :             :     {&quot;INNER&quot;, TokenType::kKwInner},</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             :     {&quot;INSERT&quot;, TokenType::kKwInsert},</span>
+<span id="L103"><span class="lineNum">     103</span>                 :             :     {&quot;INTERSECT&quot;, TokenType::kKwIntersect},</span>
+<span id="L104"><span class="lineNum">     104</span>                 :             :     {&quot;INTERVAL&quot;, TokenType::kKwInterval},</span>
+<span id="L105"><span class="lineNum">     105</span>                 :             :     {&quot;INTO&quot;, TokenType::kKwInto},</span>
+<span id="L106"><span class="lineNum">     106</span>                 :             :     {&quot;IS&quot;, TokenType::kKwIs},</span>
+<span id="L107"><span class="lineNum">     107</span>                 :             :     {&quot;JOIN&quot;, TokenType::kKwJoin},</span>
+<span id="L108"><span class="lineNum">     108</span>                 :             :     {&quot;JSON_ARRAY&quot;, TokenType::kKwJsonArray},</span>
+<span id="L109"><span class="lineNum">     109</span>                 :             :     {&quot;JSON_EXISTS&quot;, TokenType::kKwJsonExists},</span>
+<span id="L110"><span class="lineNum">     110</span>                 :             :     {&quot;JSON_OBJECT&quot;, TokenType::kKwJsonObject},</span>
+<span id="L111"><span class="lineNum">     111</span>                 :             :     {&quot;JSON_QUERY&quot;, TokenType::kKwJsonQuery},</span>
+<span id="L112"><span class="lineNum">     112</span>                 :             :     {&quot;JSON_TABLE&quot;, TokenType::kKwJsonTable},</span>
+<span id="L113"><span class="lineNum">     113</span>                 :             :     {&quot;JSON_VALUE&quot;, TokenType::kKwJsonValue},</span>
+<span id="L114"><span class="lineNum">     114</span>                 :             :     {&quot;LEFT&quot;, TokenType::kKwLeft},</span>
+<span id="L115"><span class="lineNum">     115</span>                 :             :     {&quot;LIKE&quot;, TokenType::kKwLike},</span>
+<span id="L116"><span class="lineNum">     116</span>                 :             :     {&quot;LIMIT&quot;, TokenType::kKwLimit},</span>
+<span id="L117"><span class="lineNum">     117</span>                 :             :     {&quot;LISTAGG&quot;, TokenType::kKwListagg},</span>
+<span id="L118"><span class="lineNum">     118</span>                 :             :     {&quot;LOCALTIME&quot;, TokenType::kKwLocaltime},</span>
+<span id="L119"><span class="lineNum">     119</span>                 :             :     {&quot;LOCALTIMESTAMP&quot;, TokenType::kKwLocaltimestamp},</span>
+<span id="L120"><span class="lineNum">     120</span>                 :             :     {&quot;NATURAL&quot;, TokenType::kKwNatural},</span>
+<span id="L121"><span class="lineNum">     121</span>                 :             :     {&quot;NORMALIZE&quot;, TokenType::kKwNormalize},</span>
+<span id="L122"><span class="lineNum">     122</span>                 :             :     {&quot;NOT&quot;, TokenType::kKwNot},</span>
+<span id="L123"><span class="lineNum">     123</span>                 :             :     {&quot;NULL&quot;, TokenType::kKwNull},</span>
+<span id="L124"><span class="lineNum">     124</span>                 :             :     {&quot;ON&quot;, TokenType::kKwOn},</span>
+<span id="L125"><span class="lineNum">     125</span>                 :             :     {&quot;OR&quot;, TokenType::kKwOr},</span>
+<span id="L126"><span class="lineNum">     126</span>                 :             :     {&quot;ORDER&quot;, TokenType::kKwOrder},</span>
+<span id="L127"><span class="lineNum">     127</span>                 :             :     {&quot;OUTER&quot;, TokenType::kKwOuter},</span>
+<span id="L128"><span class="lineNum">     128</span>                 :             :     {&quot;PREPARE&quot;, TokenType::kKwPrepare},</span>
+<span id="L129"><span class="lineNum">     129</span>                 :             :     {&quot;RECURSIVE&quot;, TokenType::kKwRecursive},</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             :     {&quot;RIGHT&quot;, TokenType::kKwRight},</span>
+<span id="L131"><span class="lineNum">     131</span>                 :             :     {&quot;ROLLUP&quot;, TokenType::kKwRollup},</span>
+<span id="L132"><span class="lineNum">     132</span>                 :             :     {&quot;SELECT&quot;, TokenType::kKwSelect},</span>
+<span id="L133"><span class="lineNum">     133</span>                 :             :     {&quot;TABLE&quot;, TokenType::kKwTable},</span>
+<span id="L134"><span class="lineNum">     134</span>                 :             :     {&quot;THEN&quot;, TokenType::kKwThen},</span>
+<span id="L135"><span class="lineNum">     135</span>                 :             :     {&quot;TO&quot;, TokenType::kKwTo},</span>
+<span id="L136"><span class="lineNum">     136</span>                 :             :     {&quot;TRUE&quot;, TokenType::kKwTrue},</span>
+<span id="L137"><span class="lineNum">     137</span>                 :             :     {&quot;UESCAPE&quot;, TokenType::kKwUescape},</span>
+<span id="L138"><span class="lineNum">     138</span>                 :             :     {&quot;UNION&quot;, TokenType::kKwUnion},</span>
+<span id="L139"><span class="lineNum">     139</span>                 :             :     {&quot;UNNEST&quot;, TokenType::kKwUnnest},</span>
+<span id="L140"><span class="lineNum">     140</span>                 :             :     {&quot;USING&quot;, TokenType::kKwUsing},</span>
+<span id="L141"><span class="lineNum">     141</span>                 :             :     {&quot;VALUES&quot;, TokenType::kKwValues},</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             :     {&quot;WHEN&quot;, TokenType::kKwWhen},</span>
+<span id="L143"><span class="lineNum">     143</span>                 :             :     {&quot;WHERE&quot;, TokenType::kKwWhere},</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             :     {&quot;WITH&quot;, TokenType::kKwWith},</span>
+<span id="L145"><span class="lineNum">     145</span>                 :             : });</span>
+<span id="L146"><span class="lineNum">     146</span>                 :             : </span>
+<span id="L147"><span class="lineNum">     147</span>                 :             : static_assert(std::is_sorted(kKeywords.begin(),</span>
+<span id="L148"><span class="lineNum">     148</span>                 :             :                              kKeywords.end(),</span>
+<span id="L149"><span class="lineNum">     149</span>                 :             :                              [](const KeywordEntry&amp; a, const KeywordEntry&amp; b) {</span>
+<span id="L150"><span class="lineNum">     150</span>                 :             :                                  return a.text &lt; b.text;</span>
+<span id="L151"><span class="lineNum">     151</span>                 :             :                              }));</span>
+<span id="L152"><span class="lineNum">     152</span>                 :             : </span>
+<span id="L153"><span class="lineNum">     153</span>                 :             : constexpr size_t kMaxKeywordLength = 17; // CURRENT_TIMESTAMP</span>
+<span id="L154"><span class="lineNum">     154</span>                 :             : </span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">       12299 : TokenType lookup_keyword(std::string_view ident) {</span></span>
+<span id="L156"><span class="lineNum">     156</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 12286 times"> + </span>]:<span class="tlaGNC">       12299 :     if (ident.size() &gt; kMaxKeywordLength) {</span></span>
+<span id="L157"><span class="lineNum">     157</span>                 :             :         return TokenType::kIdentifier;</span>
+<span id="L158"><span class="lineNum">     158</span>                 :             :     }</span>
+<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaGNC">       12286 :     std::array&lt;char, kMaxKeywordLength&gt; buf{};</span></span>
+<span id="L160"><span class="lineNum">     160</span>         [<span class="tlaGBC" title="Branch 0 was taken 53852 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 12286 times"> + </span>]:<span class="tlaGNC">       66138 :     for (size_t i = 0; i &lt; ident.size(); ++i) {</span></span>
+<span id="L161"><span class="lineNum">     161</span>         [<span class="tlaGBC" title="Branch 0 was taken 12188 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 41664 times"> + </span>]:<span class="tlaGNC">       66040 :         buf[i] = ascii_upper(ident[i]);</span></span>
+<span id="L162"><span class="lineNum">     162</span>                 :             :     }</span>
+<span id="L163"><span class="lineNum">     163</span>                 :             :     const std::string_view key(buf.data(), ident.size());</span>
+<span id="L164"><span class="lineNum">     164</span>                 :             :     const auto* it = std::lower_bound(</span>
+<span id="L165"><span class="lineNum">     165</span>                 :             :         kKeywords.begin(), kKeywords.end(), key, [](const KeywordEntry&amp; e, std::string_view v) {</span>
+<span id="L166"><span class="lineNum">     166</span>         [<span class="tlaGBC" title="Branch 0 was taken 39163 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 41323 times"> + </span>]:<span class="tlaGNC">       80486 :             return e.text &lt; v;</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :             :         });</span>
+<span id="L168"><span class="lineNum">     168</span>   [<span class="tlaGBC" title="Branch 0 was taken 505 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 11781 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 6543 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 5238 times"> + </span>]:<span class="tlaGNC">       12286 :     if (it != kKeywords.end() &amp;&amp; it-&gt;text == key) {</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">        5238 :         return it-&gt;type;</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :             :     }</span>
+<span id="L171"><span class="lineNum">     171</span>                 :             :     return TokenType::kIdentifier;</span>
+<span id="L172"><span class="lineNum">     172</span>                 :             : }</span>
+<span id="L173"><span class="lineNum">     173</span>                 :             : </span>
+<span id="L174"><span class="lineNum">     174</span>                 :             : } // namespace</span>
+<span id="L175"><span class="lineNum">     175</span>                 :             : </span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">      137384 : char Lexer::peek(uint32_t lookahead) const {</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">      137384 :     const uint32_t idx = pos_ + lookahead;</span></span>
+<span id="L178"><span class="lineNum">     178</span>         [<span class="tlaGBC" title="Branch 0 was taken 133393 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3991 times"> + </span>]:<span class="tlaGNC">      137384 :     return idx &lt; source_.size() ? source_[idx] : '\0';</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :             : }</span>
+<span id="L180"><span class="lineNum">     180</span>                 :             : </span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">       83877 : char Lexer::advance() {</span></span>
+<span id="L182"><span class="lineNum">     182</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 83872 times"> + </span>]:<span class="tlaGNC">       83877 :     const char c = source_[pos_++];</span></span>
+<span id="L183"><span class="lineNum">     183</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 83872 times"> + </span>]:<span class="tlaGNC">       83877 :     if (c == '\n') {</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">           5 :         ++line_;</span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">           5 :         column_ = 1;</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :             :     } else {</span>
+<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">       83872 :         ++column_;</span></span>
+<span id="L188"><span class="lineNum">     188</span>                 :             :     }</span>
+<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">       83877 :     return c;</span></span>
+<span id="L190"><span class="lineNum">     190</span>                 :             : }</span>
+<span id="L191"><span class="lineNum">     191</span>                 :             : </span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">       22917 : Token Lexer::make_token(TokenType type, uint32_t start, uint32_t line, uint32_t column) const {</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">       22917 :     return Token{type, start, pos_ - start, line, column};</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :             : }</span>
+<span id="L195"><span class="lineNum">     195</span>                 :             : </span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">         190 : void Lexer::report(uint32_t offset, uint32_t line, uint32_t column, std::string message) {</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">         190 :     errors_.push_back(LexError{offset, line, column, std::move(message)});</span></span>
+<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC">         190 : }</span></span>
+<span id="L199"><span class="lineNum">     199</span>                 :             : </span>
+<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaGNC">       22917 : void Lexer::skip_trivia() {</span></span>
+<span id="L201"><span class="lineNum">     201</span>                 :             :     for (;;) {</span>
+<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">       35111 :         const char c = peek();</span></span>
+<span id="L203"><span class="lineNum">     203</span>         [<span class="tlaGBC" title="Branch 0 was taken 12189 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 22922 times"> + </span>]:<span class="tlaGNC">       35111 :         if (is_whitespace(c)) {</span></span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">       12189 :             advance();</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">       12189 :             continue;</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :             :         }</span>
+<span id="L207"><span class="lineNum">     207</span>   [<span class="tlaGBC" title="Branch 0 was taken 238 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 22684 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 236 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 2 times"> + </span>]:<span class="tlaGNC">       22922 :         if (c == '-' &amp;&amp; peek(1) == '-') {</span></span>
+<span id="L208"><span class="lineNum">     208</span>   [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 19 times"> + </span>]:<span class="tlaGNC">          21 :             while (!eof() &amp;&amp; peek() != '\n') {</span></span>
+<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC">          19 :                 advance();</span></span>
+<span id="L210"><span class="lineNum">     210</span>                 :             :             }</span>
+<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">           2 :             continue;</span></span>
+<span id="L212"><span class="lineNum">     212</span>                 :             :         }</span>
+<span id="L213"><span class="lineNum">     213</span>   [<span class="tlaGBC" title="Branch 0 was taken 19 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 22901 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 16 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 3 times"> + </span>]:<span class="tlaGNC">       22920 :         if (c == '/' &amp;&amp; peek(1) == '*') {</span></span>
+<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">           3 :             const uint32_t start = pos_;</span></span>
+<span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaGNC">           3 :             const uint32_t line = line_;</span></span>
+<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">           3 :             const uint32_t column = column_;</span></span>
+<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">           3 :             advance();</span></span>
+<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaGNC">           3 :             advance();</span></span>
+<span id="L219"><span class="lineNum">     219</span>                 :             :             bool closed = false;</span>
+<span id="L220"><span class="lineNum">     220</span>         [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">          26 :             while (!eof()) {</span></span>
+<span id="L221"><span class="lineNum">     221</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 23 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 2 times"> + </span>]:<span class="tlaGNC">          25 :                 if (peek() == '*' &amp;&amp; peek(1) == '/') {</span></span>
+<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">           2 :                     advance();</span></span>
+<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC">           2 :                     advance();</span></span>
+<span id="L224"><span class="lineNum">     224</span>                 :             :                     closed = true;</span>
+<span id="L225"><span class="lineNum">     225</span>                 :             :                     break;</span>
+<span id="L226"><span class="lineNum">     226</span>                 :             :                 }</span>
+<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">          23 :                 advance();</span></span>
+<span id="L228"><span class="lineNum">     228</span>                 :             :             }</span>
+<span id="L229"><span class="lineNum">     229</span>                 :             :             if (!closed) {</span>
+<span id="L230"><span class="lineNum">     230</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :                 report(start, line, column, &quot;unterminated block comment&quot;);</span></span>
+<span id="L231"><span class="lineNum">     231</span>                 :             :             }</span>
+<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">           3 :             continue;</span></span>
+<span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaGNC">           3 :         }</span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :             :         break;</span>
+<span id="L235"><span class="lineNum">     235</span>                 :             :     }</span>
+<span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaGNC">       22917 : }</span></span>
+<span id="L237"><span class="lineNum">     237</span>                 :             : </span>
+<span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">       22917 : Token Lexer::next_token() {</span></span>
+<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">       22917 :     skip_trivia();</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :             : </span>
+<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">       22917 :     const uint32_t start = pos_;</span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">       22917 :     const uint32_t line = line_;</span></span>
+<span id="L243"><span class="lineNum">     243</span>         [<span class="tlaGBC" title="Branch 0 was taken 2563 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 20354 times"> + </span>]:<span class="tlaGNC">       22917 :     const uint32_t column = column_;</span></span>
+<span id="L244"><span class="lineNum">     244</span>                 :             : </span>
+<span id="L245"><span class="lineNum">     245</span>         [<span class="tlaGBC" title="Branch 0 was taken 2563 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 20354 times"> + </span>]:<span class="tlaGNC">       22917 :     if (eof()) {</span></span>
+<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">        2563 :         return make_token(TokenType::kEof, start, line, column);</span></span>
+<span id="L247"><span class="lineNum">     247</span>                 :             :     }</span>
+<span id="L248"><span class="lineNum">     248</span>                 :             : </span>
+<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">       20354 :     const char c = peek();</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :             : </span>
+<span id="L251"><span class="lineNum">     251</span>         [<span class="tlaGBC" title="Branch 0 was taken 12400 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 7954 times"> + </span>]:<span class="tlaGNC">       20354 :     if (is_ident_start(c)) {</span></span>
+<span id="L252"><span class="lineNum">     252</span>                 :             :         // Prefixed literals: X'01' (binary), U&amp;'str' (unicode string).</span>
+<span id="L253"><span class="lineNum">     253</span>   [<span class="tlaGBC" title="Branch 0 was taken 319 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 12081 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 18 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 301 times"> + </span>]:<span class="tlaGNC">       12400 :         if ((c == 'X' || c == 'x') &amp;&amp; peek(1) == '\'') {</span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">          18 :             return lex_string(TokenType::kBinaryString, 1);</span></span>
+<span id="L255"><span class="lineNum">     255</span>                 :             :         }</span>
+<span id="L256"><span class="lineNum">     256</span>   [<span class="tlaGBC" title="Branch 0 was taken 418 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 11964 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 85 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 333 times"> + </span> :<span class="tlaGNC">       12382 :         if ((c == 'U' || c == 'u') &amp;&amp; peek(1) == '&amp;' &amp;&amp; peek(2) == '\'') {</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 83 times"> + </span>]
+<span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaGNC">          83 :             return lex_string(TokenType::kUnicodeString, 2);</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :             :         }</span>
+<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">       12299 :         return lex_identifier_or_keyword();</span></span>
+<span id="L260"><span class="lineNum">     260</span>                 :             :     }</span>
+<span id="L261"><span class="lineNum">     261</span>                 :             : </span>
+<span id="L262"><span class="lineNum">     262</span>   [<span class="tlaGBC" title="Branch 0 was taken 6513 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1441 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 549 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 5964 times"> + </span> :<span class="tlaGNC">        7954 :     if (is_digit(c) || (c == '.' &amp;&amp; is_digit(peek(1)))) {</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 41 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 508 times"> + </span>]
+<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC">        1482 :         return lex_number();</span></span>
+<span id="L264"><span class="lineNum">     264</span>                 :             :     }</span>
+<span id="L265"><span class="lineNum">     265</span>                 :             : </span>
+<span id="L266"><span class="lineNum">     266</span>   [<span class="tlaGBC" title="Branch 0 was taken 823 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 160 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1236 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1236 times"> + </span> :<span class="tlaGNC">        6472 :     switch (c) {</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 88 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 88 times"> + </span><span class="tlaGBC" title="Branch 6 was taken 828 times"> + </span><span class="tlaGBC" title="Branch 7 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 8 was taken 508 times"> + </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 9 was taken 38 times"> + </span><span class="tlaGBC" title="Branch 10 was taken 178 times"> + </span><span class="tlaGBC" title="Branch 11 was taken 236 times"> + </span><span class="tlaGBC" title="Branch 12 was taken 396 times"> + </span><span class="tlaGBC" title="Branch 13 was taken 16 times"> + </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 14 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 15 was taken 62 times"> + </span><span class="tlaGBC" title="Branch 16 was taken 314 times"> + </span><span class="tlaGBC" title="Branch 17 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 18 was taken 15 times"> + </span> 
+<span class="lineNum">        </span>       <span class="tlaGBC" title="Branch 19 was taken 31 times"> + </span><span class="tlaGBC" title="Branch 20 was taken 39 times"> + </span><span class="tlaGBC" title="Branch 21 was taken 165 times"> + </span>]
+<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">         823 :         case '\'':</span></span>
+<span id="L268"><span class="lineNum">     268</span>                 :<span class="tlaGNC">         823 :             return lex_string(TokenType::kString, 0);</span></span>
+<span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaGNC">         160 :         case '&quot;':</span></span>
+<span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaGNC">         160 :             return lex_quoted_identifier();</span></span>
+<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">        1236 :         case '(':</span></span>
+<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">        1236 :             advance();</span></span>
+<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">        1236 :             return make_token(TokenType::kLParen, start, line, column);</span></span>
+<span id="L274"><span class="lineNum">     274</span>                 :<span class="tlaGNC">        1236 :         case ')':</span></span>
+<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaGNC">        1236 :             advance();</span></span>
+<span id="L276"><span class="lineNum">     276</span>                 :<span class="tlaGNC">        1236 :             return make_token(TokenType::kRParen, start, line, column);</span></span>
+<span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaGNC">          88 :         case '[':</span></span>
+<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaGNC">          88 :             advance();</span></span>
+<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">          88 :             return make_token(TokenType::kLBracket, start, line, column);</span></span>
+<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC">          88 :         case ']':</span></span>
+<span id="L281"><span class="lineNum">     281</span>                 :<span class="tlaGNC">          88 :             advance();</span></span>
+<span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaGNC">          88 :             return make_token(TokenType::kRBracket, start, line, column);</span></span>
+<span id="L283"><span class="lineNum">     283</span>                 :<span class="tlaGNC">         828 :         case ',':</span></span>
+<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">         828 :             advance();</span></span>
+<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaGNC">         828 :             return make_token(TokenType::kComma, start, line, column);</span></span>
+<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaGNC">           3 :         case ';':</span></span>
+<span id="L287"><span class="lineNum">     287</span>                 :<span class="tlaGNC">           3 :             advance();</span></span>
+<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC">           3 :             return make_token(TokenType::kSemicolon, start, line, column);</span></span>
+<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">         508 :         case '.':</span></span>
+<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC">         508 :             advance();</span></span>
+<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaGNC">         508 :             return make_token(TokenType::kDot, start, line, column);</span></span>
+<span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaGNC">          38 :         case ':':</span></span>
+<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC">          38 :             advance();</span></span>
+<span id="L294"><span class="lineNum">     294</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 25 times"> + </span>]:<span class="tlaGNC">          38 :             if (peek() == ':') {</span></span>
+<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">          13 :                 advance();</span></span>
+<span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaGNC">          13 :                 return make_token(TokenType::kDoubleColon, start, line, column);</span></span>
+<span id="L297"><span class="lineNum">     297</span>                 :             :             }</span>
+<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaGNC">          25 :             return make_token(TokenType::kColon, start, line, column);</span></span>
+<span id="L299"><span class="lineNum">     299</span>                 :<span class="tlaGNC">         178 :         case '+':</span></span>
+<span id="L300"><span class="lineNum">     300</span>                 :<span class="tlaGNC">         178 :             advance();</span></span>
+<span id="L301"><span class="lineNum">     301</span>                 :<span class="tlaGNC">         178 :             return make_token(TokenType::kPlus, start, line, column);</span></span>
+<span id="L302"><span class="lineNum">     302</span>                 :<span class="tlaGNC">         236 :         case '-':</span></span>
+<span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaGNC">         236 :             advance();</span></span>
+<span id="L304"><span class="lineNum">     304</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 224 times"> + </span>]:<span class="tlaGNC">         236 :             if (peek() == '&gt;') {</span></span>
+<span id="L305"><span class="lineNum">     305</span>                 :<span class="tlaGNC">          12 :                 advance();</span></span>
+<span id="L306"><span class="lineNum">     306</span>                 :<span class="tlaGNC">          12 :                 return make_token(TokenType::kArrow, start, line, column);</span></span>
+<span id="L307"><span class="lineNum">     307</span>                 :             :             }</span>
+<span id="L308"><span class="lineNum">     308</span>                 :<span class="tlaGNC">         224 :             return make_token(TokenType::kMinus, start, line, column);</span></span>
+<span id="L309"><span class="lineNum">     309</span>                 :<span class="tlaGNC">         396 :         case '*':</span></span>
+<span id="L310"><span class="lineNum">     310</span>                 :<span class="tlaGNC">         396 :             advance();</span></span>
+<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC">         396 :             return make_token(TokenType::kStar, start, line, column);</span></span>
+<span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC">          16 :         case '/':</span></span>
+<span id="L313"><span class="lineNum">     313</span>                 :<span class="tlaGNC">          16 :             advance();</span></span>
+<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">          16 :             return make_token(TokenType::kSlash, start, line, column);</span></span>
+<span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaGNC">           7 :         case '%':</span></span>
+<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaGNC">           7 :             advance();</span></span>
+<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaGNC">           7 :             return make_token(TokenType::kPercent, start, line, column);</span></span>
+<span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaGNC">          62 :         case '?':</span></span>
+<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">          62 :             advance();</span></span>
+<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC">          62 :             return make_token(TokenType::kQuestion, start, line, column);</span></span>
+<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">         314 :         case '=':</span></span>
+<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC">         314 :             advance();</span></span>
+<span id="L323"><span class="lineNum">     323</span>         [<span class="tlaGBC" title="Branch 0 was taken 65 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 249 times"> + </span>]:<span class="tlaGNC">         314 :             if (peek() == '&gt;') {</span></span>
+<span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaGNC">          65 :                 advance();</span></span>
+<span id="L325"><span class="lineNum">     325</span>                 :<span class="tlaGNC">          65 :                 return make_token(TokenType::kFatArrow, start, line, column);</span></span>
+<span id="L326"><span class="lineNum">     326</span>                 :             :             }</span>
+<span id="L327"><span class="lineNum">     327</span>                 :<span class="tlaGNC">         249 :             return make_token(TokenType::kEq, start, line, column);</span></span>
+<span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaGNC">           5 :         case '!':</span></span>
+<span id="L329"><span class="lineNum">     329</span>                 :<span class="tlaGNC">           5 :             advance();</span></span>
+<span id="L330"><span class="lineNum">     330</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           5 :             if (peek() == '=') {</span></span>
+<span id="L331"><span class="lineNum">     331</span>                 :<span class="tlaGNC">           1 :                 advance();</span></span>
+<span id="L332"><span class="lineNum">     332</span>                 :<span class="tlaGNC">           1 :                 return make_token(TokenType::kNeq, start, line, column);</span></span>
+<span id="L333"><span class="lineNum">     333</span>                 :             :             }</span>
+<span id="L334"><span class="lineNum">     334</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :             report(start, line, column, &quot;unexpected character '!', did you mean '!='?&quot;);</span></span>
+<span id="L335"><span class="lineNum">     335</span>                 :<span class="tlaGNC">           4 :             return make_token(TokenType::kIllegal, start, line, column);</span></span>
+<span id="L336"><span class="lineNum">     336</span>                 :<span class="tlaGNC">          15 :         case '&lt;':</span></span>
+<span id="L337"><span class="lineNum">     337</span>                 :<span class="tlaGNC">          15 :             advance();</span></span>
+<span id="L338"><span class="lineNum">     338</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">          15 :             if (peek() == '=') {</span></span>
+<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaGNC">           7 :                 advance();</span></span>
+<span id="L340"><span class="lineNum">     340</span>                 :<span class="tlaGNC">           7 :                 return make_token(TokenType::kLte, start, line, column);</span></span>
+<span id="L341"><span class="lineNum">     341</span>                 :             :             }</span>
+<span id="L342"><span class="lineNum">     342</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           8 :             if (peek() == '&gt;') {</span></span>
+<span id="L343"><span class="lineNum">     343</span>                 :<span class="tlaGNC">           3 :                 advance();</span></span>
+<span id="L344"><span class="lineNum">     344</span>                 :<span class="tlaGNC">           3 :                 return make_token(TokenType::kNeq, start, line, column);</span></span>
+<span id="L345"><span class="lineNum">     345</span>                 :             :             }</span>
+<span id="L346"><span class="lineNum">     346</span>                 :<span class="tlaGNC">           5 :             return make_token(TokenType::kLt, start, line, column);</span></span>
+<span id="L347"><span class="lineNum">     347</span>                 :<span class="tlaGNC">          31 :         case '&gt;':</span></span>
+<span id="L348"><span class="lineNum">     348</span>                 :<span class="tlaGNC">          31 :             advance();</span></span>
+<span id="L349"><span class="lineNum">     349</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC">          31 :             if (peek() == '=') {</span></span>
+<span id="L350"><span class="lineNum">     350</span>                 :<span class="tlaGNC">           4 :                 advance();</span></span>
+<span id="L351"><span class="lineNum">     351</span>                 :<span class="tlaGNC">           4 :                 return make_token(TokenType::kGte, start, line, column);</span></span>
+<span id="L352"><span class="lineNum">     352</span>                 :             :             }</span>
+<span id="L353"><span class="lineNum">     353</span>                 :<span class="tlaGNC">          27 :             return make_token(TokenType::kGt, start, line, column);</span></span>
+<span id="L354"><span class="lineNum">     354</span>                 :<span class="tlaGNC">          39 :         case '|':</span></span>
+<span id="L355"><span class="lineNum">     355</span>                 :<span class="tlaGNC">          39 :             advance();</span></span>
+<span id="L356"><span class="lineNum">     356</span>         [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 11 times"> + </span>]:<span class="tlaGNC">          39 :             if (peek() == '|') {</span></span>
+<span id="L357"><span class="lineNum">     357</span>                 :<span class="tlaGNC">          28 :                 advance();</span></span>
+<span id="L358"><span class="lineNum">     358</span>                 :<span class="tlaGNC">          28 :                 return make_token(TokenType::kConcat, start, line, column);</span></span>
+<span id="L359"><span class="lineNum">     359</span>                 :             :             }</span>
+<span id="L360"><span class="lineNum">     360</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :             report(start, line, column, &quot;unexpected character '|', did you mean '||'?&quot;);</span></span>
+<span id="L361"><span class="lineNum">     361</span>                 :<span class="tlaGNC">          11 :             return make_token(TokenType::kIllegal, start, line, column);</span></span>
+<span id="L362"><span class="lineNum">     362</span>                 :<span class="tlaGNC">         165 :         default:</span></span>
+<span id="L363"><span class="lineNum">     363</span>                 :<span class="tlaGNC">         165 :             advance();</span></span>
+<span id="L364"><span class="lineNum">     364</span>   [<span class="tlaGBC" title="Branch 0 was taken 165 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 165 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         330 :             report(start, line, column, std::string(&quot;unexpected character '&quot;) + c + &quot;'&quot;);</span></span>
+<span id="L365"><span class="lineNum">     365</span>                 :<span class="tlaGNC">         165 :             return make_token(TokenType::kIllegal, start, line, column);</span></span>
+<span id="L366"><span class="lineNum">     366</span>                 :             :     }</span>
+<span id="L367"><span class="lineNum">     367</span>                 :             : }</span>
+<span id="L368"><span class="lineNum">     368</span>                 :             : </span>
+<span id="L369"><span class="lineNum">     369</span>                 :<span class="tlaGNC">       12299 : Token Lexer::lex_identifier_or_keyword() {</span></span>
+<span id="L370"><span class="lineNum">     370</span>                 :<span class="tlaGNC">       12299 :     const uint32_t start = pos_;</span></span>
+<span id="L371"><span class="lineNum">     371</span>                 :<span class="tlaGNC">       12299 :     const uint32_t line = line_;</span></span>
+<span id="L372"><span class="lineNum">     372</span>                 :<span class="tlaGNC">       12299 :     const uint32_t column = column_;</span></span>
+<span id="L373"><span class="lineNum">     373</span>   [<span class="tlaGBC" title="Branch 0 was taken 65304 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1139 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 54144 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 11160 times"> + </span>]:<span class="tlaGNC">       66443 :     while (!eof() &amp;&amp; is_ident_part(peek())) {</span></span>
+<span id="L374"><span class="lineNum">     374</span>                 :<span class="tlaGNC">       54144 :         advance();</span></span>
+<span id="L375"><span class="lineNum">     375</span>                 :             :     }</span>
+<span id="L376"><span class="lineNum">     376</span>                 :<span class="tlaGNC">       12299 :     const TokenType type = lookup_keyword(source_.substr(start, pos_ - start));</span></span>
+<span id="L377"><span class="lineNum">     377</span>                 :<span class="tlaGNC">       12299 :     return make_token(type, start, line, column);</span></span>
+<span id="L378"><span class="lineNum">     378</span>                 :             : }</span>
+<span id="L379"><span class="lineNum">     379</span>                 :             : </span>
+<span id="L380"><span class="lineNum">     380</span>                 :<span class="tlaGNC">        1482 : Token Lexer::lex_number() {</span></span>
+<span id="L381"><span class="lineNum">     381</span>                 :<span class="tlaGNC">        1482 :     const uint32_t start = pos_;</span></span>
+<span id="L382"><span class="lineNum">     382</span>                 :<span class="tlaGNC">        1482 :     const uint32_t line = line_;</span></span>
+<span id="L383"><span class="lineNum">     383</span>                 :<span class="tlaGNC">        1482 :     const uint32_t column = column_;</span></span>
+<span id="L384"><span class="lineNum">     384</span>                 :             : </span>
+<span id="L385"><span class="lineNum">     385</span>                 :             :     // Consumes a run of digits with optional single '_' separators between</span>
+<span id="L386"><span class="lineNum">     386</span>                 :             :     // digits (Trino 445+): 1_000 is one token, 1__0 and 1_ are not.</span>
+<span id="L387"><span class="lineNum">     387</span>                 :<span class="tlaGNC">        1689 :     const auto consume_digits = [this](bool (*pred)(char)) {</span></span>
+<span id="L388"><span class="lineNum">     388</span>   [<span class="tlaGBC" title="Branch 0 was taken 4264 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 479 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1310 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 2954 times"> + </span> :<span class="tlaGNC">        4743 :         while (!eof() &amp;&amp; (pred(peek()) || (peek() == '_' &amp;&amp; pred(peek(1))))) {</span></span>
+<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 112 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 1198 times"> + </span><span class="tlaGBC" title="Branch 6 was taken 100 times"> + </span><span class="tlaGBC" title="Branch 7 was taken 12 times"> + </span>]
+<span id="L389"><span class="lineNum">     389</span>                 :<span class="tlaGNC">        3054 :             advance();</span></span>
+<span id="L390"><span class="lineNum">     390</span>                 :             :         }</span>
+<span id="L391"><span class="lineNum">     391</span>                 :<span class="tlaGNC">        3171 :     };</span></span>
+<span id="L392"><span class="lineNum">     392</span>                 :             : </span>
+<span id="L393"><span class="lineNum">     393</span>                 :             :     // Base-prefixed literals: 0x..., 0o..., 0b...</span>
+<span id="L394"><span class="lineNum">     394</span>   [<span class="tlaGBC" title="Branch 0 was taken 107 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1375 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 106 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">        1482 :     if (peek() == '0' &amp;&amp; pos_ + 1 &lt; source_.size()) {</span></span>
+<span id="L395"><span class="lineNum">     395</span>                 :<span class="tlaGNC">         106 :         const char kind = peek(1);</span></span>
+<span id="L396"><span class="lineNum">     396</span>         [<span class="tlaGBC" title="Branch 0 was taken 49 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 57 times"> + </span>]:<span class="tlaGNC">         106 :         if (kind == 'x' || kind == 'X' || kind == 'o' || kind == 'O' || kind == 'b' ||</span></span>
+<span id="L397"><span class="lineNum">     397</span>                 :             :             kind == 'B') {</span>
+<span id="L398"><span class="lineNum">     398</span>                 :<span class="tlaGNC">          49 :             advance();</span></span>
+<span id="L399"><span class="lineNum">     399</span>                 :<span class="tlaGNC">          49 :             advance();</span></span>
+<span id="L400"><span class="lineNum">     400</span>      [<span class="tlaGBC" title="Branch 0 was taken 17 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 16 times"> + </span>]:<span class="tlaGNC">          49 :             switch (kind) {</span></span>
+<span id="L401"><span class="lineNum">     401</span>                 :<span class="tlaGNC">          17 :                 case 'x':</span></span>
+<span id="L402"><span class="lineNum">     402</span>                 :             :                 case 'X':</span>
+<span id="L403"><span class="lineNum">     403</span>                 :<span class="tlaGNC">          17 :                     consume_digits([](char c) {</span></span>
+<span id="L404"><span class="lineNum">     404</span>                 :             :                         return is_digit(c) || (c &gt;= 'a' &amp;&amp; c &lt;= 'f') || (c &gt;= 'A' &amp;&amp; c &lt;= 'F');</span>
+<span id="L405"><span class="lineNum">     405</span>                 :             :                     });</span>
+<span id="L406"><span class="lineNum">     406</span>                 :             :                     break;</span>
+<span id="L407"><span class="lineNum">     407</span>                 :<span class="tlaGNC">          16 :                 case 'o':</span></span>
+<span id="L408"><span class="lineNum">     408</span>                 :             :                 case 'O':</span>
+<span id="L409"><span class="lineNum">     409</span>                 :<span class="tlaGNC">          16 :                     consume_digits([](char c) { return c &gt;= '0' &amp;&amp; c &lt;= '7'; });</span></span>
+<span id="L410"><span class="lineNum">     410</span>                 :             :                     break;</span>
+<span id="L411"><span class="lineNum">     411</span>                 :<span class="tlaGNC">          16 :                 default:</span></span>
+<span id="L412"><span class="lineNum">     412</span>                 :<span class="tlaGNC">          16 :                     consume_digits([](char c) { return c == '0' || c == '1'; });</span></span>
+<span id="L413"><span class="lineNum">     413</span>                 :             :                     break;</span>
+<span id="L414"><span class="lineNum">     414</span>                 :             :             }</span>
+<span id="L415"><span class="lineNum">     415</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 48 times"> + </span>]:<span class="tlaGNC">          49 :             if (pos_ - start == 2) {</span></span>
+<span id="L416"><span class="lineNum">     416</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :                 report(start, line, column, &quot;expected digits after base prefix&quot;);</span></span>
+<span id="L417"><span class="lineNum">     417</span>                 :<span class="tlaGNC">           1 :                 return make_token(TokenType::kIllegal, start, line, column);</span></span>
+<span id="L418"><span class="lineNum">     418</span>                 :             :             }</span>
+<span id="L419"><span class="lineNum">     419</span>                 :<span class="tlaGNC">          48 :             return make_token(TokenType::kNumber, start, line, column);</span></span>
+<span id="L420"><span class="lineNum">     420</span>                 :             :         }</span>
+<span id="L421"><span class="lineNum">     421</span>                 :             :     }</span>
+<span id="L422"><span class="lineNum">     422</span>                 :             : </span>
+<span id="L423"><span class="lineNum">     423</span>         [<span class="tlaGBC" title="Branch 0 was taken 41 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1392 times"> + </span>]:<span class="tlaGNC">        1433 :     if (peek() == '.') {</span></span>
+<span id="L424"><span class="lineNum">     424</span>                 :<span class="tlaGNC">          41 :         advance();</span></span>
+<span id="L425"><span class="lineNum">     425</span>                 :<span class="tlaGNC">          41 :         consume_digits(is_digit);</span></span>
+<span id="L426"><span class="lineNum">     426</span>                 :             :     } else {</span>
+<span id="L427"><span class="lineNum">     427</span>                 :<span class="tlaGNC">        1392 :         consume_digits(is_digit);</span></span>
+<span id="L428"><span class="lineNum">     428</span>         [<span class="tlaGBC" title="Branch 0 was taken 106 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1286 times"> + </span>]:<span class="tlaGNC">        1392 :         if (peek() == '.') {</span></span>
+<span id="L429"><span class="lineNum">     429</span>                 :<span class="tlaGNC">         106 :             advance();</span></span>
+<span id="L430"><span class="lineNum">     430</span>                 :<span class="tlaGNC">         106 :             consume_digits(is_digit);</span></span>
+<span id="L431"><span class="lineNum">     431</span>                 :             :         }</span>
+<span id="L432"><span class="lineNum">     432</span>                 :             :     }</span>
+<span id="L433"><span class="lineNum">     433</span>                 :             : </span>
+<span id="L434"><span class="lineNum">     434</span>                 :             :     // Exponent: only consumed when it forms a valid suffix, so that &quot;1e&quot; lexes</span>
+<span id="L435"><span class="lineNum">     435</span>                 :             :     // as number(&quot;1&quot;) followed by identifier(&quot;e&quot;).</span>
+<span id="L436"><span class="lineNum">     436</span>   [<span class="tlaGBC" title="Branch 0 was taken 1406 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 75 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1331 times"> + </span>]:<span class="tlaGNC">        1433 :     if (peek() == 'e' || peek() == 'E') {</span></span>
+<span id="L437"><span class="lineNum">     437</span>         [<span class="tlaGBC" title="Branch 0 was taken 63 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 39 times"> + </span>]:<span class="tlaGNC">         102 :         if (is_digit(peek(1))) {</span></span>
+<span id="L438"><span class="lineNum">     438</span>                 :<span class="tlaGNC">          63 :             advance();</span></span>
+<span id="L439"><span class="lineNum">     439</span>                 :<span class="tlaGNC">          63 :             consume_digits(is_digit);</span></span>
+<span id="L440"><span class="lineNum">     440</span>   [<span class="tlaGBC" title="Branch 0 was taken 29 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 28 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span> :<span class="tlaGNC">          39 :         } else if ((peek(1) == '+' || peek(1) == '-') &amp;&amp; is_digit(peek(2))) {</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 38 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
+<span id="L441"><span class="lineNum">     441</span>                 :<span class="tlaGNC">          38 :             advance();</span></span>
+<span id="L442"><span class="lineNum">     442</span>                 :<span class="tlaGNC">          38 :             advance();</span></span>
+<span id="L443"><span class="lineNum">     443</span>                 :<span class="tlaGNC">          38 :             consume_digits(is_digit);</span></span>
+<span id="L444"><span class="lineNum">     444</span>                 :             :         }</span>
+<span id="L445"><span class="lineNum">     445</span>                 :             :     }</span>
+<span id="L446"><span class="lineNum">     446</span>                 :             : </span>
+<span id="L447"><span class="lineNum">     447</span>                 :<span class="tlaGNC">        1433 :     return make_token(TokenType::kNumber, start, line, column);</span></span>
+<span id="L448"><span class="lineNum">     448</span>                 :             : }</span>
+<span id="L449"><span class="lineNum">     449</span>                 :             : </span>
+<span id="L450"><span class="lineNum">     450</span>                 :<span class="tlaGNC">         924 : Token Lexer::lex_string(TokenType type, uint32_t prefix_length) {</span></span>
+<span id="L451"><span class="lineNum">     451</span>                 :<span class="tlaGNC">         924 :     const uint32_t start = pos_;</span></span>
+<span id="L452"><span class="lineNum">     452</span>                 :<span class="tlaGNC">         924 :     const uint32_t line = line_;</span></span>
+<span id="L453"><span class="lineNum">     453</span>                 :<span class="tlaGNC">         924 :     const uint32_t column = column_;</span></span>
+<span id="L454"><span class="lineNum">     454</span>                 :             : </span>
+<span id="L455"><span class="lineNum">     455</span>         [<span class="tlaGBC" title="Branch 0 was taken 184 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 924 times"> + </span>]:<span class="tlaGNC">        1108 :     for (uint32_t i = 0; i &lt; prefix_length; ++i) {</span></span>
+<span id="L456"><span class="lineNum">     456</span>                 :<span class="tlaGNC">         184 :         advance();</span></span>
+<span id="L457"><span class="lineNum">     457</span>                 :             :     }</span>
+<span id="L458"><span class="lineNum">     458</span>                 :<span class="tlaGNC">         924 :     advance(); // opening quote</span></span>
+<span id="L459"><span class="lineNum">     459</span>                 :             : </span>
+<span id="L460"><span class="lineNum">     460</span>         [<span class="tlaGBC" title="Branch 0 was taken 5653 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">        6584 :     while (!eof()) {</span></span>
+<span id="L461"><span class="lineNum">     461</span>         [<span class="tlaGBC" title="Branch 0 was taken 4714 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 939 times"> + </span>]:<span class="tlaGNC">        5653 :         if (advance() == '\'') {</span></span>
+<span id="L462"><span class="lineNum">     462</span>         [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 917 times"> + </span>]:<span class="tlaGNC">         939 :             if (peek() == '\'') { // doubled quote escape</span></span>
+<span id="L463"><span class="lineNum">     463</span>                 :<span class="tlaGNC">          22 :                 advance();</span></span>
+<span id="L464"><span class="lineNum">     464</span>                 :<span class="tlaGNC">          22 :                 continue;</span></span>
+<span id="L465"><span class="lineNum">     465</span>                 :             :             }</span>
+<span id="L466"><span class="lineNum">     466</span>                 :<span class="tlaGNC">         917 :             return make_token(type, start, line, column);</span></span>
+<span id="L467"><span class="lineNum">     467</span>                 :             :         }</span>
+<span id="L468"><span class="lineNum">     468</span>                 :             :     }</span>
+<span id="L469"><span class="lineNum">     469</span>                 :             : </span>
+<span id="L470"><span class="lineNum">     470</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :     report(start, line, column, &quot;unterminated string literal&quot;);</span></span>
+<span id="L471"><span class="lineNum">     471</span>                 :<span class="tlaGNC">           7 :     return make_token(TokenType::kIllegal, start, line, column);</span></span>
+<span id="L472"><span class="lineNum">     472</span>                 :             : }</span>
+<span id="L473"><span class="lineNum">     473</span>                 :             : </span>
+<span id="L474"><span class="lineNum">     474</span>                 :<span class="tlaGNC">         160 : Token Lexer::lex_quoted_identifier() {</span></span>
+<span id="L475"><span class="lineNum">     475</span>                 :<span class="tlaGNC">         160 :     const uint32_t start = pos_;</span></span>
+<span id="L476"><span class="lineNum">     476</span>                 :<span class="tlaGNC">         160 :     const uint32_t line = line_;</span></span>
+<span id="L477"><span class="lineNum">     477</span>                 :<span class="tlaGNC">         160 :     const uint32_t column = column_;</span></span>
+<span id="L478"><span class="lineNum">     478</span>                 :             : </span>
+<span id="L479"><span class="lineNum">     479</span>                 :<span class="tlaGNC">         160 :     advance(); // opening quote</span></span>
+<span id="L480"><span class="lineNum">     480</span>         [<span class="tlaGBC" title="Branch 0 was taken 1479 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">        1640 :     while (!eof()) {</span></span>
+<span id="L481"><span class="lineNum">     481</span>         [<span class="tlaGBC" title="Branch 0 was taken 1310 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 169 times"> + </span>]:<span class="tlaGNC">        1479 :         if (advance() == '&quot;') {</span></span>
+<span id="L482"><span class="lineNum">     482</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 159 times"> + </span>]:<span class="tlaGNC">         169 :             if (peek() == '&quot;') { // doubled quote escape</span></span>
+<span id="L483"><span class="lineNum">     483</span>                 :<span class="tlaGNC">          10 :                 advance();</span></span>
+<span id="L484"><span class="lineNum">     484</span>                 :<span class="tlaGNC">          10 :                 continue;</span></span>
+<span id="L485"><span class="lineNum">     485</span>                 :             :             }</span>
+<span id="L486"><span class="lineNum">     486</span>                 :<span class="tlaGNC">         159 :             return make_token(TokenType::kQuotedIdentifier, start, line, column);</span></span>
+<span id="L487"><span class="lineNum">     487</span>                 :             :         }</span>
+<span id="L488"><span class="lineNum">     488</span>                 :             :     }</span>
+<span id="L489"><span class="lineNum">     489</span>                 :             : </span>
+<span id="L490"><span class="lineNum">     490</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     report(start, line, column, &quot;unterminated quoted identifier&quot;);</span></span>
+<span id="L491"><span class="lineNum">     491</span>                 :<span class="tlaGNC">           1 :     return make_token(TokenType::kIllegal, start, line, column);</span></span>
+<span id="L492"><span class="lineNum">     492</span>                 :             : }</span>
+<span id="L493"><span class="lineNum">     493</span>                 :             : </span>
+<span id="L494"><span class="lineNum">     494</span>                 :             : } // namespace pl::prism::syntax</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>
