@@ -1595,6 +1595,7 @@ kernel void mllm_attention_full_fused(
     constant uint& head_dim      [[buffer(5)]],
     constant uint& seq_len       [[buffer(6)]],
     constant float& scale        [[buffer(7)]],
+    constant uint& kv_stride     [[buffer(8)]], // K/V row stride (== hd when pre-transposed)
     uint2 tgid [[threadgroup_position_in_grid]],
     uint lane [[thread_index_in_simdgroup]],
     uint sg   [[simdgroup_index_in_threadgroup]],
@@ -1659,10 +1660,15 @@ kernel void mllm_attention_full_fused(
         simdgroup_float8x8 st[BN / 8];
         for (uint jj = 0; jj < BN / 8; ++jj) {
             const uint kr = min(k0 + jj * 8, max_n8);
-            const device float* kb = keys + (size_t)kr * row_stride + (size_t)h * hd;
+            // When the host pre-transposes K/V to [heads, n, hd] (kv_stride
+            // == hd) the head offset is the plane base h*n*hd; with the
+            // interleaved layout kv_stride == row_stride and the head offset
+            // is h*hd. Same values, same fragment arithmetic.
+            const device float* kb = keys + (size_t)kr * kv_stride +
+                                     (kv_stride == hd ? (size_t)h * n * hd : (size_t)h * hd);
             for (uint kk = 0; kk < kt; ++kk) {
                 simdgroup_float8x8 kf;
-                simdgroup_load(kf, kb + kk * 8, row_stride);
+                simdgroup_load(kf, kb + kk * 8, kv_stride);
                 if (kk == 0) {
                     simdgroup_multiply(st[jj], kf, qt[kk]);
                 } else {
@@ -1745,8 +1751,10 @@ kernel void mllm_attention_full_fused(
                 const uint vr = min(k0 + jj * 8, max_n8);
                 simdgroup_float8x8 vf;
                 simdgroup_load(vf,
-                               values + (size_t)vr * row_stride + (size_t)h * hd + dd * 8,
-                               row_stride);
+                               values + (size_t)vr * kv_stride +
+                                   (kv_stride == hd ? (size_t)h * n * hd : (size_t)h * hd) +
+                                   dd * 8,
+                               kv_stride);
                 simdgroup_multiply_accumulate(of[dd], pf[jj], vf, of[dd]);
             }
         }
@@ -1770,6 +1778,29 @@ kernel void mllm_attention_full_fused(
             }
         }
     }
+}
+// ---------------------------------------------------------------------------
+// K/V transpose for the fused vision attention: [n, heads, hd] interleaved
+// -> [heads, n, hd] contiguous per-head planes. Pure data movement (no
+// arithmetic), used to give the fused kernel unit-stride fragment loads.
+// One thread per element; both source reads and destination writes are
+// coalesced along head_dim.
+kernel void mllm_kv_transpose(
+    device float* dst          [[buffer(0)]], // [heads, n, hd]
+    const device float* src    [[buffer(1)]], // [n, heads, hd]
+    constant uint& num_heads   [[buffer(2)]],
+    constant uint& head_dim    [[buffer(3)]],
+    constant uint& seq_len     [[buffer(4)]],
+    uint gid [[thread_position_in_grid]])
+{
+    const uint total = num_heads * head_dim * seq_len;
+    if (gid >= total) return;
+    const uint d = gid % head_dim;
+    const uint t = gid / head_dim;
+    const uint h = t % num_heads;
+    const uint r = t / num_heads;
+    dst[((size_t)h * seq_len + r) * head_dim + d] =
+        src[((size_t)r * num_heads + h) * head_dim + d];
 }
 )msl";
 

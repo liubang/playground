@@ -160,6 +160,95 @@ ocr_small / ocr_large 在 CPU 上 hash 同样成立（两后端字节一致）�
 
 ---
 
+## 基线 2026-09-18（A 级 vision 优化：QKV 融合 + attention K/V 预转置）
+
+**环境**: Apple M4 Pro, macOS (darwin_arm64), `--config=release`，PaddleOCR-VL-1.6 GGUF，base commit `da7c1a523` + 本节所列改动（工作区未提交）。优化方向与分级见 [VISION_OPTIMIZATION_PLAN.md](VISION_OPTIMIZATION_PLAN.md)。
+
+改动内容（全部为逐位等价的 A 级优化）：
+
+1. **`MatMulFused` batch>1 f16 快速路径**（A1）：Metal 端共享输入的多个
+   GEMM（vision QKV、LM prefill 的 QKV / gate-up）现在只上传 + f32→f16
+   转换输入一次，随后在同一 deferred command buffer 连续 encode N 个
+   MPS GEMM。此前每次 `MatMul` 都重复转换同一输入（QKV 冗余 2 次）。
+   每个 GEMM 的 shape/数据/kernel 序列与独立调用完全一致。vision tower
+   的 QKV 三调用改为一次 `MatMulFused`；CPU 后端走默认逐次回退，不变。
+2. **fused vision attention 的 K/V 预转置**（A2）：新增 `mllm_kv_transpose`
+   kernel，在 n ≥ 1024 时把 K/V 从交错布局 `[n, heads, hd]` 转成按 head
+   连续的 `[heads, n, hd]` 平面（纯数据搬运），fused kernel 的 fragment
+   加载从 4608B 行距变为 288B 行距。kernel 通过 `kv_stride` 参数兼容两种
+   布局，小 n 维持原交错路径（转置 dispatch 开销在小图占优）。
+3. **负结果记录**（未合入）：(a) threadgroup K/V staging 版（v6）——
+   threadgroup memory 从 4.9KB 涨到 23.7KB，occupancy 从 ~6 跌至 1
+   threadgroup/core，慢 3 倍（0.53-0.56 TFLOP/s）；(b) 16-query-row
+   寄存器分块版（fused16）——寄存器/占用压力，同样慢 3 倍
+   （0.63-0.67 TFLOP/s）。结论：v5 的 4.9KB/6-tg occupancy 是性能关键，
+   保持 f32 的前提下的剩余空间在减少加载发射次数且不牺牲 occupancy 的
+   方向上，已基本到顶；大头收益需走 B 级（f16 attention）。
+
+### 单元测试
+
+`//cpp/pl/mllm/...` — **15/15 PASSED**（含 `AttentionFullParity` /
+`AttentionFullParityPaddleOcrDims`：CPU vs Metal 容差内一致）。
+
+### 真实模型 golden 回归（e2e_golden_ocr）
+
+**6/6 PASSED**，且四个用例 stdout SHA-256 与 2026-09-13 基线冻结的
+golden **完全相同**——A1/A2 端到端逐字节等价（greedy decode）：
+
+| 检查 | 结果 |
+| ---- | ---- |
+| text_short / text_long stdout SHA-256 == golden | PASS |
+| ocr_small stdout SHA-256 == golden + 语义断言（转写正确） | PASS |
+| ocr_large stdout SHA-256 == golden + sanity（非空、无 `<unk>`） | PASS |
+
+单次冷进程性能（回归脚本输出，参考值）：
+
+| case       | backend | prompt tok | gen tok | prefill ms | decode ms | tok/s  |
+| ---------- | ------- | ---------- | ------- | ---------- | --------- | ------ |
+| text_short | metal   | 5          | 32      | 83.48      | 197.55    | 161.99 |
+| text_long  | metal   | 175        | 32      | 77.98      | 177.04    | 180.75 |
+| ocr_small  | metal   | 197        | 48      | 402.53     | 287.50    | 166.96 |
+| ocr_large  | metal   | 869        | 48      | 2039.62    | 365.90    | 131.18 |
+
+### 性能 — op 微基准（bench_ops，vision attention）
+
+| op                          | 2026-09-13（v5） | 本版（v5 + 转置） | 提升      |
+| --------------------------- | ---------------- | ----------------- | --------- |
+| attn_full n=768 h=16 hd=72  | 1.55–1.66 ms     | **1.48–1.50 ms**  | 持平略优  |
+| attn_full n=3456 h=16 hd=72 | 32.5 ms          | **28.4–28.7 ms**  | **1.14x** |
+
+### 性能 — vision tower 分层 profile（doc_large, n=3456）
+
+| stage       | 2026-09-13 | 本版     | 变化       |
+| ----------- | ---------- | -------- | ---------- |
+| 总          | 1706 ms    | **1515 ms** | **-11.2%** |
+| blk_attn    | 760.3      | 685.8    | -9.8%      |
+| blk_mlp     | 543.6      | 475.6    | -12.5%     |
+| blk_qkv     | 264.8      | 227.6    | **-14.1%**（A1 融合） |
+| blk_oproj   | 88.5       | 79.3     | -10.4%     |
+| patch_embed | 21.2       | 19.4     | —          |
+| rope_tables | 0.16       | 0.16     | —          |
+
+（blk_mlp/blk_oproj 路径未改动，其变化含 run-to-run 方差；blk_qkv 的
+下降来自 A1 消除重复输入转换 + 减少 dispatch。）
+
+### 性能 — 端到端（CLI, warm 中位数）与上一基线对比
+
+| 用例                      | 2026-09-13 prefill | 本版 prefill        | 提升     |
+| ------------------------- | ------------------ | ------------------- | -------- |
+| OCR doc_small (197 tok)   | 319–330 ms         | **300–317 ms**      | ~1.06x   |
+| OCR doc_large (869 tok)   | 1996–2083 ms       | **1805–2036 ms**    | ~1.07x   |
+
+### 性能 — decode 微基准（bench_decode, n=64, EOS 于 8 token）
+
+| backend | tok/s              |
+| ------- | ------------------ |
+| Metal   | 147.9（冷）        |
+
+decode 路径未改动；e2e 冷进程 tok/s（131–181）与上版一致。
+
+---
+
 ## 基线 2026-09-13（fused flash attention kernel + host 预处理优化 + MPS GEMM 缓存）
 
 **环境**: Apple M4 Pro, macOS (darwin_arm64), `--config=release`，PaddleOCR-VL-1.6 GGUF，base commit `d56e5720d` + 本节所列改动（工作区未提交）。

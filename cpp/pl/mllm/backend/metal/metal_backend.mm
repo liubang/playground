@@ -139,6 +139,7 @@ struct MetalBackend::Impl {
     id<MTLComputePipelineState> gelu_ps = nil;             // vision GELU in place
     id<MTLComputePipelineState> rope_apply_ps = nil;       // table-driven rope (vision/mrope)
     id<MTLComputePipelineState> attention_full_ps = nil;   // bidirectional vision attention
+    id<MTLComputePipelineState> kv_transpose_ps = nil;     // [n,h,hd] -> [h,n,hd] for fused attention
     id<MTLComputePipelineState> gemm_f32_ps = nil;         // MPS-unfriendly batched GEMM fallback
     id<MTLComputePipelineState> gemm_f16_ps = nil;
     id<MTLComputePipelineState> row_softmax_ps = nil;      // pitched row softmax (MPS-tiled attention)
@@ -191,6 +192,10 @@ struct MetalBackend::Impl {
     // (grow-on-demand: [tile_rows, pitched n] f32).
     id<MTLBuffer> attn_scratch_ = nil;
     size_t attn_scratch_bytes_ = 0;
+    // Transposed K/V planes for the fused vision attention
+    // (grow-on-demand: 2 x [heads, n, head_dim] f32).
+    id<MTLBuffer> attn_kv_scratch_ = nil;
+    size_t attn_kv_scratch_bytes_ = 0;
     // Cache of MPSMatrixMultiplication objects keyed by GEMM shape; creation
     // is non-trivial per call and the tiled attention issues thousands of
     // identically shaped GEMMs per image.
@@ -370,6 +375,7 @@ private:
         gelu_ps = make_ps("mllm_gelu_inplace");
         rope_apply_ps = make_ps("mllm_rope_apply");
         attention_full_ps = make_ps("mllm_attention_full");
+        kv_transpose_ps = make_ps("mllm_kv_transpose");
         gemm_f32_ps = make_ps("mllm_gemm_f32");
         gemm_f16_ps = make_ps("mllm_gemm_f16");
         row_softmax_ps = make_ps("mllm_row_softmax");
@@ -920,6 +926,134 @@ if (auto s = ensure_ready(*impl_); !s.ok()) return s;
     const int32_t batch = static_cast<int32_t>(x.shape().dim(0));
     const int32_t in_dim = static_cast<int32_t>(x.shape().dim(1));
     if (batch != 1) {
+        // Batched path (prefill / vision tower). When every weight is f16 and all
+        // GEMM dims are MPS-friendly, share ONE upload + f32->f16 conversion of x
+        // across the N GEMMs instead of paying it per MatMul call (the vision QKV
+        // and the LM QKV / gate-up projections each converted the same input 2-3
+        // times). Every GEMM keeps the exact shape, data, kernel and conversion
+        // sequence of the unfused path, so results are bit-identical; anything
+        // else falls back to the per-matrix loop below.
+        std::array<const Impl::Weight*, 3> ws{};
+        std::array<int32_t, 3> out_dims_b{};
+        bool f16_fast = ((in_dim % 8) == 0);
+        for (size_t i = 0; i < outs.size() && f16_fast; ++i) {
+            if (auto s = check_contig_valid(outs[i], "MatMulFused"); !s.ok()) return s;
+            auto it = impl_->weights_.find(weight_names[i]);
+            if (it == impl_->weights_.end()) {
+                return Status::Error(ErrorCode::kNotFound,
+                                     "MatMulFused: weight '" + std::string(weight_names[i]) + "' not found");
+            }
+            ws[i] = &it->second;
+            out_dims_b[i] = static_cast<int32_t>(it->second.shape.dim(0));
+            if (it->second.shape.dim(1) != in_dim) {
+                return Status::Error(ErrorCode::kInvalidArgument, "MatMulFused: in_dim mismatch");
+            }
+            if (outs[i].shape().rank() != 2 || outs[i].shape().dim(0) != batch ||
+                outs[i].shape().dim(1) != out_dims_b[i]) {
+                return Status::Error(ErrorCode::kInvalidArgument,
+                                     "MatMulFused: output shape mismatch");
+            }
+            if (outs[i].dtype() != DType::kF32) {
+                return Status::Error(ErrorCode::kUnsupported, "MatMulFused: output must be f32");
+            }
+            f16_fast = (it->second.dtype == DType::kF16) && ((out_dims_b[i] % 8) == 0);
+        }
+        if (f16_fast) {
+            id<MTLBuffer> xbuf = upload_tensor(*impl_, x);
+            if (!xbuf) {
+                return Status::Error(ErrorCode::kBackendFailure, "MatMulFused: x upload failed");
+            }
+            // Stage A (x, f32) into the f16 scratch at MPS row pitch — once for all.
+            const size_t a_row = align16(static_cast<size_t>(in_dim) * sizeof(uint16_t));
+            impl_->mps_scratch_a_ = impl_->ensure_scratch(static_cast<size_t>(batch) * a_row,
+                                                          impl_->mps_scratch_a_,
+                                                          impl_->mps_scratch_a_bytes_);
+            if (impl_->mps_scratch_a_ == nil) {
+                return Status::Error(ErrorCode::kBackendFailure,
+                                     "MatMulFused: MPS scratch alloc failed");
+            }
+            {
+                id<MTLComputeCommandEncoder> enc = impl_->encoder();
+                [enc setComputePipelineState:impl_->cvt_f32_to_f16_ps];
+                [enc setBuffer:xbuf offset:0 atIndex:0];
+                [enc setBuffer:impl_->mps_scratch_a_ offset:0 atIndex:1];
+                uint32_t in_d = static_cast<uint32_t>(in_dim);
+                uint32_t pitch = static_cast<uint32_t>(a_row / sizeof(uint16_t));
+                [enc setBytes:&in_d length:sizeof(in_d) atIndex:2];
+                [enc setBytes:&pitch length:sizeof(pitch) atIndex:3];
+                const NSUInteger total =
+                    static_cast<NSUInteger>(batch) * static_cast<NSUInteger>(in_dim);
+                [enc dispatchThreads:MTLSizeMake(total, 1, 1)
+                    threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
+            }
+            MPSMatrixDescriptor* a_desc = [MPSMatrixDescriptor
+                matrixDescriptorWithRows:static_cast<NSUInteger>(batch)
+                                 columns:static_cast<NSUInteger>(in_dim)
+                                rowBytes:a_row
+                                dataType:MPSDataTypeFloat16];
+            MPSMatrix* mA = [[MPSMatrix alloc] initWithBuffer:impl_->mps_scratch_a_
+                                                   descriptor:a_desc];
+            for (size_t i = 0; i < outs.size(); ++i) {
+                const int32_t out_dim = out_dims_b[i];
+                const size_t c_row = align16(static_cast<size_t>(out_dim) * sizeof(uint16_t));
+                impl_->mps_scratch_c_ = impl_->ensure_scratch(static_cast<size_t>(batch) * c_row,
+                                                              impl_->mps_scratch_c_,
+                                                              impl_->mps_scratch_c_bytes_);
+                const size_t out_bytes =
+                    static_cast<size_t>(batch) * static_cast<size_t>(out_dim) * sizeof(float);
+                id<MTLBuffer> obuf = impl_->get_or_alloc_output(outs[i].data(), out_bytes);
+                if (impl_->mps_scratch_c_ == nil || !obuf) {
+                    return Status::Error(ErrorCode::kBackendFailure,
+                                         "MatMulFused: output/scratch alloc failed");
+                }
+                MPSMatrixDescriptor* b_desc = [MPSMatrixDescriptor
+                    matrixDescriptorWithRows:static_cast<NSUInteger>(out_dim)
+                                     columns:static_cast<NSUInteger>(in_dim)
+                                    rowBytes:static_cast<size_t>(in_dim) * sizeof(uint16_t)
+                                    dataType:MPSDataTypeFloat16];
+                MPSMatrixDescriptor* c_desc = [MPSMatrixDescriptor
+                    matrixDescriptorWithRows:static_cast<NSUInteger>(batch)
+                                     columns:static_cast<NSUInteger>(out_dim)
+                                    rowBytes:c_row
+                                    dataType:MPSDataTypeFloat16];
+                MPSMatrix* mB = [[MPSMatrix alloc] initWithBuffer:ws[i]->buf descriptor:b_desc];
+                MPSMatrix* mC = [[MPSMatrix alloc] initWithBuffer:impl_->mps_scratch_c_
+                                                       descriptor:c_desc];
+                MPSMatrixMultiplication* mul =
+                    impl_->mul_kernel(YES, batch, out_dim, in_dim, 1.0, true);
+                if (!mul || !mA || !mB || !mC) {
+                    return Status::Error(ErrorCode::kBackendFailure,
+                                         "MatMulFused: MPS init failed");
+                }
+                if (impl_->deferred_enc != nil) {
+                    [impl_->deferred_enc endEncoding];
+                    impl_->deferred_enc = nil;
+                }
+                if (impl_->deferred_cb == nil) {
+                    impl_->deferred_cb = [impl_->queue commandBuffer];
+                }
+                [mul encodeToCommandBuffer:impl_->deferred_cb
+                                leftMatrix:mA
+                               rightMatrix:mB
+                              resultMatrix:mC];
+                // Convert the f16 GEMM result back to dense f32 in the output buffer.
+                id<MTLComputeCommandEncoder> enc = impl_->encoder();
+                [enc setComputePipelineState:impl_->cvt_f16_to_f32_ps];
+                [enc setBuffer:impl_->mps_scratch_c_ offset:0 atIndex:0];
+                [enc setBuffer:obuf offset:0 atIndex:1];
+                uint32_t out_d = static_cast<uint32_t>(out_dim);
+                uint32_t pitch = static_cast<uint32_t>(c_row / sizeof(uint16_t));
+                [enc setBytes:&out_d length:sizeof(out_d) atIndex:2];
+                [enc setBytes:&pitch length:sizeof(pitch) atIndex:3];
+                const NSUInteger total =
+                    static_cast<NSUInteger>(batch) * static_cast<NSUInteger>(out_dim);
+                [enc dispatchThreads:MTLSizeMake(total, 1, 1)
+                    threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
+                impl_->shadow_[reinterpret_cast<uintptr_t>(outs[i].data())] =
+                    {obuf, out_bytes, true};
+            }
+            return {};
+        }
         // Fallback for prefill (batch > 1) — use individual MatMul calls.
         for (size_t i = 0; i < outs.size(); ++i) {
             if (auto s = MatMul(outs[i], x, weight_names[i]); !s.ok()) return s;
@@ -1582,16 +1716,59 @@ Status MetalBackend::AttentionFull(
             const uint32_t nh = static_cast<uint32_t>(num_heads);
             const uint32_t hd = static_cast<uint32_t>(head_dim);
             const uint32_t sl = static_cast<uint32_t>(n);
+
+            // Pre-transpose K/V into contiguous per-head planes ([heads, n, hd])
+            // so the fused kernel's fragment loads become unit-stride (the
+            // interleaved layout strided by num_heads*hd was the throughput
+            // limiter at large n). Pure data movement — the kernel consumes
+            // identical values, so results are bit-identical. Falls back to the
+            // interleaved layout (kv_stride = num_heads*hd) if the transpose
+            // pipeline or scratch is unavailable.
+            id<MTLBuffer> kb_use = kbuf;
+            id<MTLBuffer> vb_use = vbuf;
+            NSUInteger vb_off = 0;
+            uint32_t kv_stride = static_cast<uint32_t>(num_heads * head_dim);
+            // Only worth it at large n: below ~1k patches the strided loads
+            // still hit L2 well and the extra transpose dispatches dominate.
+            if (impl_->kv_transpose_ps != nil && n >= 1024) {
+                const size_t plane =
+                    static_cast<size_t>(n) * static_cast<size_t>(num_heads) *
+                    static_cast<size_t>(head_dim);
+                impl_->attn_kv_scratch_ =
+                    impl_->ensure_scratch(2 * plane * sizeof(float), impl_->attn_kv_scratch_,
+                                          impl_->attn_kv_scratch_bytes_);
+                if (impl_->attn_kv_scratch_ != nil) {
+                    const NSUInteger total = static_cast<NSUInteger>(plane);
+                    for (int t = 0; t < 2; ++t) {
+                        id<MTLComputeCommandEncoder> tenc = impl_->encoder();
+                        [tenc setComputePipelineState:impl_->kv_transpose_ps];
+                        [tenc setBuffer:impl_->attn_kv_scratch_
+                                 offset:(t == 0 ? 0 : plane * sizeof(float))
+                                atIndex:0];
+                        [tenc setBuffer:(t == 0 ? kbuf : vbuf) offset:0 atIndex:1];
+                        [tenc setBytes:&nh length:sizeof(nh) atIndex:2];
+                        [tenc setBytes:&hd length:sizeof(hd) atIndex:3];
+                        [tenc setBytes:&sl length:sizeof(sl) atIndex:4];
+                        [tenc dispatchThreads:MTLSizeMake(total, 1, 1)
+                            threadsPerThreadgroup:MTLSizeMake(256, 1, 1)];
+                    }
+                    kb_use = impl_->attn_kv_scratch_;
+                    vb_use = impl_->attn_kv_scratch_;
+                    vb_off = plane * sizeof(float);
+                    kv_stride = static_cast<uint32_t>(head_dim);
+                }
+            }
             id<MTLComputeCommandEncoder> enc = impl_->encoder();
             [enc setComputePipelineState:ps];
             [enc setBuffer:obuf offset:0 atIndex:0];
             [enc setBuffer:qbuf offset:0 atIndex:1];
-            [enc setBuffer:kbuf offset:0 atIndex:2];
-            [enc setBuffer:vbuf offset:0 atIndex:3];
+            [enc setBuffer:kb_use offset:0 atIndex:2];
+            [enc setBuffer:vb_use offset:vb_off atIndex:3];
             [enc setBytes:&nh length:sizeof(nh) atIndex:4];
             [enc setBytes:&hd length:sizeof(hd) atIndex:5];
             [enc setBytes:&sl length:sizeof(sl) atIndex:6];
             [enc setBytes:&scale length:sizeof(scale) atIndex:7];
+            [enc setBytes:&kv_stride length:sizeof(kv_stride) atIndex:8];
             [enc setThreadgroupMemoryLength:tg_s_bytes atIndex:0];
             [enc setThreadgroupMemoryLength:tg_stat_bytes atIndex:1];
             [enc dispatchThreadgroups:MTLSizeMake(

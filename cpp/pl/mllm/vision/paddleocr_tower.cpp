@@ -18,6 +18,7 @@
 #include "cpp/pl/mllm/vision/paddleocr_tower.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -637,14 +638,14 @@ Result<VisionOutput> PaddleOcrTower::Encode(const media::Image& image, Backend& 
             TensorView qv = view2d(q, n, heads * hd);
             TensorView kv = view2d(kbuf, n, heads * hd);
             TensorView vv = view2d(vbuf, n, heads * hd);
-            if (auto s = backend.MatMul(qv, hv, lw.q_w); !s.ok()) {
-                return s;
-            }
-            if (auto s = backend.MatMul(kv, hv, lw.k_w); !s.ok()) {
-                return s;
-            }
-            if (auto s = backend.MatMul(vv, hv, lw.v_w); !s.ok()) {
-                return s;
+            // QKV share the same LN output: one fused call lets device
+            // backends upload/convert the input once (see MatMulFused).
+            {
+                std::array<TensorView, 3> qkv_outs{qv, kv, vv};
+                std::array<std::string_view, 3> qkv_names{lw.q_w, lw.k_w, lw.v_w};
+                if (auto s = backend.MatMulFused(qkv_outs, hv, qkv_names); !s.ok()) {
+                    return s;
+                }
             }
             if (auto s = backend.AddBiasInPlace(qv, lw.q_b); !s.ok()) {
                 return s;
