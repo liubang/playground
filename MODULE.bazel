@@ -39,9 +39,9 @@ git_override(
 )
 
 # apple support
-bazel_dep(name = "apple_support", version = "2.6.1", repo_name = "build_bazel_apple_support")
-bazel_dep(name = "rules_swift", version = "3.6.1")
-bazel_dep(name = "rules_apple", version = "4.5.3")
+bazel_dep(name = "apple_support", version = "2.8.4", repo_name = "build_bazel_apple_support")
+bazel_dep(name = "rules_swift", version = "4.1.0")
+bazel_dep(name = "rules_apple", version = "5.1.0")
 
 # foreign cc
 bazel_dep(name = "rules_cc", version = "0.2.19")
@@ -81,6 +81,35 @@ single_version_override(
     version = "33.4",
 )
 ### grpc && protobuf
+
+# grpc-java 1.74.0 (the plugin version pinned by rules_proto_grpc_java 5.8.0)
+# published its macOS "osx-aarch_64" protoc plugin as the x86_64 binary: maven
+# serves byte-identical files for osx-aarch_64 and osx-x86_64 (sha256
+# 7f286de2...), so on Apple Silicon without Rosetta 2 `protoc` cannot exec it
+# ("Bad CPU type in executable", reported by the sandbox as "program not found
+# or is not executable"). From 1.76.0 the macOS artifact is a universal
+# (arm64 + x86_64) binary, so replace the darwin-arm64 plugin repo with it.
+grpc_java_plugin_universal_macos = use_repo_rule(
+    "@bazel_tools//tools/build_defs/repo:http.bzl",
+    "http_file",
+)
+
+grpc_java_plugin_universal_macos(
+    name = "grpc_java_plugin_universal_macos",
+    executable = True,
+    sha256 = "8100c67d1ea547fc34dd638db20876921349df99c42608fdfdcf1cef15c1d6ff",
+    url = "https://repo1.maven.org/maven2/io/grpc/protoc-gen-grpc-java/1.76.0/protoc-gen-grpc-java-1.76.0-osx-aarch_64.exe",
+)
+
+grpc_java_download_plugins = use_extension(
+    "@rules_proto_grpc_java//:module_extensions.bzl",
+    "download_plugins",
+)
+
+override_repo(
+    grpc_java_download_plugins,
+    grpc_java_plugin_darwin_arm64 = "grpc_java_plugin_universal_macos",
+)
 
 ## math
 bazel_dep(name = "openblas", version = "0.3.28")
