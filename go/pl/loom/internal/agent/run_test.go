@@ -3631,6 +3631,101 @@ func TestWireToolsGatesViewImageOnVisionSupport(t *testing.T) {
 	}
 }
 
+// Defense in depth behind the wireTools gate: a text-only model is never
+// offered view_image, but dispatch resolves calls against the full
+// registry, so a call the model reconstructs from memory must be rejected
+// (unsupported_modality) instead of executing a tool whose only effect is
+// an artifact the model cannot consume. A vision-capable loop is
+// unaffected.
+func TestLoopRejectsViewImageForTextOnlyModel(t *testing.T) {
+	newViewTool := func() *fakes.FakeTool {
+		return fakes.NewFakeTool(domain.ToolDefinition{
+			Name:        "view_image",
+			Description: "view image",
+			InputSchema: json.RawMessage(`{"type":"object"}`),
+		}, domain.ToolResult{Status: domain.ToolStatusSuccess})
+	}
+	newLoop := func(viewTool *fakes.FakeTool, supportsImages bool) (*Loop, *Run, domain.ToolCallID) {
+		callID := domain.NewToolCallID()
+		model := fakes.NewFakeModel(
+			fakes.ScriptEntry{
+				ToolCalls:  []domain.ToolCall{{ID: callID, Name: "view_image", Arguments: json.RawMessage(`{"path":"plot.png"}`)}},
+				StopReason: domain.StopToolUse,
+				UsageIn:    100,
+				UsageOut:   30,
+			},
+			fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn, UsageIn: 200, UsageOut: 15},
+		)
+		registry := NewToolRegistry()
+		if err := registry.Register(viewTool); err != nil {
+			t.Fatalf("Register error: %v", err)
+		}
+		run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
+		run.AddUserMessage(domain.Message{
+			ID:        domain.NewMessageID(),
+			Role:      domain.RoleUser,
+			Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "check plot.png"}},
+			CreatedAt: time.Now(),
+		})
+		loop := &Loop{
+			Run:            run,
+			Model:          model,
+			Approver:       fakes.NewFakeApprover(domain.DecisionAllow),
+			Registry:       registry,
+			Logger:         slog.Default(),
+			SupportsImages: supportsImages,
+		}
+		return loop, run, callID
+	}
+	findResult := func(run *Run, callID domain.ToolCallID) *domain.ToolResult {
+		for i := range run.Messages {
+			for j := range run.Messages[i].Parts {
+				part := &run.Messages[i].Parts[j]
+				if part.Kind == domain.PartToolResult && part.ToolResult != nil && part.ToolResult.CallID == callID {
+					return part.ToolResult
+				}
+			}
+		}
+		return nil
+	}
+
+	t.Run("text-only rejects before execution", func(t *testing.T) {
+		viewTool := newViewTool()
+		loop, run, callID := newLoop(viewTool, false)
+		if err := loop.Execute(context.Background()); err != nil {
+			t.Fatalf("Execute error: %v", err)
+		}
+		if got := len(viewTool.ExecutedCalls()); got != 0 {
+			t.Fatalf("view_image executed %d times for a text-only model, want 0", got)
+		}
+		result := findResult(run, callID)
+		if result == nil {
+			t.Fatal("no tool result recorded for the view_image call")
+		}
+		if result.Error == nil || result.Error.Code != "unsupported_modality" {
+			t.Fatalf("tool result error = %+v, want unsupported_modality", result.Error)
+		}
+	})
+
+	t.Run("vision model still executes", func(t *testing.T) {
+		viewTool := newViewTool()
+		loop, run, callID := newLoop(viewTool, true)
+		if err := loop.Execute(context.Background()); err != nil {
+			t.Fatalf("Execute error: %v", err)
+		}
+		if got := len(viewTool.ExecutedCalls()); got != 1 {
+			t.Fatalf("view_image executed %d times for a vision model, want 1", got)
+		}
+		result := findResult(run, callID)
+		if result == nil {
+			t.Fatal("no tool result recorded for the view_image call")
+		}
+		if result.Error != nil {
+			t.Fatalf("tool result error = %+v, want success", result.Error)
+		}
+	})
+}
+
 func cloneStringMap(values map[string]string) map[string]string {
 	if len(values) == 0 {
 		return nil

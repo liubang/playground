@@ -43,6 +43,19 @@ bazel_dep(name = "apple_support", version = "2.8.4", repo_name = "build_bazel_ap
 bazel_dep(name = "rules_swift", version = "4.1.0")
 bazel_dep(name = "rules_apple", version = "5.1.0")
 
+# highlight.js (common-languages bundle) for //swift/pl/loom's code-block
+# syntax highlighting — the same engine and version the WebUI uses
+# (webui/package.json), embedded as an app resource and driven through
+# JavaScriptCore.
+highlight_js = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
+
+highlight_js(
+    name = "highlight_js",
+    downloaded_file_path = "highlight.min.js",
+    integrity = "sha256-xKOZ3W9Ii8l6NUbjR2dHs+cUyZxXuUcxVMb7jSWbk4E=",
+    url = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js",
+)
+
 # foreign cc
 bazel_dep(name = "rules_cc", version = "0.2.19")
 bazel_dep(name = "rules_foreign_cc", version = "0.15.1")

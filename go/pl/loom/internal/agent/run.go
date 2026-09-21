@@ -1964,6 +1964,21 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 			}
 			continue
 		}
+		// Defense in depth for the wireTools vision gate: a text-only
+		// model is never OFFERED view_image, but dispatch looks tools up
+		// in the full registry, so a call the model reconstructs from
+		// memory (view_image is a well-known codex builtin) would
+		// otherwise execute and store an artifact the model can never
+		// consume — StripImages would turn it into a text gap at the
+		// egress. Fail fast with an actionable error instead.
+		if tc.Name == viewImageToolName && !l.SupportsImages {
+			l.recordToolError(ctx, tc, "unsupported_modality",
+				"view_image is unavailable: the active model does not support image input; use present_image to show an image to the user")
+			if reason := l.runaway.trackToolCall(l.runawayConfig(), tc.Name, tc.Arguments, &l.notices, l.Run.Clock); reason != "" {
+				return l.terminateRunaway(ctx, reason)
+			}
+			continue
+		}
 		// The malformed-arguments placeholder must never reach a tool:
 		// built-in decoders reject it during Prepare, but pass-through
 		// tools (MCP adapters) would forward the internal marker to the

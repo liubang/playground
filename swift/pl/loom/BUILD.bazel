@@ -1,0 +1,91 @@
+# Copyright (c) 2026 The Authors. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Loom — pure-SwiftUI peer client of `loom serve`'s REST+SSE protocol.
+# Replaces the Wails webview shell with a fully native macOS UI; the Go
+# backend is untouched (SERVE_DESIGN §3.1: every frontend is an equal
+# pure-rendering client of the /v1 protocol). The loom CLI is embedded
+# as a resource and spawned as `loom serve` on app launch.
+
+load("@rules_apple//apple:macos.bzl", "macos_application")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_swift//swift:swift.bzl", "swift_library")
+
+swift_library(
+    name = "loom_lib",
+    srcs = glob([
+        "app/*.swift",
+        "protocol/*.swift",
+        "store/*.swift",
+        "views/*.swift",
+    ]),
+    module_name = "Loom",
+    target_compatible_with = ["@platforms//os:macos"],
+)
+
+# Protocol + store sources recompiled with -enable-testing for
+# //swift/pl/loom/ut (see the aurashot pattern). Views and the @main
+# entry point are excluded: nothing to unit-test there, and the entry
+# point's _main would collide with the test runner's.
+filegroup(
+    name = "sources_for_tests",
+    srcs = glob([
+        "protocol/*.swift",
+        "store/*.swift",
+    ]),
+    visibility = ["//visibility:public"],
+)
+
+macos_application(
+    name = "Loom",
+    # Reuses the retired Wails build's bundle id: this app is its
+    # drop-in replacement, so LaunchServices/TCC records carry over.
+    bundle_id = "cc.liubang.loom.desktop",
+    bundle_name = "Loom",
+    infoplists = ["resources/Info.plist"],
+    minimum_os_version = "14.0",
+    # AppIcon + the loom CLI: embedded so the app can spawn `loom serve`
+    # itself (ServerManager) instead of requiring a user-managed server.
+    # highlight.min.js feeds the code-block syntax highlighter
+    # (JavaScriptCore bridge in views/SyntaxHighlighter.swift).
+    resources = [
+        "resources/AppIcon.icns",
+        "//go/pl/loom/cmd/loom",
+        "@highlight_js//file:highlight.min.js",
+    ],
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = [":loom_lib"],
+)
+
+# bazel run //swift/pl/loom:install — unzip, re-sign with a stable local
+# identity, install to /Applications. Launch via `open` (LaunchServices),
+# never as a child process of a terminal/IDE.
+sh_binary(
+    name = "install",
+    srcs = ["install.sh"],
+    args = ["$(location :Loom)"],
+    data = [
+        ":Loom",
+        ":make-signing-cert",
+    ],
+    target_compatible_with = ["@platforms//os:macos"],
+)
+
+# bazel run //swift/pl/loom:make-signing-cert — create the local
+# self-signed codesigning identity (idempotent, once per machine).
+sh_binary(
+    name = "make-signing-cert",
+    srcs = ["make-signing-cert.sh"],
+    target_compatible_with = ["@platforms//os:macos"],
+)
