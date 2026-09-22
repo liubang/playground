@@ -200,20 +200,28 @@ struct SSEClient: Sendable {
                     }
 
                     var parser = SSEParser()
-                    // Line-at-a-time: AsyncBytes.lines buffers natively,
-                    // while per-byte iteration of URLSession.AsyncBytes
-                    // is a known slow path. SSE frames are
-                    // newline-delimited — feed each line back with its
-                    // terminator so the incremental parser sees the
-                    // same byte stream (it strips the CR of CRLF, and
-                    // interior blank lines still dispatch the event).
-                    for try await line in bytes.lines {
+                    // Feed raw bytes, flushing at newline boundaries.
+                    // Do NOT "optimize" this into AsyncBytes.lines:
+                    // AsyncLineSequence drops EMPTY lines, and SSE
+                    // events are dispatched by the blank line that
+                    // terminates them — through .lines the parser
+                    // accumulates id/event/data forever and no runtime
+                    // event is ever emitted (only comments, which are
+                    // per-line, got through: the badge went "live"
+                    // while every event silently died).
+                    var chunk: [UInt8] = []
+                    chunk.reserveCapacity(4096)
+                    for try await byte in bytes {
                         try Task.checkCancellation()
-                        for frame in parser.feed(Array(line.utf8) + [0x0A]) {
-                            continuation.yield(frame)
+                        chunk.append(byte)
+                        if byte == 0x0A || chunk.count >= 4096 {
+                            for frame in parser.feed(chunk) {
+                                continuation.yield(frame)
+                            }
+                            chunk.removeAll(keepingCapacity: true)
                         }
                     }
-                    for frame in parser.finish() {
+                    for frame in parser.feed(chunk) + parser.finish() {
                         continuation.yield(frame)
                     }
                     continuation.finish()
