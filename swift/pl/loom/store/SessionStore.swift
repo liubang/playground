@@ -50,9 +50,9 @@ struct DraftTurn: Sendable {
     var isEmpty: Bool {
         segments.allSatisfy { segment in
             switch segment {
-            case let .reasoning(reasoning): return reasoning.text.isEmpty
-            case let .text(text): return text.text.isEmpty
-            case .tool: return false
+            case let .reasoning(reasoning): reasoning.text.isEmpty
+            case let .text(text): text.text.isEmpty
+            case .tool: false
             }
         }
     }
@@ -192,16 +192,18 @@ struct DraftTurn: Sendable {
     private func segmentIndex(of id: UUID) -> Int? {
         segments.firstIndex { segment in
             switch segment {
-            case let .reasoning(reasoning): return reasoning.id == id
-            case let .text(text): return text.id == id
-            case .tool: return false
+            case let .reasoning(reasoning): reasoning.id == id
+            case let .text(text): text.id == id
+            case .tool: false
             }
         }
     }
 
     private func toolIndex(of callId: String) -> Int? {
         segments.firstIndex { segment in
-            if case let .tool(tool) = segment { return tool.id == callId }
+            if case let .tool(tool) = segment {
+                return tool.id == callId
+            }
             return false
         }
     }
@@ -215,9 +217,9 @@ enum DraftSegment: Identifiable, Sendable {
 
     var id: String {
         switch self {
-        case let .reasoning(reasoning): return "reasoning-\(reasoning.id.uuidString)"
-        case let .text(text): return "text-\(text.id.uuidString)"
-        case let .tool(tool): return "tool-\(tool.id)"
+        case let .reasoning(reasoning): "reasoning-\(reasoning.id.uuidString)"
+        case let .text(text): "text-\(text.id.uuidString)"
+        case let .tool(tool): "tool-\(tool.id)"
         }
     }
 }
@@ -287,13 +289,35 @@ final class SessionStore {
     private let api: APIClient
     private let sse: SSEClient
 
-    private(set) var state: SessionState = .booting
+    private(set) var state: SessionState = .booting {
+        didSet { rebuildTranscript() }
+    }
+
     private(set) var modelName = ""
     private(set) var providerName = ""
     /// Composer pickers (the server applies them from the next turn on).
     private(set) var reasoningEffort = "default"
     private(set) var approvalMode = "on-request"
-    private(set) var messages: [Message] = []
+    /// Catalog default model ref ("provider/model", the WebUI's
+    /// defaultModelRef) — pushed in by SessionListStore; lets the
+    /// composer mark the active row when the snapshot carries only a
+    /// bare model name.
+    var defaultModelRef: String?
+    private(set) var messages: [Message] = [] {
+        didSet { rebuildTranscript() }
+    }
+
+    /// Precomputed transcript render data (rows, merged tool blocks,
+    /// diffs, action-row flags). Rebuilt ONLY when messages/state
+    /// change — never on draft frames — so view-body evaluation is a
+    /// pure lookup instead of three O(history) walks plus an LCS diff
+    /// per edit call. (Previously these were ChatView computed
+    /// properties re-derived on every streaming frame.)
+    private(set) var transcript: TranscriptModel = .empty
+    /// Composer input, kept in the store so it survives session
+    /// switches (SessionListStore keeps stores warm; the chat view
+    /// itself is destroyed on every switch via .id(sessionId)).
+    var composerDraft = ""
     private(set) var draft: DraftTurn?
     private(set) var pendingApprovals: [ApprovalRequestedPayload] = []
     private(set) var pendingQuestions: [PendingRequest.Question] = []
@@ -340,6 +364,11 @@ final class SessionStore {
         state == .running || state == .awaitingApproval || state == .cancelling
     }
 
+    private func rebuildTranscript() {
+        let midTurn = state == .running || state == .cancelling || state == .awaitingApproval
+        transcript = TranscriptModel.build(messages: messages, midTurn: midTurn)
+    }
+
     var occupancyFraction: Double? {
         guard let occupancy, let contextWindow, contextWindow > 0 else { return nil }
         return min(1, Double(occupancy) / Double(contextWindow))
@@ -359,20 +388,25 @@ final class SessionStore {
     /// Loaded artifact bytes keyed by "id:size" — the transcript
     /// re-renders on every stream frame, so without this cache a
     /// scrolled-past image would re-download on every rebuild.
+    /// Eviction is true LRU: artifactLRU tracks access order.
     private var artifactCache: [String: (data: Data, mediaType: String?)] = [:]
+    private var artifactLRU: [String] = []
 
     func artifactData(_ artifact: ContentPart.Artifact) async -> (data: Data, mediaType: String?)? {
         let key = "\(artifact.id):\(artifact.size ?? -1)"
         if let cached = artifactCache[key] {
+            artifactLRU.removeAll { $0 == key }
+            artifactLRU.append(key)
             return cached
         }
         guard let entry = try? await api.fetchArtifact(artifact.id, size: artifact.size)
         else { return nil }
         // LRU evict at 32 entries (WebUI ARTIFACT_CACHE_MAX).
-        if artifactCache.count >= 32 {
-            artifactCache.removeValue(forKey: artifactCache.keys.first!)
+        if artifactLRU.count >= 32 {
+            artifactCache.removeValue(forKey: artifactLRU.removeFirst())
         }
         artifactCache[key] = entry
+        artifactLRU.append(key)
         return entry
     }
 
@@ -387,13 +421,18 @@ final class SessionStore {
     func stop() {
         loopTask?.cancel()
         loopTask = nil
+        deltaFlushTask?.cancel()
+        deltaFlushTask = nil
     }
 
     // MARK: Commands
 
-    func sendPrompt(_ text: String) async {
+    /// Returns false when the prompt failed to send — the composer
+    /// restores the draft on false so the text is never lost.
+    @discardableResult
+    func sendPrompt(_ text: String) async -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else { return true }
         do {
             try await api.sendPrompt(sessionId, prompt: trimmed)
             // No optimistic append: idle → turn.started carries the prompt;
@@ -401,8 +440,10 @@ final class SessionStore {
             // The first prompt also gives the session its derived title —
             // refresh the list now so the header/sidebar pick it up.
             onTurnActivity?()
+            return true
         } catch {
             lastError = error.localizedDescription
+            return false
         }
     }
 
@@ -415,7 +456,10 @@ final class SessionStore {
     }
 
     func requestCompaction() async {
-        do { try await api.requestCompaction(sessionId) } catch {
+        do {
+            try await api.requestCompaction(sessionId)
+            notices.append("Context compaction scheduled — it runs at the start of the next turn.")
+        } catch {
             lastError = error.localizedDescription
         }
     }
@@ -557,6 +601,11 @@ final class SessionStore {
     }
 
     private func applySnapshot(_ snap: Snapshot) {
+        // The snapshot replaces the draft wholesale — any buffered
+        // deltas belong to the pre-snapshot projection.
+        deltaFlushTask?.cancel()
+        deltaFlushTask = nil
+        deltaBuffer.removeAll()
         state = snap.state
         modelName = snap.modelName
         providerName = snap.providerName ?? ""
@@ -756,7 +805,76 @@ final class SessionStore {
 
     // MARK: Event projection
 
+    // MARK: Delta coalescing
+
+    /// One buffered model-stream delta. Text/reasoning/tool-arg deltas
+    /// arrive per token (tens per second); applying each one straight
+    /// to `draft` fired an @Observable change per token, re-rendering
+    /// the transcript at token rate. They are now buffered and applied
+    /// in a batch at display cadence (~25fps); any non-delta event
+    /// flushes first so event ordering is preserved.
+    private enum PendingDelta {
+        case text(String)
+        case reasoning(String)
+        case toolArgs(index: Int, name: String?, toolId: String?, arguments: String?)
+    }
+
+    private var deltaBuffer: [PendingDelta] = []
+    private var deltaFlushTask: Task<Void, Never>?
+    private static let deltaFlushInterval: Duration = .milliseconds(40)
+
+    private func scheduleDeltaFlush() {
+        guard deltaFlushTask == nil else { return }
+        deltaFlushTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.deltaFlushInterval)
+            guard let self, !Task.isCancelled else { return }
+            deltaFlushTask = nil
+            flushPendingDeltas()
+        }
+    }
+
+    /// Applies the buffered deltas to the draft in arrival order. Called
+    /// by the flush timer and synchronously before any non-delta event
+    /// (response_completed seals text, tool.prepared seals reasoning —
+    /// their draft mutations must observe every preceding delta).
+    private func flushPendingDeltas() {
+        deltaFlushTask?.cancel()
+        deltaFlushTask = nil
+        guard !deltaBuffer.isEmpty else { return }
+        let pending = deltaBuffer
+        deltaBuffer.removeAll(keepingCapacity: true)
+        if draft == nil {
+            draft = DraftTurn()
+        }
+        for delta in pending {
+            switch delta {
+            case let .text(text):
+                draft?.appendText(text)
+            case let .reasoning(text):
+                draft?.appendReasoning(text)
+            case let .toolArgs(index, name, toolId, arguments):
+                var entry = draft?.pendingArgs[index] ?? DraftTurn.PendingToolArgs()
+                if let name {
+                    entry.name = name
+                }
+                if let toolId {
+                    entry.toolId = toolId
+                }
+                if let arguments {
+                    entry.arguments += arguments
+                }
+                draft?.pendingArgs[index] = entry
+            }
+        }
+    }
+
     private func apply(_ event: RuntimeEvent) {
+        switch event.kind {
+        case .modelTextDelta, .modelReasoningDelta, .modelToolCallDelta:
+            break // buffered below; applied at display cadence
+        default:
+            flushPendingDeltas()
+        }
         switch event.kind {
         case .turnStarted:
             let payload = tryDecode(TurnStartedPayload.self, from: event)
@@ -790,36 +908,25 @@ final class SessionStore {
 
         case .modelTextDelta:
             if let payload = tryDecode(ModelDeltaPayload.self, from: event) {
-                if draft == nil {
-                    draft = DraftTurn()
-                }
-                draft?.appendText(payload.delta)
+                deltaBuffer.append(.text(payload.delta))
+                scheduleDeltaFlush()
             }
 
         case .modelReasoningDelta:
             if let payload = tryDecode(ModelDeltaPayload.self, from: event) {
-                if draft == nil {
-                    draft = DraftTurn()
-                }
-                draft?.appendReasoning(payload.delta)
+                deltaBuffer.append(.reasoning(payload.delta))
+                scheduleDeltaFlush()
             }
 
         case .modelToolCallDelta:
             if let payload = tryDecode(ModelToolCallDeltaPayload.self, from: event) {
-                if draft == nil {
-                    draft = DraftTurn()
-                }
-                var pending = draft?.pendingArgs[payload.toolIndex] ?? DraftTurn.PendingToolArgs()
-                if let name = payload.toolName {
-                    pending.name = name
-                }
-                if let toolId = payload.toolId {
-                    pending.toolId = toolId
-                }
-                if let arguments = payload.arguments {
-                    pending.arguments += arguments
-                }
-                draft?.pendingArgs[payload.toolIndex] = pending
+                deltaBuffer.append(.toolArgs(
+                    index: payload.toolIndex,
+                    name: payload.toolName,
+                    toolId: payload.toolId,
+                    arguments: payload.arguments,
+                ))
+                scheduleDeltaFlush()
             }
 
         case .modelResponseCompleted:

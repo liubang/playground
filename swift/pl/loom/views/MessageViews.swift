@@ -17,18 +17,19 @@ import SwiftUI
 
 // MARK: - Message row (WebUI blocks.css)
 
+/// Renders one precomputed TranscriptModel.Row. All derivation (tool
+/// call/result pairing, diff computation, the action-row turn gate)
+/// happened in TranscriptModel.build — body evaluation here is pure
+/// layout, so streaming frames stay cheap.
 struct MessageRow: View {
-    let message: Message
-    /// Cross-message call_id → result map (the WebUI's histTools):
-    /// tool results live in their own assistant messages, so pairing
-    /// cannot happen per-message.
-    var toolResults: [String: ContentPart.ToolResult] = [:]
-    /// WebUI closeTurn: the action row attaches only to the LAST text
-    /// segment of a finished turn, not to every assistant message.
-    var showActions = true
+    let row: TranscriptModel.Row
     /// Authenticated artifact loader (SessionStore.artifactData);
     /// artifact parts fall back to a plain label when absent.
     var artifactLoader: ((ContentPart.Artifact) async -> (data: Data, mediaType: String?)?)?
+
+    private var message: Message {
+        row.message
+    }
 
     var body: some View {
         switch message.role {
@@ -90,7 +91,7 @@ struct MessageRow: View {
 
     private var assistantRow: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(message.assistantItems(toolResults: toolResults).enumerated()), id: \.offset) { _, item in
+            ForEach(Array(row.items.enumerated()), id: \.offset) { _, item in
                 switch item {
                 case let .markdown(text):
                     MarkdownText(source: text)
@@ -100,8 +101,8 @@ struct MessageRow: View {
                         durationMs: reasoning.durationMs,
                         live: false,
                     )
-                case let .tool(tool):
-                    ToolBlock(item: tool, artifactLoader: artifactLoader)
+                case let .tool(model):
+                    ToolBlock(model: model, artifactLoader: artifactLoader)
                 case let .image(image):
                     InlineImageView(mediaType: image.mediaType, data: image.data, maxDim: 360)
                 case let .artifact(artifact):
@@ -133,8 +134,8 @@ struct MessageRow: View {
             }
 
             // .msg-actions: copy + time, the "this message is finished"
-            // marker — attached by ChatView at the turn boundary only.
-            if showActions, !message.copyText.isEmpty {
+            // marker — attached at the turn boundary only (precomputed).
+            if row.showActions, !message.copyText.isEmpty {
                 MessageActionsView(
                     text: message.copyText,
                     createdAt: message.createdAt,
@@ -159,75 +160,6 @@ struct MessageRow: View {
         }
         .padding(.leading, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-// MARK: - Assistant content model (tool_call + tool_result merged)
-
-/// A tool call merged with its result (same call_id) — the WebUI's
-/// single .block-tool per invocation.
-struct ToolBlockItem {
-    let call: ContentPart.ToolCall?
-    let result: ContentPart.ToolResult?
-
-    var name: String {
-        call?.name ?? "tool"
-    }
-}
-
-enum AssistantItem {
-    case markdown(String)
-    case reasoning(ContentPart.Reasoning)
-    case tool(ToolBlockItem)
-    case image(ContentPart.ImageContent)
-    case artifact(ContentPart.Artifact)
-}
-
-extension Message {
-    /// Text copied by the message action row (prose parts only).
-    var copyText: String {
-        parts.compactMap { part in
-            if case let .text(text) = part {
-                return text
-            }
-            return nil
-        }.joined(separator: "\n\n")
-    }
-
-    /// Flattens parts into render items, folding each tool_call together
-    /// with the tool_result that shares its call_id. Pairing is
-    /// cross-message (the WebUI's buildFromSnapshot: results live in
-    /// their own assistant messages and only PATCH the block created
-    /// for the call — they never create a block of their own).
-    func assistantItems(toolResults: [String: ContentPart.ToolResult]) -> [AssistantItem] {
-        var items: [AssistantItem] = []
-        for part in parts {
-            switch part {
-            case let .text(text):
-                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    items.append(.markdown(text))
-                }
-            case let .reasoning(reasoning):
-                items.append(.reasoning(reasoning))
-            case let .toolCall(call):
-                items.append(.tool(ToolBlockItem(call: call, result: toolResults[call.id])))
-            case .toolResult:
-                // Consumed by the pairing map; an orphaned result (no
-                // call anywhere) is dropped, exactly like the WebUI.
-                break
-            case let .image(image):
-                items.append(.image(image))
-            case let .artifact(artifact):
-                // WebUI transcript.ts: model_only artifacts (view_image)
-                // skip the display channel entirely.
-                if !artifact.modelOnly {
-                    items.append(.artifact(artifact))
-                }
-            case .unknown:
-                break
-            }
-        }
-        return items
     }
 }
 
@@ -270,6 +202,7 @@ struct MessageActionsView: View {
         }
         .buttonStyle(.plain)
         .help("Copy this message")
+        .accessibilityLabel("Copy this message")
     }
 
     @ViewBuilder private var timeTip: some View {
@@ -297,14 +230,15 @@ struct MessageActionsView: View {
 private struct LightbulbIcon: View {
     let active: Bool
     @State private var dim = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Image(systemName: active ? "lightbulb.fill" : "lightbulb")
             .font(.system(size: 12))
             .foregroundStyle(active ? Theme.primary : Theme.muted)
-            .opacity(active && dim ? 0.4 : 1)
+            .opacity(active && dim && !reduceMotion ? 0.4 : 1)
             .onAppear {
-                guard active else { return }
+                guard active, !reduceMotion else { return }
                 withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
                     dim = true
                 }
@@ -400,12 +334,19 @@ struct ReasoningBlock: View {
         excerpt(fromEnd: true)
     }
 
+    /// Scans from the requested end and stops at the first non-empty
+    /// line — the previous implementation trimmed and filtered EVERY
+    /// line on every body evaluation (per streaming frame).
     private func excerpt(fromEnd: Bool) -> String? {
         let lines = text.components(separatedBy: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        guard let line = fromEnd ? lines.last : lines.first else { return nil }
-        return line.count > 96 ? String(line.prefix(96)) + "…" : line
+        let ordered = fromEnd ? Array(lines.reversed()) : lines
+        for raw in ordered {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if !line.isEmpty {
+                return line.count > 96 ? String(line.prefix(96)) + "…" : line
+            }
+        }
+        return nil
     }
 }
 
@@ -413,80 +354,32 @@ struct ReasoningBlock: View {
 
 /// The WebUI's tool card: bg1 panel, header row (kind icon · verb ·
 /// target · status · duration), error line, collapsible output preview,
-/// and an optional diff.
+/// and an optional diff. Pure layout — the render model arrives fully
+/// derived (ToolRenderModel, built by TranscriptModel or the live
+/// draft path), so a tool card looks identical during the turn and
+/// after it, and body evaluation never recomputes the diff.
 struct ToolBlock: View {
-    /// Normalized render data, built from either a finalized
-    /// ToolBlockItem (snapshot history) or a live ToolCallState (draft
-    /// turn) — both paths share this one layout, so a tool card looks
-    /// identical during the turn and after it (WebUI: a single
-    /// ToolBlock.tsx renders the live and the rebuilt block alike).
-    struct Model {
-        var name = "tool"
-        var target: String?
-        var status = Status.running
-        var durationMs: Int64?
-        var errorMessage: String?
-        /// Display excerpt: 600 chars + "\n…" for history; the live
-        /// preview arrives pre-bounded from tool.completed.
-        var output: String?
-        /// Copy source (WebUI getFullText); the live path only has the
-        /// bounded preview.
-        var fullOutput: String?
-        var diff: String?
-        var images: [ContentPart.ImageContent] = []
-        var artifacts: [ContentPart.Artifact] = []
-    }
-
-    enum Status {
-        case running, success, failed, cancelled
-    }
-
-    private let model: Model
+    private let model: ToolRenderModel
     /// Authenticated artifact loader for result artifacts (image
     /// results from the image tool, stdout attachments from run_cmd).
     private let artifactLoader: ((ContentPart.Artifact) async -> (data: Data, mediaType: String?)?)?
 
-    /// Finalized history block (snapshot rebuild).
     init(
-        item: ToolBlockItem,
+        model: ToolRenderModel,
         artifactLoader: ((ContentPart.Artifact) async -> (data: Data, mediaType: String?)?)? = nil,
     ) {
-        model = Self.model(from: item)
+        self.model = model
         self.artifactLoader = artifactLoader
     }
 
-    /// Live draft-turn block: the event stream's ToolCallState —
-    /// server-provided target/diff, tool.completed's bounded preview in
-    /// the same output disclosure history uses, and the completion's
-    /// display-bound artifact refs (present_image renders live, without
-    /// waiting for the post-turn snapshot rebuild).
+    /// Live draft-turn block: converts the event stream's ToolCallState
+    /// through the same ToolRenderModel history uses (WebUI: a single
+    /// ToolBlock.tsx renders the live and the rebuilt block alike).
     init(
         live state: ToolCallState,
         artifactLoader: ((ContentPart.Artifact) async -> (data: Data, mediaType: String?)?)? = nil,
     ) {
-        var model = Model()
-        model.name = state.name
-        model.target = state.target
-        switch state.status {
-        case .prepared, .running:
-            model.status = .running
-        case .success, .unknown:
-            model.status = .success
-        case .error, .timeout:
-            model.status = .failed
-        case .cancelled:
-            model.status = .cancelled
-        }
-        model.durationMs = state.durationMs
-        model.errorMessage = state.errorMessage
-        if let preview = state.preview, !preview.isEmpty {
-            model.output = preview
-            model.fullOutput = preview
-        }
-        model.diff = state.diff
-        model.artifacts = state.artifacts
-        self.model = model
-        self.artifactLoader = artifactLoader
+        self.init(model: ToolRenderModel(live: state), artifactLoader: artifactLoader)
     }
 
     @State private var targetExpanded = false
@@ -675,230 +568,6 @@ struct ToolBlock: View {
             try? await Task.sleep(for: .seconds(1.5))
             copied = false
         }
-    }
-
-    // MARK: Model derivation (snapshot history)
-
-    /// Builds the render model from a finalized call+result pair —
-    /// one-to-one with the WebUI's histTarget/histCompletion and the
-    /// lazy diffForToolCall.
-    private static func model(from item: ToolBlockItem) -> Model {
-        var model = Model()
-        model.name = item.name
-        if let result = item.result {
-            if result.error != nil {
-                model.status = .failed
-            } else {
-                switch result.status {
-                case "success", "ok", "done": model.status = .success
-                case "cancelled", "canceled": model.status = .cancelled
-                case "error", "timeout", "failed": model.status = .failed
-                default: model.status = .success
-                }
-            }
-            model.errorMessage = result.error?.message
-            // WebUI histCompletion: duration = finished_at − started_at.
-            model.durationMs = result.durationMs
-        }
-        model.target = displayTarget(of: item)
-        if let full = fullOutputText(of: item) {
-            model.fullOutput = full
-            // Display excerpt (WebUI histCompletion: 600 chars + "\n…").
-            model.output = full.count > 600 ? String(full.prefix(600)) + "\n…" : full
-        }
-        model.images = resultImages(of: item)
-        model.artifacts = resultArtifacts(of: item, images: model.images)
-        model.diff = diffText(of: item)
-        return model
-    }
-
-    /// Base64 image parts inside the tool result's content.
-    private static func resultImages(of item: ToolBlockItem) -> [ContentPart.ImageContent] {
-        guard let content = item.result?.content else { return [] }
-        return content.compactMap { part in
-            if case let .image(image) = part {
-                return image
-            }
-            return nil
-        }
-    }
-
-    /// Artifact references inside the result content — only rendered
-    /// when the result carries no inline images (WebUI precedence).
-    /// model_only artifacts (view_image) are for the model only: the
-    /// WebUI's histCompletion filters them out, and so do we.
-    private static func resultArtifacts(
-        of item: ToolBlockItem, images: [ContentPart.ImageContent],
-    ) -> [ContentPart.Artifact] {
-        guard images.isEmpty, let content = item.result?.content else { return [] }
-        return content.compactMap { part in
-            if case let .artifact(artifact) = part, !artifact.modelOnly {
-                return artifact
-            }
-            return nil
-        }
-    }
-
-    /// Full output text: the result's text parts joined, falling back
-    /// to the call's arguments while the call is still running.
-    private static func fullOutputText(of item: ToolBlockItem) -> String? {
-        if let content = item.result?.content {
-            let text = content.compactMap { part -> String? in
-                if case let .text(text) = part {
-                    return text
-                }
-                return nil
-            }.joined(separator: "\n")
-            if !text.isEmpty {
-                return text
-            }
-        }
-        if item.result == nil, let args = item.call?.arguments?.prettyPrinted, !args.isEmpty {
-            return args
-        }
-        return nil
-    }
-
-    /// Header target: the canonical file path / command from the args.
-    private static func displayTarget(of item: ToolBlockItem) -> String? {
-        guard let args = item.call?.arguments else { return nil }
-        for key in ["path", "file_path", "cmd", "command", "pattern", "query", "goal", "task"] {
-            if let value = args[key]?.stringValue, !value.isEmpty {
-                return value.count > 120 ? String(value.prefix(120)) + "…" : value
-            }
-        }
-        return nil
-    }
-
-    /// Snapshot rebuilds carry no diff; recompute one from edit/write
-    /// args — one-to-one with the WebUI's diffForToolCall (diff.ts):
-    /// write = pure addition; edit = two-sided LCS (400-line cap per
-    /// side), and the `+++ b/{path}` header feeds the DiffView's file
-    /// label and highlight language.
-    private static func diffText(of item: ToolBlockItem) -> String? {
-        guard let name = item.call?.name, let args = item.call?.arguments else { return nil }
-        let text: String
-        switch name {
-        case "edit":
-            guard let newString = args["new_string"]?.stringValue else { return nil }
-            text = Self.diffTexts(args["old_string"]?.stringValue ?? "", newString)
-        case "write":
-            guard let content = args["content"]?.stringValue else { return nil }
-            text = Self.diffTexts("", content)
-        default:
-            return nil
-        }
-        guard !text.isEmpty else { return nil }
-        if let path = args["path"]?.stringValue ?? args["file_path"]?.stringValue, !path.isEmpty {
-            return "+++ b/\(path)\n" + text
-        }
-        return text
-    }
-
-    /// diff.ts DIFF_MAX_INPUT_LINES.
-    private static let diffMaxInputLines = 400
-
-    private static func splitDiffLines(_ text: String) -> [String] {
-        guard !text.isEmpty else { return [] }
-        var text = text
-        if text.hasSuffix("\n") {
-            text.removeLast()
-        }
-        return text.components(separatedBy: "\n")
-    }
-
-    private struct DiffOp {
-        enum Kind { case ctx, del, add }
-        let kind: Kind
-        let line: String
-    }
-
-    /// Line-level LCS diff — the same DP and backtrack direction as
-    /// diff.ts (del wins ties), so both clients render identical hunks.
-    private static func lcsDiff(_ oldLines: [String], _ newLines: [String]) -> [DiffOp] {
-        let n = oldLines.count
-        let m = newLines.count
-        var dp = [[Int]](repeating: [Int](repeating: 0, count: m + 1), count: n + 1)
-        if n > 0, m > 0 {
-            for i in stride(from: n - 1, through: 0, by: -1) {
-                for j in stride(from: m - 1, through: 0, by: -1) {
-                    dp[i][j] = oldLines[i] == newLines[j]
-                        ? dp[i + 1][j + 1] + 1
-                        : max(dp[i + 1][j], dp[i][j + 1])
-                }
-            }
-        }
-        var ops: [DiffOp] = []
-        var i = 0
-        var j = 0
-        while i < n, j < m {
-            if oldLines[i] == newLines[j] {
-                ops.append(DiffOp(kind: .ctx, line: oldLines[i]))
-                i += 1
-                j += 1
-            } else if dp[i + 1][j] >= dp[i][j + 1] {
-                ops.append(DiffOp(kind: .del, line: oldLines[i]))
-                i += 1
-            } else {
-                ops.append(DiffOp(kind: .add, line: newLines[j]))
-                j += 1
-            }
-        }
-        while i < n {
-            ops.append(DiffOp(kind: .del, line: oldLines[i]))
-            i += 1
-        }
-        while j < m {
-            ops.append(DiffOp(kind: .add, line: newLines[j]))
-            j += 1
-        }
-        return ops
-    }
-
-    /// diff.ts diffTexts: changed lines keep 1 line of context above
-    /// and below; unchanged runs collapse into "...".
-    private static func diffTexts(_ oldText: String, _ newText: String) -> String {
-        if oldText == newText {
-            return ""
-        }
-        let ops: [DiffOp] = if oldText.isEmpty || newText.isEmpty {
-            splitDiffLines(oldText).map { DiffOp(kind: .del, line: $0) }
-                + splitDiffLines(newText).map { DiffOp(kind: .add, line: $0) }
-        } else {
-            lcsDiff(
-                Array(splitDiffLines(oldText).prefix(diffMaxInputLines)),
-                Array(splitDiffLines(newText).prefix(diffMaxInputLines)),
-            )
-        }
-        var show = [Bool](repeating: false, count: ops.count)
-        for (index, op) in ops.enumerated() where op.kind != .ctx {
-            show[index] = true
-            if index > 0 {
-                show[index - 1] = true
-            }
-            if index + 1 < ops.count {
-                show[index + 1] = true
-            }
-        }
-        var out: [String] = []
-        var skipped = false
-        for (index, op) in ops.enumerated() {
-            guard show[index] else {
-                skipped = true
-                continue
-            }
-            if skipped, !out.isEmpty {
-                out.append("...")
-            }
-            skipped = false
-            let prefix = switch op.kind {
-            case .ctx: "  "
-            case .del: "- "
-            case .add: "+ "
-            }
-            out.append(prefix + op.line)
-        }
-        return out.joined(separator: "\n")
     }
 }
 
@@ -1147,13 +816,16 @@ extension Notification.Name {
 
 /// Window-level image lightbox (WebUI images.tsx): a dim overlay over
 /// the whole window — backdrop click, the × button, or Esc all close
-/// it; the image fills ~86% of the screen (scaled down when larger,
-/// scaled up for small bitmaps, capped at 2.5x to avoid mush).
+/// it. The image fills ~86% of the screen (scaled down when larger,
+/// scaled up for small bitmaps, capped at 2.5x to avoid mush); pinch /
+/// ctrl-scroll zooms to 4x, and dragging pans while zoomed.
 struct ImageLightboxView: View {
     let image: NSImage
     let close: () -> Void
 
     @State private var copied = false
+    @State private var zoom: CGFloat = 1
+    @State private var pan: CGSize = .zero
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -1177,25 +849,67 @@ struct ImageLightboxView: View {
                 .interpolation(.high)
                 .aspectRatio(contentMode: .fit)
                 .frame(width: imageSize.width * scale, height: imageSize.height * scale)
+                .scaleEffect(zoom)
+                .offset(pan)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSm))
                 .overlay(
                     RoundedRectangle(cornerRadius: Theme.radiusSm)
-                        .strokeBorder(Theme.bg2, lineWidth: 1),
+                        .strokeBorder(Theme.bg2, lineWidth: 1)
+                        .scaleEffect(zoom)
+                        .offset(pan),
                 )
                 .shadow(color: .black.opacity(0.5), radius: 24)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onTapGesture { close() }
+                .contentShape(Rectangle())
+                .gesture(
+                    MagnifyGesture()
+                        .onChanged { value in
+                            zoom = min(max(value.magnification, 0.5), 4)
+                        }
+                        .onEnded { _ in
+                            if zoom <= 1 {
+                                withAnimation(.easeOut(duration: 0.15)) {
+                                    zoom = 1
+                                    pan = .zero
+                                }
+                            }
+                        },
+                )
+                .simultaneousGesture(
+                    DragGesture()
+                        .onChanged { value in
+                            guard zoom > 1 else { return }
+                            pan = value.translation
+                        },
+                )
+                .onTapGesture(count: 2) {
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        if zoom > 1 {
+                            zoom = 1
+                            pan = .zero
+                        } else {
+                            zoom = 2
+                        }
+                    }
+                }
+                .onTapGesture(count: 1) {
+                    if zoom <= 1 {
+                        close()
+                    }
+                }
 
             HStack(spacing: 8) {
                 Button(action: copy) {
                     Image(systemName: copied ? "checkmark" : "doc.on.doc")
                 }
                 .help("Copy image (⌘C)")
+                .accessibilityLabel("Copy image")
 
                 Button(action: close) {
                     Image(systemName: "xmark")
                 }
                 .help("Close (Esc)")
+                .accessibilityLabel("Close image preview")
             }
             .font(.system(size: 13))
             .foregroundStyle(copied ? Theme.success : Theme.muted)
@@ -1241,7 +955,10 @@ struct InlineImageView: View {
     var maxDim: CGFloat = 320
 
     var body: some View {
-        if let image = decodedImage {
+        // InlineImageCache: the transcript re-evaluates on every
+        // streaming frame; decoding base64 + creating the bitmap here
+        // each time was one of the hot paths.
+        if let image = InlineImageCache.image(base64: data) {
             // Zoomable like the WebUI's InlineImage (zoomableProps).
             Button {
                 NotificationCenter.default.post(name: .loomZoomImage, object: image)
@@ -1264,80 +981,16 @@ struct InlineImageView: View {
                 .foregroundStyle(Theme.muted)
         }
     }
-
-    private var decodedImage: NSImage? {
-        guard let data = Data(base64Encoded: data) else { return nil }
-        return NSImage(data: data)
-    }
 }
 
 // MARK: - Diff (.diff — tinted add/del rows with a sign gutter)
 
-/// diff.ts parseDiff: the `+++ b/…` header supplies the file label;
-/// unmatched lines degrade to context (lenient, same as the WebUI).
-struct ParsedDiff {
-    enum Kind { case hunk, add, del, ctx }
-
-    struct Line {
-        let kind: Kind
-        let sign: String
-        let text: String
-    }
-
-    var file = ""
-    var lines: [Line] = []
-    var adds = 0
-    var dels = 0
-}
-
-func parseDiff(_ diffText: String) -> ParsedDiff {
-    var out = ParsedDiff()
-    var sawContent = false
-    for raw in diffText.components(separatedBy: "\n") {
-        if raw.hasPrefix("+++ ") {
-            var file = String(raw.dropFirst(4))
-            if file.hasPrefix("b/") {
-                file.removeFirst(2)
-            }
-            out.file = file
-            continue
-        }
-        if raw.hasPrefix("--- ") || raw.hasPrefix("diff ") || raw.hasPrefix("index ") {
-            continue
-        }
-        if raw.hasPrefix("@@") {
-            out.lines.append(ParsedDiff.Line(kind: .hunk, sign: "", text: raw))
-            sawContent = true
-            continue
-        }
-        var kind: ParsedDiff.Kind = .ctx
-        var sign = " "
-        var text = raw
-        if raw.hasPrefix("+") {
-            kind = .add
-            sign = "+"
-            text = String(raw.dropFirst())
-            out.adds += 1
-        } else if raw.hasPrefix("-") {
-            kind = .del
-            sign = "−"
-            text = String(raw.dropFirst())
-            out.dels += 1
-        } else if raw.hasPrefix(" ") {
-            text = String(raw.dropFirst())
-        } else if raw.isEmpty, !sawContent {
-            continue
-        }
-        out.lines.append(ParsedDiff.Line(kind: kind, sign: sign, text: text))
-        sawContent = true
-    }
-    return out
-}
-
 /// Unified diff rendering (WebUI DiffView): diffs longer than
 /// DIFF_COLLAPSE_LINES collapse into a disclosure whose head carries
 /// the file and the `N lines · +adds −dels` stat; short diffs render
-/// flat under the same .d-head strip.
+/// flat under the same .d-head strip. The parsed model is memoized by
+/// diff text — this view sits inside every tool card and its body is
+/// re-evaluated on every transcript frame.
 struct DiffView: View {
     let diff: String
 
@@ -1347,7 +1000,7 @@ struct DiffView: View {
     @State private var expanded = false
 
     private var parsed: ParsedDiff {
-        parseDiff(diff)
+        DiffParseCache.parse(diff)
     }
 
     var body: some View {
@@ -1488,7 +1141,12 @@ struct DraftView: View {
                     )
                 case let .text(text):
                     if !text.text.isEmpty {
-                        MarkdownText(source: text.text + (text.live ? " ▍" : ""))
+                        // live: code blocks skip hljs highlighting (an
+                        // unterminated fence would re-run the JS
+                        // highlighter on the whole growing block every
+                        // frame, on the main thread); colors pop in when
+                        // the segment seals.
+                        MarkdownText(source: text.text + (text.live ? " ▍" : ""), live: text.live)
                     }
                 case let .tool(tool):
                     ToolBlock(live: tool, artifactLoader: artifactLoader)

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import AppKit
 import SwiftUI
 
 /// Message composer, after the WebUI's composer.css: the plan panel
@@ -21,13 +22,14 @@ import SwiftUI
 /// ctx-gauge ring + send/stop circle as twin 32px buttons on the right.
 /// Return sends, ⇧Return inserts a newline (⌘Return also sends). While
 /// a turn is busy the prompt is steered into the session queue by the
-/// server.
+/// server. The input text lives in SessionStore.composerDraft so an
+/// unfinished message survives switching to another session and back
+/// (the chat view itself is destroyed on every switch).
 struct ComposerView: View {
-    let store: SessionStore
+    @Bindable var store: SessionStore
     /// Model catalog for the picker (from SessionListStore).
     var models: [MetaModels.ModelInfo] = []
 
-    @State private var text = ""
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -56,8 +58,11 @@ struct ComposerView: View {
                 // inset (~5pt) separates them, keeping the caret and the
                 // hint aligned. Caret takes the foreground color (WebUI
                 // inherits --fg), not the system accent blue.
-                TextEditor(text: $text)
+                TextEditor(text: $store.composerDraft)
                     .font(.system(size: 14))
+                    // Match the app's text color: the default .primary is pure white
+                    // in dark mode and read as bold-ish next to the beige transcript.
+                    .foregroundStyle(Theme.fg)
                     .lineSpacing(3)
                     .scrollContentBackground(.hidden)
                     .tint(Theme.fg)
@@ -67,7 +72,7 @@ struct ComposerView: View {
                     .padding(.horizontal, 9)
                     .padding(.vertical, 4)
                     .background(alignment: .topLeading) {
-                        if text.isEmpty {
+                        if store.composerDraft.isEmpty {
                             // Match the editor's internal text inset
                             // (~5pt leading, ~6pt top) so the caret and
                             // the hint sit on the same first line.
@@ -81,8 +86,11 @@ struct ComposerView: View {
                         }
                     }
                     .onKeyPress(keys: [.return], phases: .down) { press in
-                        guard !press.modifiers.contains(.shift) else { return .ignored }
-                        guard canSend else { return .ignored }
+                        // Bare Return only: ⇧Return inserts a newline;
+                        // ⌘/⌥ Return fall through to the send button's
+                        // and the approval card's keyboard shortcuts.
+                        guard press.modifiers.isEmpty, !imeComposing, canSend
+                        else { return .ignored }
                         send()
                         return .handled
                     }
@@ -184,9 +192,13 @@ struct ComposerView: View {
     // MARK: Pickers (.picker-btn)
 
     private var currentModelRef: String {
-        store.providerName.isEmpty || store.modelName.isEmpty
-            ? store.modelName
-            : "\(store.providerName)/\(store.modelName)"
+        // WebUI applySnapshotMeta: provider/model when both are known;
+        // a bare snapshot model name falls back to the catalog's
+        // default ref so the picker still marks the active row.
+        if !store.providerName.isEmpty, !store.modelName.isEmpty {
+            return "\(store.providerName)/\(store.modelName)"
+        }
+        return store.defaultModelRef ?? store.modelName
     }
 
     @ViewBuilder private var modelPicker: some View {
@@ -195,7 +207,7 @@ struct ComposerView: View {
                 label: store.modelName.isEmpty ? "model" : store.modelName,
                 isActive: false,
                 help: "Switch model",
-            ) {
+            ) { close in
                 ForEach(models, id: \.name) { model in
                     let ref = "\(model.provider)/\(model.name)"
                     PickerMenuItem(
@@ -203,6 +215,7 @@ struct ComposerView: View {
                         detail: model.contextWindow.map { formatContextWindow($0) },
                         isCurrent: ref == currentModelRef,
                     ) {
+                        close()
                         Task { await store.pickModel(ref) }
                     }
                 }
@@ -215,12 +228,13 @@ struct ComposerView: View {
             label: store.reasoningEffort == "default" ? "reasoning" : store.reasoningEffort,
             isOn: store.reasoningEffort != "default",
             help: "Set reasoning (current: \(store.reasoningEffort))",
-        ) {
+        ) { close in
             ForEach(ReasoningOption.all, id: \.value) { option in
                 PickerMenuItem(
                     title: option.label,
                     isCurrent: store.reasoningEffort == option.value,
                 ) {
+                    close()
                     Task { await store.pickReasoning(option.value) }
                 }
             }
@@ -237,13 +251,14 @@ struct ComposerView: View {
                 : (ApprovalOption(rawValue: store.approvalMode)?.short ?? store.approvalMode),
             isWarn: store.approvalMode != "on-request",
             help: "Switch approval baseline (workspace-level; takes effect next turn)",
-        ) {
+        ) { close in
             ForEach(ApprovalOption.all, id: \.rawValue) { option in
                 PickerMenuItem(
                     title: "\(option.short) · \(option.rawValue)",
                     detail: option.hint,
                     isCurrent: store.approvalMode == option.rawValue,
                 ) {
+                    close()
                     Task { await store.pickApprovalMode(option.rawValue) }
                 }
             }
@@ -263,15 +278,30 @@ struct ComposerView: View {
     }
 
     private var canSend: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !store.composerDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && store.state != .closed
             && store.state != .booting
     }
 
+    /// True while an IME composition (Chinese/Japanese input) is in
+    /// progress: the Return that CONFIRMS a candidate must not send
+    /// the message. The marked-text state lives on the first responder
+    /// (the TextEditor's NSTextView), not on the input context.
+    private var imeComposing: Bool {
+        guard let view = NSApp.keyWindow?.firstResponder as? NSTextView else { return false }
+        return view.hasMarkedText()
+    }
+
     private func send() {
-        let prompt = text
-        text = ""
-        Task { await store.sendPrompt(prompt) }
+        let prompt = store.composerDraft
+        store.composerDraft = ""
+        Task {
+            // A failed send puts the text back (unless the user has
+            // already typed something new) — the message is never lost.
+            if await !store.sendPrompt(prompt), store.composerDraft.isEmpty {
+                store.composerDraft = prompt
+            }
+        }
     }
 
     private func formatContextWindow(_ value: Int) -> String {
@@ -352,7 +382,9 @@ private enum ApprovalOption: String, CaseIterable {
 // MARK: - Picker capsule (.picker-btn) + popover menu (.menu)
 
 /// The 26px capsule buttons in the composer bar; opens a bg1 popover
-/// styled after the WebUI's .menu overlay.
+/// styled after the WebUI's .menu overlay. The content receives a
+/// `close` action so picking an item dismisses the popover (macOS
+/// menu behavior — popovers do not close on their own).
 private struct PickerCapsule<Content: View>: View {
     var icon: String?
     var label: String?
@@ -360,7 +392,7 @@ private struct PickerCapsule<Content: View>: View {
     var isOn = false
     var isWarn = false
     var help: String
-    @ViewBuilder var content: Content
+    @ViewBuilder var content: (_ close: @escaping () -> Void) -> Content
 
     @State private var open = false
     @State private var hovered = false
@@ -405,7 +437,7 @@ private struct PickerCapsule<Content: View>: View {
         .help(help)
         .popover(isPresented: $open, arrowEdge: .top) {
             VStack(alignment: .leading, spacing: 2) {
-                content
+                content { open = false }
             }
             .padding(6)
             .frame(minWidth: 220, alignment: .leading)

@@ -15,22 +15,28 @@
 import AppKit
 import SwiftUI
 
-/// Pixel-faithful port of the WebUI's design tokens
+/// Near-faithful port of the WebUI's design tokens
 /// (webui/src/styles/tokens.css — Everforest dark, the WebUI's default,
 /// plus its Everforest Light Medium variant). Every token is
 /// appearance-adaptive: the header's theme toggle flips the window's
 /// color scheme (loom.theme) and all colors re-resolve, exactly like
 /// the WebUI swapping [data-theme] on the root element.
+///
+/// One deliberate deviation: the surface ladder is widened (bg0
+/// deepened, bg2/bg3 lifted, fg slightly brightened). The stock
+/// Everforest steps are only ~3–5% luminance apart, which flattened
+/// the sidebar/main split into one murky slab on native macOS
+/// rendering; the wider ladder restores depth between zones.
 enum Theme {
     // Surfaces
-    static let bg0 = adaptive(dark: 0x1E2326, light: 0xFDF6E3)
+    static let bg0 = adaptive(dark: 0x1A1F22, light: 0xFDF6E3)
     static let bg1 = adaptive(dark: 0x272E33, light: 0xF4F0D9)
-    static let bg2 = adaptive(dark: 0x2E383C, light: 0xEFEBD4)
-    static let bg3 = adaptive(dark: 0x3D484D, light: 0xE2DCC4)
-    static let bubbleUser = adaptive(dark: 0x3A4148, light: 0xE6E2CC)
+    static let bg2 = adaptive(dark: 0x333D42, light: 0xECE7D0)
+    static let bg3 = adaptive(dark: 0x49545A, light: 0xDDD7BC)
+    static let bubbleUser = adaptive(dark: 0x3E474D, light: 0xE1DCC4)
 
     // Text
-    static let fg = adaptive(dark: 0xD3C6AA, light: 0x5C6A72)
+    static let fg = adaptive(dark: 0xDBCFB8, light: 0x5C6A72)
     static let muted = adaptive(dark: 0x9DA9A0, light: 0x5C6E5E)
 
     // Accents
@@ -46,13 +52,6 @@ enum Theme {
     /// tokens.css --ring-color: the uniform focus halo (gate input /
     /// question card / pickers) — primary at 35%.
     static let ring = primary.opacity(0.35)
-
-    /// Back-compat alias used across the older views.
-    static let accent = primary
-    static let green = success
-    static let yellow = warning
-    static let red = error
-    static let orange = highlight
 
     // Typography (tokens.css --text-* scale)
     static let textXs: CGFloat = 11.5
@@ -73,46 +72,9 @@ enum Theme {
     // Layout
     static let contentWidth: CGFloat = 960
     static let sidebarWidth: CGFloat = 288
-
-    static let cardBorder = bg2
-    static let codeBackground = bg1
-    static let inlineCodeBackground = bg2
-    static let cardCornerRadius = radiusMd
-    static let bubbleCornerRadius: CGFloat = 14
-    static let transcriptMaxWidth = contentWidth
-
-    /// Legacy helpers kept for existing call sites.
-    static func riskColor(_ risk: Int) -> Color {
-        switch risk {
-        case 0: success
-        case 1: warning
-        case 2: highlight
-        default: error
-        }
-    }
-
-    static func riskLabel(_ risk: Int) -> String {
-        "R\(risk)"
-    }
-
-    static func stateColor(_ state: SessionState) -> Color {
-        switch state {
-        case .running, .cancelling: success
-        case .awaitingApproval: warning
-        case .idle: success
-        case .closed: muted
-        default: muted
-        }
-    }
-
-    static func connectionColor(_ connection: SessionConnection) -> Color {
-        switch connection {
-        case .live: success
-        case .connecting: warning
-        case .offline: highlight
-        case .drained: error
-        }
-    }
+    /// Sidebar drag-resize clamp (SidebarDivider).
+    static let sidebarMinWidth: CGFloat = 220
+    static let sidebarMaxWidth: CGFloat = 420
 }
 
 /// A token color resolved from the hosting view's effective appearance,
@@ -130,7 +92,9 @@ private func adaptive(dark: UInt32, light: UInt32) -> Color {
     })
 }
 
-/// Relative "3m ago"-style timestamps for the sidebar.
+/// Compact relative timestamps for the sidebar meta line ("now" /
+/// "3m" / "5h" / "2d" / "3w" / "4mo") — short and fixed-shape so the
+/// muted second line stays quiet and never looks ragged.
 func relativeTime(_ date: Date?) -> String {
     guard let date else { return "" }
     let seconds = Int(-date.timeIntervalSinceNow)
@@ -138,12 +102,18 @@ func relativeTime(_ date: Date?) -> String {
         return "now"
     }
     if seconds < 3600 {
-        return "\(seconds / 60)m ago"
+        return "\(seconds / 60)m"
     }
     if seconds < 86400 {
-        return "\(seconds / 3600)h ago"
+        return "\(seconds / 3600)h"
     }
-    return "\(seconds / 86400)d ago"
+    if seconds < 7 * 86400 {
+        return "\(seconds / 86400)d"
+    }
+    if seconds < 30 * 86400 {
+        return "\(seconds / (7 * 86400))w"
+    }
+    return "\(seconds / (30 * 86400))mo"
 }
 
 func formatTokenCount(_ value: Int64?) -> String {
@@ -172,16 +142,23 @@ func formatDuration(_ ms: Int64) -> String {
 }
 
 /// WebUI fmtMsgTime: short "Aug 6 14:34" label under a message.
-func formatMessageTime(_ date: Date?) -> String {
-    guard let date else { return "" }
+/// The formatter is created once — DateFormatter allocation is
+/// surprisingly expensive and this runs per visible message row.
+private let messageTimeFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "MMM d HH:mm"
-    return formatter.string(from: date)
+    return formatter
+}()
+
+func formatMessageTime(_ date: Date?) -> String {
+    guard let date else { return "" }
+    return messageTimeFormatter.string(from: date)
 }
 
 // MARK: - WebUI signature micro-animations
 
 /// The WebUI's pulsing status dot (pulse 1.6s ease-in-out, 0.4…1.0).
+/// Honors Reduce Motion: renders as a steady dot.
 struct PulsingDot: View {
     let color: Color
     var size: CGFloat = 7
@@ -189,13 +166,15 @@ struct PulsingDot: View {
     var period: Double = 1.6
 
     @State private var on = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Circle()
             .fill(color)
             .frame(width: size, height: size)
-            .opacity(on ? 0.4 : 1)
+            .opacity(on && !reduceMotion ? 0.4 : 1)
             .onAppear {
+                guard !reduceMotion else { return }
                 withAnimation(
                     .easeInOut(duration: period)
                         .repeatForever(autoreverses: true)
@@ -276,6 +255,44 @@ struct ThinkingDots: View {
 }
 
 // MARK: - Buttons (ui.css .btn variants)
+
+/// The WebUI's .icon-btn as a VIEW: bare muted glyph, fg + bg2 wash on
+/// hover. This used to be a ButtonStyle holding @State for the hover
+/// flag — but SwiftUI does not guarantee stable state storage for
+/// style instances, so hover highlighting could stick or leak across
+/// buttons sharing the style. State lives safely in a View instead.
+struct GhostButton<Label: View>: View {
+    let action: () -> Void
+    /// Glyph point size — 15 in toolbars, smaller in dense footers.
+    var size: CGFloat = 15
+    @ViewBuilder let label: Label
+
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var hovered = false
+
+    init(size: CGFloat = 15, action: @escaping () -> Void, @ViewBuilder label: () -> Label) {
+        self.action = action
+        self.size = size
+        self.label = label()
+    }
+
+    var body: some View {
+        Button(action: action) { label }
+            .buttonStyle(.plain)
+            .font(.system(size: size))
+            .foregroundStyle(
+                isEnabled ? (hovered ? Theme.fg : Theme.muted) : Theme.muted.opacity(0.4),
+            )
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(
+                hovered ? Theme.bg2 : Color.clear,
+                in: RoundedRectangle(cornerRadius: Theme.radiusSm),
+            )
+            .contentShape(Rectangle())
+            .onHover { hovered = $0 }
+    }
+}
 
 /// .btn-primary: filled primary, on-accent label.
 struct PrimaryButtonStyle: ButtonStyle {

@@ -59,13 +59,13 @@ struct ConnectView: View {
                         field: .token,
                         secure: true,
                     )
-                    Button {
+                    GhostButton {
                         appState.refetchTokenFromDisk()
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
-                    .buttonStyle(GhostButtonStyle())
                     .help("Re-read serve.token from the loom data directory")
+                    .accessibilityLabel("Re-read token from disk")
                 }
             }
 

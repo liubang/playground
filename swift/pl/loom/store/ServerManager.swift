@@ -152,6 +152,11 @@ final class ServerManager {
         if !FileManager.default.fileExists(atPath: path) {
             FileManager.default.createFile(atPath: path, contents: nil)
         }
-        return try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+        let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+        // Truncate first: the handle starts at offset 0 and would
+        // otherwise overwrite only the head of the previous run's log,
+        // leaving a stale tail glued behind the new content.
+        try handle.truncate(atOffset: 0)
+        return handle
     }
 }

@@ -46,6 +46,11 @@ private enum MarkdownCache {
 
 struct MarkdownText: View {
     let source: String
+    /// Live (still-streaming) text: code blocks render unhighlighted —
+    /// an unterminated fence grows with every flush, and re-running the
+    /// JS highlighter on the whole block each frame would hog the main
+    /// thread. Highlighting pops in when the segment seals.
+    var live = false
 
     enum Block: Equatable {
         case prose(String)
@@ -62,7 +67,7 @@ struct MarkdownText: View {
                 case let .prose(markdown):
                     ProseText(markdown: markdown)
                 case let .code(language, code):
-                    CodeBlockView(language: language, code: code)
+                    CodeBlockView(language: language, code: code, deferHighlight: live)
                 case let .table(header, rows):
                     MarkdownTableView(header: header, rows: rows)
                 }
@@ -200,18 +205,19 @@ private struct ProseText: View {
 
 /// Inline markdown → AttributedString with the WebUI's .md styling:
 /// orange mono chips for inline code, headings squashed to 15/600.
-/// Shared by prose paragraphs and table cells.
-func renderInlineMarkdown(_ source: String) -> AttributedString {
-    let key = source as NSString
+/// Shared by prose paragraphs (size textLg) and table cells (textMd)
+/// — pass the surrounding point size so strong-emphasis runs match it.
+func renderInlineMarkdown(_ source: String, size: CGFloat = Theme.textLg) -> AttributedString {
+    let key = "\(size)|\(source)" as NSString
     if let cached = MarkdownCache.inline.object(forKey: key) {
         return AttributedString(cached)
     }
-    let rendered = parseInlineMarkdown(source)
+    let rendered = parseInlineMarkdown(source, size: size)
     MarkdownCache.inline.setObject(NSAttributedString(rendered), forKey: key)
     return rendered
 }
 
-private func parseInlineMarkdown(_ source: String) -> AttributedString {
+private func parseInlineMarkdown(_ source: String, size: CGFloat) -> AttributedString {
     typealias SwiftUIAttrs = AttributeScopes.SwiftUIAttributes
 
     guard var parsed = try? AttributedString(
@@ -236,6 +242,14 @@ private func parseInlineMarkdown(_ source: String) -> AttributedString {
         {
             parsed[run.range][SwiftUIAttrs.FontAttribute.self] =
                 Font.system(size: 15, weight: .semibold)
+            continue
+        }
+        // Strong emphasis renders as semibold, not the parser's
+        // default bold: **-heavy assistant prose became a glaring
+        // bright wall at weight 700 on the dark surfaces.
+        if run.inlinePresentationIntent?.contains(.stronglyEmphasized) == true {
+            parsed[run.range][SwiftUIAttrs.FontAttribute.self] =
+                Font.system(size: size, weight: .semibold)
         }
     }
     return parsed
@@ -275,7 +289,7 @@ private struct MarkdownTableView: View {
     }
 
     private func cell(text: String, isHeader: Bool) -> some View {
-        Text(renderInlineMarkdown(text))
+        Text(renderInlineMarkdown(text, size: Theme.textMd))
             .font(.system(size: Theme.textMd, weight: isHeader ? .semibold : .regular))
             .foregroundStyle(Theme.fg)
             .lineSpacing(2)
@@ -295,14 +309,19 @@ private struct MarkdownTableView: View {
 struct CodeBlockView: View {
     let language: String?
     let code: String
+    /// Skip hljs (live streaming blocks); renders plain mono instead.
+    var deferHighlight = false
 
     @State private var copied = false
     @State private var hovering = false
 
     /// hljs-highlighted code (same engine and code.css theme as the
-    /// WebUI); plain mono text when the language is unknown.
+    /// WebUI); plain mono text when the language is unknown or the
+    /// block is still streaming.
     private var highlightedCode: AttributedString {
-        SyntaxHighlighter.attributed(code.isEmpty ? " " : code, language: language)
+        deferHighlight
+            ? SyntaxHighlighter.plain(code.isEmpty ? " " : code)
+            : SyntaxHighlighter.attributed(code.isEmpty ? " " : code, language: language)
     }
 
     var body: some View {

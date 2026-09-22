@@ -44,17 +44,6 @@ struct APIClient: Sendable {
         try await get("/v1/meta/models")
     }
 
-    func healthz() async throws -> Bool {
-        var request = URLRequest(url: baseURL.appendingPathComponent("healthz"))
-        request.timeoutInterval = 3
-        do {
-            let (_, response) = try await session.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch {
-            return false
-        }
-    }
-
     // MARK: - Sessions
 
     func listSessions(
@@ -291,7 +280,7 @@ struct APIClient: Sendable {
     func putConfig(revision: String, config: JSONValue) async throws -> PutConfigResult {
         try await request(
             "PUT", "/v1/config", query: [],
-            body: try Self.configBodyData(revision: revision, config: config), headers: [:],
+            body: Self.configBodyData(revision: revision, config: config), headers: [:],
         )
     }
 
@@ -304,7 +293,7 @@ struct APIClient: Sendable {
     /// slash, and JSON structure never contains a bare slash.
     static func configBodyData(revision: String, config: JSONValue) throws -> Data {
         let body = JSONValue.object(["revision": .string(revision), "config": config])
-        let text = String(decoding: try LoomJSON.encoder.encode(body), as: UTF8.self)
+        let text = try String(decoding: LoomJSON.encoder.encode(body), as: UTF8.self)
             .replacingOccurrences(of: "\\/", with: "/")
         return Data(text.utf8)
     }
@@ -382,10 +371,6 @@ struct APIClient: Sendable {
 
     private func put<T: Decodable>(_ path: String, json body: some Encodable) async throws -> T {
         try await request("PUT", path, body: LoomJSON.encoder.encode(body), headers: [:])
-    }
-
-    private func put<T: Decodable>(_ path: String, jsonValue: JSONValue) async throws -> T {
-        try await request("PUT", path, body: LoomJSON.encoder.encode(jsonValue), headers: [:])
     }
 
     private func post<T: Decodable>(

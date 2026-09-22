@@ -21,6 +21,12 @@ import SwiftUI
 /// spacer · connection badge), the transcript with edge scroll-fades,
 /// pending cards, the composer, and a 28px statusbar (bg1, hairline top
 /// border) closing the pane.
+///
+/// Each pane is its own View reading only the SessionStore properties
+/// it needs: @Observable tracks access per property, so a streaming
+/// draft frame re-evaluates ONLY the transcript — the header and
+/// statusbar no longer rebuild at token rate (and token-counter ticks
+/// no longer re-layout the transcript).
 struct ChatView: View {
     let store: SessionStore
     /// Server-derived session title (first user message); the header
@@ -36,6 +42,36 @@ struct ChatView: View {
     var archived: Bool = false
     @Binding var sidebarCollapsed: Bool
 
+    var body: some View {
+        VStack(spacing: 0) {
+            ChatHeaderView(
+                store: store,
+                sessionTitle: sessionTitle,
+                workspaceName: workspaceName,
+                archived: archived,
+                sidebarCollapsed: $sidebarCollapsed,
+            )
+            Hairline(axis: .horizontal)
+            NoticeBannerView(store: store)
+            TranscriptView(store: store)
+            PendingAreaView(store: store)
+            ComposerView(store: store, models: models)
+            Hairline(axis: .horizontal)
+            StatusBarView(store: store, version: version)
+        }
+        .background(Theme.bg0)
+    }
+}
+
+// MARK: - Header (.app-header)
+
+private struct ChatHeaderView: View {
+    let store: SessionStore
+    var sessionTitle: String?
+    var workspaceName: String?
+    var archived: Bool
+    @Binding var sidebarCollapsed: Bool
+
     /// WebUI loom_theme: "dark" (default) or "light"; LoomApp applies
     /// it as the window's preferredColorScheme.
     @AppStorage("loom.theme") private var theme = "dark"
@@ -43,40 +79,24 @@ struct ChatView: View {
     @State private var copiedShareLink = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Hairline(axis: .horizontal)
-            noticeBanner
-            transcript
-            pendingArea
-            ComposerView(store: store, models: models)
-            Hairline(axis: .horizontal)
-            statusbar
-        }
-        .background(Theme.bg0)
-    }
-
-    // MARK: Header (.app-header)
-
-    private var header: some View {
         HStack(spacing: 12) {
             // hdr-sidebar (bars)
-            Button {
+            GhostButton {
                 sidebarCollapsed.toggle()
             } label: {
                 Image(systemName: "line.3.horizontal")
             }
-            .buttonStyle(GhostButtonStyle())
             .help("Toggle sidebar")
+            .accessibilityLabel("Toggle sidebar")
 
             // hdr-theme (circle-half-stroke)
-            Button {
+            GhostButton {
                 theme = theme == "dark" ? "light" : "dark"
             } label: {
                 Image(systemName: "circle.lefthalf.filled")
             }
-            .buttonStyle(GhostButtonStyle())
             .help(theme == "dark" ? "Switch to light mode" : "Switch to dark mode")
+            .accessibilityLabel("Toggle color theme")
 
             // hdr-ws: owning workspace breadcrumb — click to locate it
             // in the sidebar (WebUI revealCurrentWorkspace).
@@ -89,14 +109,16 @@ struct ChatView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .frame(maxWidth: 240, alignment: .leading)
-                        .fixedSize()
                 }
-                .buttonStyle(GhostButtonStyle())
+                .buttonStyle(GhostTextButtonStyle())
                 .help("Locate the owning workspace")
             }
 
             // hdr-session: the derived title once the conversation has
             // started (short id before that); click to copy the full id.
+            // NOTE: no .fixedSize() here — it proposes infinite width to
+            // the Text, which defeats lineLimit+truncation and lets a
+            // long title blow up the header.
             Button(action: copySessionId) {
                 Text(displayTitle)
                     .font(hasTitle ? .system(size: Theme.textSm) : Theme.monoSm)
@@ -104,21 +126,21 @@ struct ChatView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: 280, alignment: .leading)
-                    .fixedSize()
             }
-            .buttonStyle(GhostButtonStyle())
+            .buttonStyle(GhostTextButtonStyle())
             .help(copiedSessionId ? "Copied" : "\(store.sessionId) — click to copy the session ID")
+            .accessibilityLabel("Session \(displayTitle)")
 
             // hdr-share: mint + copy a public read-only link
             // (Shift+click revokes, like the WebUI).
-            Button(action: shareSession) {
+            GhostButton(action: shareSession) {
                 Image(systemName: copiedShareLink ? "check" : "arrowshape.turn.up.right")
                     .foregroundStyle(copiedShareLink ? Theme.success : Theme.muted)
             }
-            .buttonStyle(GhostButtonStyle())
             .help(copiedShareLink
                 ? "Share link copied — anyone with the link can view this session read-only"
                 : "Share session: copy a public read-only link (Shift+click to unshare)")
+            .accessibilityLabel("Share session")
 
             readOnlyBadge
 
@@ -128,13 +150,13 @@ struct ChatView: View {
 
             connectionBadge
 
-            Button {
+            GhostButton {
                 Task { await store.requestCompaction() }
             } label: {
                 Image(systemName: "rectangle.compress.vertical")
             }
-            .buttonStyle(GhostButtonStyle())
             .help("Compact context on next turn")
+            .accessibilityLabel("Compact context")
             .disabled(store.isBusy)
         }
         .padding(.horizontal, 20)
@@ -234,10 +256,14 @@ struct ChatView: View {
             BadgeView(tone: .dead, text: "server shut down")
         }
     }
+}
 
-    // MARK: Notices (.banner)
+// MARK: - Notices (.banner)
 
-    @ViewBuilder private var noticeBanner: some View {
+private struct NoticeBannerView: View {
+    let store: SessionStore
+
+    var body: some View {
         if !store.notices.isEmpty || store.lastError != nil {
             HStack(spacing: 10) {
                 Image(systemName: "exclamationmark.triangle")
@@ -273,109 +299,91 @@ struct ChatView: View {
             }
         }
     }
+}
 
-    // MARK: Transcript (with the WebUI's edge scroll-fades)
+// MARK: - Transcript (with the WebUI's edge scroll-fades)
 
-    private var transcript: some View {
-        ScrollView {
-            // NOT LazyVStack: a lazy container estimates unmaterialized
-            // row heights, and with .defaultScrollAnchor(.bottom) the
-            // estimate error pins the scroll position to a region the
-            // stack never materializes — the transcript renders as a
-            // persistent blank page (reproduced: 200 heavy rows, doc
-            // estimated at 5.6k vs 214k real, viewport pure black until
-            // the next content change). A plain VStack always reports
-            // exact heights, so the bottom anchor tracks reliably.
-            VStack(alignment: .leading, spacing: 20) {
-                ForEach(visibleMessages) { message in
-                    MessageRow(
-                        message: message,
-                        toolResults: toolResults,
-                        showActions: actionMessageIds.contains(message.id),
-                        artifactLoader: { await store.artifactData($0) },
-                    )
+private struct TranscriptView: View {
+    let store: SessionStore
+
+    /// Tracks the bottom sentinel's visibility: scrolling up reveals
+    /// the jump-to-bottom button; returning hides it.
+    @State private var awayFromBottom = false
+
+    private static let bottomId = "transcript-bottom"
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                // NOT LazyVStack: a lazy container estimates unmaterialized
+                // row heights, and with .defaultScrollAnchor(.bottom) the
+                // estimate error pins the scroll position to a region the
+                // stack never materializes — the transcript renders as a
+                // persistent blank page (reproduced: 200 heavy rows, doc
+                // estimated at 5.6k vs 214k real, viewport pure black until
+                // the next content change). A plain VStack always reports
+                // exact heights, so the bottom anchor tracks reliably.
+                VStack(alignment: .leading, spacing: 20) {
+                    ForEach(store.transcript.rows) { row in
+                        MessageRow(
+                            row: row,
+                            artifactLoader: { await store.artifactData($0) },
+                        )
+                    }
+
+                    if let draft = store.draft, !draft.isEmpty {
+                        DraftView(
+                            draft: draft,
+                            artifactLoader: { await store.artifactData($0) },
+                        )
+                    } else if store.state == .running || store.state == .cancelling {
+                        ThinkingDots()
+                    }
+
+                    // Bottom sentinel: drives the jump button's visibility.
+                    Color.clear
+                        .frame(height: 1)
+                        .id(Self.bottomId)
+                        .onAppear { awayFromBottom = false }
+                        .onDisappear { awayFromBottom = true }
                 }
-
-                if let draft = store.draft, !draft.isEmpty {
-                    DraftView(
-                        draft: draft,
-                        artifactLoader: { await store.artifactData($0) },
-                    )
-                } else if store.state == .running || store.state == .cancelling {
-                    ThinkingDots()
+                .padding(.horizontal, 24)
+                .padding(.top, 24)
+                .padding(.bottom, 12)
+                .frame(maxWidth: Theme.contentWidth)
+                .frame(maxWidth: .infinity)
+            }
+            // Pins the view to the latest content, including while a turn
+            // streams — but releases as soon as the user scrolls up, unlike
+            // a scrollToBottom-on-every-change loop.
+            .defaultScrollAnchor(.bottom)
+            .overlay(alignment: .top) { scrollFade(fromTop: true) }
+            .overlay(alignment: .bottom) { scrollFade(fromTop: false) }
+            .overlay(alignment: .bottomTrailing) {
+                if awayFromBottom {
+                    Button {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            proxy.scrollTo(Self.bottomId, anchor: .bottom)
+                        }
+                    } label: {
+                        Image(systemName: "arrow.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Theme.muted)
+                            .frame(width: 28, height: 28)
+                            .background(Theme.bg1, in: Circle())
+                            .overlay(Circle().strokeBorder(Theme.bg2, lineWidth: 1))
+                            .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Jump to the latest message")
+                    .accessibilityLabel("Jump to bottom")
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 12)
+                    .transition(.opacity)
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
-            .padding(.bottom, 12)
-            .frame(maxWidth: Theme.contentWidth)
-            .frame(maxWidth: .infinity)
+            .animation(.easeInOut(duration: 0.15), value: awayFromBottom)
         }
-        // Pins the view to the latest content, including while a turn
-        // streams — but releases as soon as the user scrolls up, unlike
-        // a scrollToBottom-on-every-change loop.
-        .defaultScrollAnchor(.bottom)
-        .overlay(alignment: .top) { scrollFade(fromTop: true) }
-        .overlay(alignment: .bottom) { scrollFade(fromTop: false) }
-    }
-
-    /// Cross-message call_id → result map (the WebUI's histTools):
-    /// tool results arrive in their own assistant messages and patch
-    /// the block created for the matching call.
-    private var toolResults: [String: ContentPart.ToolResult] {
-        var map: [String: ContentPart.ToolResult] = [:]
-        for message in store.messages {
-            for part in message.parts {
-                if case let .toolResult(result) = part {
-                    map[result.callId] = result
-                }
-            }
-        }
-        return map
-    }
-
-    /// Messages that produce at least one render item — pure
-    /// tool_result carrier messages fold into their call's block and
-    /// leave no row of their own.
-    private var visibleMessages: [Message] {
-        store.messages.filter { message in
-            switch message.role {
-            case .assistant:
-                !message.assistantItems(toolResults: toolResults).isEmpty
-            default:
-                true
-            }
-        }
-    }
-
-    /// WebUI closeTurn: the action row attaches to the LAST text
-    /// segment of a finished turn — settled at the next user message,
-    /// and at the transcript tail only when no turn is in flight.
-    private var actionMessageIds: Set<String> {
-        var ids: Set<String> = []
-        var candidate: String?
-        for message in store.messages {
-            switch message.role {
-            case .user:
-                if let candidate {
-                    ids.insert(candidate)
-                }
-                candidate = nil
-            case .assistant:
-                if !message.copyText.isEmpty {
-                    candidate = message.id
-                }
-            default:
-                break
-            }
-        }
-        let midTurn = store.state == .running
-            || store.state == .cancelling
-            || store.state == .awaitingApproval
-        if !midTurn, let candidate {
-            ids.insert(candidate)
-        }
-        return ids
     }
 
     private func scrollFade(fromTop: Bool) -> some View {
@@ -387,10 +395,14 @@ struct ChatView: View {
         .frame(height: 28)
         .allowsHitTesting(false)
     }
+}
 
-    // MARK: Pending requests
+// MARK: - Pending requests
 
-    @ViewBuilder private var pendingArea: some View {
+private struct PendingAreaView: View {
+    let store: SessionStore
+
+    var body: some View {
         if !store.pendingApprovals.isEmpty || !store.pendingQuestions.isEmpty {
             VStack(spacing: 10) {
                 ForEach(store.pendingApprovals, id: \.approvalId) { approval in
@@ -418,10 +430,15 @@ struct ChatView: View {
             .frame(maxWidth: .infinity)
         }
     }
+}
 
-    // MARK: Statusbar (.statusbar)
+// MARK: - Statusbar (.statusbar)
 
-    private var statusbar: some View {
+private struct StatusBarView: View {
+    let store: SessionStore
+    var version: String
+
+    var body: some View {
         HStack(spacing: 14) {
             Text(usageText)
                 .font(Theme.monoXs)
@@ -454,26 +471,22 @@ struct ChatView: View {
     }
 }
 
-// MARK: - Ghost button (.icon-btn)
+// MARK: - Ghost text button
 
-/// The WebUI's .icon-btn: bare muted glyph, fg + bg2 wash on hover.
-struct GhostButtonStyle: ButtonStyle {
+/// The text-label variant of the ghost header button (breadcrumb,
+/// session title): the GhostButton chrome without the icon sizing.
+private struct GhostTextButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
-    @State private var hovered = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 15))
-            .foregroundStyle(
-                isEnabled ? (hovered ? Theme.fg : Theme.muted) : Theme.muted.opacity(0.4),
-            )
+            .foregroundStyle(isEnabled ? Theme.muted : Theme.muted.opacity(0.4))
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
             .background(
-                configuration.isPressed || hovered ? Theme.bg2 : Color.clear,
+                configuration.isPressed ? Theme.bg2 : Color.clear,
                 in: RoundedRectangle(cornerRadius: Theme.radiusSm),
             )
             .contentShape(Rectangle())
-            .onHover { hovered = $0 }
     }
 }

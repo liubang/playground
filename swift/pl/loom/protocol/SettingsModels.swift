@@ -92,7 +92,9 @@ struct SkillsOverview: Decodable, Sendable {
         let path: String
         let disabled: Bool?
 
-        var id: String { path }
+        var id: String {
+            path
+        }
     }
 }
 
@@ -116,7 +118,9 @@ struct McpServerStatus: Decodable, Sendable, Identifiable {
     let error: String?
     let tools: [McpTool]?
 
-    var id: String { name }
+    var id: String {
+        name
+    }
 
     struct McpTool: Decodable, Sendable {
         let name: String
@@ -159,7 +163,9 @@ struct EnvironmentReport: Decodable, Sendable {
         let found: Bool?
         let path: String?
 
-        var id: String { name }
+        var id: String {
+            name
+        }
     }
 
     struct EnvDir: Decodable, Sendable, Identifiable {
@@ -167,6 +173,8 @@ struct EnvironmentReport: Decodable, Sendable {
         let source: String?
         let status: String?
 
-        var id: String { path }
+        var id: String {
+            path
+        }
     }
 }

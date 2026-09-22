@@ -36,6 +36,14 @@ enum SyntaxHighlighter {
     static func attributed(_ code: String, language: String?) -> AttributedString {
         bridge.attributed(code, language: language)
     }
+
+    /// The unhighlighted rendering (mono + fg). Used by live streaming
+    /// code blocks, where the growing unterminated block would
+    /// otherwise re-run the JS highlighter every frame on the main
+    /// thread.
+    static func plain(_ code: String) -> AttributedString {
+        HighlightBridge.plain(code)
+    }
 }
 
 // MARK: - JavaScriptCore bridge
@@ -116,7 +124,7 @@ private final class HighlightBridge {
 
     /// The unhighlighted rendering: mono + fg, same as before the
     /// highlighter existed.
-    private static func plain(_ code: String) -> AttributedString {
+    static func plain(_ code: String) -> AttributedString {
         AttributedString(NSAttributedString(string: code, attributes: [
             .font: NSFont.monospacedSystemFont(ofSize: Theme.textSm, weight: .regular),
             .foregroundColor: Palette.fg,

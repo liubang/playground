@@ -125,11 +125,7 @@ final class SettingsStore {
 
     // MARK: Load (fill)
 
-    func load(manual: Bool = false) async {
-        if manual, dirty {
-            // The view confirms discarding unsaved edits before calling
-            // with manual=true (WebUI confirmDialog).
-        }
+    func load() async {
         if loadState != .loaded {
             loadState = .loading
         }
@@ -137,17 +133,16 @@ final class SettingsStore {
         let wasDirty = dirty
         do {
             let envelope = try await api.getConfig()
-            let config: [String: JSONValue]
-            if case let .object(map) = envelope.config {
-                config = map
+            let config: [String: JSONValue] = if case let .object(map) = envelope.config {
+                map
             } else {
-                config = [:]
+                [:]
             }
             revision = envelope.revision
             origCfg = config
-            cfgPath = envelope.exists ? envelope.path : "\(envelope.path)（尚未创建，保存后生成）"
+            cfgPath = envelope.exists ? envelope.path : "\(envelope.path) (not created yet; written on save)"
             dirty = false
-            showMsg(envelope.exists ? "" : "首次配置：请先在「模型」页添加至少一个 provider")
+            showMsg(envelope.exists ? "" : "First-time setup: add at least one provider on the Models tab")
             // Skip rebuilding the draft when nothing changed: scroll
             // position and expansion state survive a no-op reload.
             if loadState != .loaded || wasDirty || envelope.revision != prevRevision {
@@ -157,7 +152,7 @@ final class SettingsStore {
                 await loadMcpStatus()
             }
         } catch {
-            showMsg("加载配置失败: \(error.localizedDescription)", isError: true)
+            showMsg("Failed to load configuration: \(error.localizedDescription)", isError: true)
             if loadState != .loaded {
                 loadState = .failed(error.localizedDescription)
             }
@@ -173,7 +168,7 @@ final class SettingsStore {
             draft.providers = providers.compactMap { value in
                 guard case let .object(p) = value else { return nil }
                 var fields: [String: ControlState] = [:]
-                for spec in providerBaseFields + providerAdvFields + [FieldSpec("name")] {
+                for spec in providerAllFields {
                     fields[spec.key] = fillValue(spec, p[spec.key])
                 }
                 var models: [CardDraft] = []
@@ -194,8 +189,11 @@ final class SettingsStore {
             draft.mcpServers = servers
                 .sorted { $0.key < $1.key }
                 .map { name, value in
-                    let srv: [String: JSONValue]
-                    if case let .object(map) = value { srv = map } else { srv = [:] }
+                    let srv: [String: JSONValue] = if case let .object(map) = value {
+                        map
+                    } else {
+                        [:]
+                    }
                     let fill = { (specs: [FieldSpec]) in
                         specs.reduce(into: [String: ControlState]()) { out, spec in
                             out[spec.key] = fillValue(spec, srv[spec.key])
@@ -344,11 +342,11 @@ final class SettingsStore {
         var namedProviders = 0
         for card in draft.providers {
             var p: [String: JSONValue] = [:]
-            collectFields(providerBaseFields + providerAdvFields + [FieldSpec("name")], card.fields, into: &p)
+            collectFields(providerAllFields, card.fields, into: &p)
             guard let name = p["name"]?.stringValue, !name.isEmpty else {
                 if !p.isEmpty || !card.models.isEmpty {
                     return InvalidTarget(
-                        msg: "有 provider 缺少名称", tab: "providers",
+                        msg: "A provider is missing its name", tab: "providers",
                         fieldId: "\(card.id.uuidString):name", providerCardId: card.id,
                     )
                 }
@@ -357,13 +355,13 @@ final class SettingsStore {
             namedProviders += 1
             if p["base_url"]?.stringValue?.isEmpty != false {
                 return InvalidTarget(
-                    msg: "provider「\(name)」缺少 Base URL", tab: "providers",
+                    msg: "Provider \"\(name)\" is missing its Base URL", tab: "providers",
                     fieldId: "\(card.id.uuidString):base_url", providerCardId: card.id,
                 )
             }
             if p["api_key"] != nil, p["api_key_env"] != nil {
                 return InvalidTarget(
-                    msg: "provider「\(name)」的 API Key 与 Key 环境变量只能二选一", tab: "providers",
+                    msg: "Provider \"\(name)\": API key and key env var are mutually exclusive", tab: "providers",
                     fieldId: "\(card.id.uuidString):api_key_env", providerCardId: card.id,
                 )
             }
@@ -375,7 +373,7 @@ final class SettingsStore {
                     namedModels += 1
                 } else if !m.isEmpty {
                     return InvalidTarget(
-                        msg: "provider「\(name)」下有模型缺少名称", tab: "providers",
+                        msg: "Provider \"\(name)\" has a model missing its name", tab: "providers",
                         fieldId: "\(modelCard.id.uuidString):name",
                         providerCardId: card.id, modelCardId: modelCard.id,
                     )
@@ -383,14 +381,14 @@ final class SettingsStore {
             }
             if namedModels == 0 {
                 return InvalidTarget(
-                    msg: "provider「\(name)」至少需要一个模型", tab: "providers",
+                    msg: "Provider \"\(name)\" needs at least one model", tab: "providers",
                     fieldId: "\(card.id.uuidString):add-model", providerCardId: card.id,
                 )
             }
         }
         if namedProviders == 0 {
             return InvalidTarget(
-                msg: "请先在「模型」页添加至少一个 provider", tab: "providers",
+                msg: "Add at least one provider on the Models tab first", tab: "providers",
                 fieldId: "add-provider",
             )
         }
@@ -406,7 +404,7 @@ final class SettingsStore {
             if name.isEmpty {
                 if !srv.isEmpty {
                     return InvalidTarget(
-                        msg: "有 MCP 服务器缺少名称", tab: "mcp",
+                        msg: "An MCP server is missing its name", tab: "mcp",
                         fieldId: "\(card.id.uuidString):name", mcpCardId: card.id,
                     )
                 }
@@ -414,13 +412,13 @@ final class SettingsStore {
             }
             if card.transport == .stdio, srv["command"]?.stringValue?.isEmpty != false {
                 return InvalidTarget(
-                    msg: "MCP 服务器「\(name)」缺少命令", tab: "mcp",
+                    msg: "MCP server \"\(name)\" is missing its command", tab: "mcp",
                     fieldId: "\(card.id.uuidString):command", mcpCardId: card.id,
                 )
             }
             if card.transport == .http, srv["url"]?.stringValue?.isEmpty != false {
                 return InvalidTarget(
-                    msg: "MCP 服务器「\(name)」缺少 URL", tab: "mcp",
+                    msg: "MCP server \"\(name)\" is missing its URL", tab: "mcp",
                     fieldId: "\(card.id.uuidString):url", mcpCardId: card.id,
                 )
             }
@@ -430,7 +428,7 @@ final class SettingsStore {
             collectFields([FieldSpec("name"), FieldSpec("root")], card.fields, into: &ws)
             if ws["root"] == nil, let name = ws["name"]?.stringValue {
                 return InvalidTarget(
-                    msg: "工作区「\(name)」缺少根目录", tab: "system",
+                    msg: "Workspace \"\(name)\" is missing its root directory", tab: "system",
                     fieldId: "\(card.id.uuidString):root",
                 )
             }
@@ -458,22 +456,24 @@ final class SettingsStore {
     // MARK: Save
 
     private func applyMsg(_ result: PutConfigResult) -> String {
-        guard let applied = result.applied else { return "已保存" }
+        guard let applied = result.applied else { return "Saved" }
         var parts: [String] = []
         if let immediate = applied.immediate, !immediate.isEmpty {
-            parts.append("立即生效: " + immediate.joined(separator: "、"))
+            parts.append("effective immediately: " + immediate.joined(separator: ", "))
         }
         if let nextTurn = applied.nextTurn, !nextTurn.isEmpty {
-            parts.append("下一轮生效: " + nextTurn.joined(separator: "、"))
+            parts.append("effective next turn: " + nextTurn.joined(separator: ", "))
         }
         if let restart = applied.restart, !restart.isEmpty {
-            parts.append("重启后生效: " + restart.joined(separator: "、"))
+            parts.append("effective after restart: " + restart.joined(separator: ", "))
         }
-        return parts.isEmpty ? "已保存（配置无变化）" : "已保存 — " + parts.joined(separator: "；")
+        return parts.isEmpty ? "Saved (no changes)" : "Saved — " + parts.joined(separator: "; ")
     }
 
     func save() async {
-        if saving { return } // a repeated PUT carries the old revision and inevitably 409s
+        if saving {
+            return
+        } // a repeated PUT carries the old revision and inevitably 409s
         saving = true
         defer { saving = false }
         if let bad = firstInvalid() {
@@ -491,7 +491,7 @@ final class SettingsStore {
         var providers: [JSONValue] = []
         for card in draft.providers {
             var p: [String: JSONValue] = [:]
-            collectFields(providerBaseFields + providerAdvFields + [FieldSpec("name")], card.fields, into: &p)
+            collectFields(providerAllFields, card.fields, into: &p)
             var models: [JSONValue] = []
             for modelCard in card.models {
                 var m: [String: JSONValue] = [:]
@@ -502,18 +502,24 @@ final class SettingsStore {
                     skippedCards += 1
                 }
             }
-            if !models.isEmpty { p["models"] = .array(models) }
+            if !models.isEmpty {
+                p["models"] = .array(models)
+            }
             if p["name"] != nil {
                 providers.append(.object(p))
             } else if !p.isEmpty {
                 skippedCards += 1
             }
         }
-        if !providers.isEmpty { cfg["providers"] = .array(providers) }
+        if !providers.isEmpty {
+            cfg["providers"] = .array(providers)
+        }
         var servers: [String: JSONValue] = [:]
         for card in draft.mcpServers {
             let name = card.name.trimmingCharacters(in: .whitespaces)
-            if name.isEmpty { continue }
+            if name.isEmpty {
+                continue
+            }
             var srv: [String: JSONValue] = [:]
             collectFields(mcpCommonFields, card.common, into: &srv)
             collectFields(
@@ -521,10 +527,14 @@ final class SettingsStore {
                 card.transport == .http ? card.http : card.stdio,
                 into: &srv,
             )
-            if servers[name] != nil { skippedCards += 1 }
+            if servers[name] != nil {
+                skippedCards += 1
+            }
             servers[name] = .object(srv)
         }
-        if !servers.isEmpty { cfg["mcp_servers"] = .object(servers) }
+        if !servers.isEmpty {
+            cfg["mcp_servers"] = .object(servers)
+        }
         var wss: [JSONValue] = []
         for card in draft.workspaces {
             var ws: [String: JSONValue] = [:]
@@ -535,13 +545,15 @@ final class SettingsStore {
                 skippedCards += 1
             }
         }
-        if !wss.isEmpty { cfg["workspaces"] = .array(wss) }
+        if !wss.isEmpty {
+            cfg["workspaces"] = .array(wss)
+        }
         if skippedCards > 0 {
-            showMsg("\(skippedCards) 张卡片因缺少必填字段（名称/根目录）未被保存", isError: true)
+            showMsg("\(skippedCards) card(s) were not saved (missing required name/root)", isError: true)
         }
 
         preserveUnmanaged(&cfg, orig: origCfg)
-        showMsg("保存中…（MCP 变更需连接，可能耗时数秒）")
+        showMsg("Saving… (MCP changes need to connect; may take a few seconds)")
         do {
             let result = try await api.putConfig(revision: revision, config: .object(cfg))
             revision = result.revision ?? revision
@@ -555,13 +567,14 @@ final class SettingsStore {
                 self?.flashSave = false
             }
             await loadMcpStatus()
-            if pathExtraChanged { await loadEnvironment() }
+            if pathExtraChanged {
+                await loadEnvironment()
+            }
             onConfigSaved?()
-        } catch let LoomAPIError.http(_, code, message) where code == "config_conflict" {
-            _ = message
-            showMsg("配置文件已被外部修改 — 点击「重新加载」后再保存", isError: true)
+        } catch let LoomAPIError.http(_, code, _) where code == "config_conflict" {
+            showMsg("The config file was modified externally — Reload, then save again", isError: true)
         } catch {
-            showMsg("保存失败: \(error.localizedDescription)", isError: true)
+            showMsg("Save failed: \(error.localizedDescription)", isError: true)
         }
     }
 
@@ -571,16 +584,16 @@ final class SettingsStore {
     /// fetched on demand; failures surface on the footer status line.
     func reveal(_ ref: SecretRef) async -> String? {
         if (ref.name ?? "").isEmpty, ref.kind == "provider" || ref.kind == "mcp_header" {
-            showMsg("先填写名称并保存配置后才能查看", isError: true)
+            showMsg("Fill in the name and save the configuration before revealing", isError: true)
             return nil
         }
         do {
             return try await api.revealSecret(ref)
         } catch let LoomAPIError.http(status, _, _) where status == 404 {
-            showMsg("该位置没有已保存的密钥（先保存配置）", isError: true)
+            showMsg("No secret saved here (save the configuration first)", isError: true)
             return nil
         } catch {
-            showMsg("查看密钥失败: \(error.localizedDescription)", isError: true)
+            showMsg("Failed to reveal secret: \(error.localizedDescription)", isError: true)
             return nil
         }
     }
@@ -592,7 +605,7 @@ final class SettingsStore {
             skills = try await api.listSkills()
             skillsLoaded = true
         } catch {
-            showMsg("加载 skills 失败: \(error.localizedDescription)", isError: true)
+            showMsg("Failed to load skills: \(error.localizedDescription)", isError: true)
         }
     }
 
@@ -610,7 +623,7 @@ final class SettingsStore {
             }
             await loadSkills()
         } catch {
-            showMsg("修改 skill 状态失败: \(error.localizedDescription)", isError: true)
+            showMsg("Failed to update skill state: \(error.localizedDescription)", isError: true)
         }
     }
 
@@ -622,19 +635,19 @@ final class SettingsStore {
             await load()
             await loadSkills()
         } catch {
-            showMsg("删除 skill 失败: \(error.localizedDescription)", isError: true)
+            showMsg("Failed to delete skill: \(error.localizedDescription)", isError: true)
         }
     }
 
     func loadMcpStatus() async {
-        mcpStatus = (try? await api.listMcpServers()) ?? mcpStatus
+        mcpStatus = await (try? api.listMcpServers()) ?? mcpStatus
     }
 
     func reconnectMcpServer(_ name: String) async {
         do {
             try await api.reconnectMcpServer(name)
         } catch {
-            showMsg("重连失败: \(error.localizedDescription)", isError: true)
+            showMsg("Reconnect failed: \(error.localizedDescription)", isError: true)
         }
         await loadMcpStatus()
     }
@@ -643,7 +656,7 @@ final class SettingsStore {
         do {
             rulePacks = try await api.listRulePacks()
         } catch {
-            showMsg("加载规则包失败: \(error.localizedDescription)", isError: true)
+            showMsg("Failed to load rule packs: \(error.localizedDescription)", isError: true)
         }
     }
 
@@ -656,7 +669,7 @@ final class SettingsStore {
             }
             await loadRulePacks()
         } catch {
-            showMsg("规则包操作失败: \(error.localizedDescription)", isError: true)
+            showMsg("Rule pack operation failed: \(error.localizedDescription)", isError: true)
         }
     }
 

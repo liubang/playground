@@ -135,39 +135,48 @@ struct ApprovalCard: View {
     // MARK: Actions (.actions)
 
     private var actionsRow: some View {
-        HStack(spacing: 10) {
-            Button("Allow") { onResolve(.allow, false, nil) }
-                .buttonStyle(PrimaryButtonStyle())
-                .keyboardShortcut(.return, modifiers: .command)
+        // The rule/trust memo sits on its own line: squeezed in beside
+        // the buttons it compressed them on narrow windows.
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                // ⌥Return, NOT ⌘Return: the composer's send button owns
+                // ⌘Return window-wide, and a ⌘Return here would shadow
+                // (or be shadowed by) it whenever the card and the
+                // composer are both visible.
+                Button("Allow") { onResolve(.allow, false, nil) }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .keyboardShortcut(.return, modifiers: .option)
+                    .help("Allow (⌥Return)")
 
-            if !rulePreview.isEmpty {
-                Button("Always allow") { onResolve(.allow, true, nil) }
-                    .buttonStyle(OutlineButtonStyle())
-            }
+                if !rulePreview.isEmpty {
+                    Button("Always allow") { onResolve(.allow, true, nil) }
+                        .buttonStyle(OutlineButtonStyle())
+                }
 
-            if !trustPreview.isEmpty {
-                Button("Trust (no sandbox)") { onResolve(.allow, true, "unsandboxed") }
+                if !trustPreview.isEmpty {
+                    Button("Trust (no sandbox)") { onResolve(.allow, true, "unsandboxed") }
+                        .buttonStyle(OutlineButtonStyle(color: Theme.error))
+                }
+
+                Button("Deny") { onResolve(.deny, false, nil) }
                     .buttonStyle(OutlineButtonStyle(color: Theme.error))
-            }
+                    .keyboardShortcut(.delete, modifiers: .command)
+                    .help("Deny (⌘⌫)")
 
-            Button("Deny") { onResolve(.deny, false, nil) }
-                .buttonStyle(OutlineButtonStyle(color: Theme.error))
+                Spacer(minLength: 0)
+            }
 
             if !rulePreview.isEmpty {
                 Text("\"Always allow\" remembers \"\(rulePreview)\" as a rule for this workspace")
                     .font(.system(size: Theme.textXs))
                     .foregroundStyle(Theme.muted)
-                    .padding(.leading, 4)
                     .lineLimit(2)
             } else if !trustPreview.isEmpty {
                 Text("\"Trust\" remembers \"\(trustPreview)\" with full user permissions")
                     .font(.system(size: Theme.textXs))
                     .foregroundStyle(Theme.muted)
-                    .padding(.leading, 4)
                     .lineLimit(2)
             }
-
-            Spacer(minLength: 0)
         }
     }
 }

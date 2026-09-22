@@ -200,21 +200,20 @@ struct SSEClient: Sendable {
                     }
 
                     var parser = SSEParser()
-                    var chunk: [UInt8] = []
-                    chunk.reserveCapacity(4096)
-                    for try await byte in bytes {
+                    // Line-at-a-time: AsyncBytes.lines buffers natively,
+                    // while per-byte iteration of URLSession.AsyncBytes
+                    // is a known slow path. SSE frames are
+                    // newline-delimited — feed each line back with its
+                    // terminator so the incremental parser sees the
+                    // same byte stream (it strips the CR of CRLF, and
+                    // interior blank lines still dispatch the event).
+                    for try await line in bytes.lines {
                         try Task.checkCancellation()
-                        chunk.append(byte)
-                        // Frame boundaries are newlines; flush eagerly so
-                        // high-frequency text_delta frames surface immediately.
-                        if byte == 0x0A || chunk.count >= 4096 {
-                            for frame in parser.feed(chunk) {
-                                continuation.yield(frame)
-                            }
-                            chunk.removeAll(keepingCapacity: true)
+                        for frame in parser.feed(Array(line.utf8) + [0x0A]) {
+                            continuation.yield(frame)
                         }
                     }
-                    for frame in parser.feed(chunk) + parser.finish() {
+                    for frame in parser.finish() {
                         continuation.yield(frame)
                     }
                     continuation.finish()

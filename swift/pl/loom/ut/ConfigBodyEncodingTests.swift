@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import XCTest
-
 @testable import Loom
+import XCTest
 
 /// Regression lock for the PUT /v1/config body encoding: the server
 /// parses it with gopkg.in/yaml.v3, which rejects Foundation's \/

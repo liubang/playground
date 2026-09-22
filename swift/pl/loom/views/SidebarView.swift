@@ -15,12 +15,16 @@
 import AppKit
 import SwiftUI
 
-/// WebUI-faithful sidebar (shell.css): a bg1 column holding the
-/// WORKSPACES bar, per-workspace session groups (caret + name + count,
-/// hover reveals new/delete; the hierarchy guide appears on group
-/// hover), single-line session rows (status dot · title · relative
-/// time, hover swaps the time for actions), and a footer with the
-/// brand mark and ghost buttons.
+/// Sidebar (shell.css, tuned for native): a bg1 column holding the
+/// WORKSPACES bar, per-workspace session groups (caret + name + count
+/// badge; new/delete fade into a fixed trailing slot on hover; a faint
+/// hierarchy guide is always on; collapse state persists), compact
+/// single-line session rows (a fixed leading slot keeps every title on
+/// the same axis; the trailing timestamp swaps for actions on hover),
+/// and a footer with the Archive toggle and ghost buttons. The active
+/// row reads at a glance: bg3 fill + primary accent bar + medium
+/// title, versus hover's faint bg2 wash. ⌘-click marks rows for the
+/// batch bar (archive/delete) pinned above the footer.
 struct SidebarView: View {
     @Bindable var list: SessionListStore
     @Binding var selection: String?
@@ -29,7 +33,19 @@ struct SidebarView: View {
 
     @State private var pendingDelete: SessionSummary?
     @State private var pendingDeleteWorkspace: Workspace?
-    @State private var collapsedGroups: Set<String> = []
+    /// Collapse state, persisted as a JSON string through AppStorage —
+    /// the canonical SwiftUI path (a @State + manual UserDefaults
+    /// round-trip proved unreliable across relaunches).
+    @AppStorage("loom.collapsedGroups") private var collapsedGroupsJSON = "[]"
+    /// Batch selection (⌘-click toggles rows; the batch bar above the
+    /// footer acts on the set). Sidebar-local: `selection` stays the
+    /// single session shown in the main column.
+    @State private var markedSessions: Set<String> = []
+    @State private var pendingBatchDelete = false
+
+    private var collapsedGroups: Set<String> {
+        (try? JSONDecoder().decode(Set<String>.self, from: Data(collapsedGroupsJSON.utf8))) ?? []
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -41,14 +57,38 @@ struct SidebarView: View {
             .padding(.top, 12)
             .padding(.bottom, 12)
 
+            Hairline(axis: .horizontal)
+
             sessionTree
+
+            if !markedSessions.isEmpty {
+                batchBar
+            }
 
             footBar
         }
         .background(Theme.bg1)
+        .animation(.easeInOut(duration: 0.15), value: markedSessions.isEmpty)
+        // Prune marks for sessions that vanished (deleted elsewhere,
+        // archived out of the listing); switching views clears them.
+        .onChange(of: list.sessions.map(\.id)) { _, ids in
+            markedSessions.formIntersection(ids)
+        }
+        .onChange(of: list.showArchived) { _, _ in
+            markedSessions.removeAll()
+        }
         .confirmationDialog(
             "Delete this session? Its history is removed from the store.",
-            isPresented: .constant(pendingDelete != nil),
+            // A real binding — .constant(...) swallowed the system's
+            // own dismiss paths (Esc, the cancel role's default).
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: {
+                    if !$0 {
+                        pendingDelete = nil
+                    }
+                },
+            ),
             titleVisibility: .visible,
         ) {
             Button("Delete", role: .destructive) {
@@ -57,14 +97,33 @@ struct SidebarView: View {
                     if selection == target.id {
                         selection = nil
                     }
+                    markedSessions.remove(target.id)
                 }
                 pendingDelete = nil
             }
             Button("Cancel", role: .cancel) { pendingDelete = nil }
         }
         .confirmationDialog(
+            "Delete the selected sessions? Their history is removed from the store.",
+            isPresented: $pendingBatchDelete,
+            titleVisibility: .visible,
+        ) {
+            Button("Delete \(markedSessions.count) Sessions", role: .destructive) {
+                Task { await batchDelete() }
+                pendingBatchDelete = false
+            }
+            Button("Cancel", role: .cancel) { pendingBatchDelete = false }
+        }
+        .confirmationDialog(
             "Delete this workspace and all its sessions? The directory on disk is left untouched.",
-            isPresented: .constant(pendingDeleteWorkspace != nil),
+            isPresented: Binding(
+                get: { pendingDeleteWorkspace != nil },
+                set: {
+                    if !$0 {
+                        pendingDeleteWorkspace = nil
+                    }
+                },
+            ),
             titleVisibility: .visible,
         ) {
             Button("Delete Workspace", role: .destructive) {
@@ -89,15 +148,15 @@ struct SidebarView: View {
             Text(list.showArchived ? "ARCHIVED" : "WORKSPACES")
                 .font(.system(size: Theme.textXs, weight: .semibold))
                 .foregroundStyle(list.showArchived ? Theme.primary : Theme.muted)
-                .tracking(0.5)
+                .tracking(0.8)
             Spacer()
             if !list.showArchived {
-                Button(action: addWorkspace) {
+                GhostButton(action: addWorkspace) {
                     Image(systemName: "folder.badge.plus")
                         .font(.system(size: 11, weight: .medium))
                 }
-                .buttonStyle(GhostButtonStyle())
                 .help("Add workspace…")
+                .accessibilityLabel("Add workspace")
             }
         }
         .padding(.horizontal, 4)
@@ -124,8 +183,8 @@ struct SidebarView: View {
             }
             .foregroundStyle(Theme.fg)
             .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(Theme.bg2, in: RoundedRectangle(cornerRadius: Theme.radiusMd))
+            .padding(.vertical, 8)
+            .background(Theme.bg2, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -136,7 +195,10 @@ struct SidebarView: View {
 
     private var sessionTree: some View {
         ScrollView {
-            LazyVStack(spacing: 2) {
+            // spacing 0: the inter-group rhythm lives on WorkspaceGroup
+            // itself (8pt bottom), so collapsed runs still read as
+            // sections instead of one undifferentiated list.
+            LazyVStack(spacing: 0) {
                 if let error = list.loadError {
                     Label(error, systemImage: "exclamationmark.triangle")
                         .font(.system(size: Theme.textXs))
@@ -181,6 +243,10 @@ struct SidebarView: View {
             archivedView: list.showArchived,
             onArchiveSession: archiveOrUnarchive,
             onDeleteSession: { pendingDelete = $0 },
+            marked: markedSessions,
+            onToggleMark: toggleMark,
+            onMarkAll: { mark in markAll(list.sessions(for: workspace.id), mark) },
+            onClearMarks: { markedSessions.removeAll() },
         )
     }
 
@@ -196,6 +262,10 @@ struct SidebarView: View {
             archivedView: list.showArchived,
             onArchiveSession: archiveOrUnarchive,
             onDeleteSession: { pendingDelete = $0 },
+            marked: markedSessions,
+            onToggleMark: toggleMark,
+            onMarkAll: { mark in markAll(group.sessions, mark) },
+            onClearMarks: { markedSessions.removeAll() },
         )
     }
 
@@ -217,10 +287,57 @@ struct SidebarView: View {
     }
 
     private func toggleGroup(_ id: String) {
-        if collapsedGroups.contains(id) {
-            collapsedGroups.remove(id)
+        var groups = collapsedGroups
+        if groups.contains(id) {
+            groups.remove(id)
         } else {
-            collapsedGroups.insert(id)
+            groups.insert(id)
+        }
+        collapsedGroupsJSON = String(
+            decoding: (try? JSONEncoder().encode(groups)) ?? Data("[]".utf8),
+            as: UTF8.self,
+        )
+    }
+
+    // MARK: Batch selection
+
+    private func toggleMark(_ session: SessionSummary) {
+        if markedSessions.contains(session.id) {
+            markedSessions.remove(session.id)
+        } else {
+            markedSessions.insert(session.id)
+        }
+    }
+
+    private func markAll(_ sessions: [SessionSummary], _ mark: Bool) {
+        let ids = sessions.map(\.id)
+        if mark {
+            markedSessions.formUnion(ids)
+        } else {
+            markedSessions.subtract(ids)
+        }
+    }
+
+    private func batchArchive() async {
+        let ids = markedSessions
+        markedSessions.removeAll()
+        for id in ids {
+            if list.showArchived {
+                await list.unarchiveSession(id)
+            } else {
+                await list.archiveSession(id)
+            }
+        }
+    }
+
+    private func batchDelete() async {
+        let ids = markedSessions
+        markedSessions.removeAll()
+        if let current = selection, ids.contains(current) {
+            selection = nil
+        }
+        for id in ids {
+            await list.deleteSession(id)
         }
     }
 
@@ -251,19 +368,17 @@ struct SidebarView: View {
     // MARK: Footer (.sidebar-foot)
 
     /// .sidebar-foot: the Archive/Back view toggle on the left, the
-    /// brand mark on the right (WebUI sidebar-foot).
+    /// refresh/settings/disconnect ghost buttons on the right. (The
+    /// brand mark moved out — it was the brightest element in the
+    /// footer and did nothing; it still fronts the empty state.)
     private var footBar: some View {
         HStack(spacing: 8) {
             Button {
                 Task { await list.toggleArchivedView() }
             } label: {
                 HStack(spacing: 4) {
-                    if list.showArchived {
-                        Image(systemName: "arrow.left")
-                        Text("Back")
-                    } else {
-                        Text("Archive")
-                    }
+                    Image(systemName: list.showArchived ? "arrow.left" : "archivebox")
+                    Text(list.showArchived ? "Back" : "Archive")
                 }
                 .font(.system(size: Theme.textXs))
                 .foregroundStyle(list.showArchived ? Theme.primary : Theme.muted)
@@ -276,7 +391,7 @@ struct SidebarView: View {
 
             Spacer()
 
-            Button {
+            GhostButton(size: 13) {
                 Task {
                     await list.loadWorkspaces()
                     await list.loadSessions()
@@ -284,25 +399,23 @@ struct SidebarView: View {
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
-            .buttonStyle(GhostButtonStyle())
             .help("Refresh")
+            .accessibilityLabel("Refresh sessions")
             .disabled(list.isLoading)
 
-            Button(action: onOpenSettings) {
+            GhostButton(size: 13, action: onOpenSettings) {
                 Image(systemName: "gear")
             }
-            .buttonStyle(GhostButtonStyle())
             .help("Settings")
+            .accessibilityLabel("Settings")
 
-            Button(role: .cancel, action: onDisconnect) {
-                Image(systemName: "bolt.horizontal.circle")
+            GhostButton(size: 13, action: onDisconnect) {
+                // network.slash: this severs the server connection,
+                // it does not quit the app (power read as "quit").
+                Image(systemName: "network.slash")
             }
-            .buttonStyle(GhostButtonStyle())
             .help("Disconnect")
-
-            Text("◆ loom")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Theme.primary)
+            .accessibilityLabel("Disconnect")
         }
         .padding(.horizontal, 10)
         .padding(.top, 8)
@@ -310,6 +423,54 @@ struct SidebarView: View {
         .overlay(alignment: .top) {
             Hairline(axis: .horizontal)
         }
+    }
+
+    // MARK: Batch bar (visible while marks exist)
+
+    /// Pinned above the footer whenever sessions are marked: count +
+    /// archive/delete/clear for the batch.
+    private var batchBar: some View {
+        HStack(spacing: 10) {
+            Text("\(markedSessions.count) selected")
+                .font(.system(size: Theme.textXs, weight: .medium))
+                .foregroundStyle(Theme.fg)
+
+            Spacer()
+
+            Button(list.showArchived ? "Unarchive" : "Archive") {
+                Task { await batchArchive() }
+            }
+            .buttonStyle(BatchActionStyle())
+
+            Button("Delete") { pendingBatchDelete = true }
+                .buttonStyle(BatchActionStyle(danger: true))
+
+            GhostButton(size: 11) { markedSessions.removeAll() } label: {
+                Image(systemName: "xmark")
+            }
+            .help("Clear selection")
+            .accessibilityLabel("Clear selection")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Theme.bg2)
+        .overlay(alignment: .top) {
+            Hairline(axis: .horizontal)
+        }
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+}
+
+/// The batch bar's text actions: xs medium, primary (danger = error),
+/// dimmed on press.
+private struct BatchActionStyle: ButtonStyle {
+    var danger = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: Theme.textXs, weight: .medium))
+            .foregroundStyle(danger ? Theme.error : Theme.primary)
+            .opacity(configuration.isPressed ? 0.6 : 1)
     }
 }
 
@@ -328,6 +489,12 @@ private struct WorkspaceGroup: View {
     var archivedView = false
     let onArchiveSession: (SessionSummary) -> Void
     let onDeleteSession: (SessionSummary) -> Void
+    /// Batch selection: the marked set, ⌘-click toggler, group-level
+    /// mark-all, and the plain-click mark reset.
+    let marked: Set<String>
+    let onToggleMark: (SessionSummary) -> Void
+    let onMarkAll: (Bool) -> Void
+    let onClearMarks: () -> Void
 
     @State private var hovered = false
 
@@ -364,13 +531,17 @@ private struct WorkspaceGroup: View {
             groupHeader
 
             if !isCollapsed {
-                // .ws-sessions: indented; the hierarchy guide appears on
-                // group hover (VSCode tree indent-guide interaction).
+                // .ws-sessions: indented; an always-on faint guide
+                // (bg2, brightening to bg3 on group hover) keeps the
+                // hierarchy readable at rest.
                 HStack(spacing: 0) {
+                    // 11.5pt: centers the guide on the group header's
+                    // chevron column (chevron center = 10 tree padding
+                    // + 6 header padding + 6 half-slot).
                     Rectangle()
-                        .fill(hovered ? Theme.bg2 : Color.clear)
+                        .fill(hovered ? Theme.bg3 : Theme.bg2)
                         .frame(width: 1)
-                        .padding(.leading, 9)
+                        .padding(.leading, 11.5)
                     VStack(spacing: 1) {
                         if sessions.isEmpty {
                             Text("No sessions")
@@ -384,21 +555,36 @@ private struct WorkspaceGroup: View {
                                 SessionRow(
                                     session: item.session,
                                     isActive: selection == item.session.id,
+                                    isMarked: marked.contains(item.session.id),
                                     isChild: item.isChild,
                                     archivedView: archivedView,
                                     onArchive: { onArchiveSession(item.session) },
                                     onDelete: { onDeleteSession(item.session) },
+                                    onToggleMark: { onToggleMark(item.session) },
                                 )
                                 .contentShape(Rectangle())
-                                .onTapGesture { selection = item.session.id }
+                                .onTapGesture {
+                                    // ⌘-click toggles the batch mark
+                                    // (Finder idiom); a plain click
+                                    // selects the session and drops
+                                    // any marks.
+                                    if NSEvent.modifierFlags.contains(.command) {
+                                        onToggleMark(item.session)
+                                    } else {
+                                        selection = item.session.id
+                                        onClearMarks()
+                                    }
+                                }
                             }
                         }
                     }
                     .padding(.leading, 8)
                 }
-                .padding(.bottom, 4)
             }
         }
+        // The 8pt group rhythm: sections read as sections even when a
+        // run of groups is collapsed.
+        .padding(.bottom, 8)
         .onHover { hovered = $0 }
     }
 
@@ -418,32 +604,49 @@ private struct WorkspaceGroup: View {
                 .truncationMode(.tail)
                 .layoutPriority(1)
 
+            // Count as a capsule (macOS sidebar idiom); it steps up a
+            // shade while the header itself is hover-highlighted.
             Text("\(sessions.count)")
-                .font(.system(size: Theme.textXs))
+                .font(.system(size: Theme.textXs).monospacedDigit())
                 .foregroundStyle(Theme.muted)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .background(hovered ? Theme.bg3 : Theme.bg2, in: Capsule())
 
             Spacer(minLength: 2)
 
-            // New/delete entries only show in the active view (the
-            // archived view is read-only history).
-            if hovered, !archivedView {
-                if let onNewSession {
-                    Button(action: onNewSession) {
-                        Image(systemName: "doc.badge.plus")
-                            .font(.system(size: 11, weight: .medium))
+            // Fixed trailing slot: new/delete are always laid out and
+            // merely fade in on hover — no layout shift, no flicker
+            // under the pointer. The archived view is read-only and
+            // renders nothing here.
+            if !archivedView {
+                HStack(spacing: 2) {
+                    if let onNewSession {
+                        Button(action: onNewSession) {
+                            // Same "new session" glyph as the top
+                            // button — one action, one icon.
+                            Image(systemName: "plus")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .buttonStyle(GroupActionButtonStyle())
+                        .help("New session in \(name)")
                     }
-                    .buttonStyle(GroupActionButtonStyle())
-                    .help("New session in \(name)")
-                }
 
-                if let onDeleteWorkspace {
-                    Button(action: onDeleteWorkspace) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 10, weight: .medium))
+                    if let onDeleteWorkspace {
+                        Button(action: onDeleteWorkspace) {
+                            // xmark = remove from the list (the
+                            // directory stays); trash is reserved for
+                            // destructive deletes.
+                            Image(systemName: "xmark")
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .buttonStyle(GroupActionButtonStyle(danger: true))
+                        .help("Delete workspace")
                     }
-                    .buttonStyle(GroupActionButtonStyle(danger: true))
-                    .help("Delete workspace")
                 }
+                .opacity(hovered ? 1 : 0)
+                .allowsHitTesting(hovered)
+                .animation(.easeInOut(duration: 0.12), value: hovered)
             }
         }
         .padding(.horizontal, 6)
@@ -454,6 +657,14 @@ private struct WorkspaceGroup: View {
         )
         .contentShape(Rectangle())
         .onTapGesture(perform: onToggle)
+        // Group-level batch entries (the row context menu has the
+        // single-session toggle).
+        .contextMenu {
+            if !archivedView, !sessions.isEmpty {
+                Button("Select All Sessions") { onMarkAll(true) }
+                Button("Deselect All") { onMarkAll(false) }
+            }
+        }
         .animation(.easeInOut(duration: 0.16), value: isCollapsed)
     }
 }
@@ -484,10 +695,12 @@ private struct GroupActionButtonStyle: ButtonStyle {
 private struct SessionRow: View {
     let session: SessionSummary
     let isActive: Bool
+    var isMarked = false
     var isChild: Bool = false
     var archivedView = false
     let onArchive: () -> Void
     let onDelete: () -> Void
+    let onToggleMark: () -> Void
 
     @State private var hovered = false
 
@@ -504,71 +717,99 @@ private struct SessionRow: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            if isChild {
-                Image(systemName: "cpu")
-                    .font(.system(size: Theme.textXs))
-                    .foregroundStyle(Theme.muted)
-                    .help("Subagent session")
+            // Fixed-width leading slot: the live-status pulse, else the
+            // subagent glyph, else nothing — reserving the width keeps
+            // every row's title on the same vertical axis. (The
+            // archived glyph was dropped: in the archived view every
+            // row is archived by definition — pure noise.)
+            Group {
+                if isMarked {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.primary)
+                } else if let statusState {
+                    PulsingDot(
+                        color: statusState == "attn" ? Theme.warning : Theme.success,
+                        size: 7,
+                    )
+                } else if isChild {
+                    // Branch glyph for a subagent-derived session (cpu
+                    // read as "processor", not "child").
+                    Image(systemName: "arrow.turn.down.right")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.muted)
+                }
             }
+            .frame(width: 10)
 
-            if archivedView {
-                Image(systemName: "archivebox")
-                    .font(.system(size: 10))
-                    .foregroundStyle(Theme.muted)
-            }
-
-            if let statusState {
-                PulsingDot(
-                    color: statusState == "attn" ? Theme.warning : Theme.success,
-                    size: 7,
-                )
-            }
-
-            Text(session.title?.isEmpty == false ? session.title! : shortId)
-                .font(.system(size: Theme.textMd))
+            // Middle truncation: sibling sessions often share a long
+            // prompt prefix and only differ at the tail.
+            Text(title)
+                .font(.system(size: Theme.textMd, weight: isActive ? .medium : .regular))
                 .foregroundStyle(Theme.fg)
                 .lineLimit(1)
-                .truncationMode(.tail)
+                .truncationMode(.middle)
                 .layoutPriority(1)
 
             Spacer(minLength: 4)
 
-            // Hover swaps the timestamp for archive + delete (WebUI).
-            if hovered {
-                HStack(spacing: 2) {
-                    Button(action: onArchive) {
-                        Image(systemName: archivedView ? "arrow.uturn.left" : "archivebox")
-                            .font(.system(size: 11))
-                    }
-                    .buttonStyle(RowActionButtonStyle())
-                    .help(archivedView ? "Unarchive" : "Archive")
+            // Fixed-width trailing slot: the compact timestamp; hover
+            // swaps in archive + delete. Reserving the width keeps the
+            // title from re-truncating on hover.
+            ZStack(alignment: .trailing) {
+                if hovered {
+                    HStack(spacing: 2) {
+                        Button(action: onArchive) {
+                            Image(systemName: archivedView ? "arrow.uturn.left" : "archivebox")
+                                .font(.system(size: 11))
+                        }
+                        .buttonStyle(RowActionButtonStyle())
+                        .help(archivedView ? "Unarchive" : "Archive")
 
-                    Button(action: onDelete) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 11))
+                        Button(action: onDelete) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 11))
+                        }
+                        .buttonStyle(RowActionButtonStyle(danger: true))
+                        .help("Delete session")
                     }
-                    .buttonStyle(RowActionButtonStyle(danger: true))
-                    .help("Delete session")
+                } else {
+                    // The list is sorted by updatedAt — show the same
+                    // timestamp the ordering is based on.
+                    Text(relativeTime(session.updatedAt ?? session.createdAt))
+                        .font(.system(size: Theme.textXs).monospacedDigit())
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
                 }
-            } else {
-                Text(relativeTime(session.createdAt))
-                    .font(.system(size: Theme.textXs))
-                    .foregroundStyle(Theme.muted)
-                    .lineLimit(1)
-                    .fixedSize()
             }
+            .frame(width: 44, alignment: .trailing)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.vertical, 5)
+        // Active = bg3: the bg1→bg2 step is only ~3% luminance and
+        // the selection wash was nearly invisible on its own. Marked
+        // (batch-selected) rows get the steady bg2.
         .background(
-            (isActive || hovered) ? Theme.bg2 : Color.clear,
+            isMarked ? Theme.bg2 : (isActive ? Theme.bg3 : (hovered ? Theme.bg2.opacity(0.55) : Color.clear)),
             in: UnevenRoundedRectangle(
-                topLeadingRadius: isChild ? 0 : Theme.radiusMd,
-                bottomLeadingRadius: isChild ? 0 : Theme.radiusMd,
-                bottomTrailingRadius: Theme.radiusMd,
-                topTrailingRadius: Theme.radiusMd,
+                topLeadingRadius: isChild ? 0 : Theme.radiusSm,
+                bottomLeadingRadius: isChild ? 0 : Theme.radiusSm,
+                bottomTrailingRadius: Theme.radiusSm,
+                topTrailingRadius: Theme.radiusSm,
             ),
         )
+        // Selection accent: a primary bar on the leading edge, so the
+        // active session reads at a glance even when nothing is
+        // hovered (previously active and hover were the same wash).
+        .overlay(alignment: .leading) {
+            if isActive {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(Theme.primary)
+                    .frame(width: 3)
+                    .padding(.vertical, 3)
+                    .padding(.leading, isChild ? 2 : 0)
+            }
+        }
         // .sess-item.is-child: 12px indent + 1px left hierarchy guide.
         .overlay(alignment: .leading) {
             if isChild {
@@ -580,6 +821,17 @@ private struct SessionRow: View {
         .padding(.leading, isChild ? 12 : 0)
         .help(tooltip)
         .onHover { hovered = $0 }
+        // The hover-only action buttons are mouse-discoverable; the
+        // context menu keeps archive/delete reachable by right-click
+        // and via the keyboard — plus the batch-mark toggle, which
+        // has no keyboard discoverability otherwise.
+        .contextMenu {
+            Button(isMarked ? "Deselect" : "Select", action: onToggleMark)
+            Divider()
+            Button(archivedView ? "Unarchive" : "Archive", action: onArchive)
+            Divider()
+            Button("Delete Session", role: .destructive, action: onDelete)
+        }
     }
 
     /// shortId: the first 8 chars, like the WebUI's title fallback.
@@ -587,12 +839,19 @@ private struct SessionRow: View {
         String(session.id.prefix(8))
     }
 
+    private var title: String {
+        session.title?.isEmpty == false ? session.title! : shortId
+    }
+
     private var tooltip: String {
-        let title = session.title?.isEmpty == false ? session.title! : shortId
-        if let model = session.modelName, !model.isEmpty {
-            return "\(title) · \(model)"
+        var extras: [String] = []
+        if isChild {
+            extras.append("subagent")
         }
-        return title
+        if let model = session.modelName, !model.isEmpty {
+            extras.append(model)
+        }
+        return extras.isEmpty ? title : "\(title) · \(extras.joined(separator: " · "))"
     }
 }
 

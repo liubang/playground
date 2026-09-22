@@ -128,6 +128,11 @@ final class SessionListStore {
             let catalog = try await api.metaModels()
             models = catalog.models
             defaultModelRef = catalog.default
+            // Live stores read the default ref for their picker
+            // checkmark fallback (WebUI applySnapshotMeta).
+            for store in stores.values {
+                store.defaultModelRef = defaultModelRef
+            }
         } catch {
             // The picker simply stays on the session's current model.
         }
@@ -153,6 +158,7 @@ final class SessionListStore {
         }
         let workspaceId = sessions.first { $0.id == sessionId }?.workspaceId
         let store = SessionStore(sessionId: sessionId, workspaceId: workspaceId, api: api)
+        store.defaultModelRef = defaultModelRef
         // The store's turn activity (first prompt → derived title,
         // turn end → state) feeds the list the sidebar renders.
         store.onTurnActivity = { [weak self] in

@@ -14,15 +14,30 @@
 
 import SwiftUI
 
-// The settings panel (WebUI SettingsPanel): a modal config.yaml
-// graphical editor — header (title + config path + close), left tab
-// nav, spec-driven content, and a footer with the status line and
-// reload/close/save. Closing with unsaved edits confirms first.
+/// The settings panel (WebUI SettingsPanel): a modal config.yaml
+/// graphical editor — header (title + config path + close), left tab
+/// nav, spec-driven content, and a footer with the status line and
+/// reload/close/save. Closing with unsaved edits confirms first.
 struct SettingsView: View {
     @Bindable var store: SettingsStore
     let onClose: () -> Void
 
-    @State private var confirmDiscard = false
+    /// The destructive action waiting on the discard confirmation
+    /// (WebUI confirmDialog): closing the panel, or reloading and
+    /// throwing away the draft.
+    private enum DiscardAction: Identifiable {
+        case close
+        case reload
+
+        var id: Int {
+            switch self {
+            case .close: 0
+            case .reload: 1
+            }
+        }
+    }
+
+    @State private var pendingDiscard: DiscardAction?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -36,12 +51,29 @@ struct SettingsView: View {
         .background(Theme.bg0)
         .task { await store.load() }
         .confirmationDialog(
-            "设置中有未保存的修改，关闭后将丢失。",
-            isPresented: $confirmDiscard,
+            "You have unsaved changes. They will be lost.",
+            isPresented: Binding(
+                get: { pendingDiscard != nil },
+                set: {
+                    if !$0 {
+                        pendingDiscard = nil
+                    }
+                },
+            ),
             titleVisibility: .visible,
         ) {
-            Button("放弃修改", role: .destructive) { onClose() }
-            Button("继续编辑", role: .cancel) {}
+            Button("Discard Changes", role: .destructive) {
+                switch pendingDiscard {
+                case .close:
+                    onClose()
+                case .reload:
+                    Task { await store.load() }
+                case nil:
+                    break
+                }
+                pendingDiscard = nil
+            }
+            Button("Keep Editing", role: .cancel) { pendingDiscard = nil }
         }
     }
 
@@ -49,7 +81,7 @@ struct SettingsView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Text("设置")
+            Text("Settings")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Theme.fg)
             Text(store.cfgPath)
@@ -59,12 +91,12 @@ struct SettingsView: View {
                 .truncationMode(.middle)
                 .help(store.cfgPath)
             Spacer()
-            Button(action: attemptClose) {
+            GhostButton(action: attemptClose) {
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .medium))
             }
-            .buttonStyle(GhostButtonStyle())
-            .help("关闭 (Esc)")
+            .help("Close (Esc)")
+            .accessibilityLabel("Close settings")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -110,17 +142,17 @@ struct SettingsView: View {
             case .idle, .loading:
                 VStack(spacing: 10) {
                     ProgressView()
-                    Text("加载配置中…")
+                    Text("Loading configuration…")
                         .font(.system(size: Theme.textMd))
                         .foregroundStyle(Theme.muted)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             case let .failed(error):
                 VStack(spacing: 10) {
-                    Label("加载配置失败: \(error)", systemImage: "exclamationmark.triangle")
+                    Label("Failed to load configuration: \(error)", systemImage: "exclamationmark.triangle")
                         .font(.system(size: Theme.textMd))
                         .foregroundStyle(Theme.error)
-                    Button("重试") { Task { await store.load() } }
+                    Button("Retry") { Task { await store.load() } }
                         .buttonStyle(OutlineButtonStyle())
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -133,7 +165,7 @@ struct SettingsView: View {
 
     /// Mount on demand: only the active tab renders (WebUI
     /// mount-on-demand; the draft lives in the store and survives).
-    @ViewBuilder private var tabContent: some View {
+    private var tabContent: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -182,12 +214,18 @@ struct SettingsView: View {
                 .truncationMode(.tail)
                 .help(store.msg)
             Spacer()
-            Button("重新加载") { Task { await store.load(manual: true) } }
-                .buttonStyle(OutlineButtonStyle())
-            Button("关闭", action: attemptClose)
+            Button("Reload") {
+                if store.dirty {
+                    pendingDiscard = .reload
+                } else {
+                    Task { await store.load() }
+                }
+            }
+            .buttonStyle(OutlineButtonStyle())
+            Button("Close", action: attemptClose)
                 .buttonStyle(OutlineButtonStyle())
                 .keyboardShortcut(.cancelAction)
-            Button("保存") { Task { await store.save() } }
+            Button("Save") { Task { await store.save() } }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(store.saving)
                 .overlay(
@@ -198,7 +236,7 @@ struct SettingsView: View {
                             lineWidth: 1.5,
                         ),
                 )
-                .help(store.dirty ? "有未保存的修改" : "保存到 config.yaml")
+                .help(store.dirty ? "Unsaved changes" : "Save to config.yaml")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -206,7 +244,7 @@ struct SettingsView: View {
 
     private func attemptClose() {
         if store.dirty {
-            confirmDiscard = true
+            pendingDiscard = .close
         } else {
             onClose()
         }
@@ -274,7 +312,7 @@ struct FieldRow: View {
                                 .foregroundStyle(Theme.error)
                         }
                         if let def = spec.def {
-                            Text("默认：\(def)")
+                            Text("default: \(def)")
                                 .font(.system(size: Theme.textXs))
                                 .foregroundStyle(Theme.muted)
                         }
@@ -309,9 +347,9 @@ struct FieldRow: View {
                 .labelsHidden()
         case .tristate:
             Picker("", selection: textBinding) {
-                Text("开").tag("true")
-                Text("关").tag("false")
-                Text("自动").tag("")
+                Text("On").tag("true")
+                Text("Off").tag("false")
+                Text("Auto").tag("")
             }
             .pickerStyle(.segmented)
             .frame(width: 180)
@@ -343,7 +381,7 @@ struct FieldRow: View {
                 input(SecureField(spec.ph ?? "", text: textBinding))
             }
             if onReveal != nil {
-                Button {
+                GhostButton {
                     if revealed != nil {
                         revealed = nil
                     } else {
@@ -353,13 +391,12 @@ struct FieldRow: View {
                     Image(systemName: revealed == nil ? "eye" : "eye.slash")
                         .font(.system(size: 11))
                 }
-                .buttonStyle(GhostButtonStyle())
-                .help(revealed == nil ? "查看已保存的密钥" : "隐藏")
+                .help(revealed == nil ? "Reveal the saved secret" : "Hide")
             }
         }
     }
 
-    private func input<V: View>(_ field: V) -> some View {
+    private func input(_ field: some View) -> some View {
         field
             .textFieldStyle(.plain)
             .font(.system(size: Theme.textMd))

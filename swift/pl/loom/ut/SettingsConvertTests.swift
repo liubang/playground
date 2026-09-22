@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import XCTest
-
 @testable import Loom
+import XCTest
 
 /// Fill/collect round-trip semantics for the settings panel's spec
 /// engine (ports of the WebUI settings/convert.ts + cfgpath.ts rules):
@@ -147,7 +146,7 @@ final class SettingsConvertTests: XCTestCase {
         )
         // Secrets are not trimmed.
         XCTAssertEqual(
-            collect(FieldSpec("tracing.secret_key", type: .password), .text(" sk ") ),
+            collect(FieldSpec("tracing.secret_key", type: .password), .text(" sk ")),
             ["tracing": .object(["secret_key": .string(" sk ")])],
         )
     }
