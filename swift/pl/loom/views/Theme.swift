@@ -336,3 +336,32 @@ struct OutlineButtonStyle: ButtonStyle {
             .opacity(isEnabled ? 1 : 0.5)
     }
 }
+
+// MARK: - Window drag surfaces (custom titlebar regions)
+
+extension View {
+    /// Marks an empty-chrome region (chat header, statusbar, landing
+    /// states) as the surface that moves the window.
+    ///
+    /// The window is deliberately NOT movable by its background on
+    /// macOS 15+: that global flag claims every mouseDown as a
+    /// potential window drag, racing SwiftUI's own hit tracking — the
+    /// header's sidebar/theme toggles intermittently "clicked but did
+    /// nothing". With explicit drag surfaces, controls keep their
+    /// clicks and only the marked empty areas drag the window. macOS
+    /// 14 has no WindowDragGesture; the AppDelegate keeps the old
+    /// movable-by-background behavior there as a fallback.
+    func windowDragSurface() -> some View {
+        modifier(WindowDragSurfaceModifier())
+    }
+}
+
+private struct WindowDragSurfaceModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 15, *) {
+            content.gesture(WindowDragGesture())
+        } else {
+            content
+        }
+    }
+}

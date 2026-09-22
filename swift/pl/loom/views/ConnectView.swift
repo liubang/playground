@@ -117,6 +117,7 @@ struct ConnectView: View {
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.bg0)
+        .windowDragSurface()
     }
 
     /// .gate input: bg0 field with a muted border that swaps to the

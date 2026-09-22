@@ -161,6 +161,9 @@ private struct ChatHeaderView: View {
         }
         .padding(.horizontal, 20)
         .frame(minHeight: 44)
+        // Custom titlebar: empty header areas move the window (the
+        // buttons keep their clicks — see windowDragSurface).
+        .windowDragSurface()
     }
 
     private var shortSessionId: String {
@@ -457,6 +460,7 @@ private struct StatusBarView: View {
         .padding(.horizontal, 16)
         .frame(minHeight: 28)
         .background(Theme.bg1)
+        .windowDragSurface()
     }
 
     /// WebUI StatusBar: "12.3k in / 1.4k out · cache 82%".

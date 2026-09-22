@@ -198,6 +198,7 @@ struct RootView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.bg0)
+        .windowDragSurface()
     }
 }
 

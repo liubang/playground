@@ -97,14 +97,26 @@ extension Notification.Name {
     static let loomOpenSettings = Notification.Name("loom.openSettings")
 }
 
-/// hiddenTitleBar windows have no grab-able chrome, so make the whole
-/// background a drag region (scroll views still win drags first).
+/// Window dragging on a hiddenTitleBar window: macOS 15+ uses explicit
+/// WindowDragGesture surfaces (chat header, statusbar, landing states)
+/// instead of the movable-by-background flag — that flag claims every
+/// mouseDown as a potential window drag and raced SwiftUI's own hit
+/// tracking, which is why header buttons (sidebar/theme toggles)
+/// intermittently ignored clicks. macOS 14 has no WindowDragGesture;
+/// keep the old flag there as a fallback (and the divider's
+/// NonDraggableStrip still covers its worst symptom).
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
-        NSApp.windows.forEach { $0.isMovableByWindowBackground = true }
+        enableBackgroundDragFallback()
     }
 
     func applicationDidBecomeActive(_: Notification) {
-        NSApp.windows.forEach { $0.isMovableByWindowBackground = true }
+        enableBackgroundDragFallback()
+    }
+
+    private func enableBackgroundDragFallback() {
+        if #unavailable(macOS 15) {
+            NSApp.windows.forEach { $0.isMovableByWindowBackground = true }
+        }
     }
 }
