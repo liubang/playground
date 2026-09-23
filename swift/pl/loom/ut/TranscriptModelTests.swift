@@ -50,7 +50,9 @@ final class TranscriptModelTests: XCTestCase {
         // The result-only message folds into the call's block; only the
         // call row remains.
         XCTAssertEqual(model.rows.count, 1)
-        guard case let .tool(render) = model.rows[0].items[0] else {
+        guard case let .message(rowModel) = model.rows[0],
+              case let .tool(render) = rowModel.items[0]
+        else {
             return XCTFail("expected a tool item")
         }
         XCTAssertEqual(render.status, .success)
@@ -71,8 +73,11 @@ final class TranscriptModelTests: XCTestCase {
             assistant("a1", [.text("done"), .artifact(artifact)]),
         ], midTurn: false)
         XCTAssertEqual(model.rows.count, 1)
-        XCTAssertEqual(model.rows[0].items.count, 1)
-        guard case .markdown = model.rows[0].items[0] else {
+        guard case let .message(rowModel) = model.rows[0] else {
+            return XCTFail("expected a message row")
+        }
+        XCTAssertEqual(rowModel.items.count, 1)
+        guard case .markdown = rowModel.items[0] else {
             return XCTFail("expected only the markdown item")
         }
     }
@@ -85,7 +90,10 @@ final class TranscriptModelTests: XCTestCase {
             assistant("a2", [.text("second")]),
             user("u1", "next"),
         ], midTurn: false)
-        let actions = model.rows.filter(\.showActions).map(\.id)
+        let actions = model.rows.compactMap { row -> String? in
+            guard case let .message(model) = row, model.showActions else { return nil }
+            return model.message.id
+        }
         XCTAssertEqual(actions, ["a2"])
     }
 
@@ -94,13 +102,91 @@ final class TranscriptModelTests: XCTestCase {
             user("u1", "hi"),
             assistant("a1", [.text("answer")]),
         ]
+        func tailShowsActions(_ model: TranscriptModel) -> Bool? {
+            guard case let .message(rowModel) = model.rows.last else { return nil }
+            return rowModel.showActions
+        }
         XCTAssertEqual(
-            TranscriptModel.build(messages: messages, midTurn: false).rows.last?.showActions,
+            tailShowsActions(TranscriptModel.build(messages: messages, midTurn: false)),
             true,
         )
         XCTAssertEqual(
-            TranscriptModel.build(messages: messages, midTurn: true).rows.last?.showActions,
+            tailShowsActions(TranscriptModel.build(messages: messages, midTurn: true)),
             false,
+        )
+    }
+
+    // MARK: Turn summaries (WebUI closeTurn / .block-turn-summary)
+
+    private func summary(_ runId: String, _ paths: [String]) -> TurnSummary {
+        TurnSummary(
+            runId: runId, turn: 1, cancelled: nil, failed: nil,
+            changes: paths.map { TurnFileChange(path: $0, created: true, edits: 1, size: nil) },
+        )
+    }
+
+    private func assistant(_ id: String, _ text: String, runId: String) -> Message {
+        var message = assistant(id, [.text(text)])
+        message.metadata = ["run_id": runId]
+        return message
+    }
+
+    func testTurnSummaryMountsAtTurnBoundaryAndTail() {
+        let model = TranscriptModel.build(messages: [
+            user("u1", "q1"),
+            assistant("a1", "first", runId: "run_1"),
+            user("u2", "q2"),
+            assistant("a2", "second", runId: "run_2"),
+        ], midTurn: false, turnSummaries: [
+            summary("run_1", ["a.txt"]),
+            summary("run_2", ["b.txt"]),
+        ])
+        // run_1's card sits between its last block and the next user
+        // bubble; run_2's closes the transcript tail.
+        XCTAssertEqual(model.rows.map(\.id), ["u1", "a1", "tsm-run_1", "u2", "a2", "tsm-run_2"])
+    }
+
+    func testTurnSummarySkippedWithoutMatchingRunIdOrFiles() {
+        // No run_id metadata: no boundary, no card.
+        let untagged = TranscriptModel.build(messages: [
+            user("u1", "q1"),
+            assistant("a1", [.text("first")]),
+        ], midTurn: false, turnSummaries: [summary("run_1", ["a.txt"])])
+        XCTAssertEqual(untagged.rows.map(\.id), ["u1", "a1"])
+
+        // Empty changes: the card itself is skipped (WebUI filters
+        // change-less summaries before building the map).
+        let empty = TranscriptModel.build(messages: [
+            user("u1", "q1"),
+            assistant("a1", "first", runId: "run_1"),
+        ], midTurn: false, turnSummaries: [
+            TurnSummary(runId: "run_1", turn: 1, cancelled: nil, failed: nil, changes: []),
+        ])
+        XCTAssertEqual(empty.rows.map(\.id), ["u1", "a1"])
+    }
+
+    func testTurnSummaryEmitsOncePerRun() {
+        let model = TranscriptModel.build(messages: [
+            user("u1", "q1"),
+            assistant("a1", "first", runId: "run_1"),
+            assistant("a2", "more", runId: "run_1"),
+        ], midTurn: false, turnSummaries: [summary("run_1", ["a.txt"])])
+        XCTAssertEqual(model.rows.map(\.id), ["u1", "a1", "a2", "tsm-run_1"])
+    }
+
+    func testTurnSummariesCloseAtRunChangeWithoutUserMessage() {
+        let model = TranscriptModel.build(messages: [
+            user("u1", "q1"),
+            assistant("a1", "first", runId: "run_1"),
+            assistant("a2", "more", runId: "run_1"),
+            assistant("a3", "second", runId: "run_2"),
+        ], midTurn: false, turnSummaries: [
+            summary("run_1", ["a.txt"]),
+            summary("run_2", ["b.txt"]),
+        ])
+        XCTAssertEqual(
+            model.rows.map(\.id),
+            ["u1", "a1", "a2", "tsm-run_1", "a3", "tsm-run_2"],
         )
     }
 

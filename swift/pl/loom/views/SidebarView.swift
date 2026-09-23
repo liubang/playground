@@ -42,6 +42,7 @@ struct SidebarView: View {
     /// single session shown in the main column.
     @State private var markedSessions: Set<String> = []
     @State private var pendingBatchDelete = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var collapsedGroups: Set<String> {
         (try? JSONDecoder().decode(Set<String>.self, from: Data(collapsedGroupsJSON.utf8))) ?? []
@@ -68,7 +69,7 @@ struct SidebarView: View {
             footBar
         }
         .background(Theme.bg1)
-        .animation(.easeInOut(duration: 0.15), value: markedSessions.isEmpty)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: markedSessions.isEmpty)
         // Prune marks for sessions that vanished (deleted elsewhere,
         // archived out of the listing); switching views clears them.
         .onChange(of: list.sessions.map(\.id)) { _, ids in
@@ -93,11 +94,13 @@ struct SidebarView: View {
         ) {
             Button("Delete", role: .destructive) {
                 if let target = pendingDelete {
-                    Task { await list.deleteSession(target.id) }
-                    if selection == target.id {
-                        selection = nil
+                    Task {
+                        guard await list.deleteSession(target.id) else { return }
+                        if selection == target.id {
+                            selection = nil
+                        }
+                        markedSessions.remove(target.id)
                     }
-                    markedSessions.remove(target.id)
                 }
                 pendingDelete = nil
             }
@@ -183,8 +186,8 @@ struct SidebarView: View {
             }
             .foregroundStyle(Theme.fg)
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Theme.bg2, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
+            .padding(.vertical, 9) // .new-session: 9px 12px, radius-md
+            .background(Theme.bg2, in: RoundedRectangle(cornerRadius: Theme.radiusMd))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -204,6 +207,11 @@ struct SidebarView: View {
                         .font(.system(size: Theme.textXs))
                         .foregroundStyle(Theme.error)
                         .padding(8)
+                }
+                if list.isLoading, list.workspaces.isEmpty, list.sessions.isEmpty {
+                    ProgressView("Loading sessions…")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
                 }
                 ForEach(list.workspaces) { workspace in
                     workspaceGroup(for: workspace)
@@ -332,12 +340,12 @@ struct SidebarView: View {
 
     private func batchDelete() async {
         let ids = markedSessions
-        markedSessions.removeAll()
-        if let current = selection, ids.contains(current) {
-            selection = nil
-        }
         for id in ids {
-            await list.deleteSession(id)
+            guard await list.deleteSession(id) else { continue }
+            markedSessions.remove(id)
+            if selection == id {
+                selection = nil
+            }
         }
     }
 
@@ -497,6 +505,11 @@ private struct WorkspaceGroup: View {
     let onClearMarks: () -> Void
 
     @State private var hovered = false
+    @FocusState private var headerFocused: Bool
+    @FocusState private var focusedAction: GroupAction?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private enum GroupAction: Hashable { case newSession, deleteWorkspace }
 
     private var hasActive: Bool {
         sessions.contains { $0.id == selection }
@@ -561,20 +574,11 @@ private struct WorkspaceGroup: View {
                                     onArchive: { onArchiveSession(item.session) },
                                     onDelete: { onDeleteSession(item.session) },
                                     onToggleMark: { onToggleMark(item.session) },
-                                )
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    // ⌘-click toggles the batch mark
-                                    // (Finder idiom); a plain click
-                                    // selects the session and drops
-                                    // any marks.
-                                    if NSEvent.modifierFlags.contains(.command) {
-                                        onToggleMark(item.session)
-                                    } else {
+                                    onSelect: {
                                         selection = item.session.id
                                         onClearMarks()
-                                    }
-                                }
+                                    },
+                                )
                             }
                         }
                     }
@@ -590,6 +594,67 @@ private struct WorkspaceGroup: View {
 
     /// .ws-node: caret + name + count; hover reveals new/delete.
     private var groupHeader: some View {
+        HStack(spacing: 0) {
+            Button(action: onToggle) {
+                headerLabel
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .focused($headerFocused)
+            .accessibilityLabel("\(name), \(sessions.count) sessions")
+            .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
+            .accessibilityHint("Toggle workspace group")
+            .accessibilityAction(named: "Select all sessions") { onMarkAll(true) }
+            .accessibilityAction(named: "Deselect all sessions") { onMarkAll(false) }
+            .contextMenu {
+                if !archivedView, !sessions.isEmpty {
+                    Button("Select All Sessions") { onMarkAll(true) }
+                    Button("Deselect All") { onMarkAll(false) }
+                }
+            }
+
+            if !archivedView {
+                HStack(spacing: 2) {
+                    if let onNewSession {
+                        Button(action: onNewSession) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .buttonStyle(GroupActionButtonStyle())
+                        .help("New session in \(name)")
+                        .accessibilityLabel("New session in \(name)")
+                        .focused($focusedAction, equals: .newSession)
+                    }
+                    if let onDeleteWorkspace {
+                        Button(action: onDeleteWorkspace) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .buttonStyle(GroupActionButtonStyle(danger: true))
+                        .help("Delete workspace \(name)")
+                        .accessibilityLabel("Delete workspace \(name)")
+                        .focused($focusedAction, equals: .deleteWorkspace)
+                    }
+                }
+                .opacity(showActions ? 1 : 0)
+                .accessibilityHidden(!showActions)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.12), value: showActions)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .background(
+            hovered ? Theme.bg2 : Color.clear,
+            in: RoundedRectangle(cornerRadius: Theme.radiusMd),
+        )
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: isCollapsed)
+    }
+
+    private var showActions: Bool {
+        hovered || headerFocused || focusedAction != nil
+    }
+
+    private var headerLabel: some View {
         HStack(spacing: 6) {
             Image(systemName: "chevron.right")
                 .font(.system(size: 9, weight: .semibold))
@@ -614,58 +679,8 @@ private struct WorkspaceGroup: View {
                 .background(hovered ? Theme.bg3 : Theme.bg2, in: Capsule())
 
             Spacer(minLength: 2)
-
-            // Fixed trailing slot: new/delete are always laid out and
-            // merely fade in on hover — no layout shift, no flicker
-            // under the pointer. The archived view is read-only and
-            // renders nothing here.
-            if !archivedView {
-                HStack(spacing: 2) {
-                    if let onNewSession {
-                        Button(action: onNewSession) {
-                            // Same "new session" glyph as the top
-                            // button — one action, one icon.
-                            Image(systemName: "plus")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .buttonStyle(GroupActionButtonStyle())
-                        .help("New session in \(name)")
-                    }
-
-                    if let onDeleteWorkspace {
-                        Button(action: onDeleteWorkspace) {
-                            // xmark = remove from the list (the
-                            // directory stays); trash is reserved for
-                            // destructive deletes.
-                            Image(systemName: "xmark")
-                                .font(.system(size: 10, weight: .medium))
-                        }
-                        .buttonStyle(GroupActionButtonStyle(danger: true))
-                        .help("Delete workspace")
-                    }
-                }
-                .opacity(hovered ? 1 : 0)
-                .allowsHitTesting(hovered)
-                .animation(.easeInOut(duration: 0.12), value: hovered)
-            }
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 5)
-        .background(
-            hovered ? Theme.bg2 : Color.clear,
-            in: RoundedRectangle(cornerRadius: Theme.radiusMd),
-        )
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onToggle)
-        // Group-level batch entries (the row context menu has the
-        // single-session toggle).
-        .contextMenu {
-            if !archivedView, !sessions.isEmpty {
-                Button("Select All Sessions") { onMarkAll(true) }
-                Button("Deselect All") { onMarkAll(false) }
-            }
-        }
-        .animation(.easeInOut(duration: 0.16), value: isCollapsed)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -701,8 +716,17 @@ private struct SessionRow: View {
     let onArchive: () -> Void
     let onDelete: () -> Void
     let onToggleMark: () -> Void
+    let onSelect: () -> Void
 
     @State private var hovered = false
+    @FocusState private var rowFocused: Bool
+    @FocusState private var focusedAction: RowAction?
+
+    private enum RowAction: Hashable { case archive, delete }
+
+    private var showActions: Bool {
+        hovered || rowFocused || focusedAction != nil
+    }
 
     /// Live status dot: awaiting_approval gets an amber breathing light
     /// (needs attention the most), running/cancelling get green; other
@@ -716,6 +740,63 @@ private struct SessionRow: View {
     }
 
     var body: some View {
+        Button(action: onSelect) {
+            rowLabel
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        // A command-modified left click wins over the Button's normal
+        // activation. Handle it as a gesture instead of inspecting
+        // NSApp.currentEvent in the action: Button actions may run after
+        // the mouse event has already left the event queue. Keyboard and
+        // VoiceOver activation still go through onSelect.
+        .highPriorityGesture(
+            TapGesture().modifiers(.command).onEnded { _ in onToggleMark() },
+            including: .gesture,
+        )
+        .focused($rowFocused)
+        .accessibilityLabel(title)
+        .accessibilityValue(isMarked ? "Marked" : (isActive ? "Selected" : ""))
+        .accessibilityHint("Open session; use the actions menu to select, archive or delete")
+        .accessibilityAction(named: isMarked ? "Deselect" : "Select") { onToggleMark() }
+        .accessibilityAction(named: archivedView ? "Unarchive" : "Archive") { onArchive() }
+        .accessibilityAction(named: "Delete session") { onDelete() }
+        .contextMenu {
+            Button(isMarked ? "Deselect" : "Select", action: onToggleMark)
+            Divider()
+            Button(archivedView ? "Unarchive" : "Archive", action: onArchive)
+            Divider()
+            Button("Delete Session", role: .destructive, action: onDelete)
+        }
+        .overlay(alignment: .trailing) {
+            if showActions {
+                HStack(spacing: 2) {
+                    Button(action: onArchive) {
+                        Image(systemName: archivedView ? "arrow.uturn.left" : "archivebox")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(RowActionButtonStyle())
+                    .help(archivedView ? "Unarchive" : "Archive")
+                    .accessibilityLabel(archivedView ? "Unarchive \(title)" : "Archive \(title)")
+                    .focused($focusedAction, equals: .archive)
+
+                    Button(action: onDelete) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(RowActionButtonStyle(danger: true))
+                    .help("Delete session")
+                    .accessibilityLabel("Delete \(title)")
+                    .focused($focusedAction, equals: .delete)
+                }
+                .padding(.trailing, 10)
+            }
+        }
+        .help(tooltip)
+        .onHover { hovered = $0 }
+    }
+
+    private var rowLabel: some View {
         HStack(spacing: 6) {
             // Fixed-width leading slot: the live-status pulse, else the
             // subagent glyph, else nothing — reserving the width keeps
@@ -756,33 +837,15 @@ private struct SessionRow: View {
             // Fixed-width trailing slot: the compact timestamp; hover
             // swaps in archive + delete. Reserving the width keeps the
             // title from re-truncating on hover.
-            ZStack(alignment: .trailing) {
-                if hovered {
-                    HStack(spacing: 2) {
-                        Button(action: onArchive) {
-                            Image(systemName: archivedView ? "arrow.uturn.left" : "archivebox")
-                                .font(.system(size: 11))
-                        }
-                        .buttonStyle(RowActionButtonStyle())
-                        .help(archivedView ? "Unarchive" : "Archive")
-
-                        Button(action: onDelete) {
-                            Image(systemName: "trash")
-                                .font(.system(size: 11))
-                        }
-                        .buttonStyle(RowActionButtonStyle(danger: true))
-                        .help("Delete session")
-                    }
-                } else {
-                    // The list is sorted by updatedAt — show the same
-                    // timestamp the ordering is based on.
-                    Text(relativeTime(session.updatedAt ?? session.createdAt))
-                        .font(.system(size: Theme.textXs).monospacedDigit())
-                        .foregroundStyle(Theme.muted)
-                        .lineLimit(1)
-                }
-            }
-            .frame(width: 44, alignment: .trailing)
+            // The list is sorted by updatedAt — show the same
+            // timestamp the ordering is based on.
+            Text(relativeTime(session.updatedAt ?? session.createdAt))
+                .font(.system(size: Theme.textXs).monospacedDigit())
+                .foregroundStyle(Theme.muted)
+                .lineLimit(1)
+                .opacity(showActions ? 0 : 1)
+                .accessibilityHidden(true)
+                .frame(width: 44, alignment: .trailing)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
@@ -819,19 +882,6 @@ private struct SessionRow: View {
             }
         }
         .padding(.leading, isChild ? 12 : 0)
-        .help(tooltip)
-        .onHover { hovered = $0 }
-        // The hover-only action buttons are mouse-discoverable; the
-        // context menu keeps archive/delete reachable by right-click
-        // and via the keyboard — plus the batch-mark toggle, which
-        // has no keyboard discoverability otherwise.
-        .contextMenu {
-            Button(isMarked ? "Deselect" : "Select", action: onToggleMark)
-            Divider()
-            Button(archivedView ? "Unarchive" : "Archive", action: onArchive)
-            Divider()
-            Button("Delete Session", role: .destructive, action: onDelete)
-        }
     }
 
     /// shortId: the first 8 chars, like the WebUI's title fallback.

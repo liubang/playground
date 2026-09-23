@@ -31,6 +31,7 @@ struct RootView: View {
     @State private var settingsStore: SettingsStore?
     @AppStorage("loom.sidebarCollapsed") private var sidebarCollapsed = false
     @AppStorage("loom.sidebarWidth") private var sidebarWidth = Theme.sidebarWidth
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
@@ -38,6 +39,9 @@ struct RootView: View {
             case let .connected(version):
                 if let list = appState.sessionList {
                     shell(list: list, version: version)
+                } else {
+                    ProgressView("Loading sessions…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             default:
                 ConnectView(appState: appState)
@@ -49,7 +53,7 @@ struct RootView: View {
                 ImageLightboxView(image: image) { lightboxImage = nil }
             }
         }
-        .animation(.easeInOut(duration: 0.15), value: lightboxImage != nil)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: lightboxImage != nil)
         .onReceive(NotificationCenter.default.publisher(for: .loomZoomImage)) { note in
             lightboxImage = note.object as? NSImage
         }
@@ -68,12 +72,19 @@ struct RootView: View {
             moveSelection(by: 1)
         }
         .task { appState.start() }
+        // Warm the hljs JSContext up front: it is created lazily on
+        // the first highlighted code block, where parsing+evaluating
+        // the highlight.js bundle would stall the main thread in the
+        // middle of a transcript render.
+        .task {
+            _ = SyntaxHighlighter.attributed(" ", language: "swift")
+        }
         // WebUI parity: regaining focus refreshes the session list —
         // other clients may have advanced sessions in the meantime.
         .onReceive(NotificationCenter.default.publisher(
             for: NSApplication.didBecomeActiveNotification,
         )) { _ in
-            guard let list = appState.sessionList else { return }
+            guard let list = appState.sessionList, !list.isLoading else { return }
             Task { await list.loadSessions() }
         }
         .onReceive(NotificationCenter.default.publisher(
@@ -158,8 +169,8 @@ struct RootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .animation(.easeInOut(duration: 0.18), value: sidebarCollapsed)
-        .animation(.easeInOut(duration: 0.18), value: selection == nil)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: sidebarCollapsed)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: selection == nil)
         .sheet(isPresented: Binding(
             get: { settingsStore != nil },
             set: {

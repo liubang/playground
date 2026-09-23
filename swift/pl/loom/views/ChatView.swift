@@ -15,12 +15,10 @@
 import AppKit
 import SwiftUI
 
-/// Session detail, laid out after the WebUI's shell: a 44px app-header
-/// (bg0, hairline bottom border: sidebar toggle · theme toggle ·
-/// workspace breadcrumb · session id · share · read-only/state badges ·
-/// spacer · connection badge), the transcript with edge scroll-fades,
-/// pending cards, the composer, and a 28px statusbar (bg1, hairline top
-/// border) closing the pane.
+/// Session detail: a 44px toolbar in the mac idiom (chrome controls
+/// left, centered document title, status + actions right), the
+/// transcript with edge scroll-fades, pending cards, the composer,
+/// and a 28px statusbar (bg1, hairline top border) closing the pane.
 ///
 /// Each pane is its own View reading only the SessionStore properties
 /// it needs: @Observable tracks access per property, so a streaming
@@ -51,6 +49,10 @@ struct ChatView: View {
                 archived: archived,
                 sidebarCollapsed: $sidebarCollapsed,
             )
+            // The share toast draws outside the header's bounds —
+            // lift the header above the transcript siblings so the
+            // toast never slides under scrolling content.
+            .zIndex(1)
             Hairline(axis: .horizontal)
             NoticeBannerView(store: store)
             TranscriptView(store: store)
@@ -63,8 +65,16 @@ struct ChatView: View {
     }
 }
 
-// MARK: - Header (.app-header)
+// MARK: - Header (mac toolbar idiom)
 
+/// The window's title bar, redesigned after the macOS toolbar idiom:
+/// window-chrome controls on the left (sidebar, theme), a centered
+/// document title (session title over a quiet `workspace · id`
+/// subtitle), and status + actions on the right. Status is quiet by
+/// default — a pill appears only when something needs attention (a
+/// busy turn, a read-only session, a dropped connection); an idle,
+/// live session shows none. Supersedes the WebUI's badge row, whose
+/// always-on "idle"/"live" labels were pure noise.
 private struct ChatHeaderView: View {
     let store: SessionStore
     var sessionTitle: String?
@@ -77,19 +87,40 @@ private struct ChatHeaderView: View {
     @AppStorage("loom.theme") private var theme = "dark"
     @State private var copiedSessionId = false
     @State private var copiedShareLink = false
+    /// True while the share-link request is in flight (the share
+    /// button spins and is disabled against double-minting).
+    @State private var sharing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 12) {
-            // hdr-sidebar (bars)
+        HStack(spacing: 0) {
+            leadingCluster
+            Spacer(minLength: 12)
+            titleCluster
+            Spacer(minLength: 12)
+            trailingCluster
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 44)
+        // Custom titlebar: empty header areas move the window (the
+        // buttons keep their clicks — see windowDragSurface).
+        .windowDragSurface()
+    }
+
+    // MARK: Leading (window chrome)
+
+    private var leadingCluster: some View {
+        HStack(spacing: 2) {
             GhostButton {
                 sidebarCollapsed.toggle()
             } label: {
-                Image(systemName: "line.3.horizontal")
+                // sidebar.left: the platform's sidebar-toggle glyph
+                // (was line.3.horizontal — a web hamburger).
+                Image(systemName: "sidebar.left")
             }
-            .help("Toggle sidebar")
+            .help("Toggle sidebar (⌃⌘S)")
             .accessibilityLabel("Toggle sidebar")
 
-            // hdr-theme (circle-half-stroke)
             GhostButton {
                 theme = theme == "dark" ? "light" : "dark"
             } label: {
@@ -97,58 +128,97 @@ private struct ChatHeaderView: View {
             }
             .help(theme == "dark" ? "Switch to light mode" : "Switch to dark mode")
             .accessibilityLabel("Toggle color theme")
+        }
+    }
 
-            // hdr-ws: owning workspace breadcrumb — click to locate it
-            // in the sidebar (WebUI revealCurrentWorkspace).
-            if let workspaceName, !workspaceName.isEmpty {
-                Button {
-                    sidebarCollapsed = false
-                } label: {
-                    Text(workspaceName)
-                        .font(.system(size: Theme.textSm))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(maxWidth: 240, alignment: .leading)
-                }
-                .buttonStyle(GhostTextButtonStyle())
-                .help("Locate the owning workspace")
-            }
+    // MARK: Center (document title)
 
-            // hdr-session: the derived title once the conversation has
-            // started (short id before that); click to copy the full id.
-            // NOTE: no .fixedSize() here — it proposes infinite width to
-            // the Text, which defeats lineLimit+truncation and lets a
-            // long title blow up the header.
+    /// macOS document-title idiom: the session title in semibold over
+    /// a quiet `workspace · id` subtitle. Clicking the title copies
+    /// the full session id (the WebUI's hdr-session); clicking the
+    /// workspace name reveals it in the sidebar.
+    private var titleCluster: some View {
+        VStack(spacing: 1) {
             Button(action: copySessionId) {
                 Text(displayTitle)
-                    .font(hasTitle ? .system(size: Theme.textSm) : Theme.monoSm)
-                    .foregroundStyle(copiedSessionId ? Theme.success : Theme.muted)
+                    .font(.system(size: Theme.textMd, weight: .semibold))
+                    .foregroundStyle(copiedSessionId ? Theme.success : (hasTitle ? Theme.fg : Theme.muted))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .frame(maxWidth: 280, alignment: .leading)
             }
-            .buttonStyle(GhostTextButtonStyle())
+            .buttonStyle(.plain)
             .help(copiedSessionId ? "Copied" : "\(store.sessionId) — click to copy the session ID")
             .accessibilityLabel("Session \(displayTitle)")
 
-            // hdr-share: mint + copy a public read-only link
-            // (Shift+click revokes, like the WebUI).
-            GhostButton(action: shareSession) {
-                Image(systemName: copiedShareLink ? "check" : "arrowshape.turn.up.right")
-                    .foregroundStyle(copiedShareLink ? Theme.success : Theme.muted)
+            HStack(spacing: 4) {
+                if let workspaceName, !workspaceName.isEmpty {
+                    Button {
+                        sidebarCollapsed = false
+                    } label: {
+                        Text(workspaceName)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Locate the owning workspace")
+                    Text("·")
+                }
+                Text(shortSessionId)
+                    .font(Theme.monoXs)
             }
-            .help(copiedShareLink
+            .font(.system(size: Theme.textXs))
+            .foregroundStyle(Theme.muted)
+            .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: Trailing (status pills + actions)
+
+    /// Status first, then the two actions. Pills render only for
+    /// exceptional states: an idle turn and a live connection are the
+    /// default and stay invisible.
+    private var trailingCluster: some View {
+        HStack(spacing: 6) {
+            if store.readOnly {
+                StatusPill(color: Theme.warning, text: "sub-agent · read-only")
+                    .help(store.readOnlyTitle)
+            } else if archived {
+                StatusPill(color: Theme.warning, text: "archived · read-only")
+            }
+            statePill
+            connectionPill
+
+            GhostButton(action: shareSession) {
+                // Minting the link is a network round-trip: spin
+                // while it is in flight (the button is disabled, so
+                // no double-mint), swap to a check on success — and
+                // the toast below says WHAT happened, so the icon
+                // swap never reads as "the button vanished".
+                if sharing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 15, height: 15)
+                } else {
+                    Image(systemName: copiedShareLink ? "check" : "square.and.arrow.up")
+                        .foregroundStyle(copiedShareLink ? Theme.success : Theme.muted)
+                }
+            }
+            .disabled(sharing)
+            .help(sharing
+                ? "Creating share link…"
+                : copiedShareLink
                 ? "Share link copied — anyone with the link can view this session read-only"
                 : "Share session: copy a public read-only link (Shift+click to unshare)")
             .accessibilityLabel("Share session")
-
-            readOnlyBadge
-
-            stateBadge
-
-            Spacer()
-
-            connectionBadge
+            .overlay(alignment: .bottomTrailing) {
+                if copiedShareLink {
+                    ShareCopiedToast()
+                        .offset(y: 34)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: copiedShareLink)
 
             GhostButton {
                 Task { await store.requestCompaction() }
@@ -159,11 +229,6 @@ private struct ChatHeaderView: View {
             .accessibilityLabel("Compact context")
             .disabled(store.isBusy)
         }
-        .padding(.horizontal, 20)
-        .frame(minHeight: 44)
-        // Custom titlebar: empty header areas move the window (the
-        // buttons keep their clicks — see windowDragSurface).
-        .windowDragSurface()
     }
 
     private var shortSessionId: String {
@@ -174,8 +239,10 @@ private struct ChatHeaderView: View {
         sessionTitle?.isEmpty == false
     }
 
+    /// The derived title once the conversation has started; a quiet
+    /// placeholder before that (the full id sits in the subtitle).
     private var displayTitle: String {
-        hasTitle ? sessionTitle! : shortSessionId
+        hasTitle ? sessionTitle! : "New Session"
     }
 
     private func copySessionId() {
@@ -193,8 +260,14 @@ private struct ChatHeaderView: View {
             confirmUnshare()
             return
         }
+        guard !sharing else { return }
+        sharing = true
         Task {
-            guard let link = await store.shareLink() else { return }
+            let link = await store.shareLink()
+            sharing = false
+            // Failure: shareLink() already set store.lastError, which
+            // the notice banner surfaces — no local flash needed.
+            guard let link else { return }
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(link, forType: .string)
             copiedShareLink = true
@@ -215,49 +288,90 @@ private struct ChatHeaderView: View {
         }
     }
 
-    /// hdr-readonly (badge is-awaiting): sub-agent sessions (snapshot
-    /// .delegated) and archived sessions are read-only.
-    @ViewBuilder private var readOnlyBadge: some View {
-        if store.readOnly {
-            BadgeView(tone: .awaiting, text: "sub-agent · read-only")
-                .help(store.readOnlyTitle)
-        } else if archived {
-            BadgeView(tone: .awaiting, text: "archived · read-only")
-        }
-    }
-
-    @ViewBuilder private var stateBadge: some View {
+    /// Turn state, exceptional cases only (idle is the default and
+    /// stays quiet). Pulses while the turn is in flight.
+    @ViewBuilder private var statePill: some View {
         switch store.state {
         case .running:
-            BadgeView(tone: .running, text: "running")
+            StatusPill(color: Theme.success, text: "running", pulses: true)
         case .awaitingApproval:
-            BadgeView(tone: .awaiting, text: "awaiting approval")
+            StatusPill(color: Theme.warning, text: "awaiting approval", pulses: true)
         case .cancelling:
-            BadgeView(tone: .awaiting, text: "cancelling")
+            StatusPill(color: Theme.warning, text: "cancelling", pulses: true)
         case .booting:
-            BadgeView(tone: .plain, text: "booting")
+            StatusPill(color: Theme.muted, text: "booting")
         case .closed:
-            BadgeView(tone: .plain, text: "closed")
+            StatusPill(color: Theme.muted, text: "closed")
         case .fatal:
-            BadgeView(tone: .dead, text: "fatal")
-        case .idle:
-            BadgeView(tone: .plain, text: "idle")
+            StatusPill(color: Theme.error, text: "fatal")
         default:
             EmptyView()
         }
     }
 
-    @ViewBuilder private var connectionBadge: some View {
+    /// Connection state, exceptional cases only (live is the default
+    /// and stays quiet — the WebUI's always-on "live" badge was
+    /// noise).
+    @ViewBuilder private var connectionPill: some View {
         switch store.connection {
         case .live:
-            BadgeView(tone: .live, text: "live")
+            EmptyView()
         case .connecting:
-            BadgeView(tone: .reconnecting, text: "connecting…")
+            StatusPill(color: Theme.warning, text: "connecting…", pulses: true)
         case let .offline(attempt):
-            BadgeView(tone: .reconnecting, text: "reconnecting (\(attempt))")
+            StatusPill(color: Theme.warning, text: "reconnecting (\(attempt))", pulses: true)
         case .drained:
-            BadgeView(tone: .dead, text: "server shut down")
+            StatusPill(color: Theme.error, text: "server shut down")
         }
+    }
+}
+
+/// Transient confirmation floating under the share button after the
+/// link lands on the clipboard: explicit text feedback so the 2.5s
+/// check-icon dwell never reads as "the button disappeared".
+private struct ShareCopiedToast: View {
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 9, weight: .bold))
+            Text("Link copied")
+        }
+        .font(.system(size: Theme.textXs, weight: .medium))
+        .foregroundStyle(Theme.success)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Theme.bg1, in: Capsule())
+        .overlay(Capsule().strokeBorder(Theme.bg2, lineWidth: 1))
+        .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
+        .fixedSize()
+    }
+}
+
+/// The header's status capsule: a small dot + 11pt label on a 12%
+/// tint of the same hue. Replaces the WebUI's bare dot-and-text
+/// badges — the tint gives a state a stable, scannable shape, and
+/// because pills only appear for exceptional states, one showing up
+/// actually means something.
+private struct StatusPill: View {
+    let color: Color
+    let text: String
+    var pulses = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if pulses {
+                PulsingDot(color: color, size: 6)
+            } else {
+                Circle().fill(color).frame(width: 6, height: 6)
+            }
+            Text(text)
+        }
+        .font(.system(size: Theme.textXs, weight: .medium))
+        .foregroundStyle(color)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(color.opacity(0.12), in: Capsule())
+        .fixedSize()
     }
 }
 
@@ -267,39 +381,45 @@ private struct NoticeBannerView: View {
     let store: SessionStore
 
     var body: some View {
-        if !store.notices.isEmpty || store.lastError != nil {
-            HStack(spacing: 10) {
-                Image(systemName: "exclamationmark.triangle")
-                Text(store.lastError ?? store.notices.joined(separator: " · "))
-                    .lineLimit(2)
-                Button {
-                    if store.lastError != nil {
-                        Task { await store.refresh() }
-                    } else {
-                        store.dismissNotices()
-                    }
-                } label: {
-                    Text(store.lastError != nil ? "Retry now" : "Dismiss")
-                        .font(.system(size: Theme.textXs))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 2)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.radiusSm)
-                                .strokeBorder(Theme.highlight, lineWidth: 1),
-                        )
+        VStack(spacing: 0) {
+            if let error = store.lastError {
+                banner(error, icon: "exclamationmark.triangle", actionTitle: "Retry now") {
+                    Task { await store.refresh() }
                 }
+            }
+            if !store.notices.isEmpty {
+                banner(store.notices.joined(separator: " · "), icon: "info.circle", actionTitle: "Dismiss") {
+                    store.dismissNotices()
+                }
+            }
+        }
+    }
+
+    private func banner(
+        _ message: String, icon: String, actionTitle: String, action: @escaping () -> Void,
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+            Text(message)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button(actionTitle, action: action)
+                .font(.system(size: Theme.textXs))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 2)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radiusSm)
+                        .strokeBorder(Theme.highlight, lineWidth: 1),
+                )
                 .buttonStyle(.plain)
-                .foregroundStyle(Theme.highlight)
-            }
-            .font(.system(size: Theme.textSm))
-            .foregroundStyle(Theme.highlight)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(Theme.highlight.opacity(0.14))
-            .overlay(alignment: .bottom) {
-                Hairline(axis: .horizontal)
-            }
+        }
+        .font(.system(size: Theme.textSm))
+        .foregroundStyle(Theme.highlight)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Theme.highlight.opacity(0.14))
+        .overlay(alignment: .bottom) {
+            Hairline(axis: .horizontal)
         }
     }
 }
@@ -312,6 +432,7 @@ private struct TranscriptView: View {
     /// Tracks the bottom sentinel's visibility: scrolling up reveals
     /// the jump-to-bottom button; returning hides it.
     @State private var awayFromBottom = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let bottomId = "transcript-bottom"
 
@@ -328,10 +449,31 @@ private struct TranscriptView: View {
                 // exact heights, so the bottom anchor tracks reliably.
                 VStack(alignment: .leading, spacing: 20) {
                     ForEach(store.transcript.rows) { row in
-                        MessageRow(
-                            row: row,
-                            artifactLoader: { await store.artifactData($0) },
-                        )
+                        switch row {
+                        case let .message(model):
+                            MessageRow(
+                                row: model,
+                                artifactLoader: { await store.artifactData($0) },
+                            )
+                            // Rows are values precomputed at turn
+                            // boundaries: a streaming frame only mutates
+                            // the draft, so unchanged rows skip body
+                            // evaluation entirely.
+                            .equatable()
+                        case let .turnSummary(summary):
+                            // .block-turn-summary: the turn's closing
+                            // review card. Revert stays hidden for
+                            // read-only (sub-agent) sessions.
+                            TurnSummaryView(
+                                summary: summary,
+                                statsLoader: { runId, force in
+                                    await store.runStats(runId: runId, forceRefresh: force)
+                                },
+                                reverter: store.readOnly
+                                    ? nil
+                                    : { runId in await store.revertRun(runId: runId) },
+                            )
+                        }
                     }
 
                     if let draft = store.draft, !draft.isEmpty {
@@ -360,13 +502,23 @@ private struct TranscriptView: View {
             // streams — but releases as soon as the user scrolls up, unlike
             // a scrollToBottom-on-every-change loop.
             .defaultScrollAnchor(.bottom)
+            .overlay {
+                if !store.hasLoaded, store.transcript.rows.isEmpty, store.lastError == nil {
+                    ProgressView("Loading conversation…")
+                        .accessibilityLabel("Loading conversation")
+                }
+            }
             .overlay(alignment: .top) { scrollFade(fromTop: true) }
             .overlay(alignment: .bottom) { scrollFade(fromTop: false) }
             .overlay(alignment: .bottomTrailing) {
                 if awayFromBottom {
                     Button {
-                        withAnimation(.easeOut(duration: 0.2)) {
+                        if reduceMotion {
                             proxy.scrollTo(Self.bottomId, anchor: .bottom)
+                        } else {
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                proxy.scrollTo(Self.bottomId, anchor: .bottom)
+                            }
                         }
                     } label: {
                         Image(systemName: "arrow.down")
@@ -385,7 +537,7 @@ private struct TranscriptView: View {
                     .transition(.opacity)
                 }
             }
-            .animation(.easeInOut(duration: 0.15), value: awayFromBottom)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: awayFromBottom)
         }
     }
 
@@ -453,7 +605,9 @@ private struct StatusBarView: View {
                 Text("\(formatTokenCount(occupancy)) / \(formatTokenCount(Int64(window))) context")
                     .help("Context occupancy")
             }
-            Text(version)
+            if !version.isEmpty {
+                Text(version)
+            }
         }
         .font(.system(size: Theme.textXs))
         .foregroundStyle(Theme.muted)
@@ -472,25 +626,5 @@ private struct StatusBarView: View {
             text += " · cache \(pct)%"
         }
         return text
-    }
-}
-
-// MARK: - Ghost text button
-
-/// The text-label variant of the ghost header button (breadcrumb,
-/// session title): the GhostButton chrome without the icon sizing.
-private struct GhostTextButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(isEnabled ? Theme.muted : Theme.muted.opacity(0.4))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
-            .background(
-                configuration.isPressed ? Theme.bg2 : Color.clear,
-                in: RoundedRectangle(cornerRadius: Theme.radiusSm),
-            )
-            .contentShape(Rectangle())
     }
 }

@@ -213,7 +213,7 @@ if (embeddedToken) {
 - **运行时开关即写穿**：`POST /v1/share/endpoint`（bearer-gated，挂在 loopback UI server）把 `share.enabled` 写进配置文件并热应用——监听经 hot-apply reconcile 即时起停，运行时状态与配置永不发散（与 `skills.disabled` 同一模式）；`GET` 返回当前状态；
 - **最小暴露面**：分享监听挂 share-only mux——仅 `/share/{token}` 页 + 静态资源 + `/v1/shared/*` 只读 API，不注册任何 bearer 路由（未知路径 404 而非 401）；
 - **绝对链接**：mint 时 `handleShareSession` 读取 ShareManager 的**实时** public base（unspecified 地址自动探测出口网卡 IP）；监听未开则响应不含 `url`，前端退回 `location.origin + path`。webview 的 origin 是 loopback 随机端口，因此分享按钮在监听未开时就地弹确认并一键开启；
-- **`loom serve` 不挂 ShareManager**：`/v1/share/endpoint` 返回 404，前端隐藏开关——`--listen` 本身即显式监听，分享链接经 origin 拼接天然可用。
+- **`loom serve` 同样挂 ShareManager**：Swift 桌面壳以 `--listen 127.0.0.1:7680` 拉起 serve，origin 恒为 loopback，「链接经 origin 拼接天然可用」的假设不成立——因此 serve 也按同一模式接线（share-only factory + 启动时按 `share.enabled` Apply + 热应用 reconcile），监听未开时响应不含 `url`、前端退回 origin 拼接（仅本机可用）。
 
 | `share.listen` 值 | TCP 监听 | 分享可达性 |
 |---|---|---|

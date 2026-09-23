@@ -31,11 +31,17 @@ struct ComposerView: View {
     var models: [MetaModels.ModelInfo] = []
 
     @FocusState private var focused: Bool
+    @ScaledMetric(relativeTo: .body) private var inputFontSize: CGFloat = 14
+    /// The ctx-gauge's instant hover card (system tooltips lag 1–2s,
+    /// which reads as "no hover feedback at all").
+    @State private var gaugeCardShown = false
+    @State private var gaugeHoverTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 8) {
             if let plan = store.plan, !plan.items.isEmpty {
                 PlanPanel(plan: plan)
+                    .id("\(store.planIdentity.uuidString):\(([plan.title ?? ""] + plan.items.map(\.goal)).joined(separator: "\u{1f}"))")
                     .frame(maxWidth: Theme.contentWidth)
                     .frame(maxWidth: .infinity)
             }
@@ -59,14 +65,16 @@ struct ComposerView: View {
                 // hint aligned. Caret takes the foreground color (WebUI
                 // inherits --fg), not the system accent blue.
                 TextEditor(text: $store.composerDraft)
-                    .font(.system(size: 14))
+                    .font(.system(size: inputFontSize))
                     // Match the app's text color: the default .primary is pure white
                     // in dark mode and read as bold-ish next to the beige transcript.
                     .foregroundStyle(Theme.fg)
-                    .lineSpacing(3)
+                    .lineSpacing(5) // ≈ the WebUI's 1.55 line-height at 14px
                     .scrollContentBackground(.hidden)
                     .tint(Theme.fg)
                     .focused($focused)
+                    .accessibilityLabel("Message")
+                    .accessibilityHint("Return to send, Shift-Return for a new line")
                     .frame(minHeight: 44, maxHeight: 200)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 9)
@@ -78,8 +86,8 @@ struct ComposerView: View {
                             // the hint sit on the same first line.
                             Text(placeholder)
                                 .foregroundStyle(Theme.muted.opacity(0.7))
-                                .font(.system(size: 14))
-                                .lineSpacing(3)
+                                .font(.system(size: inputFontSize))
+                                .lineSpacing(5)
                                 .padding(.leading, 5)
                                 .padding(.top, 6)
                                 .allowsHitTesting(false)
@@ -107,7 +115,28 @@ struct ComposerView: View {
 
                     if let fraction = store.occupancyFraction {
                         CtxGauge(fraction: fraction, hotThreshold: store.compactTriggerRatio)
-                            .help(gaugeTooltip)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Context occupancy")
+                            .accessibilityValue(gaugeFacts.joined(separator: ". "))
+                            .onHover { inside in
+                                // Hysteresis both ways: a passing
+                                // cursor must not flash the card,
+                                // and a jittery edge-crossing must
+                                // not flap it.
+                                gaugeHoverTask?.cancel()
+                                gaugeHoverTask = Task { @MainActor in
+                                    try? await Task.sleep(
+                                        for: .milliseconds(inside ? 150 : 200),
+                                    )
+                                    guard !Task.isCancelled else { return }
+                                    gaugeCardShown = inside
+                                }
+                            }
+                            .onDisappear {
+                                gaugeHoverTask?.cancel()
+                                gaugeHoverTask = nil
+                                gaugeCardShown = false
+                            }
                     }
 
                     sendStopButton
@@ -154,6 +183,27 @@ struct ComposerView: View {
         .padding(.top, 12)
         .padding(.bottom, 14)
         .background(Theme.bg0)
+        .overlay(alignment: .bottomTrailing) {
+            if gaugeCardShown, store.occupancyFraction != nil {
+                // Anchored to the COMPOSER's bottom-trailing, not the
+                // 32px gauge: it floats just above the composer bar,
+                // trailing edge aligned with the gauge's (20 outer +
+                // 6 box + 10 bar padding + 32 send + 8 spacing), and
+                // stays entirely inside the composer's own bounds —
+                // so the statusbar (a later sibling painting an
+                // opaque bg over whatever sticks out) can never clip
+                // it. Purely presentational: hit-testing off, or the
+                // insert transition sweeping the gauge would retrigger
+                // the hover and flap.
+                GaugeDetailCard(facts: gaugeFacts)
+                    .accessibilityHidden(true)
+                    .padding(.trailing, 76)
+                    .padding(.bottom, 46)
+                    .allowsHitTesting(false)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+        }
+        .animation(.easeInOut(duration: 0.12), value: gaugeCardShown)
         .onAppear { focused = true }
     }
 
@@ -173,6 +223,7 @@ struct ComposerView: View {
             .buttonStyle(.plain)
             .keyboardShortcut(.escape, modifiers: [])
             .help("Stop the current turn (⎋)")
+            .accessibilityLabel("Stop the current turn")
         } else {
             Button(action: send) {
                 Image(systemName: "arrow.up")
@@ -186,6 +237,7 @@ struct ComposerView: View {
             .disabled(!canSend)
             .keyboardShortcut(.return, modifiers: .command)
             .help("Send (Return — ⇧Return for a newline)")
+            .accessibilityLabel("Send message")
         }
     }
 
@@ -203,15 +255,17 @@ struct ComposerView: View {
 
     @ViewBuilder private var modelPicker: some View {
         if !models.isEmpty {
+            let nameCounts = Dictionary(models.map { ($0.name, 1) }, uniquingKeysWith: +)
             PickerCapsule(
                 label: store.modelName.isEmpty ? "model" : store.modelName,
                 isActive: false,
                 help: "Switch model",
             ) { close in
-                ForEach(models, id: \.name) { model in
+                ForEach(models, id: \.self) { model in
                     let ref = "\(model.provider)/\(model.name)"
                     PickerMenuItem(
-                        title: model.name,
+                        title: nameCounts[model.name, default: 0] > 1
+                            ? "\(model.provider) / \(model.name)" : model.name,
                         detail: model.contextWindow.map { formatContextWindow($0) },
                         isCurrent: ref == currentModelRef,
                     ) {
@@ -278,7 +332,8 @@ struct ComposerView: View {
     }
 
     private var canSend: Bool {
-        !store.composerDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !store.sendingPrompt
+            && !store.composerDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && store.state != .closed
             && store.state != .booting
     }
@@ -293,47 +348,30 @@ struct ComposerView: View {
     }
 
     private func send() {
-        let prompt = store.composerDraft
-        store.composerDraft = ""
-        Task {
-            // A failed send puts the text back (unless the user has
-            // already typed something new) — the message is never lost.
-            if await !store.sendPrompt(prompt), store.composerDraft.isEmpty {
-                store.composerDraft = prompt
-            }
-        }
+        guard canSend else { return }
+        store.sendComposerDraft()
     }
 
     private func formatContextWindow(_ value: Int) -> String {
-        if value >= 1_000_000 {
-            return "\(value / 1_000_000)M"
-        }
-        if value >= 1000 {
-            return "\(value / 1000)k"
-        }
-        return "\(value)"
+        formatTokenCount(Int64(value))
     }
 
-    /// WebUI CtxGauge title: "Context 19.4k / 1.0M (2%) · Compacts at
-    /// ~800k · Compact target 400k · Nominal window 1.0M".
-    private var gaugeTooltip: String {
+    /// The gauge hover card's facts: occupancy, then the one fact
+    /// that drives decisions — when compaction hits. (Compact target
+    /// and nominal window are server internals; a four-row card was
+    /// taller than the composer is deep and read as clutter.)
+    private var gaugeFacts: [String] {
         guard let occupancy = store.occupancy,
               let effective = store.contextWindow, effective > 0
-        else { return "Context occupancy" }
+        else { return ["Context occupancy"] }
         let pct = Int((Double(occupancy) / Double(effective)) * 100)
-        var parts = [
+        var facts = [
             "Context \(formatTokenCount(occupancy)) / \(formatTokenCount(Int64(effective))) (\(pct)%)",
         ]
         if let trigger = store.window?.compactTrigger, trigger > 0 {
-            parts.append("Compacts at ~\(formatTokenCount(Int64(trigger)))")
+            facts.append("Compacts at ~\(formatTokenCount(Int64(trigger)))")
         }
-        if let target = store.window?.compactTarget, target > 0 {
-            parts.append("Compact target \(formatTokenCount(Int64(target)))")
-        }
-        if let nominal = store.window?.nominal, nominal > 0, nominal != effective {
-            parts.append("Nominal window \(formatTokenCount(Int64(nominal)))")
-        }
-        return parts.joined(separator: " · ")
+        return facts
     }
 }
 
@@ -435,6 +473,7 @@ private struct PickerCapsule<Content: View>: View {
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
         .help(help)
+        .accessibilityLabel(help)
         .popover(isPresented: $open, arrowEdge: .top) {
             VStack(alignment: .leading, spacing: 2) {
                 content { open = false }
@@ -510,6 +549,7 @@ struct PlanPanel: View {
     @State private var retiring = false
     @State private var retired = false
     @State private var hovered = false
+    @State private var retirementTask: Task<Void, Never>?
 
     private var items: [PlanPayload.Item] {
         plan.items
@@ -528,38 +568,40 @@ struct PlanPanel: View {
     }
 
     var body: some View {
-        if !retired {
-            VStack(spacing: 0) {
-                summaryRow
+        Group {
+            if !retired {
+                VStack(spacing: 0) {
+                    summaryRow
 
-                if expanded {
-                    itemList
+                    if expanded {
+                        itemList
+                    }
                 }
-            }
-            .font(.system(size: Theme.textSm))
-            // Expand stitching (plan.css [open]): summary and list join
-            // into ONE card — bg1 fill, 1px bg2 border, shadow-sm;
-            // collapsed there is no card chrome at all.
-            .background(
-                expanded ? Theme.bg1 : Color.clear,
-                in: RoundedRectangle(cornerRadius: 10),
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(expanded ? Theme.bg2 : Color.clear, lineWidth: 1),
-            )
-            .shadow(
-                color: expanded ? .black.opacity(0.25) : .clear,
-                radius: 4, y: 2,
-            )
-            .opacity(retiring ? 0 : 1)
-            .offset(y: retiring ? 3 : 0)
-            .animation(.easeInOut(duration: 0.3), value: retiring)
-            .onChange(of: allDone) { _, nowAllDone in
-                guard nowAllDone, !expanded else { return }
-                Task { await retire() }
+                .font(.system(size: Theme.textSm))
+                // Expand stitching (plan.css [open]): summary and list join
+                // into ONE card — bg1 fill, 1px bg2 border, shadow-sm;
+                // collapsed there is no card chrome at all.
+                .background(
+                    expanded ? Theme.bg1 : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 10),
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(expanded ? Theme.bg2 : Color.clear, lineWidth: 1),
+                )
+                .shadow(
+                    color: expanded ? .black.opacity(0.25) : .clear,
+                    radius: 4, y: 2,
+                )
+                .opacity(retiring ? 0 : 1)
+                .offset(y: retiring ? 3 : 0)
+                .animation(.easeInOut(duration: 0.3), value: retiring)
             }
         }
+        .onAppear { updateRetirement() }
+        .onChange(of: allDone) { _, _ in updateRetirement() }
+        .onChange(of: expanded) { _, _ in updateRetirement() }
+        .onDisappear { retirementTask?.cancel() }
     }
 
     /// summary: ▸ title · ●●●○ 3/7 · In progress: goal
@@ -698,25 +740,70 @@ struct PlanPanel: View {
         .frame(width: 18, height: 18)
     }
 
-    private func retire() async {
-        try? await Task.sleep(for: .milliseconds(2200))
-        guard allDone, !expanded else { return }
-        retiring = true
-        try? await Task.sleep(for: .milliseconds(360))
-        retired = true
+    private func updateRetirement() {
+        retirementTask?.cancel()
+        retirementTask = nil
+        guard allDone, !expanded else {
+            retiring = false
+            retired = false
+            return
+        }
+        guard !retired else { return }
+        retirementTask = Task {
+            do {
+                try await Task.sleep(for: .milliseconds(2200))
+                guard !Task.isCancelled else { return }
+                retiring = true
+                try await Task.sleep(for: .milliseconds(360))
+                guard !Task.isCancelled else { return }
+                retired = true
+            } catch {
+                // A changed or expanded plan cancels the pending retirement.
+            }
+        }
     }
 }
 
 // MARK: - Context gauge (.ctx-gauge)
 
-/// The WebUI's ctx-gauge: a quiet 32px ring that warms to amber at 60%
-/// and to red at the compact-trigger ratio (≈80%); the percentage
-/// appears inside the ring from the warm level up.
+/// Instant hover card for the ctx-gauge: occupancy plus the
+/// compaction schedule, without the system tooltip's 1–2s delay.
+private struct GaugeDetailCard: View {
+    let facts: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(Array(facts.enumerated()), id: \.offset) { index, fact in
+                Text(fact)
+                    .font(.system(size: Theme.textXs, weight: index == 0 ? .semibold : .regular))
+                    .foregroundStyle(index == 0 ? Theme.fg : Theme.muted)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusMd))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMd)
+                .strokeBorder(Theme.bg2, lineWidth: 1),
+        )
+        .shadow(color: .black.opacity(0.3), radius: 8, y: 2)
+        .fixedSize()
+    }
+}
+
+/// The WebUI's ctx-gauge: a quiet 32px ring that starts showing the
+/// percentage inside at 40%, warms to amber at 60% and to red at the
+/// compact-trigger ratio (≈80%).
 struct CtxGauge: View {
     let fraction: Double
     var hotThreshold = 0.8
 
     private static let warm = 0.6
+    /// Below this the arc alone carries the value (a number would be
+    /// noise at 2% anyway); from here up the percentage rides inside
+    /// the ring — earlier than the amber level, so the exact figure
+    /// is on screen before compaction looms.
+    private static let showPercent = 0.4
 
     var body: some View {
         ZStack {
@@ -732,7 +819,7 @@ struct CtxGauge: View {
                     .rotationEffect(.degrees(-90))
                     .animation(.easeOut(duration: 0.35), value: fraction)
             }
-            if fraction >= Self.warm {
+            if fraction >= Self.showPercent {
                 Text("\(Int(fraction * 100))%")
                     .font(.system(size: 9.5, weight: .semibold))
                     .foregroundStyle(ringColor)

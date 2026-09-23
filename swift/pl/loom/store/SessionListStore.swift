@@ -183,14 +183,17 @@ final class SessionListStore {
         }
     }
 
-    func deleteSession(_ sessionId: String) async {
+    @discardableResult
+    func deleteSession(_ sessionId: String) async -> Bool {
         do {
+            try await api.deleteSession(sessionId)
             stores[sessionId]?.stop()
             stores[sessionId] = nil
-            try await api.deleteSession(sessionId)
             await loadSessions()
+            return true
         } catch {
             loadError = error.localizedDescription
+            return false
         }
     }
 

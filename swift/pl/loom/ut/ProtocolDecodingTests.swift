@@ -15,6 +15,97 @@
 @testable import Loom
 import XCTest
 
+private final class PromptURLProtocol: URLProtocol {
+    nonisolated(unsafe) static var requests: [URLRequest] = []
+    nonisolated(unsafe) static var reply: ((URLRequest) throws -> (Int, Data))?
+
+    override class func canInit(with _: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        let result: (Int, Data)
+        do {
+            if request.url?.path.hasSuffix("/prompts") == true {
+                Self.requests.append(request)
+            }
+            result = try Self.reply!(request)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+            return
+        }
+        let response = HTTPURLResponse(url: request.url!, statusCode: result.0,
+                                       httpVersion: nil, headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: result.1)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+/// Deterministic delayed responses exercise MainActor reentrancy in run stats.
+private final class RunStatsURLProtocol: URLProtocol {
+    private static let lock = NSLock()
+    private nonisolated(unsafe) static var pending: [RunStatsURLProtocol] = []
+    private nonisolated(unsafe) static var paths: [String] = []
+    nonisolated(unsafe) static var requested: (() -> Void)?
+
+    static func reset() {
+        lock.lock()
+        pending.removeAll()
+        paths.removeAll()
+        requested = nil
+        lock.unlock()
+    }
+
+    static func count(_ suffix: String) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return paths.filter { $0.hasSuffix(suffix) }.count
+    }
+
+    static func complete(_ suffix: String, occurrence: Int = 0, body: String, status: Int = 200) {
+        lock.lock()
+        let matches = pending.filter { $0.request.url?.path.hasSuffix(suffix) == true }
+        let target = matches[occurrence]
+        pending.removeAll { $0 === target }
+        lock.unlock()
+        target.respond(body, status: status)
+    }
+
+    override class func canInit(with _: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        Self.lock.lock()
+        Self.paths.append(request.url!.path)
+        Self.pending.append(self)
+        let callback = Self.requested
+        Self.lock.unlock()
+        callback?()
+    }
+
+    private func respond(_ body: String, status: Int) {
+        let response = HTTPURLResponse(url: request.url!, statusCode: status,
+                                       httpVersion: nil, headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
 /// Golden-wire decoding tests: the JSON literals below mirror what
 /// `loom serve` actually puts on the wire (internal/runtimeevent/event.go,
 /// internal/app/controller.go).
@@ -102,6 +193,17 @@ final class ProtocolDecodingTests: XCTestCase {
             return XCTFail("expected text part")
         }
         XCTAssertEqual(text, "hi")
+    }
+
+    func testSnapshotCursorAfterTerminalEventAndRejectedReplay() {
+        // The server can project idle before publishing turn.finished (seq 42),
+        // so a subsequent snapshot with watermark 41 must not replay it.
+        XCTAssertEqual(SessionStore.reconciledCursor(previous: 42, snapshot: 41, reset: false), 42)
+        XCTAssertEqual(SessionStore.reconciledCursor(previous: 42, snapshot: 45, reset: false), 45)
+        // server.resync rejects the old cursor; the next attach must use the
+        // snapshot's watermark, including after a new instance resets sequences.
+        XCTAssertEqual(SessionStore.reconciledCursor(previous: 42, snapshot: 41, reset: true), 41)
+        XCTAssertEqual(SessionStore.reconciledCursor(previous: 42, snapshot: 3, reset: true), 3)
     }
 
     func testContentPartToolCallAndResult() throws {
@@ -212,6 +314,212 @@ final class ProtocolDecodingTests: XCTestCase {
         """)
         XCTAssertEqual(body.error.code, "binding_mismatch")
         XCTAssertEqual(body.error.state, "running")
+    }
+
+    @MainActor
+    func testPromptRetryReusesKeyAndPreservesDraft() async throws {
+        let protocolMock = PromptURLProtocol.self
+        protocolMock.requests = []
+        protocolMock.reply = { request in
+            if request.url?.path.hasSuffix("/snapshot") == true {
+                return (200, Data(#"{"state":"idle","session_id":"s","model_name":"test","turn_count":0,"event_seq":0}"#.utf8))
+            }
+            if protocolMock.requests.count == 1 {
+                throw URLError(.networkConnectionLost) // submission may have succeeded
+            }
+            return (200, Data(#"{"turn":1,"deduplicated":true}"#.utf8))
+        }
+        defer { protocolMock.reply = nil; protocolMock.requests = [] }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [protocolMock]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let store = try SessionStore(sessionId: "s", api: APIClient(
+            baseURL: XCTUnwrap(URL(string: "http://localhost")), token: "", session: session,
+        ))
+        await store.refresh()
+        store.composerDraft = "  hello  "
+        let first = try XCTUnwrap(store.sendComposerDraft())
+        XCTAssertNil(store.sendComposerDraft()) // in-flight submission is claimed synchronously
+        store.composerDraft = "new draft"
+        await first.value
+        XCTAssertEqual(store.composerDraft, "  hello  \nnew draft")
+        XCTAssertFalse(store.sendingPrompt)
+
+        store.composerDraft = "  hello  "
+        let retry = try XCTUnwrap(store.sendComposerDraft())
+        await retry.value
+        XCTAssertEqual(protocolMock.requests.count, 2)
+        XCTAssertEqual(protocolMock.requests[0].value(forHTTPHeaderField: "Idempotency-Key"),
+                       protocolMock.requests[1].value(forHTTPHeaderField: "Idempotency-Key"))
+        XCTAssertEqual(store.composerDraft, "")
+
+        // After an acknowledged retry, an identical message is a NEW intent.
+        store.composerDraft = "hello"
+        await store.sendComposerDraft()?.value
+        XCTAssertEqual(protocolMock.requests.count, 3)
+        XCTAssertNotEqual(protocolMock.requests[1].value(forHTTPHeaderField: "Idempotency-Key"),
+                          protocolMock.requests[2].value(forHTTPHeaderField: "Idempotency-Key"))
+    }
+
+    @MainActor
+    func testRejectedPromptGetsNewKey() async throws {
+        let protocolMock = PromptURLProtocol.self
+        protocolMock.requests = []
+        protocolMock.reply = { request in
+            if request.url?.path.hasSuffix("/snapshot") == true {
+                return (200, Data(#"{"state":"idle","session_id":"s","model_name":"test","turn_count":0,"event_seq":0}"#.utf8))
+            }
+            if protocolMock.requests.count == 1 {
+                return (400, Data(#"{"error":{"code":"invalid_input","message":"rejected"}}"#.utf8))
+            }
+            return (202, Data(#"{"turn":1}"#.utf8))
+        }
+        defer { protocolMock.reply = nil; protocolMock.requests = [] }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [protocolMock]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let store = try SessionStore(sessionId: "s", api: APIClient(
+            baseURL: XCTUnwrap(URL(string: "http://localhost")), token: "", session: session,
+        ))
+        await store.refresh()
+        store.composerDraft = "hello"
+        await store.sendComposerDraft()?.value
+        XCTAssertEqual(store.composerDraft, "hello")
+        await store.sendComposerDraft()?.value
+        XCTAssertEqual(protocolMock.requests.count, 2)
+        XCTAssertNotEqual(protocolMock.requests[0].value(forHTTPHeaderField: "Idempotency-Key"),
+                          protocolMock.requests[1].value(forHTTPHeaderField: "Idempotency-Key"))
+    }
+
+    @MainActor
+    func testSnapshotRebuildUsesFinalStateMessagesAndSummaries() async throws {
+        let protocolMock = PromptURLProtocol.self
+        protocolMock.requests = []
+        protocolMock.reply = { _ in
+            (200, Data(#"{"state":"idle","session_id":"s","model_name":"test","turn_count":1,"event_seq":1,"messages":[{"id":"a1","role":"assistant","status":"final","metadata":{"run_id":"a"},"parts":[{"kind":"text","text":"done"}]}],"turn_summaries":[{"run_id":"a","turn":1,"changes":[{"path":"f.txt","created":true,"edits":1}]}]}"#.utf8))
+        }
+        defer { protocolMock.reply = nil; protocolMock.requests = [] }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [protocolMock]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let store = try SessionStore(sessionId: "s", api: APIClient(
+            baseURL: XCTUnwrap(URL(string: "http://localhost")), token: "", session: session,
+        ))
+        await store.refresh()
+        XCTAssertEqual(store.transcript.rows.map(\.id), ["a1", "tsm-a"])
+        await store.refresh()
+        XCTAssertEqual(store.transcript.rows.map(\.id), ["a1", "tsm-a"])
+    }
+
+    @MainActor
+    private func runStatsStore() throws -> (SessionStore, URLSession) {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RunStatsURLProtocol.self]
+        let session = URLSession(configuration: config)
+        return try (SessionStore(sessionId: "s", api: APIClient(
+            baseURL: XCTUnwrap(URL(string: "http://localhost")), token: "", session: session,
+        )), session)
+    }
+
+    @MainActor
+    private func waitForRunRequest(_ action: () -> Void) async {
+        let arrived = expectation(description: "run stats HTTP request")
+        RunStatsURLProtocol.requested = { arrived.fulfill() }
+        action()
+        await fulfillment(of: [arrived], timeout: 5)
+        RunStatsURLProtocol.requested = nil
+    }
+
+    @MainActor
+    func testEmptyAndFailedRunStatsAreCachedUntilForcedRefresh() async throws {
+        RunStatsURLProtocol.reset()
+        defer { RunStatsURLProtocol.reset() }
+        let (store, session) = try runStatsStore()
+        defer { session.invalidateAndCancel() }
+        let path = "/runs/empty/changes"
+        var first: Task<[RunFileStat]?, Never>!
+        await waitForRunRequest { first = Task { await store.runStats(runId: "empty") } }
+        RunStatsURLProtocol.complete(path, body: #"{"entries":[]}"#)
+        let firstResult = await first.value
+        let cachedEmpty = await store.runStats(runId: "empty")
+        XCTAssertNil(firstResult)
+        XCTAssertNil(cachedEmpty)
+        XCTAssertEqual(RunStatsURLProtocol.count(path), 1)
+
+        var forced: Task<[RunFileStat]?, Never>!
+        await waitForRunRequest { forced = Task { await store.runStats(runId: "empty", forceRefresh: true) } }
+        RunStatsURLProtocol.complete(path, body: #"{"error":{"code":"not_found","message":"missing"}}"#, status: 404)
+        let forcedResult = await forced.value
+        let cachedFailure = await store.runStats(runId: "empty")
+        XCTAssertNil(forcedResult)
+        XCTAssertNil(cachedFailure)
+        XCTAssertEqual(RunStatsURLProtocol.count(path), 2)
+    }
+
+    @MainActor
+    func testRevertInvalidatesAllRunStatsAndRejectsOlderResponses() async throws {
+        RunStatsURLProtocol.reset()
+        defer { RunStatsURLProtocol.reset() }
+        let (store, session) = try runStatsStore()
+        defer { session.invalidateAndCancel() }
+        let a = "/runs/a/changes"
+        let b = "/runs/b/changes"
+        let old = #"{"entries":[{"path":"old","before_size":1,"after_size":2,"added":1,"removed":0}]}"#
+        let fresh = #"{"entries":[{"path":"fresh","before_size":1,"after_size":1,"added":0,"removed":0}]}"#
+        var cached: Task<[RunFileStat]?, Never>!
+        await waitForRunRequest { cached = Task { await store.runStats(runId: "b") } }
+        RunStatsURLProtocol.complete(b, body: old)
+        let cachedResult = await cached.value
+        XCTAssertEqual(cachedResult?.first?.path, "old")
+
+        var stale: Task<[RunFileStat]?, Never>!
+        await waitForRunRequest { stale = Task { await store.runStats(runId: "a") } }
+        var revert: Task<(note: String, warn: Bool), Never>!
+        await waitForRunRequest { revert = Task { await store.revertRun(runId: "a") } }
+        RunStatsURLProtocol.complete("/runs/a/revert", body: #"{"restored":[],"deleted":[]}"#)
+        let reverted = await revert.value
+        XCTAssertFalse(reverted.warn)
+        RunStatsURLProtocol.complete(a, body: old)
+        let staleResult = await stale.value
+        XCTAssertNil(staleResult)
+
+        var refetched: Task<[RunFileStat]?, Never>!
+        await waitForRunRequest { refetched = Task { await store.runStats(runId: "b") } }
+        RunStatsURLProtocol.complete(b, body: fresh)
+        let refetchedResult = await refetched.value
+        XCTAssertEqual(refetchedResult?.first?.path, "fresh")
+        var after: Task<[RunFileStat]?, Never>!
+        await waitForRunRequest { after = Task { await store.runStats(runId: "a") } }
+        RunStatsURLProtocol.complete(a, body: fresh)
+        let afterResult = await after.value
+        XCTAssertEqual(afterResult?.first?.path, "fresh")
+        XCTAssertEqual(RunStatsURLProtocol.count(b), 2)
+        XCTAssertEqual(RunStatsURLProtocol.count(a), 2)
+    }
+
+    @MainActor
+    func testOlderForcedRefreshCannotOverwriteNewerRunStats() async throws {
+        RunStatsURLProtocol.reset()
+        defer { RunStatsURLProtocol.reset() }
+        let (store, session) = try runStatsStore()
+        defer { session.invalidateAndCancel() }
+        let path = "/runs/a/changes"
+        var older: Task<[RunFileStat]?, Never>!
+        await waitForRunRequest { older = Task { await store.runStats(runId: "a") } }
+        var newer: Task<[RunFileStat]?, Never>!
+        await waitForRunRequest { newer = Task { await store.runStats(runId: "a", forceRefresh: true) } }
+        RunStatsURLProtocol.complete(path, occurrence: 1, body: #"{"entries":[{"path":"new","before_size":0,"after_size":1,"added":1,"removed":0}]}"#)
+        let newerResult = await newer.value
+        XCTAssertEqual(newerResult?.first?.path, "new")
+        RunStatsURLProtocol.complete(path, body: #"{"entries":[{"path":"old","before_size":0,"after_size":1,"added":1,"removed":0}]}"#)
+        let olderResult = await older.value
+        let cachedResult = await store.runStats(runId: "a")
+        XCTAssertNil(olderResult)
+        XCTAssertEqual(cachedResult?.first?.path, "new")
+        XCTAssertEqual(RunStatsURLProtocol.count(path), 2)
     }
 
     func testRFC3339WithAndWithoutFraction() {

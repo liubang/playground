@@ -20,6 +20,65 @@ import XCTest
 /// blank = key not written; every field type maps config values to raw
 /// control state and back.
 final class SettingsConvertTests: XCTestCase {
+    // MARK: Save validation
+
+    private func provider(_ name: String) -> ProviderDraft {
+        ProviderDraft(
+            fields: ["name": .text(name), "base_url": .text("https://example.com")],
+            models: [CardDraft(fields: ["name": .text("model")])],
+        )
+    }
+
+    func testDuplicateProviderNameBlocksSaveAndLocatesSecondCard() async {
+        let store = await MainActor.run { () -> SettingsStore in
+            let store = SettingsStore(api: APIClient(baseURL: URL(string: "http://127.0.0.1:1")!, token: "test"))
+            store.draft.providers = [provider("same"), provider(" same ")]
+            store.markDirty()
+            return store
+        }
+        await store.save()
+        await MainActor.run {
+            let duplicate = store.draft.providers[1]
+            XCTAssertTrue(store.msgIsError)
+            XCTAssertTrue(store.msg.contains("same") && store.msg.contains("重复"))
+            XCTAssertEqual(store.activeTab, "providers")
+            XCTAssertEqual(store.openProviderId, duplicate.id)
+            XCTAssertEqual(store.invalid, "\(duplicate.id.uuidString):name")
+            XCTAssertTrue(store.dirty)
+            XCTAssertFalse(store.saving)
+            XCTAssertEqual(store.revision, "")
+            store.patchProvider(duplicate.id, key: "name", .text("other"))
+            XCTAssertNil(store.firstInvalid())
+        }
+    }
+
+    func testDuplicateMcpNameBlocksSaveAndLocatesSecondCard() async {
+        let store = await MainActor.run { () -> SettingsStore in
+            let store = SettingsStore(api: APIClient(baseURL: URL(string: "http://127.0.0.1:1")!, token: "test"))
+            store.draft.providers = [provider("provider")]
+            store.draft.mcpServers = [
+                McpDraft(name: "server", stdio: ["command": .text("first")]),
+                McpDraft(name: " server ", stdio: ["command": .text("second")]),
+            ]
+            store.markDirty()
+            return store
+        }
+        await store.save()
+        await MainActor.run {
+            let duplicate = store.draft.mcpServers[1]
+            XCTAssertTrue(store.msgIsError)
+            XCTAssertTrue(store.msg.contains("server") && store.msg.contains("重复"))
+            XCTAssertEqual(store.activeTab, "mcp")
+            XCTAssertEqual(store.openMcpId, duplicate.id)
+            XCTAssertEqual(store.invalid, "\(duplicate.id.uuidString):name")
+            XCTAssertTrue(store.dirty)
+            XCTAssertFalse(store.saving)
+            XCTAssertEqual(store.revision, "")
+            store.patchMcpName(duplicate.id, "other")
+            XCTAssertNil(store.firstInvalid())
+        }
+    }
+
     // MARK: cfgpath
 
     func testGetSetPath() {

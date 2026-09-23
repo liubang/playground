@@ -115,9 +115,22 @@ func runServe(ctx context.Context, args []string) error {
 
 	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
 	app.WireSubagentObserver(bootstrap.SubagentFactory, broker, bootstrap.Store, logger)
-	service := app.NewSessionService(proc, registry, broker, app.SessionServiceConfig{
-		Logger:   logger,
-		RulesDir: resolved.Storage.RulesDir(),
+
+	// The LAN share listener is built lazily by the manager (runtime
+	// toggle / config hot-apply); the factory dereferences service only
+	// when a listener actually starts, which is always after the
+	// assignment below.
+	var service *app.SessionService
+	shareMgr := server.NewShareManager(func(listen string) (*server.Server, error) {
+		return server.New(server.Config{
+			Listen: listen, Token: token, Version: version.Version,
+			Service: service, Logger: logger, ShareOnly: true,
+		})
+	}, logger)
+	service = app.NewSessionService(proc, registry, broker, app.SessionServiceConfig{
+		Logger:        logger,
+		ShareEndpoint: shareMgr,
+		RulesDir:      resolved.Storage.RulesDir(),
 		// The WebUI surfaces approval requests in-page; a desktop banner on
 		// top of that is noise for the user staring at the browser.
 		DisableApprovalNotify: true,
@@ -131,12 +144,19 @@ func runServe(ctx context.Context, args []string) error {
 		Service:     service,
 		Logger:      logger,
 		ConfigPath:  config.ConfigPathForHome(resolved.Storage.BaseDir),
+		Share:       shareMgr,
 	})
 	if err != nil {
 		return err
 	}
 	if err := srv.Listen(); err != nil {
 		return err
+	}
+
+	// Start the LAN share listener when the config opted in; a bind
+	// failure degrades to "sharing off" — the settings toggle retries.
+	if err := shareMgr.Apply(resolved.Share.Enabled, resolved.Share.Listen); err != nil {
+		logger.Warn("share endpoint start failed", "error", err)
 	}
 
 	if generated {
@@ -163,6 +183,7 @@ func runServe(ctx context.Context, args []string) error {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Warn("http shutdown", "error", err)
 	}
+	shareMgr.Close()
 	if err := service.Shutdown(shutdownCtx); err != nil {
 		logger.Warn("service shutdown", "error", err)
 	}

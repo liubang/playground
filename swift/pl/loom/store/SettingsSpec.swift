@@ -115,10 +115,10 @@ struct TabSpec: Sendable {
 // MARK: - Spec data (spec.ts)
 
 let skillsEmptyHint =
-    "No skills found. Directory conventions: workspace .loom/skills/ and .agents/skills/; user-level ~/.loom/skills/ and ~/.agents/skills/."
+    "未发现任何技能。目录约定：工作区 .loom/skills/ 和 .agents/skills/；用户级 ~/.loom/skills/ 和 ~/.agents/skills/。"
 
 private let effortOptions: [(String, String)] = [
-    ("", "default (provider decides)"),
+    ("", "默认（由 provider 决定）"),
     ("off", "off"),
     ("low", "low"),
     ("medium", "medium"),
@@ -126,51 +126,51 @@ private let effortOptions: [(String, String)] = [
 ]
 
 let reasoningFields: [FieldSpec] = [
-    FieldSpec("reasoning.effort", label: "Reasoning Effort", type: .select, options: effortOptions),
+    FieldSpec("reasoning.effort", label: "推理强度", type: .select, options: effortOptions),
     FieldSpec(
-        "reasoning.budget_tokens", label: "Reasoning Token Budget",
-        hint: "explicit budget; takes precedence over the effort-derived value when > 0",
+        "reasoning.budget_tokens", label: "推理 Token 预算",
+        hint: "显式预算；大于 0 时优先于按推理强度推导的值",
         ph: "0", type: .number,
     ),
 ]
 
 let providerBaseFields: [FieldSpec] = [
     FieldSpec(
-        "type", label: "Protocol Type", type: .select,
-        options: [("openai", "openai (compatible gateway)"), ("anthropic", "anthropic (Messages API)")],
+        "type", label: "协议类型", type: .select,
+        options: [("openai", "openai（兼容网关）"), ("anthropic", "anthropic（Messages API）")],
     ),
     FieldSpec("base_url", label: "Base URL", ph: "https://api.deepseek.com/v1", required: true),
     FieldSpec(
-        "api_key", label: "API Key",
-        hint: "mutually exclusive with \"Key Env Var\"; setting both is an error",
+        "api_key", label: "API 密钥",
+        hint: "与「密钥环境变量」互斥，同时设置会报错",
         type: .password,
     ),
     FieldSpec(
-        "api_key_env", label: "Key Env Var",
-        hint: "stores the variable name only; the value is read at startup",
-        ph: "e.g. DEEPSEEK_API_KEY",
+        "api_key_env", label: "密钥环境变量",
+        hint: "只保存变量名，变量值在启动时读取",
+        ph: "如 DEEPSEEK_API_KEY",
     ),
-    FieldSpec("default_model", label: "Default Model", ph: "empty = first model in the catalog"),
+    FieldSpec("default_model", label: "默认模型", ph: "留空 = 目录中的第一个模型"),
 ]
 
 let providerAdvFields: [FieldSpec] = [
     FieldSpec(
         "wire_api", label: "Wire API", type: .select,
         options: [
-            ("", "default"),
+            ("", "默认"),
             ("chat", "chat (Chat Completions)"),
             ("responses", "responses (Responses API)"),
-            ("messages", "messages (anthropic only)"),
+            ("messages", "messages（仅 anthropic）"),
         ],
     ),
     FieldSpec(
-        "auth_type", label: "Auth Header",
-        hint: "anthropic type only",
+        "auth_type", label: "认证头",
+        hint: "仅 anthropic 类型",
         type: .select,
-        options: [("", "default (x-api-key)"), ("x-api-key", "x-api-key"), ("bearer", "bearer")],
+        options: [("", "默认（x-api-key）"), ("x-api-key", "x-api-key"), ("bearer", "bearer")],
     ),
-    FieldSpec("api_version", label: "API Version Header", hint: "anthropic type only; empty = built-in version"),
-    FieldSpec("max_retries", label: "Max Retries", ph: "2", type: .number),
+    FieldSpec("api_version", label: "API 版本头", hint: "仅 anthropic 类型；留空 = 内置版本"),
+    FieldSpec("max_retries", label: "最大重试次数", ph: "2", type: .number),
 ] + reasoningFields
 
 /// Every field of a provider card (base + advanced + name), the full
@@ -178,342 +178,342 @@ let providerAdvFields: [FieldSpec] = [
 let providerAllFields: [FieldSpec] = providerBaseFields + providerAdvFields + [FieldSpec("name")]
 
 let modelFields: [FieldSpec] = [
-    FieldSpec("name", label: "Model Name", ph: "e.g. deepseek-chat", required: true),
-    FieldSpec("context_window", label: "Context Window", ph: "e.g. 65536", type: .number),
-    FieldSpec("max_output_tokens", label: "Max Output Tokens", ph: "e.g. 8192", type: .number),
+    FieldSpec("name", label: "模型名称", ph: "如 deepseek-chat", required: true),
+    FieldSpec("context_window", label: "上下文窗口", ph: "如 65536", type: .number),
+    FieldSpec("max_output_tokens", label: "最大输出 Token 数", ph: "如 8192", type: .number),
     FieldSpec(
-        "modalities", label: "Image Input (multimodal)",
-        hint: "check only when the model truly accepts image input (writes modalities: [text, image]); enables pasting/dropping images into the composer — gateways reject image input for text-only models",
+        "modalities", label: "图像输入（多模态）",
+        hint: "仅在模型确实支持图像输入时勾选（写入 modalities: [text, image]）；勾选后可在输入框粘贴/拖入图片——纯文本模型会被网关拒绝图像输入",
         type: .flagList,
         flagValue: ["text", "image"],
     ),
     FieldSpec(
-        "wire_api", label: "Wire API Override", type: .select,
-        options: [("", "follow provider"), ("chat", "chat"), ("responses", "responses")],
+        "wire_api", label: "Wire API 覆盖", type: .select,
+        options: [("", "跟随 provider"), ("chat", "chat"), ("responses", "responses")],
     ),
-    FieldSpec("window_utilization", label: "Window Utilization Override", ph: "follow global", type: .number),
+    FieldSpec("window_utilization", label: "窗口利用率覆盖", ph: "跟随全局", type: .number),
 ] + reasoningFields
 
 let mcpStdioFields: [FieldSpec] = [
-    FieldSpec("command", label: "Command", ph: "e.g. npx", required: true),
-    FieldSpec("args", label: "Arguments", hint: "one argument per line", type: .listText),
-    FieldSpec("env", label: "Environment", hint: "one KEY=VALUE per line (appended to the process environment)", type: .kvText),
-    FieldSpec("cwd", label: "Working Directory", hint: "empty = inherit loom's working directory"),
+    FieldSpec("command", label: "命令", ph: "如 npx", required: true),
+    FieldSpec("args", label: "参数", hint: "每行一个参数", type: .listText),
+    FieldSpec("env", label: "环境变量", hint: "每行一个 KEY=VALUE（追加到进程环境）", type: .kvText),
+    FieldSpec("cwd", label: "工作目录", hint: "留空 = 继承 loom 的工作目录"),
 ]
 
 let mcpHTTPFields: [FieldSpec] = [
     FieldSpec("url", label: "URL", ph: "https://mcp.example.com/mcp", required: true),
     FieldSpec(
-        "headers", label: "Headers",
-        hint: "one KEY=VALUE per line; values support ${VAR} references",
+        "headers", label: "请求头",
+        hint: "每行一个 KEY=VALUE；值支持 ${VAR} 引用",
         type: .kvText,
     ),
 ]
 
 let mcpCommonFields: [FieldSpec] = [
-    FieldSpec("startup_timeout_sec", label: "Startup Timeout (s)", ph: "30", type: .number),
-    FieldSpec("tool_timeout_sec", label: "Tool Call Timeout (s)", ph: "300", type: .number),
-    FieldSpec("enabled_tools", label: "Tool Allowlist", hint: "empty = register all tools", type: .listText),
-    FieldSpec("disabled_tools", label: "Tool Denylist", type: .listText),
+    FieldSpec("startup_timeout_sec", label: "启动超时（秒）", ph: "30", type: .number),
+    FieldSpec("tool_timeout_sec", label: "工具调用超时（秒）", ph: "300", type: .number),
+    FieldSpec("enabled_tools", label: "工具允许列表", hint: "留空 = 注册全部工具", type: .listText),
+    FieldSpec("disabled_tools", label: "工具拒绝列表", type: .listText),
 ]
 
 let skillsConfigFields: [FieldSpec] = [
-    FieldSpec("skills.enabled", label: "Enable Skills", type: .tristate),
+    FieldSpec("skills.enabled", label: "启用技能", type: .tristate),
     FieldSpec(
-        "skills.extra_roots", label: "Extra Search Roots",
-        hint: "one directory per line; a leading ~ expands to the home directory",
+        "skills.extra_roots", label: "额外搜索目录",
+        hint: "每行一个目录；开头的 ~ 会展开为用户主目录",
         type: .listText,
     ),
 ]
 
 let defaultModelField = FieldSpec(
-    "default", label: "Default Model",
-    hint: "empty = the first provider's default model",
+    "default", label: "默认模型",
+    hint: "留空 = 第一个 provider 的默认模型",
     ph: "provider/model",
 )
 
 let settingsTabs: [TabSpec] = [
-    TabSpec(id: "providers", label: "Models", icon: "square.stack.3d.up"),
-    TabSpec(id: "limits", label: "Limits & Guards", icon: "shield", sections: [
-        ("Run Budget", [
+    TabSpec(id: "providers", label: "模型", icon: "square.stack.3d.up"),
+    TabSpec(id: "limits", label: "限额与保护", icon: "shield", sections: [
+        ("运行预算", [
             FieldSpec(
-                "limits.max_input_tokens", label: "Fallback Context Window",
-                hint: "used when the model declares no context_window",
+                "limits.max_input_tokens", label: "兜底上下文窗口",
+                hint: "模型未声明 context_window 时使用",
                 ph: "200000", type: .number,
             ),
-            FieldSpec("limits.max_output_tokens", label: "Max Output Tokens", ph: "16384", type: .number),
+            FieldSpec("limits.max_output_tokens", label: "最大输出 Token 数", ph: "16384", type: .number),
             FieldSpec(
-                "limits.max_cost_usd", label: "Cost Limit (USD)",
-                hint: "per-session cumulative estimated cost; 0 = unlimited (requires cost-rate tracking)",
+                "limits.max_cost_usd", label: "费用上限（USD）",
+                hint: "单会话累计预估费用；0 = 不限（需要费用速率追踪）",
                 ph: "5.0", type: .number,
             ),
             FieldSpec(
-                "limits.max_tokens", label: "Total Token Budget",
-                hint: "per-session cumulative tokens; 0 = unlimited",
+                "limits.max_tokens", label: "总 Token 预算",
+                hint: "单会话累计 token；0 = 不限",
                 ph: "0", type: .number,
             ),
-            FieldSpec("limits.max_tool_output_bytes", label: "Tool Output Retained Bytes", ph: "49152", type: .number),
-            FieldSpec("limits.max_artifact_bytes", label: "Max Artifact Bytes", ph: "104857600", type: .number),
+            FieldSpec("limits.max_tool_output_bytes", label: "工具输出保留字节数", ph: "49152", type: .number),
+            FieldSpec("limits.max_artifact_bytes", label: "产物最大字节数", ph: "104857600", type: .number),
         ]),
-        ("Context Compaction", [
-            FieldSpec("context.utilization", label: "Window Utilization", ph: "0.95", type: .number),
-            FieldSpec("context.compact_trigger_ratio", label: "Compact Trigger Ratio", ph: "0.80", type: .number),
+        ("上下文压缩", [
+            FieldSpec("context.utilization", label: "窗口利用率", ph: "0.95", type: .number),
+            FieldSpec("context.compact_trigger_ratio", label: "压缩触发比例", ph: "0.80", type: .number),
             FieldSpec(
-                "context.compact_target_ratio", label: "Compact Target Ratio",
-                hint: "must be below the trigger ratio",
+                "context.compact_target_ratio", label: "压缩目标比例",
+                hint: "必须低于触发比例",
                 ph: "0.50", type: .number,
             ),
             FieldSpec(
-                "context.notice_levels", label: "Occupancy Notice Levels",
-                hint: "comma-separated, ascending and below the trigger ratio",
+                "context.notice_levels", label: "占用提醒档位",
+                hint: "逗号分隔，递增且低于触发比例",
                 ph: "0.60, 0.75", type: .floatList,
             ),
         ]),
-        ("Runaway Detection", [
-            FieldSpec("runaway.max_repeated_calls", label: "Max Repeated Calls", ph: "3", type: .number),
-            FieldSpec("runaway.max_consecutive_failures", label: "Max Consecutive Failures", ph: "5", type: .number),
+        ("失控检测", [
+            FieldSpec("runaway.max_repeated_calls", label: "最大重复调用次数", ph: "3", type: .number),
+            FieldSpec("runaway.max_consecutive_failures", label: "最大连续失败次数", ph: "5", type: .number),
             FieldSpec(
-                "runaway.stall_warn_turns", label: "Stall Warning Turns",
-                hint: "0 = off",
+                "runaway.stall_warn_turns", label: "停滞提醒轮数",
+                hint: "0 = 关闭",
                 ph: "10", type: .number,
             ),
             FieldSpec(
-                "runaway.stall_timeout", label: "Stall Watchdog",
-                hint: "Go duration syntax; 0 = off",
+                "runaway.stall_timeout", label: "停滞看门狗",
+                hint: "Go duration 语法；0 = 关闭",
                 ph: "15m",
             ),
         ]),
     ]),
-    TabSpec(id: "permission", label: "Permissions & Approvals", icon: "lock", sections: [
-        ("Approval Baseline", [
+    TabSpec(id: "permission", label: "权限与审批", icon: "lock", sections: [
+        ("审批基线", [
             FieldSpec(
-                "approval.mode", label: "Approval Mode",
-                hint: "decision policy when no rule or memory matches",
+                "approval.mode", label: "审批模式",
+                hint: "没有规则或记忆匹配时的决策策略",
                 type: .select,
                 options: [
-                    ("", "default (on-request)"),
-                    ("on-request", "on-request · free within sandbox/workspace"),
-                    ("danger-only", "danger-only · prompt only for dangerous operations"),
-                    ("never", "never · unattended"),
+                    ("", "默认（on-request）"),
+                    ("on-request", "on-request · 沙盒/工作区内自由执行"),
+                    ("danger-only", "danger-only · 仅危险操作弹窗"),
+                    ("never", "never · 无人值守"),
                 ],
                 optionHints: [
-                    "": "on-request (default): commands inside the sandbox and reads/writes inside the workspace are auto-allowed; sandbox escalation, out-of-workspace writes, external network, and danger signals prompt",
-                    "on-request": "commands inside the sandbox and reads/writes inside the workspace are auto-allowed; sandbox escalation, out-of-workspace writes, external network, and danger signals prompt",
-                    "danger-only": "only explicitly dangerous operations prompt: dangerous-site denylist, dangerous patterns (curl|sh, credential/startup-file writes, …), and destructive or shared-state consequences (rm of key targets, git push, …); development commands, normal sites/APIs, and sandbox escalation are auto-allowed",
-                    "never": "unattended: allowed inside the sandbox; escalation, out-of-workspace writes, and destructive/shared-state operations are denied outright — never blocks waiting for approval",
+                    "": "on-request（默认）：沙盒内的命令和工作区内的读写自动允许；沙盒提权、工作区外写入、外部网络访问以及危险信号会弹窗确认",
+                    "on-request": "沙盒内的命令和工作区内的读写自动允许；沙盒提权、工作区外写入、外部网络访问以及危险信号会弹窗确认",
+                    "danger-only": "仅明确危险的操作弹窗：危险站点拒绝列表、危险模式（curl|sh、凭证/启动文件写入等）、破坏性或有共享状态后果的操作（删除关键目标、git push 等）；开发命令、普通站点/API 以及沙盒提权自动允许",
+                    "never": "无人值守：沙盒内允许；提权、工作区外写入、破坏性/共享状态操作直接拒绝——永远不会阻塞等待审批",
                 ],
             ),
         ]),
-        ("Rule Layers", [
-            FieldSpec("rules.enabled", label: "Enable Rules", type: .tristate),
-            FieldSpec("rules.builtin", label: "Built-in Read-only Commands", type: .tristate),
-            FieldSpec("rules.project", label: "Project Rules", type: .tristate),
+        ("规则分层", [
+            FieldSpec("rules.enabled", label: "启用规则", type: .tristate),
+            FieldSpec("rules.builtin", label: "内置只读命令", type: .tristate),
+            FieldSpec("rules.project", label: "项目规则", type: .tristate),
             FieldSpec(
-                "rules.project_allow", label: "Allow Rules from the Project Layer",
-                hint: "untrusted repos may only tighten, never loosen",
+                "rules.project_allow", label: "允许项目层的 allow 规则",
+                hint: "不受信任的仓库只能收紧，不能放宽",
                 type: .tristate,
-                def: "off",
+                def: "关",
             ),
             FieldSpec(
-                "rules.persist_remembered", label: "Persist \"Always Allow\"",
-                hint: "written to the user-level rules file for future sessions to inherit",
+                "rules.persist_remembered", label: "持久化「始终允许」",
+                hint: "写入用户级规则文件，供后续会话继承",
                 type: .tristate,
             ),
         ]),
     ]),
-    TabSpec(id: "agent", label: "Agent", icon: "brain", sections: [
-        ("System Prompt", [
-            FieldSpec("prompt.extra", label: "Extra Instructions", hint: "appended to the end of the built-in system prompt", type: .textarea),
-            FieldSpec("prompt.disable_builtin", label: "Disable Built-in Prompt", type: .bool),
-            FieldSpec("prompt.managed.name", label: "Managed Prompt Name", hint: "Langfuse-managed prompt (requires tracing)"),
-            FieldSpec("prompt.managed.label", label: "Managed Prompt Label", ph: "production"),
+    TabSpec(id: "agent", label: "智能体", icon: "brain", sections: [
+        ("系统提示词", [
+            FieldSpec("prompt.extra", label: "附加指令", hint: "追加到内置系统提示词的末尾", type: .textarea),
+            FieldSpec("prompt.disable_builtin", label: "禁用内置提示词", type: .bool),
+            FieldSpec("prompt.managed.name", label: "托管提示词名称", hint: "Langfuse 托管的提示词（需要开启追踪）"),
+            FieldSpec("prompt.managed.label", label: "托管提示词标签", ph: "production"),
         ]),
-        ("Subagents", [
-            FieldSpec("subagent.enabled", label: "Enable Subagents", type: .tristate),
-            FieldSpec("subagent.model", label: "Pinned Model", hint: "empty = follow the current turn's model", ph: "provider/model"),
+        ("子智能体", [
+            FieldSpec("subagent.enabled", label: "启用子智能体", type: .tristate),
+            FieldSpec("subagent.model", label: "固定模型", hint: "留空 = 跟随当前轮次的模型", ph: "provider/model"),
             FieldSpec(
-                "subagent.max_tokens", label: "Token Limit",
-                hint: "0 = inherit the run budget",
+                "subagent.max_tokens", label: "Token 上限",
+                hint: "0 = 继承运行预算",
                 ph: "0", type: .number,
             ),
-            FieldSpec("subagent.max_output_tokens", label: "Max Output Tokens", ph: "8192", type: .number),
+            FieldSpec("subagent.max_output_tokens", label: "最大输出 Token 数", ph: "8192", type: .number),
         ]),
-        ("Long-term Memory", [
-            FieldSpec("memory.enabled", label: "Enable Memory", type: .tristate),
+        ("长期记忆", [
+            FieldSpec("memory.enabled", label: "启用记忆", type: .tristate),
             FieldSpec(
-                "memory.extract_model", label: "Extraction Model",
-                hint: "a cheap, fast model is recommended; empty = follow the default model",
+                "memory.extract_model", label: "提取模型",
+                hint: "建议使用便宜快速的模型；留空 = 跟随默认模型",
                 ph: "provider/model",
             ),
-            FieldSpec("memory.consolidation_model", label: "Consolidation Model", ph: "provider/model"),
-            FieldSpec("memory.max_jobs_per_run", label: "Max Jobs per Run", ph: "8", type: .number),
+            FieldSpec("memory.consolidation_model", label: "整合模型", ph: "provider/model"),
+            FieldSpec("memory.max_jobs_per_run", label: "每次运行最大任务数", ph: "8", type: .number),
             FieldSpec(
-                "memory.run_interval", label: "Pipeline Interval",
-                hint: "0 = run once at startup only",
+                "memory.run_interval", label: "流水线间隔",
+                hint: "0 = 仅在启动时运行一次",
                 ph: "30m",
             ),
-            FieldSpec("memory.min_session_idle", label: "Session Idle Threshold", ph: "1h"),
-            FieldSpec("memory.max_session_age", label: "Max Session Age", ph: "720h"),
+            FieldSpec("memory.min_session_idle", label: "会话空闲阈值", ph: "1h"),
+            FieldSpec("memory.max_session_age", label: "会话最大保留时长", ph: "720h"),
         ]),
-        ("Session Archiving", [
+        ("会话归档", [
             FieldSpec(
-                "sessions.auto_archive_after", label: "Auto-archive After",
-                hint: "sessions idle longer than this are archived automatically (read-only; can be unarchived at any time); empty or 0 = off",
-                ph: "e.g. 720h",
+                "sessions.auto_archive_after", label: "自动归档",
+                hint: "空闲超过该时长的会话会自动归档（只读，可随时取消归档）；留空或 0 = 关闭",
+                ph: "如 720h",
             ),
             FieldSpec(
-                "sessions.gc_archived_after", label: "Archived Retention",
-                hint: "sessions archived longer than this are permanently deleted (including events, checkpoints, and file-change history); empty or 0 = keep forever",
-                ph: "e.g. 720h",
+                "sessions.gc_archived_after", label: "归档保留时长",
+                hint: "归档超过该时长的会话将被永久删除（包括事件、检查点和文件变更历史）；留空或 0 = 永久保留",
+                ph: "如 720h",
             ),
         ]),
-        ("Text-to-image", [
+        ("文生图", [
             FieldSpec(
-                "image.enabled", label: "Enable Text-to-image",
-                hint: "default: enabled when both provider and model are set",
+                "image.enabled", label: "启用文生图",
+                hint: "默认：provider 和模型都设置时启用",
                 type: .tristate,
-                def: "auto",
+                def: "自动",
             ),
-            FieldSpec("image.provider", label: "Credential Provider", hint: "reuses its base_url/api_key (must be an openai-type provider)"),
-            FieldSpec("image.model", label: "Image Model"),
-            FieldSpec("image.size", label: "Default Size", ph: "e.g. 1024x1024"),
+            FieldSpec("image.provider", label: "凭证 Provider", hint: "复用其 base_url/api_key（必须是 openai 类型的 provider）"),
+            FieldSpec("image.model", label: "图像模型"),
+            FieldSpec("image.size", label: "默认尺寸", ph: "如 1024x1024"),
             FieldSpec(
-                "image.quality", label: "Default Quality", type: .select,
-                options: [("", "auto"), ("low", "low"), ("medium", "medium"), ("high", "high")],
+                "image.quality", label: "默认质量", type: .select,
+                options: [("", "自动"), ("low", "low"), ("medium", "medium"), ("high", "high")],
             ),
         ]),
     ]),
-    TabSpec(id: "skills", label: "Skills", icon: "puzzlepiece"),
+    TabSpec(id: "skills", label: "技能", icon: "puzzlepiece"),
     TabSpec(id: "mcp", label: "MCP", icon: "cable.connector"),
-    TabSpec(id: "kb", label: "Knowledge Base", icon: "cylinder", sections: [
-        ("Connection", [
+    TabSpec(id: "kb", label: "知识库", icon: "cylinder", sections: [
+        ("连接", [
             FieldSpec(
-                "knowledge_base.enabled", label: "Enable Knowledge Base",
-                hint: "auto = enabled when base_url is set; changes require a restart",
+                "knowledge_base.enabled", label: "启用知识库",
+                hint: "自动 = 设置 base_url 后启用；修改需要重启生效",
                 type: .tristate,
-                def: "auto",
+                def: "自动",
             ),
             FieldSpec(
-                "knowledge_base.base_url", label: "Service URL",
-                hint: "minisearch v2 REST address",
+                "knowledge_base.base_url", label: "服务地址",
+                hint: "minisearch v2 REST 地址",
                 ph: "http://127.0.0.1:8200",
                 required: true,
             ),
             FieldSpec(
-                "knowledge_base.api_key", label: "API Key",
-                hint: "minisearch bearer token (msk_…); leave empty with --auth=off",
+                "knowledge_base.api_key", label: "API 密钥",
+                hint: "minisearch bearer token（msk_…）；--auth=off 时留空",
                 type: .password,
                 revealRef: SecretRef(kind: "knowledge_base"),
             ),
             FieldSpec(
-                "knowledge_base.timeout_ms", label: "Request Timeout (ms)",
-                hint: "range 1000–60000",
+                "knowledge_base.timeout_ms", label: "请求超时（毫秒）",
+                hint: "范围 1000–60000",
                 ph: "10000", type: .number,
             ),
         ]),
-        ("Retrieval", [
+        ("检索", [
             FieldSpec(
-                "knowledge_base.default_top_k", label: "Default Top K",
-                hint: "range 1–20",
+                "knowledge_base.default_top_k", label: "默认 Top K",
+                hint: "范围 1–20",
                 ph: "5", type: .number,
             ),
-            FieldSpec("knowledge_base.default_collection", label: "Default Collection", ph: "empty = the first collection"),
+            FieldSpec("knowledge_base.default_collection", label: "默认集合", ph: "留空 = 第一个集合"),
             FieldSpec(
-                "knowledge_base.collections", label: "Collections",
-                hint: "at least one; descriptions go into the tool schema to help the model route by topic",
-                ph: "name: description (one per line)",
+                "knowledge_base.collections", label: "集合",
+                hint: "至少一个；描述会写入工具 schema，帮助模型按主题路由",
+                ph: "名称: 描述（每行一条）",
                 type: .pairList,
                 rows: 4,
                 required: true,
             ),
         ]),
     ]),
-    TabSpec(id: "system", label: "System", icon: "gear", sections: [
-        ("Dev Toolchain", [
+    TabSpec(id: "system", label: "系统", icon: "gear", sections: [
+        ("开发工具链", [
             FieldSpec(
-                "tools.path_extra", label: "Extra PATH Directories",
-                hint: "one absolute path per line (~/ prefix supported); takes precedence over all built-in candidate directories; hot-applied on save",
+                "tools.path_extra", label: "额外 PATH 目录",
+                hint: "每行一个绝对路径（支持 ~/ 前缀）；优先于所有内置候选目录；保存时热生效",
                 ph: "~/corp/bin",
                 type: .listText,
                 rows: 3,
             ),
         ]),
-        ("Langfuse Tracing", [
-            FieldSpec("tracing.host", label: "Service URL", ph: "https://langfuse.internal"),
+        ("Langfuse 追踪", [
+            FieldSpec("tracing.host", label: "服务地址", ph: "https://langfuse.internal"),
             FieldSpec(
                 "tracing.public_key", label: "Public Key", type: .password,
                 revealRef: SecretRef(kind: "tracing", field: "public_key"),
             ),
-            FieldSpec("tracing.public_key_env", label: "Public Key Env Var"),
+            FieldSpec("tracing.public_key_env", label: "Public Key 环境变量"),
             FieldSpec(
                 "tracing.secret_key", label: "Secret Key", type: .password,
                 revealRef: SecretRef(kind: "tracing", field: "secret_key"),
             ),
-            FieldSpec("tracing.secret_key_env", label: "Secret Key Env Var"),
-            FieldSpec("tracing.environment", label: "Environment Tag", ph: "dev"),
-            FieldSpec("tracing.include_content", label: "Send Conversation Content", type: .tristate),
-            FieldSpec("tracing.user", label: "Owning User", hint: "empty = git user.email, then $USER"),
-            FieldSpec("tracing.cost_input_usd_per_mtok", label: "Input Rate (USD/Mtok)", ph: "0", type: .number),
-            FieldSpec("tracing.cost_output_usd_per_mtok", label: "Output Rate (USD/Mtok)", ph: "0", type: .number),
+            FieldSpec("tracing.secret_key_env", label: "Secret Key 环境变量"),
+            FieldSpec("tracing.environment", label: "环境标签", ph: "dev"),
+            FieldSpec("tracing.include_content", label: "发送对话内容", type: .tristate),
+            FieldSpec("tracing.user", label: "归属用户", hint: "留空 = 依次尝试 git user.email、$USER"),
+            FieldSpec("tracing.cost_input_usd_per_mtok", label: "输入费率（USD/Mtok）", ph: "0", type: .number),
+            FieldSpec("tracing.cost_output_usd_per_mtok", label: "输出费率（USD/Mtok）", ph: "0", type: .number),
         ]),
-        ("LAN Sharing", [
+        ("局域网分享", [
             FieldSpec(
-                "share.enabled", label: "Enable LAN Sharing",
-                hint: "takes effect immediately on save (hot-applied); the listener only exposes the read-only share page, no admin API",
+                "share.enabled", label: "启用局域网分享",
+                hint: "保存后立即生效（热更新）；监听器只暴露只读分享页，不暴露管理 API",
                 type: .tristate,
-                def: "off",
+                def: "关",
             ),
             FieldSpec(
-                "share.listen", label: "Listen Address",
-                hint: "a fixed port keeps share links alive across restarts; 0.0.0.0 = all interfaces, or bind a specific interface IP",
+                "share.listen", label: "监听地址",
+                hint: "固定端口可让分享链接跨重启存活；0.0.0.0 = 所有网卡，也可绑定指定网卡 IP",
                 ph: "0.0.0.0:7681",
             ),
         ]),
-        ("Logging", [
-            FieldSpec("logging.max_file_mb", label: "Max Log File Size (MiB)", ph: "2048", type: .number),
-            FieldSpec("logging.max_total_mb", label: "Max Total Log Size (MiB)", ph: "10240", type: .number),
+        ("日志", [
+            FieldSpec("logging.max_file_mb", label: "单个日志文件上限（MiB）", ph: "2048", type: .number),
+            FieldSpec("logging.max_total_mb", label: "日志总大小上限（MiB）", ph: "10240", type: .number),
         ]),
-        ("Browser", [
+        ("浏览器", [
             FieldSpec(
-                "browser.enabled", label: "Enable Browser Tools",
-                hint: "enabled by default; browser tools are not registered when off",
+                "browser.enabled", label: "启用浏览器工具",
+                hint: "默认启用；关闭后不注册浏览器工具",
                 type: .tristate,
-                def: "on",
+                def: "开",
             ),
             FieldSpec(
-                "browser.chrome_path", label: "Chrome Path",
-                hint: "path to the Chrome/Chromium binary; empty = auto-detect common system locations",
-                ph: "empty = auto-detect",
+                "browser.chrome_path", label: "Chrome 路径",
+                hint: "Chrome/Chromium 二进制路径；留空 = 自动检测常见系统位置",
+                ph: "留空 = 自动检测",
             ),
             FieldSpec(
-                "browser.cdp_url", label: "CDP Remote URL",
-                hint: "remote Chrome DevTools Protocol address; connects to an external Chrome instead of launching a local one (can bypass anti-bot checks)",
+                "browser.cdp_url", label: "CDP 远程地址",
+                hint: "远程 Chrome DevTools Protocol 地址；连接外部 Chrome 而不是启动本地实例（可绕过反爬检测）",
                 ph: "ws://127.0.0.1:9222",
             ),
             FieldSpec(
-                "browser.idle_ttl", label: "Idle TTL",
-                hint: "browser instances idle longer than this are closed automatically (Go duration syntax)",
+                "browser.idle_ttl", label: "空闲 TTL",
+                hint: "空闲超过该时长的浏览器实例会自动关闭（Go duration 语法）",
                 ph: "5m",
             ),
             FieldSpec(
-                "browser.nav_timeout_ms", label: "Navigation Timeout (ms)",
-                hint: "page navigation timeout, range 5000–120000",
+                "browser.nav_timeout_ms", label: "导航超时（毫秒）",
+                hint: "页面导航超时，范围 5000–120000",
                 ph: "30000", type: .number,
             ),
             FieldSpec(
-                "browser.screenshot_quality", label: "Screenshot Quality",
-                hint: "JPEG quality, range 10–100",
+                "browser.screenshot_quality", label: "截图质量",
+                hint: "JPEG 质量，范围 10–100",
                 ph: "80", type: .number,
             ),
-            FieldSpec("browser.viewport_width", label: "Viewport Width", ph: "1280", type: .number),
-            FieldSpec("browser.viewport_height", label: "Viewport Height", ph: "720", type: .number),
+            FieldSpec("browser.viewport_width", label: "视口宽度", ph: "1280", type: .number),
+            FieldSpec("browser.viewport_height", label: "视口高度", ph: "720", type: .number),
         ]),
-        ("Terminal UI (TUI)", [
+        ("终端 UI（TUI）", [
             FieldSpec(
-                "ui.icons", label: "Icon Set", type: .select,
-                options: [("", "default (nerd)"), ("nerd", "nerd (Nerd Font)"), ("plain", "plain (text only)")],
+                "ui.icons", label: "图标集", type: .select,
+                options: [("", "默认（nerd）"), ("nerd", "nerd (Nerd Font)"), ("plain", "plain（纯文本）")],
             ),
-            FieldSpec("ui.alt_screen", label: "Use Alternate Screen", hint: "restores the scrollback on exit", type: .bool),
+            FieldSpec("ui.alt_screen", label: "使用备用屏幕", hint: "退出时恢复滚动缓冲区", type: .bool),
         ]),
     ]),
 ]

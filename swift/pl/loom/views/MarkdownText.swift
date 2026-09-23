@@ -34,14 +34,97 @@ private enum MarkdownCache {
     static let blocks: NSCache<NSString, BlocksBox> = {
         let cache = NSCache<NSString, BlocksBox>()
         cache.countLimit = 400
+        cache.totalCostLimit = 32 * 1024 * 1024
         return cache
     }()
 
     static let inline: NSCache<NSString, NSAttributedString> = {
         let cache = NSCache<NSString, NSAttributedString>()
         cache.countLimit = 800
+        cache.totalCostLimit = 64 * 1024 * 1024
         return cache
     }()
+}
+
+/// Incremental block parser for a live (append-only) streaming source,
+/// held per MarkdownText view via @State. Scan only newly completed
+/// lines for a fence-balanced blank-line boundary. Reuse split blocks
+/// when that boundary really separates code/table blocks; prose spans
+/// blank lines and still needs a whole parse to preserve exact text.
+/// Live, one-shot full-text keys never reach the shared NSCache.
+final class LiveBlockCache {
+    private var parsedPrefix = ""
+    private var prefixBlocks: [MarkdownText.Block] = []
+    private var scannedSource = ""
+    private var scannedFences = 0
+    private var stableOffset = 0
+
+    func blocks(for source: String) -> [MarkdownText.Block] {
+        guard let split = stableBoundary(of: source) else {
+            // No fence-balanced paragraph boundary yet (a short text,
+            // or one still inside its first block): the whole source
+            // is a changing tail — same cost as before, minus the
+            // cache pollution.
+            return MarkdownText.splitBlocks(source)
+        }
+        let prefix = source[..<split]
+        if prefix != parsedPrefix[...] {
+            // The prefix only ever GROWS while live; a mismatch means
+            // the source was replaced wholesale, so re-derive rather
+            // than trust the stale parse.
+            prefixBlocks = MarkdownText.splitBlocks(String(prefix))
+            parsedPrefix = String(prefix)
+        }
+        let tail = String(source[split...])
+        if tail.isEmpty {
+            return prefixBlocks
+        }
+        let tailBlocks = MarkdownText.splitBlocks(tail)
+        // splitBlocks carries prose across blank lines; only code and
+        // table boundaries can safely seal a block for reuse.
+        if case .prose? = prefixBlocks.last, case .prose? = tailBlocks.first {
+            // A blank line does not seal prose: splitBlocks joins it into
+            // one block, preserving the exact number of blank lines. Do
+            // not mutate cached prefixBlocks or normalize that separator.
+            return MarkdownText.splitBlocks(source)
+        }
+        return prefixBlocks + tailBlocks
+    }
+
+    /// Byte offset just past the last completed, fence-balanced blank
+    /// line. An open fence disqualifies boundaries inside it.
+    private func stableBoundary(of source: String) -> String.Index? {
+        // Validate append-only input, then inspect only lines not already
+        // scanned. Keep the incomplete final line for the next frame.
+        if !source.hasPrefix(scannedSource) {
+            scannedSource = ""
+            scannedFences = 0
+            stableOffset = 0
+            parsedPrefix = ""
+            prefixBlocks = []
+        }
+        let suffix = source.dropFirst(scannedSource.count)
+        let scannedBytes = scannedSource.utf8.count
+        var completeBytes = 0
+        for line in suffix.split(separator: "\n", omittingEmptySubsequences: false).dropLast() {
+            let trimmed = line.drop(while: { $0 == " " || $0 == "\t" })
+            if trimmed.hasPrefix("```") {
+                scannedFences += 1
+            }
+            completeBytes += line.utf8.count + 1
+            if line.allSatisfy({ $0 == " " || $0 == "\t" || $0 == "\r" }),
+               scannedFences % 2 == 0
+            {
+                stableOffset = scannedBytes + completeBytes
+            }
+        }
+        if completeBytes > 0 {
+            let end = source.utf8.index(source.startIndex, offsetBy: scannedBytes + completeBytes)
+            scannedSource = String(source[..<end])
+        }
+        guard stableOffset > 0 else { return nil }
+        return source.utf8.index(source.startIndex, offsetBy: stableOffset)
+    }
 }
 
 struct MarkdownText: View {
@@ -51,6 +134,14 @@ struct MarkdownText: View {
     /// JS highlighter on the whole block each frame would hog the main
     /// thread. Highlighting pops in when the segment seals.
     var live = false
+    /// The WebUI's .stream-cursor: a primary→info gradient "▍" riding
+    /// the END of the rendered content while the segment streams.
+    var streamCursor = false
+
+    /// Per-view append-only scan state. Reuse sealed code/table blocks
+    /// where safe; prose spanning blank lines remains a growing block
+    /// and is parsed whole, without polluting the shared block cache.
+    @State private var liveCache = LiveBlockCache()
 
     enum Block: Equatable {
         case prose(String)
@@ -58,22 +149,41 @@ struct MarkdownText: View {
         /// GFM pipe table: header row + body rows (the dashed separator
         /// row is consumed by the parser).
         case table(header: [String], rows: [[String]])
+
+        var isProse: Bool {
+            if case .prose = self {
+                return true
+            }
+            return false
+        }
     }
 
     var body: some View {
+        let blocks = resolvedBlocks
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(Self.blocks(source).enumerated()), id: \.offset) { _, block in
+            ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
                 switch block {
                 case let .prose(markdown):
-                    ProseText(markdown: markdown)
+                    ProseText(markdown: markdown, cursor: streamCursor && index == blocks.count - 1)
                 case let .code(language, code):
                     CodeBlockView(language: language, code: code, deferHighlight: live)
                 case let .table(header, rows):
                     MarkdownTableView(header: header, rows: rows)
                 }
             }
+            // A non-prose tail (a growing code block) can't carry the
+            // cursor inline — it takes its own line after the block.
+            if streamCursor, let last = blocks.last, !last.isProse {
+                StreamCursorGlyph()
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Sealed sources go through the shared memoization; live ones
+    /// parse incrementally (append-only deltas).
+    private var resolvedBlocks: [Block] {
+        live ? liveCache.blocks(for: source) : Self.blocks(source)
     }
 
     /// Splits on ``` fences and GFM table blocks. An unterminated fence
@@ -87,11 +197,23 @@ struct MarkdownText: View {
             return cached.value
         }
         let blocks = splitBlocks(source)
-        MarkdownCache.blocks.setObject(MarkdownCache.BlocksBox(blocks), forKey: key)
+        // Keys and parsed blocks both retain source text; NSCache's count
+        // alone cannot constrain a history containing very large messages.
+        let cost = source.utf8.count + blocks.reduce(0) { total, block in
+            switch block {
+            case let .prose(text): total + text.utf8.count
+            case let .code(language, code): total + (language?.utf8.count ?? 0) + code.utf8.count
+            case let .table(header, rows):
+                total + (header + rows.flatMap(\.self)).reduce(0) { $0 + $1.utf8.count }
+            }
+        }
+        if cost <= 32 * 1024 * 1024 {
+            MarkdownCache.blocks.setObject(MarkdownCache.BlocksBox(blocks), forKey: key, cost: cost)
+        }
         return blocks
     }
 
-    private static func splitBlocks(_ source: String) -> [Block] {
+    static func splitBlocks(_ source: String) -> [Block] {
         var blocks: [Block] = []
         var prose: [String] = []
         var code: [String] = []
@@ -193,13 +315,53 @@ struct MarkdownText: View {
 
 private struct ProseText: View {
     let markdown: String
+    /// Append the streaming cursor at the end of this paragraph.
+    var cursor = false
 
     var body: some View {
-        Text(renderInlineMarkdown(markdown))
+        var text = Text(renderInlineMarkdown(markdown))
+        if cursor {
+            // The WebUI's cursor also pulses (1.2s); SwiftUI can't
+            // animate a concatenated Text run, so the gradient glyph
+            // is static — the churning stream itself is the activity
+            // signal (the same call the WebUI makes for .reasoning-tail).
+            text = text + Text(" ▍")
+                .foregroundStyle(Self.cursorGradient)
+        }
+        return text
             .font(.system(size: Theme.textLg))
             .lineSpacing(7) // ≈ the WebUI's 1.7 line-height
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// .stream-cursor: linear-gradient(180deg, primary, info).
+    static let cursorGradient = LinearGradient(
+        colors: [Theme.primary, Theme.info],
+        startPoint: .top,
+        endPoint: .bottom,
+    )
+}
+
+/// The standalone stream cursor for non-prose tails: same gradient
+/// glyph, WITH the WebUI's 1.2s breathing (a View here can animate,
+/// unlike a concatenated Text run).
+private struct StreamCursorGlyph: View {
+    @State private var dim = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Text("▍")
+            .font(.system(size: Theme.textLg))
+            .foregroundStyle(ProseText.cursorGradient)
+            .opacity(dim && !reduceMotion ? 0.4 : 1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                    dim = true
+                }
+            }
     }
 }
 
@@ -213,7 +375,13 @@ func renderInlineMarkdown(_ source: String, size: CGFloat = Theme.textLg) -> Att
         return AttributedString(cached)
     }
     let rendered = parseInlineMarkdown(source, size: size)
-    MarkdownCache.inline.setObject(NSAttributedString(rendered), forKey: key)
+    let attributed = NSAttributedString(rendered)
+    // Include the full key and the attributed characters. Runs and
+    // attributes add overhead, so charge a conservative multiple.
+    let cost = source.utf8.count + attributed.length * 8
+    if cost <= 64 * 1024 * 1024 {
+        MarkdownCache.inline.setObject(attributed, forKey: key, cost: cost)
+    }
     return rendered
 }
 
@@ -292,7 +460,7 @@ private struct MarkdownTableView: View {
         Text(renderInlineMarkdown(text, size: Theme.textMd))
             .font(.system(size: Theme.textMd, weight: isHeader ? .semibold : .regular))
             .foregroundStyle(Theme.fg)
-            .lineSpacing(2)
+            .lineSpacing(5.5) // .md table inherits the body's 1.65 line-height at 13px
             .textSelection(.enabled)
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
@@ -327,7 +495,7 @@ struct CodeBlockView: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             Text(highlightedCode)
-                .lineSpacing(2)
+                .lineSpacing(4.5) // ≈ the WebUI's 1.55 line-height (.md pre)
                 .textSelection(.enabled)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)

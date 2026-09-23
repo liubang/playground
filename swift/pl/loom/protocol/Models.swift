@@ -182,7 +182,7 @@ enum MessageStatus: String, Decodable, Sendable {
 
 /// ContentPart tagged union (message.go:132-151): discriminator `kind`,
 /// the remaining fields are per-kind optionals.
-enum ContentPart: Decodable, Sendable {
+enum ContentPart: Decodable, Sendable, Equatable {
     case text(String)
     case reasoning(Reasoning)
     case toolCall(ToolCall)
@@ -191,7 +191,7 @@ enum ContentPart: Decodable, Sendable {
     case image(ImageContent)
     case unknown
 
-    struct Reasoning: Decodable, Sendable {
+    struct Reasoning: Decodable, Sendable, Equatable {
         let text: String?
         let redacted: Bool?
         let durationMs: Int64?
@@ -202,13 +202,13 @@ enum ContentPart: Decodable, Sendable {
         }
     }
 
-    struct ToolCall: Decodable, Sendable {
+    struct ToolCall: Decodable, Sendable, Equatable {
         let id: String
         let name: String
         let arguments: JSONValue?
     }
 
-    struct ToolResult: Decodable, Sendable {
+    struct ToolResult: Decodable, Sendable, Equatable {
         let callId: String
         let status: String
         let content: [ContentPart]?
@@ -218,7 +218,7 @@ enum ContentPart: Decodable, Sendable {
         let startedAt: Date?
         let finishedAt: Date?
 
-        struct ResultError: Decodable, Sendable {
+        struct ResultError: Decodable, Sendable, Equatable {
             let code: String
             let message: String
         }
@@ -238,7 +238,7 @@ enum ContentPart: Decodable, Sendable {
         }
     }
 
-    struct Artifact: Decodable, Sendable {
+    struct Artifact: Decodable, Sendable, Equatable {
         let id: String
         let size: Int64?
         let mediaType: String?
@@ -257,7 +257,7 @@ enum ContentPart: Decodable, Sendable {
         }
     }
 
-    struct ImageContent: Decodable, Sendable {
+    struct ImageContent: Decodable, Sendable, Equatable {
         let mediaType: String
         let data: String
 
@@ -300,17 +300,105 @@ enum ContentPart: Decodable, Sendable {
     }
 }
 
-struct Message: Decodable, Sendable, Identifiable {
+struct Message: Decodable, Sendable, Identifiable, Equatable {
     let id: String
     let role: MessageRole
     let status: MessageStatus?
     let parts: [ContentPart]
     let createdAt: Date?
+    /// Agent-loop stamps (domain.Message.Metadata); `run_id` keys the
+    /// message to its turn's file-change summary (WebUI transcript.ts).
+    /// `var` (not `let`) so the memberwise init defaults it to nil —
+    /// hand-built messages in tests stay source-compatible.
+    var metadata: [String: String]?
 
     enum CodingKeys: String, CodingKey {
-        case id, role, status, parts
+        case id, role, status, parts, metadata
         case createdAt = "created_at"
     }
+}
+
+// MARK: - Turn summary (internal/app/turn_summary.go)
+
+/// One write-tool file mutation within a finished turn
+/// (runtimeevent.TurnFileChange): the first mutation of a path
+/// establishes it (`created` = the file did not exist before the
+/// turn), later ones only bump the edit count.
+struct TurnFileChange: Decodable, Sendable, Equatable {
+    let path: String
+    let created: Bool?
+    let edits: Int
+    /// Post-mutation size of the LAST change (0 for old events).
+    let size: Int64?
+}
+
+/// The review-oriented projection of one finished turn (snapshot
+/// .turn_summaries; server-derived from the file.changed ledger, cap
+/// 400): which files the turn's write tools touched. run_cmd writes
+/// (sed/tee) bypass the ledger by design.
+struct TurnSummary: Decodable, Sendable, Equatable {
+    let runId: String?
+    let turn: Int?
+    let cancelled: Bool?
+    let failed: Bool?
+    let changes: [TurnFileChange]?
+
+    enum CodingKeys: String, CodingKey {
+        case runId = "run_id"
+        case turn, cancelled, failed, changes
+    }
+}
+
+/// Per-path review data of one run (GET /v1/sessions/{id}/runs/{runID}
+/// /changes — app.RunFileStat): the ledger's before-content compared
+/// against the file's CURRENT workspace content, no git involved.
+struct RunFileStat: Decodable, Sendable, Equatable {
+    let path: String
+    let created: Bool?
+    let edits: Int?
+    /// -1 when the ledger never captured the content.
+    let beforeSize: Int
+    /// -1 when the file no longer exists or is unreadable.
+    let afterSize: Int64
+    let added: Int
+    let removed: Int
+    /// Real unified hunks (@@ headers, +/-/space lines); empty when
+    /// identical or when notComparable explains why.
+    let diff: String?
+    let diffTruncated: Bool?
+    /// Why the diff is unavailable (never captured / oversized /
+    /// binary / unreadable); empty means the diff is trustworthy.
+    let notComparable: String?
+
+    enum CodingKeys: String, CodingKey {
+        case path, created, edits
+        case beforeSize = "before_size"
+        case afterSize = "after_size"
+        case added, removed, diff
+        case diffTruncated = "diff_truncated"
+        case notComparable = "not_comparable"
+    }
+}
+
+struct RunChangeStatsResponse: Decodable, Sendable {
+    let runId: String?
+    let entries: [RunFileStat]?
+
+    enum CodingKeys: String, CodingKey {
+        case runId = "run_id"
+        case entries
+    }
+}
+
+/// POST /v1/sessions/{id}/runs/{runID}/revert result: paths restored
+/// to their pre-turn content, turn-created files removed, conflicts
+/// (external modifications overwritten — reported, never silent),
+/// and unrestorable paths (content never captured).
+struct RevertOutcome: Decodable, Sendable {
+    let restored: [String]?
+    let deleted: [String]?
+    let conflicts: [String]?
+    let skipped: [String]?
 }
 
 struct TranscriptPage: Decodable, Sendable {
@@ -402,6 +490,10 @@ struct Snapshot: Decodable, Sendable {
     let turnCount: Int
     let usage: Usage?
     let messages: [Message]?
+    /// Per-turn file-change projection: each becomes the turn's
+    /// closing review card (WebUI .block-turn-summary), keyed to the
+    /// turn via run_id (assistant messages carry it in metadata).
+    let turnSummaries: [TurnSummary]?
     let pendingRequests: [PendingRequest]?
     let pendingSteers: [String]?
     let lastError: SnapshotError?
@@ -428,6 +520,7 @@ struct Snapshot: Decodable, Sendable {
         case workspaceRoot = "workspace_root"
         case turnCount = "turn_count"
         case usage, messages
+        case turnSummaries = "turn_summaries"
         case pendingRequests = "pending_requests"
         case pendingSteers = "pending_steers"
         case lastError = "last_error"

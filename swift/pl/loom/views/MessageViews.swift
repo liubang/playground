@@ -17,12 +17,12 @@ import SwiftUI
 
 // MARK: - Message row (WebUI blocks.css)
 
-/// Renders one precomputed TranscriptModel.Row. All derivation (tool
-/// call/result pairing, diff computation, the action-row turn gate)
-/// happened in TranscriptModel.build — body evaluation here is pure
-/// layout, so streaming frames stay cheap.
+/// Renders one precomputed TranscriptModel.MessageRowModel. All
+/// derivation (tool call/result pairing, diff computation, the
+/// action-row turn gate) happened in TranscriptModel.build — body
+/// evaluation here is pure layout, so streaming frames stay cheap.
 struct MessageRow: View {
-    let row: TranscriptModel.Row
+    let row: TranscriptModel.MessageRowModel
     /// Authenticated artifact loader (SessionStore.artifactData);
     /// artifact parts fall back to a plain label when absent.
     var artifactLoader: ((ContentPart.Artifact) async -> (data: Data, mediaType: String?)?)?
@@ -54,7 +54,7 @@ struct MessageRow: View {
                     case let .text(text):
                         Text(text)
                             .font(.system(size: 14))
-                            .lineSpacing(4)
+                            .lineSpacing(5.5) // ≈ the WebUI's 1.6 line-height at 14px
                             .foregroundStyle(Theme.fg)
                             .textSelection(.enabled)
                     case let .image(image):
@@ -163,6 +163,19 @@ struct MessageRow: View {
     }
 }
 
+extension MessageRow: Equatable {
+    /// The body depends only on the precomputed render model: the
+    /// artifact loader is a stable behavior closure (SessionStore's
+    /// artifactData) whose closure IDENTITY changes on every ChatView
+    /// rebuild — comparing it would defeat the memoization. With
+    /// `.equatable()` SwiftUI skips body evaluation for history rows
+    /// untouched by a streaming frame (previously every 40ms delta
+    /// flush re-evaluated every row in the transcript).
+    static func == (lhs: MessageRow, rhs: MessageRow) -> Bool {
+        lhs.row == rhs.row
+    }
+}
+
 // MARK: - Message actions (.msg-actions)
 
 /// The action row under a finished message: ghost copy button + short
@@ -173,6 +186,7 @@ struct MessageActionsView: View {
     var timeOnLeft = false
 
     @State private var copied = false
+    @State private var hovered = false
 
     var body: some View {
         HStack(spacing: 4) {
@@ -195,12 +209,17 @@ struct MessageActionsView: View {
         Button(action: copy) {
             Image(systemName: copied ? "checkmark" : "doc.on.doc")
                 .font(.system(size: 11))
-                .foregroundStyle(copied ? Theme.success : Theme.muted)
+                // .msg-action:hover: fg glyph on a bg2 wash.
+                .foregroundStyle(copied ? Theme.success : (hovered ? Theme.fg : Theme.muted))
                 .frame(width: 26, height: 24)
-                .background(Color.clear, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
+                .background(
+                    hovered ? Theme.bg2 : Color.clear,
+                    in: RoundedRectangle(cornerRadius: Theme.radiusSm),
+                )
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { hovered = $0 }
         .help("Copy this message")
         .accessibilityLabel("Copy this message")
     }
@@ -291,17 +310,23 @@ struct ReasoningBlock: View {
             }
 
             if expanded {
-                ScrollView {
-                    Text(text)
-                        .font(.system(size: Theme.textSm))
-                        .lineSpacing(3)
-                        .foregroundStyle(Theme.muted)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        Text(text)
+                            .font(.system(size: Theme.textSm))
+                            .lineSpacing(5) // ≈ the WebUI's 1.6 line-height (.block-reasoning .body)
+                            .foregroundStyle(Theme.muted)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Color.clear.frame(height: 1).id("reasoning-bottom")
+                    }
+                    .defaultScrollAnchor(.bottom)
+                    .onChange(of: text.count) { _, _ in
+                        if active {
+                            proxy.scrollTo("reasoning-bottom", anchor: .bottom)
+                        }
+                    }
                 }
-                // Follow the reasoning stream while expanded, same
-                // release-on-scroll-up semantics as the transcript.
-                .defaultScrollAnchor(.bottom)
                 .frame(maxHeight: 320)
                 .padding(.leading, 12)
                 .overlay(alignment: .leading) {
@@ -545,7 +570,7 @@ struct ToolBlock: View {
                 ScrollView {
                     Text(output)
                         .font(Theme.monoSm)
-                        .lineSpacing(2)
+                        .lineSpacing(4.5) // ≈ the WebUI's 1.55 line-height (.tool-preview)
                         .foregroundStyle(Theme.fg)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -710,7 +735,7 @@ struct ArtifactBlockView: View {
     private var fileContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                if isText {
+                if isText, !failed {
                     Image(systemName: expanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9))
                         .foregroundStyle(Theme.muted)
@@ -731,12 +756,14 @@ struct ArtifactBlockView: View {
             .padding(.vertical, 8)
             .contentShape(Rectangle())
             .onTapGesture {
-                if isText {
+                if isText, !failed {
                     expanded.toggle()
                 }
             }
 
-            if isText, expanded, let data = entry?.data {
+            if failed {
+                ArtifactNotice(text: "Attachment failed to load")
+            } else if isText, expanded, let data = entry?.data {
                 Text(String(decoding: data, as: UTF8.self).prefix(8000))
                     .font(Theme.monoSm)
                     .foregroundStyle(Theme.fg)
@@ -816,9 +843,11 @@ extension Notification.Name {
 
 /// Window-level image lightbox (WebUI images.tsx): a dim overlay over
 /// the whole window — backdrop click, the × button, or Esc all close
-/// it. The image fills ~86% of the screen (scaled down when larger,
+/// it. The image fits ~86% of the WINDOW (scaled down when larger,
 /// scaled up for small bitmaps, capped at 2.5x to avoid mush); pinch /
-/// ctrl-scroll zooms to 4x, and dragging pans while zoomed.
+/// ctrl-scroll zooms to 4x, and dragging pans while zoomed. Sizing is
+/// relative to the lightbox container, never the screen — the earlier
+/// screen-based fit let the image flood a small window.
 struct ImageLightboxView: View {
     let image: NSImage
     let close: () -> Void
@@ -829,95 +858,97 @@ struct ImageLightboxView: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        let screen = NSScreen.main?.visibleFrame.size ?? NSSize(width: 1512, height: 945)
-        let imageSize = image.size.width > 1 ? image.size : NSSize(width: 800, height: 600)
-        let scale = min(
-            screen.width * 0.86 / imageSize.width,
-            screen.height * 0.86 / imageSize.height,
-            2.5,
-        )
-        ZStack(alignment: .topTrailing) {
-            // Backdrop: a click anywhere off the chrome closes (the
-            // WebUI's overlay.onclick), and it swallows every hit so
-            // the transcript below is inert while zoomed.
-            Theme.bg0.opacity(0.92)
-                .contentShape(Rectangle())
-                .onTapGesture { close() }
+        GeometryReader { proxy in
+            let imageSize = image.size.width > 1 ? image.size : NSSize(width: 800, height: 600)
+            let scale = min(
+                proxy.size.width * 0.86 / imageSize.width,
+                proxy.size.height * 0.86 / imageSize.height,
+                2.5,
+            )
+            ZStack(alignment: .topTrailing) {
+                // Backdrop: a click anywhere off the chrome closes (the
+                // WebUI's overlay.onclick), and it swallows every hit so
+                // the transcript below is inert while zoomed. Black at
+                // 72%, same as the WebUI's .lightbox.
+                Color.black.opacity(0.72)
+                    .contentShape(Rectangle())
+                    .onTapGesture { close() }
 
-            Image(nsImage: image)
-                .resizable()
-                .interpolation(.high)
-                .aspectRatio(contentMode: .fit)
-                .frame(width: imageSize.width * scale, height: imageSize.height * scale)
-                .scaleEffect(zoom)
-                .offset(pan)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSm))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.radiusSm)
-                        .strokeBorder(Theme.bg2, lineWidth: 1)
-                        .scaleEffect(zoom)
-                        .offset(pan),
-                )
-                .shadow(color: .black.opacity(0.5), radius: 24)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .gesture(
-                    MagnifyGesture()
-                        .onChanged { value in
-                            zoom = min(max(value.magnification, 0.5), 4)
-                        }
-                        .onEnded { _ in
-                            if zoom <= 1 {
-                                withAnimation(.easeOut(duration: 0.15)) {
-                                    zoom = 1
-                                    pan = .zero
-                                }
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: imageSize.width * scale, height: imageSize.height * scale)
+                    .scaleEffect(zoom)
+                    .offset(pan)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSm))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.radiusSm)
+                            .strokeBorder(Theme.bg2, lineWidth: 1)
+                            .scaleEffect(zoom)
+                            .offset(pan),
+                    )
+                    .shadow(color: .black.opacity(0.5), radius: 24)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        MagnifyGesture()
+                            .onChanged { value in
+                                zoom = min(max(value.magnification, 0.5), 4)
                             }
-                        },
-                )
-                .simultaneousGesture(
-                    DragGesture()
-                        .onChanged { value in
-                            guard zoom > 1 else { return }
-                            pan = value.translation
-                        },
-                )
-                .onTapGesture(count: 2) {
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        if zoom > 1 {
-                            zoom = 1
-                            pan = .zero
-                        } else {
-                            zoom = 2
+                            .onEnded { _ in
+                                if zoom <= 1 {
+                                    withAnimation(.easeOut(duration: 0.15)) {
+                                        zoom = 1
+                                        pan = .zero
+                                    }
+                                }
+                            },
+                    )
+                    .simultaneousGesture(
+                        DragGesture()
+                            .onChanged { value in
+                                guard zoom > 1 else { return }
+                                pan = value.translation
+                            },
+                    )
+                    .onTapGesture(count: 2) {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            if zoom > 1 {
+                                zoom = 1
+                                pan = .zero
+                            } else {
+                                zoom = 2
+                            }
                         }
                     }
-                }
-                .onTapGesture(count: 1) {
-                    if zoom <= 1 {
-                        close()
+                    .onTapGesture(count: 1) {
+                        if zoom <= 1 {
+                            close()
+                        }
                     }
-                }
 
-            HStack(spacing: 8) {
-                Button(action: copy) {
-                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                }
-                .help("Copy image (⌘C)")
-                .accessibilityLabel("Copy image")
+                HStack(spacing: 8) {
+                    Button(action: copy) {
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    }
+                    .help("Copy image (⌘C)")
+                    .accessibilityLabel("Copy image")
 
-                Button(action: close) {
-                    Image(systemName: "xmark")
+                    Button(action: close) {
+                        Image(systemName: "xmark")
+                    }
+                    .help("Close (Esc)")
+                    .accessibilityLabel("Close image preview")
                 }
-                .help("Close (Esc)")
-                .accessibilityLabel("Close image preview")
+                .font(.system(size: 13))
+                .foregroundStyle(copied ? Theme.success : Theme.muted)
+                .buttonStyle(.plain)
+                .padding(8)
+                .background(Theme.bg1, in: Capsule())
+                .overlay(Capsule().strokeBorder(Theme.bg2, lineWidth: 1))
+                .padding(20)
             }
-            .font(.system(size: 13))
-            .foregroundStyle(copied ? Theme.success : Theme.muted)
-            .buttonStyle(.plain)
-            .padding(8)
-            .background(Theme.bg1, in: Capsule())
-            .overlay(Capsule().strokeBorder(Theme.bg2, lineWidth: 1))
-            .padding(20)
         }
         .transition(.opacity)
         .focusable()
@@ -1090,7 +1121,7 @@ struct DiffView: View {
                 }
             }
             .font(Theme.monoSm)
-            .lineSpacing(1.5)
+            .lineSpacing(4.5) // ≈ the WebUI's 1.55 line-height (.diff)
         }
 
         private var signColor: Color {
@@ -1145,13 +1176,554 @@ struct DraftView: View {
                         // unterminated fence would re-run the JS
                         // highlighter on the whole growing block every
                         // frame, on the main thread); colors pop in when
-                        // the segment seals.
-                        MarkdownText(source: text.text + (text.live ? " ▍" : ""), live: text.live)
+                        // the segment seals. The gradient stream cursor
+                        // (.stream-cursor) rides the end of the text.
+                        MarkdownText(source: text.text, live: text.live, streamCursor: text.live)
                     }
                 case let .tool(tool):
                     ToolBlock(live: tool, artifactLoader: artifactLoader)
                 }
             }
+        }
+    }
+}
+
+// MARK: - Turn summary (.block-turn-summary)
+
+/// The closing review card of a finished turn (blocks.tsx
+/// TurnSummaryBlock): which files the turn's write tools touched,
+/// with per-file +/− stats and inline workspace diffs fetched from
+/// the run-changes endpoint. The file LIST is expanded by default;
+/// per-file diffs start collapsed and reset when the card collapses.
+/// Diffs are ledger-before vs CURRENT workspace content — after a
+/// revert the numbers drop to 0 ("unchanged").
+struct TurnSummaryView: View {
+    let summary: TurnSummary
+    /// Per-run review stats loader (SessionStore.runStats); nil →
+    /// static rows, no chevron (share-view parity).
+    var statsLoader: ((_ runId: String, _ forceRefresh: Bool) async -> [RunFileStat]?)?
+    /// Revert action (SessionStore.revertRun) → (note, warn).
+    var reverter: ((_ runId: String) async -> (note: String, warn: Bool))?
+
+    /// The file list is expanded by default; the whole-card collapse
+    /// clears every per-file diff (blocks.tsx toggleCard).
+    @State private var open = true
+    @State private var openFiles: Set<String> = []
+    /// nil before the fetch resolves (or when it answered no ledger
+    /// data) — rows stay static in both cases; revert is independent.
+    @State private var stats: [RunFileStat]?
+    @State private var statsReady = false
+    @State private var reverting = false
+    @State private var revertNote: String?
+    @State private var revertWarn = false
+
+    private var changes: [TurnFileChange] {
+        summary.changes ?? []
+    }
+
+    private var runId: String? {
+        summary.runId.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// Only rows backed by ledger stats offer inline diffs. An empty
+    /// response or failed fetch leaves static rows, but does not prevent
+    /// trying the independent revert endpoint.
+    private var expandable: Bool {
+        runId != nil && statsLoader != nil && stats != nil
+    }
+
+    private var canRevert: Bool {
+        runId != nil && reverter != nil
+    }
+
+    /// SessionStore.revertRun prefixes only request failures this way;
+    /// warn also covers successful reverts with conflicts or skipped files.
+    private var revertFailed: Bool {
+        revertNote?.hasPrefix("Revert failed:") == true
+    }
+
+    private var statByPath: [String: RunFileStat] {
+        Dictionary(uniqueKeysWithValues: (stats ?? []).map { ($0.path, $0) })
+    }
+
+    /// Aggregate only comparable entries; when none can be compared,
+    /// there is no trustworthy total to display.
+    private var totals: (added: Int, removed: Int)? {
+        guard let stats else { return nil }
+        let comparable = stats.filter { ($0.notComparable ?? "").isEmpty }
+        guard !comparable.isEmpty else { return nil }
+        return (
+            comparable.reduce(0) { $0 + $1.added },
+            comparable.reduce(0) { $0 + $1.removed },
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            head
+            if open {
+                fileList
+            }
+            foot
+        }
+        .font(.system(size: Theme.textMd))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusMd))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMd)
+                .strokeBorder(Theme.fg.opacity(0.12), lineWidth: 1),
+        )
+        .task { await loadStats() }
+    }
+
+    // MARK: Head (.tsm-head)
+
+    private var head: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                open.toggle()
+                if !open {
+                    openFiles.removeAll()
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: open ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Theme.muted)
+                Text("Turn changes \(changes.count) \(changes.count == 1 ? "file" : "files")")
+                    .font(.system(size: Theme.textMd, weight: .semibold))
+                    .foregroundStyle(Theme.fg)
+                if let totals {
+                    (Text("+\(totals.added)").foregroundStyle(Theme.success)
+                        + Text("  ")
+                        + Text("−\(totals.removed)").foregroundStyle(Theme.error))
+                        .font(.system(size: 12, design: .monospaced))
+                }
+                if summary.cancelled == true {
+                    tag("Cancelled", icon: "nosign", tint: Theme.muted, border: Theme.fg.opacity(0.18))
+                }
+                if summary.failed == true {
+                    tag("Failed", icon: "exclamationmark.triangle",
+                        tint: Theme.warning, border: Theme.warning.opacity(0.40))
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// .tsm-tag: 11px chip, radius 10px, padding 0/8, hairline border.
+    private func tag(_ text: String, icon: String, tint: Color, border: Color) -> some View {
+        Label(text, systemImage: icon)
+            .font(.system(size: 11))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 1)
+            .overlay(Capsule().strokeBorder(border, lineWidth: 1))
+    }
+
+    // MARK: File list (.tsm-list)
+
+    private var fileList: some View {
+        // Built once per evaluation, not once per row.
+        let stats = statByPath
+        return VStack(alignment: .leading, spacing: 3) {
+            ForEach(changes, id: \.path) { change in
+                TurnSummaryFileRow(
+                    change: change,
+                    stat: stats[change.path],
+                    expandable: expandable,
+                    statsReady: statsReady,
+                    isOpen: openFiles.contains(change.path),
+                    onToggle: { toggleFile(change.path) },
+                )
+            }
+        }
+        .padding(.top, 8)
+        .padding(.bottom, 2)
+        .overlay(alignment: .top) {
+            // Hairline divider between head and list (.tsm-list).
+            Rectangle().fill(Theme.fg.opacity(0.09)).frame(height: 1)
+        }
+    }
+
+    private func toggleFile(_ path: String) {
+        withAnimation(.easeInOut(duration: 0.15)) {
+            if openFiles.contains(path) {
+                openFiles.remove(path)
+            } else {
+                openFiles.insert(path)
+            }
+        }
+    }
+
+    // MARK: Foot (.tsm-foot / .tsm-note)
+
+    @ViewBuilder
+    private var foot: some View {
+        if let revertNote {
+            // A successful result replaces the footer; failed requests
+            // retain the action so the user can retry.
+            Label(revertNote, systemImage: revertWarn ? "exclamationmark.triangle" : "checkmark")
+                .font(.system(size: 12))
+                .foregroundStyle(revertWarn ? Theme.warning : Theme.success)
+        }
+        if revertNote == nil || revertFailed {
+            HStack(alignment: .top, spacing: 12) {
+                if canRevert {
+                    revertButton
+                }
+                if revertNote == nil {
+                    // .tsm-footnote
+                    Text(footnote)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.top, 7)
+            .overlay(alignment: .top) {
+                Rectangle().fill(Theme.fg.opacity(0.09)).frame(height: 1)
+            }
+        }
+    }
+
+    private var footnote: String {
+        var text =
+            "Only loom write-tool edits are counted; files written inside run_cmd (e.g. sed) are not."
+        text += expandable
+            ? " Click a file row to expand its workspace diff."
+            : " Inline diffs are unavailable for this turn."
+        return text
+    }
+
+    /// .tsm-btn.danger: bg2 chip; the border and hover tint are
+    /// owned by TurnSummaryButtonStyle (one stroke, not two).
+    private var revertButton: some View {
+        Button(action: confirmRevert) {
+            Label(reverting ? "Reverting…" : "Revert this turn", systemImage: "arrow.counterclockwise")
+                .font(.system(size: 12))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 3)
+                .background(Theme.bg2, in: RoundedRectangle(cornerRadius: Theme.radiusMd))
+        }
+        .buttonStyle(TurnSummaryButtonStyle())
+        .disabled(reverting)
+        .opacity(reverting ? 0.55 : 1)
+        .help(
+            "Restore files written this turn to their pre-turn contents "
+                + "(external changes made after the turn are overwritten and reported)",
+        )
+    }
+
+    /// The WebUI confirms each externally-modified file one by one;
+    /// the native app collapses that into a single alert naming the
+    /// overwrite semantics before the server does the same checks.
+    private func confirmRevert() {
+        guard !reverting, let runId, let reverter else { return }
+        let alert = NSAlert()
+        alert.messageText = "Revert this turn"
+        alert.informativeText =
+            "Restore files written this turn to their pre-turn contents. "
+                + "External changes made after the turn will be overwritten and reported."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Revert")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        reverting = true
+        Task {
+            let result = await reverter(runId)
+            reverting = false
+            revertNote = result.note
+            revertWarn = result.warn
+            if !revertFailed {
+                await loadStats(forceRefresh: true)
+            }
+        }
+    }
+
+    private func loadStats(forceRefresh: Bool = false) async {
+        guard let runId, let statsLoader else {
+            statsReady = true
+            return
+        }
+        stats = await statsLoader(runId, forceRefresh)
+        statsReady = true
+    }
+}
+
+/// .tsm-btn hover feedback (the plain style draws a pressed dim, which
+/// the WebUI button never does): border/glyph tint toward error on
+/// hover for the revert action, primary otherwise — .plain gives no
+/// hover hook, so a custom style tracks it.
+private struct TurnSummaryButtonStyle: ButtonStyle {
+    @State private var hovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(hovering ? Theme.error : Theme.fg)
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusMd)
+                    .strokeBorder(hovering ? Theme.error : Theme.fg.opacity(0.16), lineWidth: 1),
+            )
+            .onHover { hovering = $0 }
+            .animation(.easeInOut(duration: 0.12), value: hovering)
+    }
+}
+
+// MARK: - Turn summary file row (.tsm-file / .tsm-row)
+
+/// One file row plus its expandable inline-diff region. The row is a
+/// whole-row click target only when diffs are available (expandable).
+private struct TurnSummaryFileRow: View {
+    let change: TurnFileChange
+    let stat: RunFileStat?
+    let expandable: Bool
+    let statsReady: Bool
+    let isOpen: Bool
+    let onToggle: () -> Void
+
+    @State private var hovering = false
+
+    private var deleted: Bool {
+        stat.map { $0.afterSize == -1 && ($0.notComparable ?? "").isEmpty } ?? false
+    }
+
+    private var edits: Int {
+        stat?.edits ?? change.edits
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: onToggle) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    badge
+                    names
+                    Spacer(minLength: 8)
+                    right
+                }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(hovering && expandable ? Theme.fg.opacity(0.06) : .clear),
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!expandable)
+            .onHover { hovering = $0 }
+            if isOpen {
+                diffRegion
+                    // .tsm-file-diff: aligns the box with the filename
+                    // column (row padding 4 + badge 20 + names gap 8).
+                    .padding(.leading, 32)
+                    .padding(.top, 3)
+                    .padding(.bottom, 5)
+            }
+        }
+    }
+
+    /// .tsm-badge: 20×20 radius 5, bold 11 — A: success on success 18%;
+    /// M: warning on warning 20%.
+    private var badge: some View {
+        Text(change.created == true ? "A" : "M")
+            .font(.system(size: 11, weight: .bold))
+            .foregroundStyle(change.created == true ? Theme.success : Theme.warning)
+            .frame(width: 20, height: 20)
+            .background(
+                change.created == true ? Theme.success.opacity(0.18) : Theme.warning.opacity(0.20),
+                in: RoundedRectangle(cornerRadius: 5),
+            )
+    }
+
+    /// .tsm-names: base name (fg, never truncates) + directory tail
+    /// (muted, ellipsis) sharing one baseline.
+    private var names: some View {
+        let (base, dir) = Self.splitPath(change.path)
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(base)
+                .font(Theme.monoSm)
+                .foregroundStyle(Theme.fg)
+                .fixedSize()
+            if !dir.isEmpty {
+                Text(dir)
+                    .font(Theme.monoSm)
+                    .foregroundStyle(Theme.muted)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+    }
+
+    /// .tsm-right: mono 11 muted — Deleted (error) / "N edits" /
+    /// +/− stats / the per-file chevron.
+    private var right: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            if deleted {
+                Text("Deleted")
+                    .foregroundStyle(Theme.error)
+            }
+            if edits > 1 {
+                Text("\(edits) edits")
+            }
+            if let stat, (stat.notComparable ?? "").isEmpty, stat.added > 0 || stat.removed > 0 {
+                Text("+\(stat.added)")
+                    .foregroundStyle(Theme.success)
+                Text("−\(stat.removed)")
+                    .foregroundStyle(Theme.error)
+            }
+            if expandable {
+                Image(systemName: isOpen ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+            }
+        }
+        .font(.system(size: 11, design: .monospaced))
+        .foregroundStyle(Theme.muted)
+    }
+
+    /// The inline diff region under the row (.tsm-file-diff content):
+    /// loading / not-comparable / truncated + diff / no-op / no-ledger
+    /// states, in blocks.tsx order.
+    @ViewBuilder
+    private var diffRegion: some View {
+        if !statsReady {
+            note("Loading…")
+        } else if let notComparable = stat?.notComparable, !notComparable.isEmpty {
+            note(notComparable)
+        } else if let diff = stat?.diff, !diff.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                if stat?.diffTruncated == true {
+                    note("Diff truncated; stats cover only the head of the file")
+                }
+                TurnSummaryInlineDiff(path: change.path, diffText: diff)
+            }
+        } else if stat != nil {
+            note(
+                "Current content matches the pre-turn state "
+                    + "(the changes may have been reverted by later operations)",
+            )
+        } else {
+            note("No ledger record for this file in this turn; diff unavailable")
+        }
+    }
+
+    /// .tsm-diff-note: 11px muted on a bg0 rounded box.
+    private func note(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(Theme.muted)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.bg0, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// TurnSummaryBlock splitPath: the final component renders bold-fg,
+    /// the directory tail trails it in muted.
+    static func splitPath(_ path: String) -> (base: String, dir: String) {
+        let i = path.lastIndex(of: "/")
+        guard let i else { return (path, "") }
+        return (String(path[path.index(after: i)...]), String(path[..<i]))
+    }
+}
+
+// MARK: - Turn summary inline diff (.tsm-diff)
+
+/// blocks.tsx InlineDiff: the review diff rendered WITHOUT DiffView's
+/// frame — a shared bg0 box, lines COLORED BY KIND (whole-line
+/// red/green, unlike the tool card's tinted-background-only style).
+/// Overlong diffs cap at 80 lines with a fold note.
+private struct TurnSummaryInlineDiff: View {
+    let path: String
+    let diffText: String
+
+    /// INLINE_DIFF_MAX_LINES (blocks.tsx).
+    private static let maxLines = 80
+
+    /// parseDiff wants the +++ header for the file label; the review
+    /// endpoint emits bare hunks, so the caller re-attaches one.
+    private var parsed: ParsedDiff {
+        DiffParseCache.parse("+++ b/\(path)\n" + diffText)
+    }
+
+    var body: some View {
+        let lines = parsed.lines
+        let shown = lines.count > Self.maxLines ? Array(lines.prefix(Self.maxLines)) : lines
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(shown.enumerated()), id: \.offset) { _, line in
+                row(line)
+            }
+            if lines.count > shown.count {
+                Text("⋯ \(lines.count - shown.count) more lines folded")
+                    .foregroundStyle(Theme.muted)
+                    .font(.system(size: 11))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .font(Theme.monoSm)
+        .lineSpacing(4.5) // .tsm-diff line-height 1.55 at 13px
+        .background(Theme.bg0)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private func row(_ line: ParsedDiff.Line) -> some View {
+        // Unified-hunk header: a full-width strip, no sign column.
+        if line.kind == .hunk {
+            Text(line.text)
+                .foregroundStyle(Theme.purple)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if line.kind == .ctx, line.text == "..." {
+            // Compact-format region separator: a subtle ellipsis row.
+            Text("⋯")
+                .foregroundStyle(Theme.muted)
+                .frame(maxWidth: .infinity)
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                Text(line.sign)
+                    .frame(width: 28)
+                    .foregroundStyle(signColor(for: line.kind))
+                Text(line.text)
+            }
+            .padding(.trailing, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .foregroundStyle(textColor(for: line.kind))
+            .background(backgroundColor(for: line.kind))
+        }
+    }
+
+    /// Whole-line coloring (.tsm-dline.d-add/.d-del): text AND a 12%
+    /// tint; context lines stay fg with a muted sign.
+    private func textColor(for kind: ParsedDiff.Kind) -> Color {
+        switch kind {
+        case .add: Theme.success
+        case .del: Theme.error
+        default: Theme.fg
+        }
+    }
+
+    private func signColor(for kind: ParsedDiff.Kind) -> Color {
+        switch kind {
+        case .add: Theme.success
+        case .del: Theme.error
+        default: Theme.muted
+        }
+    }
+
+    private func backgroundColor(for kind: ParsedDiff.Kind) -> Color {
+        switch kind {
+        case .add: Theme.success.opacity(0.12)
+        case .del: Theme.error.opacity(0.12)
+        default: .clear
         }
     }
 }

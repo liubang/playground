@@ -32,7 +32,7 @@ struct ProvidersTabView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SettingsSectionTitle("Default Model")
+            SettingsSectionTitle("默认模型")
             FieldRow(
                 spec: defaultModelField,
                 value: store.draft.globals[defaultModelField.key] ?? .text(""),
@@ -43,11 +43,11 @@ struct ProvidersTabView: View {
         }
 
         VStack(alignment: .leading, spacing: 10) {
-            SettingsSectionTitle("Model Providers (at least one)")
+            SettingsSectionTitle("模型 Provider（至少一个）")
             ForEach(store.draft.providers) { card in
                 providerCard(card)
             }
-            SettingsAddButton(title: "Add Provider") { store.addProvider() }
+            SettingsAddButton(title: "添加 Provider") { store.addProvider() }
                 .id("add-provider")
         }
         .confirmationDialog(
@@ -62,16 +62,16 @@ struct ProvidersTabView: View {
             ),
             titleVisibility: .visible,
         ) {
-            Button("Delete", role: .destructive) {
+            Button("删除", role: .destructive) {
                 if let card = pendingDeleteProvider {
                     store.deleteProvider(card)
                 }
                 pendingDeleteProvider = nil
             }
-            Button("Cancel", role: .cancel) { pendingDeleteProvider = nil }
+            Button("取消", role: .cancel) { pendingDeleteProvider = nil }
         }
         .confirmationDialog(
-            "This deletes the model's configuration. It takes effect on save; reload before saving to restore.",
+            "将删除该模型的配置，保存后生效；保存前重新加载可恢复。",
             isPresented: Binding(
                 get: { pendingDeleteModel != nil },
                 set: {
@@ -82,22 +82,22 @@ struct ProvidersTabView: View {
             ),
             titleVisibility: .visible,
         ) {
-            Button("Delete", role: .destructive) {
+            Button("删除", role: .destructive) {
                 if let pending = pendingDeleteModel {
                     store.deleteModel(pending.card, modelId: pending.modelId)
                 }
                 pendingDeleteModel = nil
             }
-            Button("Cancel", role: .cancel) { pendingDeleteModel = nil }
+            Button("取消", role: .cancel) { pendingDeleteModel = nil }
         }
     }
 
     private var providerDeleteMessage: String {
         guard let card = pendingDeleteProvider else { return "" }
         let name = card.fields["name"]?.textValue.trimmingCharacters(in: .whitespaces)
-        return "Delete provider \"\(name?.isEmpty == false ? name! : "unnamed")\""
-            + (card.models.isEmpty ? "" : " and its \(card.models.count) model(s)")
-            + "? Takes effect on save; reload before saving to restore."
+        return "删除 provider \"\(name?.isEmpty == false ? name! : "未命名")\""
+            + (card.models.isEmpty ? "" : "及其 \(card.models.count) 个模型")
+            + "？保存后生效；保存前重新加载可恢复。"
     }
 
     // MARK: Provider card
@@ -130,12 +130,12 @@ struct ProvidersTabView: View {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
                 }
-                .help("Delete this provider")
+                .help("删除该 provider")
             }
         } content: {
             FieldRow(
                 spec: FieldSpec(
-                    "name", label: "Name", ph: "provider name (globally unique, required)", required: true,
+                    "name", label: "名称", ph: "provider 名称（全局唯一，必填）", required: true,
                 ),
                 value: card.fields["name"] ?? .text(""),
                 invalid: store.invalid == "\(card.id.uuidString):name",
@@ -186,18 +186,18 @@ struct ProvidersTabView: View {
                 }
                 .padding(.top, 8)
             } label: {
-                Text("Advanced")
+                Text("高级")
                     .font(.system(size: Theme.textSm, weight: .medium))
                     .foregroundStyle(Theme.muted)
             }
 
-            Text("Model Catalog")
+            Text("模型目录")
                 .font(.system(size: Theme.textSm, weight: .semibold))
                 .foregroundStyle(Theme.fg)
             ForEach(card.models) { model in
                 modelCard(card, model)
             }
-            SettingsAddButton(title: "Add Model") { store.addModel(card) }
+            SettingsAddButton(title: "添加模型") { store.addModel(card) }
                 .id("\(card.id.uuidString):add-model")
         }
     }
@@ -222,7 +222,7 @@ struct ProvidersTabView: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
-                Text("model")
+                Text("模型")
                     .font(.system(size: Theme.textXs))
                     .foregroundStyle(Theme.muted)
                     .padding(.horizontal, 6)
@@ -236,7 +236,7 @@ struct ProvidersTabView: View {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
                 }
-                .help("Delete this model")
+                .help("删除该模型")
             }
         } content: {
             ForEach(modelFields, id: \.key) { spec in
@@ -261,15 +261,15 @@ struct McpTabView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SettingsSectionTitle("MCP Servers")
+            SettingsSectionTitle("MCP 服务器")
             ForEach(store.draft.mcpServers) { card in
                 mcpCard(card)
             }
-            SettingsAddButton(title: "Add MCP Server") { store.addMcpServer() }
+            SettingsAddButton(title: "添加 MCP 服务器") { store.addMcpServer() }
         }
         .task { await store.loadMcpStatus() }
         .confirmationDialog(
-            "This deletes the MCP server's configuration. It takes effect on save; reload before saving to restore.",
+            "将删除该 MCP 服务器的配置，保存后生效；保存前重新加载可恢复。",
             isPresented: Binding(
                 get: { pendingDelete != nil },
                 set: {
@@ -280,13 +280,13 @@ struct McpTabView: View {
             ),
             titleVisibility: .visible,
         ) {
-            Button("Delete", role: .destructive) {
+            Button("删除", role: .destructive) {
                 if let card = pendingDelete {
                     store.deleteMcpServer(card)
                 }
                 pendingDelete = nil
             }
-            Button("Cancel", role: .cancel) { pendingDelete = nil }
+            Button("取消", role: .cancel) { pendingDelete = nil }
         }
     }
 
@@ -299,7 +299,7 @@ struct McpTabView: View {
         ) {
             HStack(spacing: 8) {
                 Text(card.name.trimmingCharacters(in: .whitespaces).isEmpty
-                    ? "(unnamed server)" : card.name)
+                    ? "（未命名服务器）" : card.name)
                     .font(.system(size: Theme.textMd, weight: .semibold))
                     .foregroundStyle(card.name.isEmpty ? Theme.muted : Theme.fg)
                 Text(card.transport.rawValue)
@@ -317,11 +317,11 @@ struct McpTabView: View {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
                 }
-                .help("Delete this server")
+                .help("删除该服务器")
             }
         } content: {
             FieldRow(
-                spec: FieldSpec("name", label: "Name", ph: "server name (globally unique, required)", required: true),
+                spec: FieldSpec("name", label: "名称", ph: "服务器名称（全局唯一，必填）", required: true),
                 value: .text(card.name),
                 invalid: store.invalid == "\(card.id.uuidString):name",
                 onChange: { store.patchMcpName(card.id, $0.textValue) },
@@ -329,7 +329,7 @@ struct McpTabView: View {
             .id("\(card.id.uuidString):name")
 
             HStack(spacing: 8) {
-                Text("Transport")
+                Text("传输方式")
                     .font(.system(size: Theme.textMd))
                     .foregroundStyle(Theme.fg)
                     .frame(width: 168, alignment: .leading)
@@ -337,8 +337,8 @@ struct McpTabView: View {
                     get: { card.transport },
                     set: { store.patchMcpTransport(card.id, $0) },
                 )) {
-                    Text("stdio (local command)").tag(McpDraft.Transport.stdio)
-                    Text("http (remote service)").tag(McpDraft.Transport.http)
+                    Text("stdio（本地命令）").tag(McpDraft.Transport.stdio)
+                    Text("http（远程服务）").tag(McpDraft.Transport.http)
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 280)
@@ -367,11 +367,11 @@ struct McpTabView: View {
 
             if !card.name.trimmingCharacters(in: .whitespaces).isEmpty {
                 HStack(spacing: 8) {
-                    Button("Reconnect") {
+                    Button("重新连接") {
                         Task { await store.reconnectMcpServer(card.name) }
                     }
                     .buttonStyle(OutlineButtonStyle())
-                    .help("Reconnect this server manually after saving the configuration")
+                    .help("保存配置后手动重新连接该服务器")
                     if let error = status?.error, !error.isEmpty {
                         Text(error)
                             .font(.system(size: Theme.textXs))
@@ -386,16 +386,16 @@ struct McpTabView: View {
     @ViewBuilder private func statusBadge(_ status: McpServerStatus?) -> some View {
         if let status {
             if status.connected == true {
-                Label("Connected · \(status.tools?.count ?? 0) tools", systemImage: "circle.fill")
+                Label("已连接 · \(status.tools?.count ?? 0) 个工具", systemImage: "circle.fill")
                     .font(.system(size: Theme.textXs))
                     .foregroundStyle(Theme.success)
             } else if let error = status.error, !error.isEmpty {
-                Label("Connection failed", systemImage: "exclamationmark.triangle.fill")
+                Label("连接失败", systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: Theme.textXs))
                     .foregroundStyle(Theme.error)
                     .help(error)
             } else {
-                Text("Not connected")
+                Text("未连接")
                     .font(.system(size: Theme.textXs))
                     .foregroundStyle(Theme.muted)
             }
@@ -412,7 +412,7 @@ struct SkillsTabView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SettingsSectionTitle("Skill Settings")
+            SettingsSectionTitle("技能设置")
             ForEach(skillsConfigFields, id: \.key) { spec in
                 FieldRow(
                     spec: spec,
@@ -425,12 +425,12 @@ struct SkillsTabView: View {
         }
 
         VStack(alignment: .leading, spacing: 10) {
-            SettingsSectionTitle("Discovered Skills")
+            SettingsSectionTitle("已发现的技能")
             runtimeContent
         }
         .task { await store.loadSkills() }
         .confirmationDialog(
-            "This deletes the skill's directory from disk. This cannot be undone.",
+            "将从磁盘删除该技能的目录，此操作不可撤销。",
             isPresented: Binding(
                 get: { pendingDelete != nil },
                 set: {
@@ -441,20 +441,27 @@ struct SkillsTabView: View {
             ),
             titleVisibility: .visible,
         ) {
-            Button("Delete", role: .destructive) {
+            Button("删除", role: .destructive) {
                 if let skill = pendingDelete {
                     Task { await store.deleteSkill(path: skill.path) }
                 }
                 pendingDelete = nil
             }
-            Button("Cancel", role: .cancel) { pendingDelete = nil }
+            Button("取消", role: .cancel) { pendingDelete = nil }
         }
     }
 
     @ViewBuilder private var runtimeContent: some View {
+        if let error = store.skillsError {
+            Label("技能加载失败：\(error)", systemImage: "exclamationmark.triangle")
+                .font(.system(size: Theme.textSm))
+                .foregroundStyle(Theme.error)
+            Button("重试") { Task { await store.loadSkills() } }
+                .buttonStyle(OutlineButtonStyle())
+        }
         if let overview = store.skills {
             if overview.enabled == false {
-                Label(overview.reason ?? "Skills are disabled", systemImage: "exclamationmark.triangle")
+                Label(overview.reason ?? "技能已禁用", systemImage: "exclamationmark.triangle")
                     .font(.system(size: Theme.textSm))
                     .foregroundStyle(Theme.warning)
             }
@@ -467,7 +474,7 @@ struct SkillsTabView: View {
             }
             ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(group.shared == true ? "User (shared)" : group.workspaceName)
+                    Text(group.shared == true ? "用户级（共享）" : group.workspaceName)
                         .font(.system(size: Theme.textSm, weight: .semibold))
                         .foregroundStyle(Theme.fg)
                     ForEach(group.issues ?? [], id: \.self) { issue in
@@ -480,8 +487,8 @@ struct SkillsTabView: View {
                     }
                 }
             }
-        } else {
-            Text(store.skillsLoaded ? skillsEmptyHint : "Loading…")
+        } else if store.skillsError == nil {
+            Text(store.skillsLoaded ? skillsEmptyHint : "加载中…")
                 .font(.system(size: Theme.textSm))
                 .foregroundStyle(Theme.muted)
         }
@@ -519,7 +526,7 @@ struct SkillsTabView: View {
                     .truncationMode(.middle)
             }
             Spacer()
-            Toggle("Disabled", isOn: Binding(
+            Toggle("禁用", isOn: Binding(
                 get: { skill.disabled == true },
                 set: { disabled in
                     Task { await store.setSkillDisabled(skill.name, disabled: disabled) }
@@ -531,7 +538,7 @@ struct SkillsTabView: View {
                 Image(systemName: "trash")
                     .font(.system(size: 11))
             }
-            .help("Delete this skill (cannot be undone)")
+            .help("删除该技能（不可撤销）")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -546,18 +553,25 @@ struct RulePacksView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SettingsSectionTitle("Rule Packs")
+            SettingsSectionTitle("规则包")
+            if let error = store.rulePacksError {
+                Label("规则包加载失败：\(error)", systemImage: "exclamationmark.triangle")
+                    .font(.system(size: Theme.textSm))
+                    .foregroundStyle(Theme.error)
+                Button("重试") { Task { await store.loadRulePacks() } }
+                    .buttonStyle(OutlineButtonStyle())
+            }
             if let packs = store.rulePacks {
                 if packs.isEmpty {
-                    Text("No rule packs available")
+                    Text("没有可用的规则包")
                         .font(.system(size: Theme.textSm))
                         .foregroundStyle(Theme.muted)
                 }
                 ForEach(packs) { pack in
                     packRow(pack)
                 }
-            } else {
-                Text("Loading…")
+            } else if store.rulePacksError == nil {
+                Text("加载中…")
                     .font(.system(size: Theme.textSm))
                     .foregroundStyle(Theme.muted)
             }
@@ -596,7 +610,7 @@ struct RulePacksView: View {
                 }
             }
             Spacer()
-            Button(pack.installed == true ? "Uninstall" : "Install") {
+            Button(pack.installed == true ? "卸载" : "安装") {
                 Task { await store.installRulePack(pack.id, install: pack.installed != true) }
             }
             .buttonStyle(OutlineButtonStyle())
@@ -623,26 +637,33 @@ struct SystemExtrasView: View {
     var body: some View {
         // Workspaces (config.yaml workspaces[]) — WebUI SystemExtras card.
         VStack(alignment: .leading, spacing: 10) {
-            SettingsSectionTitle("Workspaces")
+            SettingsSectionTitle("工作区")
             ForEach(store.draft.workspaces) { card in
                 workspaceCard(card)
             }
-            SettingsAddButton(title: "Add Workspace") { store.addWorkspaceCard() }
+            SettingsAddButton(title: "添加工作区") { store.addWorkspaceCard() }
         }
 
         // Dev-environment runtime report (read-only).
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                SettingsSectionTitle("Dev Environment")
+                SettingsSectionTitle("开发环境")
                 Spacer()
                 GhostButton {
                     Task { await store.loadEnvironment() }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .help("Re-detect")
+                .help("重新检测")
             }
 
+            if let error = store.environmentError {
+                Label("环境检测失败：\(error)", systemImage: "exclamationmark.triangle")
+                    .font(.system(size: Theme.textSm))
+                    .foregroundStyle(Theme.error)
+                Button("重试") { Task { await store.loadEnvironment() } }
+                    .buttonStyle(OutlineButtonStyle())
+            }
             if let env = store.environment {
                 if let tools = env.tools, !tools.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
@@ -656,7 +677,7 @@ struct SystemExtrasView: View {
                                     .font(.system(size: Theme.textSm, weight: .medium, design: .monospaced))
                                     .foregroundStyle(Theme.fg)
                                     .frame(width: 100, alignment: .leading)
-                                Text(tool.found == true ? (tool.path ?? "") : "not found")
+                                Text(tool.found == true ? (tool.path ?? "") : "未找到")
                                     .font(.system(size: Theme.textXs, design: .monospaced))
                                     .foregroundStyle(Theme.muted)
                                     .lineLimit(1)
@@ -667,7 +688,7 @@ struct SystemExtrasView: View {
                 }
                 if let dirs = env.dirs, !dirs.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("PATH Assembly")
+                        Text("PATH 组装")
                             .font(.system(size: Theme.textSm, weight: .semibold))
                             .foregroundStyle(Theme.fg)
                         ForEach(dirs) { dir in
@@ -687,7 +708,7 @@ struct SystemExtrasView: View {
                 }
                 if let path = env.effectivePath, !path.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Effective PATH")
+                        Text("生效的 PATH")
                             .font(.system(size: Theme.textSm, weight: .semibold))
                             .foregroundStyle(Theme.fg)
                         Text(path)
@@ -699,8 +720,8 @@ struct SystemExtrasView: View {
                             .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
                     }
                 }
-            } else {
-                Text("Loading…")
+            } else if store.environmentError == nil {
+                Text("加载中…")
                     .font(.system(size: Theme.textSm))
                     .foregroundStyle(Theme.muted)
             }
@@ -713,7 +734,7 @@ struct SystemExtrasView: View {
             HStack {
                 Text(card.fields["name"]?.textValue.isEmpty == false
                     ? card.fields["name"]?.textValue ?? ""
-                    : "(unnamed workspace)")
+                    : "（未命名工作区）")
                     .font(.system(size: Theme.textMd, weight: .semibold))
                     .foregroundStyle(Theme.fg)
                 Spacer()
@@ -721,15 +742,15 @@ struct SystemExtrasView: View {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
                 }
-                .help("Remove this workspace (takes effect on save)")
+                .help("移除该工作区（保存后生效）")
             }
             FieldRow(
-                spec: FieldSpec("name", label: "Name"),
+                spec: FieldSpec("name", label: "名称"),
                 value: card.fields["name"] ?? .text(""),
                 onChange: { store.patchWorkspace(card.id, key: "name", $0) },
             )
             FieldRow(
-                spec: FieldSpec("root", label: "Root Directory", ph: "/path/to/project", required: true),
+                spec: FieldSpec("root", label: "根目录", ph: "/path/to/project", required: true),
                 value: card.fields["root"] ?? .text(""),
                 invalid: store.invalid == "\(card.id.uuidString):root",
                 onChange: { store.patchWorkspace(card.id, key: "root", $0) },
@@ -753,10 +774,10 @@ private func providerSummary(_ card: ProviderDraft) -> (name: String, meta: Stri
     let name = p["name"]?.stringValue
     let meta = [
         p["type"]?.stringValue ?? "openai",
-        p["base_url"]?.stringValue ?? "no base URL configured",
-        "\(card.models.count) model(s)",
+        p["base_url"]?.stringValue ?? "未配置 Base URL",
+        "\(card.models.count) 个模型",
     ].joined(separator: " · ")
-    return (name ?? "(unnamed provider)", meta, name != nil)
+    return (name ?? "（未命名 provider）", meta, name != nil)
 }
 
 private func modelSummary(_ card: CardDraft) -> (name: String, meta: String, named: Bool) {
@@ -764,18 +785,18 @@ private func modelSummary(_ card: CardDraft) -> (name: String, meta: String, nam
     collectFields(modelFields, card.fields, into: &m)
     var parts: [String] = []
     if let window = m["context_window"]?.numberText {
-        parts.append("context \(window)")
+        parts.append("上下文 \(window)")
     }
     if let output = m["max_output_tokens"]?.numberText {
-        parts.append("max output \(output)")
+        parts.append("最大输出 \(output)")
     }
     if case let .array(modalities) = m["modalities"], modalities.contains(.string("image")) {
-        parts.append("multimodal")
+        parts.append("多模态")
     }
     let name = m["name"]?.stringValue
     return (
-        name ?? "(unnamed model)",
-        parts.isEmpty ? "follows provider / global defaults" : parts.joined(separator: " · "),
+        name ?? "（未命名模型）",
+        parts.isEmpty ? "跟随 provider / 全局默认" : parts.joined(separator: " · "),
         name != nil,
     )
 }

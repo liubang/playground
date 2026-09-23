@@ -35,15 +35,20 @@ swift_library(
 )
 
 # Protocol + store sources recompiled with -enable-testing for
-# //swift/pl/loom/ut (see the aurashot pattern). Views and the @main
-# entry point are excluded: nothing to unit-test there, and the entry
-# point's _main would collide with the test runner's.
+# //swift/pl/loom/ut (see the aurashot pattern). The @main entry point
+# is excluded (its _main would collide with the test runner's), and so
+# are the views — except the markdown block parser's self-contained
+# trio, which carries the unit-tested LiveBlockCache/splitBlocks logic.
 filegroup(
     name = "sources_for_tests",
     srcs = glob([
         "protocol/*.swift",
         "store/*.swift",
-    ]),
+    ]) + [
+        "views/MarkdownText.swift",
+        "views/SyntaxHighlighter.swift",
+        "views/Theme.swift",
+    ],
     visibility = ["//visibility:public"],
 )
 

@@ -84,8 +84,8 @@ struct LoomApp: App {
                 .keyboardShortcut("]", modifiers: .command)
                 .disabled(appState.sessionList == nil)
             }
-            // No help book ships; the menu was a bare search field.
-            CommandGroup(replacing: .help) {}
+            // Keep the system Help menu (including its searchable menu
+            // commands) even though Loom does not ship a help book.
         }
     }
 }

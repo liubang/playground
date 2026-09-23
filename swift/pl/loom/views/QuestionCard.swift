@@ -25,9 +25,14 @@ struct QuestionCard: View {
     @State private var selected: Set<String> = []
     @State private var customText = ""
     @FocusState private var customFocused: Bool
+    @ScaledMetric(relativeTo: .body) private var inputFontSize: CGFloat = Theme.textMd
 
     private var allowMultiple: Bool {
         question.allowMultiple ?? false
+    }
+
+    private var canSubmit: Bool {
+        !selected.isEmpty || !customText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
@@ -67,15 +72,19 @@ struct QuestionCard: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(option.label)
+                    .accessibilityValue(isSelected(option.label) ? "Selected" : "Not selected")
+                    .accessibilityHint(option.description ?? (allowMultiple ? "Toggle option" : "Select option"))
                 }
             }
 
             // input[type='text'] with the gate-style focus halo
             TextField("Custom answer… (optional)", text: $customText)
                 .textFieldStyle(.plain)
-                .font(.system(size: Theme.textMd))
+                .font(.system(size: inputFontSize))
                 .foregroundStyle(Theme.fg)
                 .focused($customFocused)
+                .accessibilityLabel("Custom answer")
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
@@ -92,7 +101,9 @@ struct QuestionCard: View {
             HStack(spacing: 10) {
                 Button("Submit", action: submit)
                     .buttonStyle(PrimaryButtonStyle())
-                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canSubmit)
+                // Multiple pending cards can be enabled at once; Return belongs
+                // only to the focused custom-answer field above.
 
                 Button("Skip") {
                     onAnswer([], nil, true)
@@ -142,7 +153,9 @@ struct QuestionCard: View {
     }
 
     private func submit() {
+        guard canSubmit else { return }
         let custom = customText.trimmingCharacters(in: .whitespacesAndNewlines)
-        onAnswer(Array(selected), custom.isEmpty ? nil : custom, false)
+        let orderedSelection = question.options.map(\.label).filter { selected.contains($0) }
+        onAnswer(orderedSelection, custom.isEmpty ? nil : custom, false)
     }
 }

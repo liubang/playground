@@ -15,28 +15,25 @@
 import AppKit
 import SwiftUI
 
-/// Near-faithful port of the WebUI's design tokens
+/// Exact port of the WebUI's design tokens
 /// (webui/src/styles/tokens.css — Everforest dark, the WebUI's default,
 /// plus its Everforest Light Medium variant). Every token is
 /// appearance-adaptive: the header's theme toggle flips the window's
 /// color scheme (loom.theme) and all colors re-resolve, exactly like
 /// the WebUI swapping [data-theme] on the root element.
 ///
-/// One deliberate deviation: the surface ladder is widened (bg0
-/// deepened, bg2/bg3 lifted, fg slightly brightened). The stock
-/// Everforest steps are only ~3–5% luminance apart, which flattened
-/// the sidebar/main split into one murky slab on native macOS
-/// rendering; the wider ladder restores depth between zones.
+/// The hex pairs below mirror tokens.css one-to-one (keep in sync —
+/// SyntaxHighlighter's NSColor Palette carries the same pairs).
 enum Theme {
     // Surfaces
-    static let bg0 = adaptive(dark: 0x1A1F22, light: 0xFDF6E3)
+    static let bg0 = adaptive(dark: 0x1E2326, light: 0xFDF6E3)
     static let bg1 = adaptive(dark: 0x272E33, light: 0xF4F0D9)
-    static let bg2 = adaptive(dark: 0x333D42, light: 0xECE7D0)
-    static let bg3 = adaptive(dark: 0x49545A, light: 0xDDD7BC)
-    static let bubbleUser = adaptive(dark: 0x3E474D, light: 0xE1DCC4)
+    static let bg2 = adaptive(dark: 0x2E383C, light: 0xEFEBD4)
+    static let bg3 = adaptive(dark: 0x3D484D, light: 0xE2DCC4)
+    static let bubbleUser = adaptive(dark: 0x3A4148, light: 0xE6E2CC)
 
     // Text
-    static let fg = adaptive(dark: 0xDBCFB8, light: 0x5C6A72)
+    static let fg = adaptive(dark: 0xD3C6AA, light: 0x5C6A72)
     static let muted = adaptive(dark: 0x9DA9A0, light: 0x5C6E5E)
 
     // Accents
@@ -199,58 +196,40 @@ struct Hairline: View {
     }
 }
 
-/// Badge (ui.css .badge): dot + label; the header's state/connection
-/// indicators. Colors and pulse behavior follow the is-* variants.
-struct BadgeView: View {
-    enum Tone {
-        case plain, running, awaiting, live, reconnecting, draining, dead
-
-        var color: Color {
-            switch self {
-            case .plain: Theme.muted
-            case .running, .live: Theme.success
-            case .awaiting, .reconnecting: Theme.warning
-            case .draining: Theme.highlight
-            case .dead: Theme.error
-            }
-        }
-
-        var pulses: Bool {
-            switch self {
-            case .running, .awaiting, .reconnecting: true
-            default: false
-            }
-        }
-    }
-
-    let tone: Tone
-    let text: String
-
-    var body: some View {
-        HStack(spacing: 6) {
-            if tone.pulses {
-                PulsingDot(color: tone.color, period: tone == .reconnecting ? 1.0 : 1.6)
-            } else {
-                Circle().fill(tone.color).frame(width: 7, height: 7)
-            }
-            Text(text)
-        }
-        .font(.system(size: 12))
-        .foregroundStyle(tone.color)
-        .fixedSize()
-    }
-}
-
-/// Waiting-for-model indicator: the WebUI's three-dot traveling wave.
+/// Waiting-for-model indicator: the WebUI's three-dot traveling wave
+/// (.block-thinking / think-wave 1.4s — opacity 0.3↔1 with a -2px rise
+/// at the midpoint, staggered 0.2s per dot). Honors Reduce Motion.
 struct ThinkingDots: View {
     var body: some View {
         HStack(spacing: 6) {
-            PulsingDot(color: Theme.muted, delay: 0)
-            PulsingDot(color: Theme.muted, delay: 0.2)
-            PulsingDot(color: Theme.muted, delay: 0.4)
+            WaveDot(delay: 0)
+            WaveDot(delay: 0.2)
+            WaveDot(delay: 0.4)
         }
         .padding(.vertical, 6)
         .accessibilityLabel("Working")
+    }
+
+    private struct WaveDot: View {
+        var delay: Double
+        @State private var crest = false
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+        var body: some View {
+            Circle()
+                .fill(Theme.muted)
+                .frame(width: 7, height: 7)
+                .opacity(crest && !reduceMotion ? 1 : 0.3)
+                .offset(y: crest && !reduceMotion ? -2 : 0)
+                .onAppear {
+                    guard !reduceMotion else { return }
+                    withAnimation(
+                        .easeInOut(duration: 0.7)
+                            .repeatForever(autoreverses: true)
+                            .delay(delay),
+                    ) { crest = true }
+                }
+        }
     }
 }
 

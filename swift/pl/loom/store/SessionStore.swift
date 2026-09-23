@@ -290,7 +290,11 @@ final class SessionStore {
     private let sse: SSEClient
 
     private(set) var state: SessionState = .booting {
-        didSet { rebuildTranscript() }
+        didSet {
+            if !applyingSnapshot {
+                rebuildTranscript()
+            }
+        }
     }
 
     private(set) var modelName = ""
@@ -304,7 +308,22 @@ final class SessionStore {
     /// bare model name.
     var defaultModelRef: String?
     private(set) var messages: [Message] = [] {
-        didSet { rebuildTranscript() }
+        didSet {
+            if !applyingSnapshot {
+                rebuildTranscript()
+            }
+        }
+    }
+
+    /// Per-turn file-change projection (snapshot.turn_summaries): each
+    /// becomes the turn's closing review card (WebUI
+    /// .block-turn-summary) mounted at its turn boundary.
+    private(set) var turnSummaries: [TurnSummary] = [] {
+        didSet {
+            if !applyingSnapshot {
+                rebuildTranscript()
+            }
+        }
     }
 
     /// Precomputed transcript render data (rows, merged tool blocks,
@@ -314,14 +333,20 @@ final class SessionStore {
     /// per edit call. (Previously these were ChatView computed
     /// properties re-derived on every streaming frame.)
     private(set) var transcript: TranscriptModel = .empty
+    private var applyingSnapshot = false
     /// Composer input, kept in the store so it survives session
     /// switches (SessionListStore keeps stores warm; the chat view
     /// itself is destroyed on every switch via .id(sessionId)).
     var composerDraft = ""
+    private(set) var sendingPrompt = false
+    /// Retain the key only when the outcome is unknown and the exact request is retried.
+    private var uncertainPrompt: (text: String, key: String)?
     private(set) var draft: DraftTurn?
     private(set) var pendingApprovals: [ApprovalRequestedPayload] = []
     private(set) var pendingQuestions: [PendingRequest.Question] = []
     private(set) var plan: PlanPayload?
+    /// Distinguishes a newly created plan from a previous one with identical goals.
+    private(set) var planIdentity = UUID()
     private(set) var usage: Usage?
     private(set) var occupancy: Int64?
     /// Gauge denominator: snapshot.window.effective (the compaction
@@ -331,6 +356,7 @@ final class SessionStore {
     private(set) var turnCount = 0
     private(set) var pendingSteers: [String] = []
     private(set) var notices: [String] = []
+    private static let maxNotices = 10
     private(set) var lastError: String?
     private(set) var connection: SessionConnection = .connecting
     private(set) var hasLoaded = false
@@ -348,6 +374,12 @@ final class SessionStore {
     /// Global sequence cursor — the snapshot's event_seq stitched with
     /// every observed frame id (query `after=` wins over Last-Event-ID).
     private var cursor: UInt64 = 0
+    /// A snapshot may commit only if no later request or SSE projection has overtaken it.
+    private var snapshotRequest = 0
+    private var projectionRevision = 0
+    /// An invalid replay cursor (including a prior server instance) must be
+    /// replaced by the next snapshot watermark, never merged with it.
+    private var resetCursorOnSnapshot = false
     private var instance: String?
     private var lastFrameAt = Date()
     private var loopTask: Task<Void, Never>?
@@ -366,7 +398,9 @@ final class SessionStore {
 
     private func rebuildTranscript() {
         let midTurn = state == .running || state == .cancelling || state == .awaitingApproval
-        transcript = TranscriptModel.build(messages: messages, midTurn: midTurn)
+        transcript = TranscriptModel.build(
+            messages: messages, midTurn: midTurn, turnSummaries: turnSummaries,
+        )
     }
 
     var occupancyFraction: Double? {
@@ -410,6 +444,13 @@ final class SessionStore {
         return entry
     }
 
+    private func addNotice(_ text: String) {
+        notices.append(text)
+        if notices.count > Self.maxNotices {
+            notices.removeFirst(notices.count - Self.maxNotices)
+        }
+    }
+
     // MARK: Lifecycle
 
     func start() {
@@ -427,24 +468,48 @@ final class SessionStore {
 
     // MARK: Commands
 
-    /// Returns false when the prompt failed to send — the composer
-    /// restores the draft on false so the text is never lost.
+    /// Claim the draft synchronously before starting a request. The store owns
+    /// both the in-flight gate and draft restoration, even across view switches.
     @discardableResult
-    func sendPrompt(_ text: String) async -> Bool {
+    func sendComposerDraft() -> Task<Void, Never>? {
+        let text = composerDraft
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return true }
-        do {
-            try await api.sendPrompt(sessionId, prompt: trimmed)
-            // No optimistic append: idle → turn.started carries the prompt;
-            // busy → steer.queued carries it. Both arrive within ms.
-            // The first prompt also gives the session its derived title —
-            // refresh the list now so the header/sidebar pick it up.
-            onTurnActivity?()
-            return true
-        } catch {
-            lastError = error.localizedDescription
-            return false
+        guard !sendingPrompt, !trimmed.isEmpty, state != .closed, state != .booting else { return nil }
+        sendingPrompt = true
+        composerDraft = ""
+        let key: String = if let uncertainPrompt, uncertainPrompt.text == trimmed {
+            uncertainPrompt.key
+        } else {
+            UUID().uuidString
         }
+        // A different message is a new intent, not a retry of the previous one.
+        uncertainPrompt = nil
+        return Task { [self] in
+            do {
+                try await api.sendPrompt(sessionId, prompt: trimmed, idempotencyKey: key)
+                // No optimistic append: idle → turn.started carries the prompt;
+                // busy → steer.queued carries it. Both arrive within ms.
+                onTurnActivity?()
+            } catch {
+                // A transport error, malformed success response or server error
+                // may follow a committed submission. Only explicit rejections
+                // allow the next attempt to use a fresh key.
+                if !Self.isDefinitePromptRejection(error) {
+                    uncertainPrompt = (trimmed, key)
+                }
+                lastError = error.localizedDescription
+                let draft = composerDraft
+                composerDraft = draft.isEmpty ? text : text + "\n" + draft
+            }
+            sendingPrompt = false
+        }
+    }
+
+    private static func isDefinitePromptRejection(_ error: Error) -> Bool {
+        guard case let LoomAPIError.http(_, code, _) = error else { return false }
+        // These are rejected before a prompt can be accepted by the service.
+        return ["invalid_input", "unauthenticated", "session_archived", "session_closed",
+                "rate_limited", "too_large", "not_found"].contains(code)
     }
 
     func cancel() async {
@@ -458,9 +523,88 @@ final class SessionStore {
     func requestCompaction() async {
         do {
             try await api.requestCompaction(sessionId)
-            notices.append("Context compaction scheduled — it runs at the start of the next turn.")
+            addNotice("Context compaction scheduled — it runs at the start of the next turn.")
         } catch {
             lastError = error.localizedDescription
+        }
+    }
+
+    // MARK: Turn change review / revert (turn-summary card)
+
+    /// Stats compare each run's ledger against the CURRENT workspace, so
+    /// reverting any run invalidates every card, not just the reverted one.
+    private enum CachedRunStats {
+        case available([RunFileStat])
+        case unavailable
+
+        var value: [RunFileStat]? {
+            if case let .available(stats) = self {
+                return stats
+            }
+            return nil
+        }
+    }
+
+    private var runStatsCache: [String: CachedRunStats] = [:]
+    private var runStatsEpoch = 0
+    private var runStatsRequests: [String: Int] = [:]
+
+    func runStats(runId: String, forceRefresh: Bool = false) async -> [RunFileStat]? {
+        if !forceRefresh, let cached = runStatsCache[runId] {
+            return cached.value
+        }
+        let epoch = runStatsEpoch
+        let request = (runStatsRequests[runId] ?? 0) + 1
+        runStatsRequests[runId] = request
+        let result: CachedRunStats
+        do {
+            let response = try await api.runChanges(sessionId, runId: runId)
+            if let entries = response.entries, !entries.isEmpty {
+                result = .available(entries)
+            } else {
+                result = .unavailable
+            }
+        } catch {
+            // An unavailable result is cached too; otherwise every card
+            // mount retries a failed or empty request.
+            result = .unavailable
+        }
+        // MainActor is reentrant across the await: an older request must
+        // neither overwrite a forced refresh nor resurrect pre-revert stats.
+        guard epoch == runStatsEpoch, runStatsRequests[runId] == request else { return nil }
+        runStatsCache[runId] = result
+        return result.value
+    }
+
+    /// Revert one turn's file mutations (WebUI revertRun): restores
+    /// the recorded before-content, conflicts are overwritten and
+    /// reported. Invalidates all run stats so cards refetch against
+    /// the current workspace. Returns the
+    /// note text + warn flag for the card's .tsm-note line.
+    func revertRun(runId: String) async -> (note: String, warn: Bool) {
+        do {
+            let outcome = try await api.revertRun(sessionId, runId: runId)
+            runStatsEpoch += 1
+            runStatsCache.removeAll()
+            runStatsRequests.removeAll()
+            let restored = (outcome.restored ?? []).count + (outcome.deleted ?? []).count
+            let conflicts = (outcome.conflicts ?? []).count
+            let skipped = (outcome.skipped ?? []).count
+            if conflicts > 0 {
+                return (
+                    "Reverted \(restored) file(s); \(conflicts) external change(s) made after the turn were overwritten",
+                    true,
+                )
+            }
+            if skipped > 0 {
+                return (
+                    "Reverted \(restored) file(s); \(skipped) had no recorded content and were left as-is",
+                    true,
+                )
+            }
+            return ("Reverted \(restored) file(s) to their pre-turn state", false)
+        } catch {
+            return ("Revert failed: \(error.localizedDescription)", true)
         }
     }
 
@@ -517,7 +661,10 @@ final class SessionStore {
     }
 
     func pickApprovalMode(_ mode: String) async {
-        guard let workspaceId else { return }
+        guard let workspaceId else {
+            lastError = "Cannot change approval mode: this session has no workspace ID."
+            return
+        }
         do {
             try await api.setWorkspaceApprovalMode(workspaceId, mode: mode)
             approvalMode = mode
@@ -581,23 +728,49 @@ final class SessionStore {
     /// on start, on server.resync, on instance change, and after every
     /// turn end to swap the lossy draft for canonical messages.
     func refresh() async {
+        snapshotRequest += 1
+        let request = snapshotRequest
+        let revision = projectionRevision
         do {
-            try await applySnapshot(api.snapshot(sessionId))
-            lastError = nil
+            let snap = try await api.snapshot(sessionId)
+            commitSnapshot(snap, request: request, revision: revision)
         } catch let LoomAPIError.http(status, _, _) where status == 404 {
             // Session not alive in this process — resume, then snapshot.
+            guard request == snapshotRequest, revision == projectionRevision, !Task.isCancelled else { return }
             do {
                 try await api.createSession(resume: sessionId)
-                try await applySnapshot(api.snapshot(sessionId))
-                lastError = nil
+                guard request == snapshotRequest, revision == projectionRevision, !Task.isCancelled else { return }
+                let snap = try await api.snapshot(sessionId)
+                commitSnapshot(snap, request: request, revision: revision)
             } catch {
-                lastError = error.localizedDescription
+                if request == snapshotRequest, revision == projectionRevision, !Task.isCancelled {
+                    lastError = error.localizedDescription
+                }
             }
         } catch {
-            if !Task.isCancelled {
+            if request == snapshotRequest, revision == projectionRevision, !Task.isCancelled {
                 lastError = error.localizedDescription
             }
         }
+    }
+
+    private func commitSnapshot(_ snap: Snapshot, request: Int, revision: Int) {
+        guard request == snapshotRequest, revision == projectionRevision, !Task.isCancelled else { return }
+        // Within one server instance the broker sequence is global and monotonic.
+        // A snapshot may trail the terminal frame (the server projects idle before
+        // publishing turn.finished), so preserve the larger observed cursor.
+        let previousCursor = cursor
+        applySnapshot(snap)
+        cursor = Self.reconciledCursor(
+            previous: previousCursor, snapshot: snap.eventSeq, reset: resetCursorOnSnapshot,
+        )
+        resetCursorOnSnapshot = false
+    }
+
+    /// A terminal event may arrive after the server captured its snapshot
+    /// watermark. Only a rejected cursor or new broker instance may lower it.
+    nonisolated static func reconciledCursor(previous: UInt64, snapshot: UInt64, reset: Bool) -> UInt64 {
+        reset ? snapshot : max(previous, snapshot)
     }
 
     private func applySnapshot(_ snap: Snapshot) {
@@ -606,12 +779,18 @@ final class SessionStore {
         deltaFlushTask?.cancel()
         deltaFlushTask = nil
         deltaBuffer.removeAll()
+        // Assigning these separately triggers three full transcript builds.
+        // Commit the snapshot's render inputs together, then build once.
+        applyingSnapshot = true
         state = snap.state
         modelName = snap.modelName
         providerName = snap.providerName ?? ""
+        turnSummaries = snap.turnSummaries ?? []
         messages = snap.messages ?? []
+        applyingSnapshot = false
+        rebuildTranscript()
         draft = nil
-        plan = snap.plan
+        setPlan(snap.plan)
         usage = snap.usage
         occupancy = snap.occupancy
         window = snap.window
@@ -641,7 +820,6 @@ final class SessionStore {
         pendingApprovals = approvals
         pendingQuestions = questions
 
-        cursor = snap.eventSeq
         hasLoaded = true
     }
 
@@ -700,6 +878,11 @@ final class SessionStore {
                 do {
                     for try await frame in sse.frames(sessionId: sessionId, after: cursor) {
                         await self.handleFrame(frame)
+                        if await self.takeTurnRefreshRequest() {
+                            // Keep the stream's event projection paused until the
+                            // canonical snapshot has replaced the finished draft.
+                            await self.refresh()
+                        }
                         // Control frames end this consumption immediately —
                         // server.resync/server.draining are followed by the
                         // server closing the stream, but we don't wait for it.
@@ -756,6 +939,8 @@ final class SessionStore {
             if let existing = instance, existing != newInstance {
                 // Server restarted: sequence space reset — full resync.
                 instance = newInstance
+                projectionRevision += 1
+                resetCursorOnSnapshot = true
                 resyncRequested = true
             } else {
                 instance = newInstance
@@ -767,6 +952,12 @@ final class SessionStore {
             guard let event else { return }
             switch event {
             case "server.resync":
+                // The broker rejected `after=` (future cursor or replay gap).
+                // Keeping the old cursor after the snapshot would immediately
+                // request the same invalid replay again. Invalidate snapshots
+                // already in flight from before the rejection, too.
+                projectionRevision += 1
+                resetCursorOnSnapshot = true
                 resyncRequested = true
             case "server.draining":
                 drainRequested = true
@@ -774,7 +965,11 @@ final class SessionStore {
                 guard let raw = data.data(using: .utf8),
                       let runtime = try? LoomJSON.decoder.decode(RuntimeEvent.self, from: raw)
                 else { return }
+                // A snapshot can include events still queued on this SSE stream.
+                // Replaying them would roll the canonical projection backwards.
+                guard runtime.sequence > cursor else { return }
                 cursor = max(cursor, runtime.sequence)
+                projectionRevision += 1
                 apply(runtime)
             }
         }
@@ -785,6 +980,12 @@ final class SessionStore {
     /// frame handler cannot do directly (it runs inside the iteration).
     private var resyncRequested = false
     private var drainRequested = false
+    private var turnRefreshRequested = false
+
+    private func takeTurnRefreshRequest() -> Bool {
+        defer { turnRefreshRequested = false }
+        return turnRefreshRequested
+    }
 
     private func takeResyncRequest() -> Bool {
         defer { resyncRequested = false }
@@ -1032,16 +1233,16 @@ final class SessionStore {
                 if let after = payload.estTokensAfter {
                     occupancy = after
                 }
-                notices.append("Context compacted (\(formatTokens(payload.estTokensBefore)) → \(formatTokens(payload.estTokensAfter)))")
+                addNotice("Context compacted (\(formatTokens(payload.estTokensBefore)) → \(formatTokens(payload.estTokensAfter)))")
             }
 
         case .budgetNotice:
             if let payload = tryDecode(BudgetNoticePayload.self, from: event) {
-                notices.append(payload.text)
+                addNotice(payload.text)
             }
 
         case .planUpdated:
-            plan = tryDecode(PlanPayload.self, from: event)
+            setPlan(tryDecode(PlanPayload.self, from: event))
 
         case .steerQueued:
             if let payload = tryDecode(SteerQueuedPayload.self, from: event) {
@@ -1079,26 +1280,24 @@ final class SessionStore {
         case .runCancelRequested:
             state = .cancelling
 
-        case .turnFinished, .runCompleted, .runCancelled:
-            // Authoritative reconcile: swap draft for canonical messages.
-            let capturedDraft = draft
-            Task {
-                await refresh()
-                if capturedDraft != nil {
-                    self.draft = nil
-                }
-                if self.state == .running || self.state == .cancelling {
-                    self.state = .idle
-                }
-                self.onTurnActivity?()
-            }
+        case .turnFinished:
+            // The server publishes run.completed/run.cancelled BEFORE turn.finished.
+            // Only this final boundary warrants a snapshot; do not spawn a task
+            // that can finish after a newer turn.started and erase its draft.
+            draft?.sealAll()
+            state = .idle
+            turnRefreshRequested = true
+            onTurnActivity?()
+
+        case .runCompleted, .runCancelled:
+            break // turn.finished follows with the final canonical projection
 
         case .sessionClosed:
             state = .closed
 
         case .runtimeWarning, .runtimeFatal:
             if let payload = tryDecode(RuntimeMessagePayload.self, from: event) {
-                notices.append(payload.message)
+                addNotice(payload.message)
             }
 
         case .sessionOpened, .unknown:
@@ -1107,6 +1306,14 @@ final class SessionStore {
     }
 
     // MARK: Draft helpers
+
+    private func setPlan(_ next: PlanPayload?) {
+        let active = next?.items.isEmpty == true ? nil : next
+        if plan == nil, active != nil {
+            planIdentity = UUID()
+        }
+        plan = active
+    }
 
     private func materializeTool(_ payload: ToolPreparedPayload) {
         if draft == nil {

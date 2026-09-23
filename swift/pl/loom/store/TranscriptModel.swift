@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import AppKit
+import CryptoKit
 import Foundation
 
 // MARK: - Transcript model (derived render data, built on state change)
@@ -27,21 +28,35 @@ import Foundation
 /// (turn boundaries), and the per-tool render model is memoized by
 /// call content, so a body re-evaluation is pure lookup.
 struct TranscriptModel {
-    /// One rendered row: the source message plus its precomputed
-    /// render items and the turn-boundary action flag (WebUI closeTurn).
-    struct Row: Identifiable {
+    /// One transcript line: a message row, or a turn-summary card
+    /// appended at a finished turn's boundary (WebUI closeTurn — the
+    /// card has no message of its own; it is keyed by run_id).
+    enum Row: Identifiable, Equatable {
+        case message(MessageRowModel)
+        case turnSummary(TurnSummary)
+
+        var id: String {
+            switch self {
+            case let .message(model):
+                model.message.id
+            case let .turnSummary(summary):
+                "tsm-\(summary.runId ?? "turn\(summary.turn ?? 0)")"
+            }
+        }
+    }
+
+    /// The message-row payload (the old Row struct): the source
+    /// message plus its precomputed render items and the
+    /// turn-boundary action flag.
+    struct MessageRowModel: Equatable {
         let message: Message
         let items: [Item]
         let showActions: Bool
-
-        var id: String {
-            message.id
-        }
     }
 
     /// One render unit inside an assistant row (tool_call + tool_result
     /// already merged, tool render model precomputed).
-    enum Item {
+    enum Item: Equatable {
         case markdown(String)
         case reasoning(ContentPart.Reasoning)
         case tool(ToolRenderModel)
@@ -56,8 +71,12 @@ struct TranscriptModel {
     /// Builds the model from the authoritative history. `midTurn` is
     /// the ChatView gate (running/cancelling/awaitingApproval) that
     /// keeps the action row off the transcript tail while a turn is
-    /// in flight (WebUI closeTurn).
-    static func build(messages: [Message], midTurn: Bool) -> TranscriptModel {
+    /// in flight (WebUI closeTurn). `turnSummaries` is the snapshot's
+    /// per-turn file-change projection: each becomes a closing card
+    /// appended at its turn boundary.
+    static func build(
+        messages: [Message], midTurn: Bool, turnSummaries: [TurnSummary] = [],
+    ) -> TranscriptModel {
         // Cross-message call_id → result map (the WebUI's histTools):
         // tool results arrive in their own assistant messages and patch
         // the block created for the matching call.
@@ -94,26 +113,63 @@ struct TranscriptModel {
             actionIds.insert(candidate)
         }
 
+        // Per-turn file-change projection (WebUI transcript.ts): keyed
+        // by run_id — the same run_id stamped into assistant message
+        // metadata — each summary becomes a closing card emitted at
+        // its turn boundary (before the next user bubble; at the tail).
+        var summariesByRun: [String: TurnSummary] = [:]
+        for summary in turnSummaries {
+            if let runId = summary.runId, !(summary.changes ?? []).isEmpty {
+                summariesByRun[runId] = summary
+            }
+        }
+        var emitted: Set<String> = []
+        var lastRunId = ""
+
         var rows: [Row] = []
-        rows.reserveCapacity(messages.count)
+        rows.reserveCapacity(messages.count + summariesByRun.count)
+
+        func emitSummary() {
+            guard !lastRunId.isEmpty, !emitted.contains(lastRunId),
+                  let summary = summariesByRun[lastRunId]
+            else { return }
+            emitted.insert(lastRunId)
+            rows.append(.turnSummary(summary))
+        }
+
         for message in messages {
             switch message.role {
+            case .user:
+                // Turn boundary: close out the previous turn's file
+                // summary before opening the next bubble (no-op when
+                // the run wrote no files).
+                emitSummary()
+                rows.append(.message(MessageRowModel(message: message, items: [], showActions: false)))
             case .assistant:
+                // The agent loop stamps run_id metadata when persisting
+                // the message; a run's summaries key off its LAST one.
+                if let runId = message.metadata?["run_id"], !runId.isEmpty {
+                    if runId != lastRunId {
+                        emitSummary()
+                        lastRunId = runId
+                    }
+                }
                 let items = assistantItems(of: message, toolResults: toolResults)
                 // Pure tool_result carriers fold into their call's block
                 // and leave no row of their own (WebUI parity).
                 if items.isEmpty {
                     continue
                 }
-                rows.append(Row(
+                rows.append(.message(MessageRowModel(
                     message: message,
                     items: items,
                     showActions: actionIds.contains(message.id),
-                ))
+                )))
             default:
-                rows.append(Row(message: message, items: [], showActions: false))
+                rows.append(.message(MessageRowModel(message: message, items: [], showActions: false)))
             }
         }
+        emitSummary()
         return TranscriptModel(rows: rows)
     }
 
@@ -191,7 +247,7 @@ extension Message {
 /// instead of on every view-body evaluation. Diff results are memoized
 /// by content, so repeated snapshot rebuilds (every turn end) do not
 /// re-run the DP.
-struct ToolRenderModel {
+struct ToolRenderModel: Equatable {
     var name = "tool"
     var target: String?
     var status = Status.running
@@ -367,6 +423,7 @@ enum ToolDiffCache {
     private static let cache: NSCache<NSString, NSString> = {
         let cache = NSCache<NSString, NSString>()
         cache.countLimit = 200
+        cache.totalCostLimit = 32 * 1024 * 1024
         return cache
     }()
 
@@ -382,7 +439,11 @@ enum ToolDiffCache {
         if !text.isEmpty, let path, !path.isEmpty {
             text = "+++ b/\(path)\n" + text
         }
-        cache.setObject(text as NSString, forKey: key)
+        // The key retains both inputs; charge it as well as the result.
+        let cost = key.length * 2 + (text as NSString).length * 2
+        if cost <= 32 * 1024 * 1024 {
+            cache.setObject(text as NSString, forKey: key, cost: cost)
+        }
         return text.isEmpty ? nil : text
     }
 
@@ -572,6 +633,7 @@ enum DiffParseCache {
     private static let cache: NSCache<NSString, Box> = {
         let cache = NSCache<NSString, Box>()
         cache.countLimit = 200
+        cache.totalCostLimit = 32 * 1024 * 1024
         return cache
     }()
 
@@ -581,7 +643,12 @@ enum DiffParseCache {
             return cached.value
         }
         let parsed = parseDiff(text)
-        cache.setObject(Box(parsed), forKey: key)
+        // Parsed lines copy text out of the source; include both the
+        // original diff key and all retained line strings in the cost.
+        let cost = key.length * 2 + parsed.lines.reduce(0) { $0 + $1.text.utf16.count * 2 + 64 }
+        if cost <= 32 * 1024 * 1024 {
+            cache.setObject(Box(parsed), forKey: key, cost: cost)
+        }
         return parsed
     }
 }
@@ -593,21 +660,34 @@ enum DiffParseCache {
 /// visible image — base64 decode + bitmap creation for what is often
 /// a multi-MB PNG.
 enum InlineImageCache {
+    private static let byteLimit = 64 * 1024 * 1024
     private static let cache: NSCache<NSString, NSImage> = {
         let cache = NSCache<NSString, NSImage>()
         cache.countLimit = 100
+        cache.totalCostLimit = byteLimit
         return cache
     }()
 
     static func image(base64: String) -> NSImage? {
-        let key = base64 as NSString
+        // A cryptographic digest avoids retaining a second multi-MB copy
+        // of the base64 payload as the cache key. Hashing is linear, but
+        // hits still avoid base64 decoding and image construction.
+        let key = SHA256.hash(data: Data(base64.utf8)).map { String(format: "%02x", $0) }
+            .joined() as NSString
         if let cached = cache.object(forKey: key) {
             return cached
         }
         guard let data = Data(base64Encoded: base64), let image = NSImage(data: data) else {
             return nil
         }
-        cache.setObject(image, forKey: key)
+        // AppKit may lazily decode image representations. Budget the
+        // backing bitmap when known, not just the compressed PNG bytes.
+        let bitmapBytes = image.representations.compactMap { $0 as? NSBitmapImageRep }
+            .map { $0.bytesPerRow * $0.pixelsHigh }.max() ?? 0
+        let cost = max(data.count, bitmapBytes)
+        if cost <= byteLimit {
+            cache.setObject(image, forKey: key, cost: cost)
+        }
         return image
     }
 }

@@ -72,9 +72,9 @@ func (s *Server) handleShareSession(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetShareEndpoint reports the runtime state of the LAN share
-// listener (docs/DESKTOP_DESIGN.md §5). Servers without a ShareManager
-// (`loom serve`, where --listen is the whole story) answer 404 so the
-// frontend hides the toggle.
+// listener (docs/DESKTOP_DESIGN.md §5). The route is only registered
+// when the server was built with a ShareManager; otherwise it answers
+// 404 so the frontend hides the toggle.
 func (s *Server) handleGetShareEndpoint(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, s.cfg.Share.State())
 }

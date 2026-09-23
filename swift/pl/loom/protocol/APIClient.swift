@@ -100,7 +100,7 @@ struct APIClient: Sendable {
     // MARK: - Turn control
 
     @discardableResult
-    func sendPrompt(_ id: String, prompt: String, idempotencyKey: String = UUID().uuidString) async throws -> PromptResponse {
+    func sendPrompt(_ id: String, prompt: String, idempotencyKey: String) async throws -> PromptResponse {
         try await post(
             "/v1/sessions/\(id)/prompts",
             json: ["prompt": prompt],
@@ -116,6 +116,28 @@ struct APIClient: Sendable {
     func requestCompaction(_ id: String) async throws {
         struct CompactResponse: Decodable { let AlreadyPending: Bool? }
         let _: CompactResponse = try await postEmpty("/v1/sessions/\(id)/compact")
+    }
+
+    // MARK: - Turn change review / revert (turn-summary card)
+
+    /// GET /v1/sessions/{id}/runs/{runID}/changes — per-path +/− stats
+    /// and inline diffs, ledger-before vs CURRENT workspace content
+    /// (git-free; stale after a revert — refetch). A run with no
+    /// recorded changes answers an empty list, not an error.
+    func runChanges(_ id: String, runId: String) async throws -> RunChangeStatsResponse {
+        try await get("/v1/sessions/\(id)/runs/\(Self.pathEscaped(runId))/changes")
+    }
+
+    /// POST /v1/sessions/{id}/runs/{runID}/revert — restores the files
+    /// one run mutated to their pre-turn contents; conflicts report
+    /// external modifications that were overwritten (never silently
+    /// clobbered). The session must be idle.
+    func revertRun(_ id: String, runId: String) async throws -> RevertOutcome {
+        try await postEmpty("/v1/sessions/\(id)/runs/\(Self.pathEscaped(runId))/revert")
+    }
+
+    private static func pathEscaped(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? value
     }
 
     // MARK: - Share links

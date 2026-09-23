@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import AppKit
 import SwiftUI
 
 /// The settings panel (WebUI SettingsPanel): a modal config.yaml
@@ -47,11 +48,17 @@ struct SettingsView: View {
             Hairline(axis: .horizontal)
             footer
         }
-        .frame(minWidth: 880, idealWidth: 940, minHeight: 600, idealHeight: 660)
+        .frame(minWidth: 680, idealWidth: 940, minHeight: 440, idealHeight: 660)
         .background(Theme.bg0)
+        .environment(
+            \.secretIdentity,
+            [store.revision, String(store.dirty)] + store.draft.providers.flatMap { card in
+                [card.id.uuidString, card.fields["name"]?.textValue ?? ""]
+            },
+        )
         .task { await store.load() }
         .confirmationDialog(
-            "You have unsaved changes. They will be lost.",
+            "你有未保存的修改，这些修改将会丢失。",
             isPresented: Binding(
                 get: { pendingDiscard != nil },
                 set: {
@@ -62,7 +69,7 @@ struct SettingsView: View {
             ),
             titleVisibility: .visible,
         ) {
-            Button("Discard Changes", role: .destructive) {
+            Button("放弃修改", role: .destructive) {
                 switch pendingDiscard {
                 case .close:
                     onClose()
@@ -73,7 +80,7 @@ struct SettingsView: View {
                 }
                 pendingDiscard = nil
             }
-            Button("Keep Editing", role: .cancel) { pendingDiscard = nil }
+            Button("继续编辑", role: .cancel) { pendingDiscard = nil }
         }
     }
 
@@ -81,7 +88,7 @@ struct SettingsView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Text("Settings")
+            Text("设置")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Theme.fg)
             Text(store.cfgPath)
@@ -95,8 +102,8 @@ struct SettingsView: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .medium))
             }
-            .help("Close (Esc)")
-            .accessibilityLabel("Close settings")
+            .help("关闭 (Esc)")
+            .accessibilityLabel("关闭设置")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -106,34 +113,35 @@ struct SettingsView: View {
 
     private var bodyContent: some View {
         HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(settingsTabs, id: \.id) { tab in
-                    Button {
-                        store.activeTab = tab.id
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: tab.icon)
-                                .font(.system(size: 12))
-                                .frame(width: 16)
-                            Text(tab.label)
-                                .font(.system(size: Theme.textMd))
-                            Spacer()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(settingsTabs, id: \.id) { tab in
+                        Button {
+                            store.activeTab = tab.id
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: tab.icon)
+                                    .font(.system(size: 12))
+                                    .frame(width: 16)
+                                Text(tab.label)
+                                    .font(.system(size: Theme.textMd))
+                                Spacer()
+                            }
+                            .foregroundStyle(store.activeTab == tab.id ? Theme.primary : Theme.fg)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(
+                                store.activeTab == tab.id ? Theme.bg2 : Color.clear,
+                                in: RoundedRectangle(cornerRadius: Theme.radiusMd),
+                            )
+                            .contentShape(Rectangle())
                         }
-                        .foregroundStyle(store.activeTab == tab.id ? Theme.primary : Theme.fg)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(
-                            store.activeTab == tab.id ? Theme.bg2 : Color.clear,
-                            in: RoundedRectangle(cornerRadius: Theme.radiusMd),
-                        )
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
-                Spacer()
+                .padding(10)
             }
-            .padding(10)
-            .frame(width: 168)
+            .frame(width: 148)
             .background(Theme.bg1)
 
             Hairline(axis: .vertical)
@@ -142,17 +150,17 @@ struct SettingsView: View {
             case .idle, .loading:
                 VStack(spacing: 10) {
                     ProgressView()
-                    Text("Loading configuration…")
+                    Text("正在加载配置…")
                         .font(.system(size: Theme.textMd))
                         .foregroundStyle(Theme.muted)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             case let .failed(error):
                 VStack(spacing: 10) {
-                    Label("Failed to load configuration: \(error)", systemImage: "exclamationmark.triangle")
+                    Label("配置加载失败：\(error)", systemImage: "exclamationmark.triangle")
                         .font(.system(size: Theme.textMd))
                         .foregroundStyle(Theme.error)
-                    Button("Retry") { Task { await store.load() } }
+                    Button("重试") { Task { await store.load() } }
                         .buttonStyle(OutlineButtonStyle())
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -167,7 +175,7 @@ struct SettingsView: View {
     /// mount-on-demand; the draft lives in the store and survives).
     private var tabContent: some View {
         ScrollViewReader { proxy in
-            ScrollView {
+            ScrollView([.horizontal, .vertical]) {
                 VStack(alignment: .leading, spacing: 20) {
                     switch store.activeTab {
                     case "providers":
@@ -191,6 +199,7 @@ struct SettingsView: View {
                     }
                 }
                 .padding(18)
+                .frame(minWidth: 590, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .onChange(of: store.invalid) { _, fieldId in
@@ -213,8 +222,9 @@ struct SettingsView: View {
                 .lineLimit(2)
                 .truncationMode(.tail)
                 .help(store.msg)
-            Spacer()
-            Button("Reload") {
+                .layoutPriority(1)
+            Spacer(minLength: 0)
+            Button("重新加载") {
                 if store.dirty {
                     pendingDiscard = .reload
                 } else {
@@ -222,10 +232,10 @@ struct SettingsView: View {
                 }
             }
             .buttonStyle(OutlineButtonStyle())
-            Button("Close", action: attemptClose)
+            Button("关闭", action: attemptClose)
                 .buttonStyle(OutlineButtonStyle())
                 .keyboardShortcut(.cancelAction)
-            Button("Save") { Task { await store.save() } }
+            Button("保存") { Task { await store.save() } }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(store.saving)
                 .overlay(
@@ -236,7 +246,7 @@ struct SettingsView: View {
                             lineWidth: 1.5,
                         ),
                 )
-                .help(store.dirty ? "Unsaved changes" : "Save to config.yaml")
+                .help(store.dirty ? "有未保存的修改" : "保存到 config.yaml")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -287,16 +297,28 @@ extension FieldSpec {
     }
 }
 
-// MARK: - Field row (WebUI FieldRow — one control per spec type)
+private extension EnvironmentValues {
+    @Entry var secretIdentity: [String] = []
+}
 
 struct FieldRow: View {
+    @Environment(\.secretIdentity) private var secretIdentity
     let spec: FieldSpec
     let value: ControlState
     var invalid = false
     let onChange: (ControlState) -> Void
     var onReveal: (() async -> String?)?
 
-    @State private var revealed: String?
+    @State private var revealedSecret: String?
+    @State private var revealedValue: ControlState?
+    @State private var revealedIdentity: [String] = []
+    @State private var revealGeneration = 0
+    @State private var revealPending = false
+
+    private var revealed: String? {
+        guard revealedValue == value, revealedIdentity == secretIdentity else { return nil }
+        return revealedSecret
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -312,7 +334,7 @@ struct FieldRow: View {
                                 .foregroundStyle(Theme.error)
                         }
                         if let def = spec.def {
-                            Text("default: \(def)")
+                            Text("默认：\(def)")
                                 .font(.system(size: Theme.textXs))
                                 .foregroundStyle(Theme.muted)
                         }
@@ -328,6 +350,9 @@ struct FieldRow: View {
                     .padding(.leading, spec.label == nil ? 0 : 176)
             }
         }
+        .onChange(of: value) { _, _ in hideSecret() }
+        .onChange(of: secretIdentity) { _, _ in hideSecret() }
+        .onDisappear { hideSecret() }
     }
 
     /// The select type's per-option explanation wins over the static
@@ -347,9 +372,9 @@ struct FieldRow: View {
                 .labelsHidden()
         case .tristate:
             Picker("", selection: textBinding) {
-                Text("On").tag("true")
-                Text("Off").tag("false")
-                Text("Auto").tag("")
+                Text("开").tag("true")
+                Text("关").tag("false")
+                Text("自动").tag("")
             }
             .pickerStyle(.segmented)
             .frame(width: 180)
@@ -371,29 +396,63 @@ struct FieldRow: View {
     }
 
     /// Masked secret field: the eye button fetches the plaintext on
-    /// demand and swaps the editor for a read-only reveal (WebUI
+    /// demand and swaps the editor for a selectable reveal (WebUI
     /// reveal button).
     private var passwordControl: some View {
         HStack(spacing: 6) {
             if let revealed {
-                input(TextField("", text: .constant(revealed)).disabled(true))
+                input(Text(revealed).textSelection(.enabled).lineLimit(1))
+                GhostButton {
+                    guard let revealed = self.revealed else { return }
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(revealed, forType: .string)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 11))
+                }
+                .help("复制已保存的密钥")
+                .accessibilityLabel("复制已保存的密钥")
             } else {
                 input(SecureField(spec.ph ?? "", text: textBinding))
             }
             if onReveal != nil {
                 GhostButton {
-                    if revealed != nil {
-                        revealed = nil
+                    if revealed != nil || revealPending {
+                        hideSecret()
                     } else {
-                        Task { revealed = await onReveal?() }
+                        revealPending = true
+                        revealGeneration += 1
+                        let generation = revealGeneration
+                        let requestedValue = value
+                        let requestedIdentity = secretIdentity
+                        let reveal = onReveal
+                        Task {
+                            let secret = await reveal?()
+                            guard generation == revealGeneration else { return }
+                            revealPending = false
+                            guard requestedValue == value, requestedIdentity == secretIdentity else {
+                                return
+                            }
+                            revealedValue = requestedValue
+                            revealedIdentity = requestedIdentity
+                            revealedSecret = secret
+                        }
                     }
                 } label: {
                     Image(systemName: revealed == nil ? "eye" : "eye.slash")
                         .font(.system(size: 11))
                 }
-                .help(revealed == nil ? "Reveal the saved secret" : "Hide")
+                .help(revealed == nil ? "查看已保存的密钥" : "隐藏")
+                .accessibilityLabel(revealed == nil ? "查看已保存的密钥" : "隐藏密钥")
             }
         }
+    }
+
+    private func hideSecret() {
+        revealGeneration += 1
+        revealPending = false
+        revealedSecret = nil
+        revealedValue = nil
     }
 
     private func input(_ field: some View) -> some View {
