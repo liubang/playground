@@ -1,0 +1,9 @@
+{
+  "url": "https://github.com/RoaringBitmap/CRoaring/archive/refs/tags/v5.2.2.tar.gz",
+  "strip_prefix": "CRoaring-5.2.2",
+  "integrity": "sha256-p9jBDJVKlxt+KZa0mMt2AOUAJjdBL0GY3NYAtBXh61w=",
+  "patch_strip": 1,
+  "patches": {
+    "add-build.patch": "sha256-+3Z6wAkx/UtgNxyYFHI/9yoUv/Ap8MJnry94ma8/q+s="
+  }
+}

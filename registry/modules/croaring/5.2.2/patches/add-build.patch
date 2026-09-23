@@ -1,0 +1,70 @@
+diff --git a/BUILD.bazel b/BUILD.bazel
+new file mode 100644
+--- /dev/null
++++ b/BUILD.bazel
+@@ -0,0 +1,65 @@
++# Copyright (c) 2026 The Authors. All rights reserved.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#      https://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++#
++# Authors: liubang (it.liubang@gmail.com)
++#
++# Bazel build file for CRoaring, added by
++# //registry/modules/croaring/5.2.2/patches/add-build.patch
++
++load("@rules_cc//cc:defs.bzl", "cc_library")
++
++package(default_visibility = ["//visibility:public"])
++
++# The same sources CMake builds (ROARING_SRC in src/CMakeLists.txt).
++SOURCES = [
++    "src/array_util.c",
++    "src/art/art.c",
++    "src/bitset.c",
++    "src/bitset_util.c",
++    "src/containers/array.c",
++    "src/containers/bitset.c",
++    "src/containers/containers.c",
++    "src/containers/convert.c",
++    "src/containers/mixed_andnot.c",
++    "src/containers/mixed_equal.c",
++    "src/containers/mixed_intersection.c",
++    "src/containers/mixed_negation.c",
++    "src/containers/mixed_subset.c",
++    "src/containers/mixed_union.c",
++    "src/containers/mixed_xor.c",
++    "src/containers/run.c",
++    "src/isadetection.c",
++    "src/memory.c",
++    "src/roaring.c",
++    "src/roaring64.c",
++    "src/roaring_array.c",
++    "src/roaring_priority_queue.c",
++]
++
++cc_library(
++    name = "croaring",
++    srcs = SOURCES,
++    hdrs = glob([
++        "cpp/roaring/*.hh",
++        "include/roaring/**/*.h",
++    ]),
++    # Upstream sets CMAKE_C_STANDARD 11; gnu11 keeps the GNU/POSIX extensions
++    # (posix_memalign) that src/memory.c relies on.
++    copts = ["-std=gnu11"],
++    # include/ -> <roaring/roaring.h> (C API), cpp/ -> <roaring/roaring.hh> (C++ API).
++    includes = [
++        "cpp",
++        "include",
++    ],
++)

@@ -186,6 +186,11 @@ bazel_dep(name = "isa-l", version = "2.31")
 bazel_dep(name = "xxhash", version = "0.8.3")
 bazel_dep(name = "magic_enum", version = "0.9.7")
 
+# Roaring bitmaps (C library + C++ headers). Upstream ships no Bazel support,
+# so the local registry provides the module plus a BUILD file patch — see
+# registry/modules/croaring/5.2.2/.
+bazel_dep(name = "croaring", version = "5.2.2")
+
 # Chinese word segmentation (ClickHouse-maintained jieba reimplementation;
 # the original yanyiwu/cpp-jieba repository was deleted — cpp/pl/minisearch/DESIGN.md §15-4).
 # Served by the local registry together with its darts-clone dependency.
