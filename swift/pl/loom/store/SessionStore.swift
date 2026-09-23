@@ -376,6 +376,7 @@ final class SessionStore {
     private var cursor: UInt64 = 0
     /// A snapshot may commit only if no later request or SSE projection has overtaken it.
     private var snapshotRequest = 0
+    private var snapshotCommit = 0
     private var projectionRevision = 0
     /// An invalid replay cursor (including a prior server instance) must be
     /// replaced by the next snapshot watermark, never merged with it.
@@ -383,6 +384,7 @@ final class SessionStore {
     private var instance: String?
     private var lastFrameAt = Date()
     private var loopTask: Task<Void, Never>?
+    private var stopped = false
     private var reconnectAttempt = 0
 
     init(sessionId: String, workspaceId: String? = nil, api: APIClient) {
@@ -454,16 +456,19 @@ final class SessionStore {
     // MARK: Lifecycle
 
     func start() {
-        guard loopTask == nil else { return }
+        guard loopTask == nil, !stopped else { return }
         loopTask = Task { [weak self] in await self?.eventLoop() }
         Task { [weak self] in await self?.loadApprovalMode() }
     }
 
     func stop() {
+        stopped = true
         loopTask?.cancel()
         loopTask = nil
         deltaFlushTask?.cancel()
         deltaFlushTask = nil
+        deltaBuffer.removeAll()
+        onTurnActivity = nil
     }
 
     // MARK: Commands
@@ -698,6 +703,11 @@ final class SessionStore {
             )
         } catch {
             lastError = error.localizedDescription
+            if state == .awaitingApproval,
+               !pendingApprovals.contains(where: { $0.approvalId == approval.approvalId })
+            {
+                pendingApprovals.append(approval)
+            }
             await refresh()
         }
     }
@@ -714,6 +724,9 @@ final class SessionStore {
             )
         } catch {
             lastError = error.localizedDescription
+            if isBusy, !pendingQuestions.contains(where: { $0.id == question.id }) {
+                pendingQuestions.append(question)
+            }
             await refresh()
         }
     }
@@ -728,6 +741,7 @@ final class SessionStore {
     /// on start, on server.resync, on instance change, and after every
     /// turn end to swap the lossy draft for canonical messages.
     func refresh() async {
+        guard !stopped else { return }
         snapshotRequest += 1
         let request = snapshotRequest
         let revision = projectionRevision
@@ -755,7 +769,7 @@ final class SessionStore {
     }
 
     private func commitSnapshot(_ snap: Snapshot, request: Int, revision: Int) {
-        guard request == snapshotRequest, revision == projectionRevision, !Task.isCancelled else { return }
+        guard !stopped, request == snapshotRequest, revision == projectionRevision, !Task.isCancelled else { return }
         // Within one server instance the broker sequence is global and monotonic.
         // A snapshot may trail the terminal frame (the server projects idle before
         // publishing turn.finished), so preserve the larger observed cursor.
@@ -765,6 +779,7 @@ final class SessionStore {
             previous: previousCursor, snapshot: snap.eventSeq, reset: resetCursorOnSnapshot,
         )
         resetCursorOnSnapshot = false
+        snapshotCommit += 1
     }
 
     /// A terminal event may arrive after the server captured its snapshot
@@ -838,13 +853,13 @@ final class SessionStore {
         await refresh()
         var backoffNs: UInt64 = 1_000_000_000 // 1s
 
-        while !Task.isCancelled {
+        while !Task.isCancelled, !stopped {
             if connection != .live {
                 connection = reconnectAttempt == 0 ? .connecting : .offline(attempt: reconnectAttempt)
             }
 
             let outcome = await consumeStream()
-            if Task.isCancelled {
+            if Task.isCancelled || stopped {
                 return
             }
 
@@ -852,11 +867,18 @@ final class SessionStore {
             case .drained:
                 connection = .drained
                 return
-            case .resync:
-                await refresh()
-                reconnectAttempt = 0
-                backoffNs = 1_000_000_000
-            case .interrupted:
+            case .resync, .interrupted:
+                if case .resync = outcome {
+                    let previousCommit = snapshotCommit
+                    await refresh()
+                    if snapshotCommit != previousCommit {
+                        reconnectAttempt = 0
+                        backoffNs = 1_000_000_000
+                        continue
+                    }
+                }
+                // A deleted session cannot be resumed. Back off instead of
+                // repeatedly requesting its 404 snapshot and SSE endpoint.
                 reconnectAttempt += 1
                 connection = .offline(attempt: reconnectAttempt)
                 // 1s → 15s exponential with ±25% jitter (sse.ts:10-11).
@@ -931,6 +953,7 @@ final class SessionStore {
     // MARK: Frame handling
 
     private func handleFrame(_ frame: SSEFrame) {
+        guard !stopped else { return }
         lastFrameAt = Date()
 
         switch frame.content {
@@ -964,7 +987,12 @@ final class SessionStore {
             default:
                 guard let raw = data.data(using: .utf8),
                       let runtime = try? LoomJSON.decoder.decode(RuntimeEvent.self, from: raw)
-                else { return }
+                else {
+                    // The cursor cannot safely advance past an undecodable frame.
+                    // Reconcile from a snapshot rather than silently dropping it.
+                    resyncRequested = true
+                    return
+                }
                 // A snapshot can include events still queued on this SSE stream.
                 // Replaying them would roll the canonical projection backwards.
                 guard runtime.sequence > cursor else { return }

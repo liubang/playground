@@ -148,7 +148,8 @@ struct QuestionCard: View {
                 selected.insert(label)
             }
         } else {
-            selected = [label]
+            // Clearing a radio selection is local only; Skip is the explicit skipped answer.
+            selected = selected.contains(label) ? [] : [label]
         }
     }
 

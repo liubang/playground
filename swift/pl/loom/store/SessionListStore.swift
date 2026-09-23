@@ -39,12 +39,32 @@ final class SessionListStore {
     /// Live stores keyed by session id; created lazily on selection and
     /// reused across switches so a session keeps streaming in background.
     private var stores: [String: SessionStore] = [:]
+    private var stopped = false
+    private var sessionsRequest = 0
+    private var refreshTask: Task<Void, Never>?
+    private var refreshAgain = false
+
+    func stop() {
+        stopped = true
+        sessionsRequest += 1
+        pollTask?.cancel()
+        pollTask = nil
+        refreshTask?.cancel()
+        refreshTask = nil
+        refreshScheduled = false
+        refreshAgain = false
+        for store in stores.values {
+            store.stop()
+        }
+        stores.removeAll()
+    }
 
     init(api: APIClient) {
         self.api = api
     }
 
     func load() async {
+        guard !stopped else { return }
         startPolling()
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.loadWorkspaces() }
@@ -54,22 +74,61 @@ final class SessionListStore {
     }
 
     func loadWorkspaces() async {
+        guard !stopped else { return }
         do {
-            workspaces = try await api.listWorkspaces().workspaces
+            let response = try await api.listWorkspaces()
+            guard !stopped, !Task.isCancelled else { return }
+            workspaces = response.workspaces
         } catch {
-            loadError = error.localizedDescription
+            if !stopped, !Task.isCancelled {
+                loadError = error.localizedDescription
+            }
         }
     }
 
     func loadSessions() async {
+        guard !stopped else { return }
+        sessionsRequest += 1
+        let request = sessionsRequest
+        let archived = showArchived
         isLoading = true
-        defer { isLoading = false }
+        defer {
+            if request == sessionsRequest {
+                isLoading = false
+            }
+        }
         do {
-            let response = try await api.listSessions(workspaceId: "all", archived: showArchived)
-            sessions = response.sessions.sorted { ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast) }
+            var all: [SessionSummary] = []
+            var cursor: String?
+            var seenCursors = Set<String>()
+            repeat {
+                let response = try await api.listSessions(
+                    workspaceId: "all", archived: archived, cursor: cursor,
+                )
+                guard !stopped, request == sessionsRequest, !Task.isCancelled else { return }
+                all.append(contentsOf: response.sessions)
+                // The server uses an empty string (not null) for the last page.
+                cursor = response.nextCursor.flatMap { $0.isEmpty ? nil : $0 }
+                if let cursor, !seenCursors.insert(cursor).inserted {
+                    throw SessionListError.repeatedCursor
+                }
+            } while cursor != nil
+            var seenIds = Set<String>()
+            sessions = all.filter { seenIds.insert($0.id).inserted }
+                .sorted { ($0.updatedAt ?? .distantPast) > ($1.updatedAt ?? .distantPast) }
             loadError = nil
         } catch {
-            loadError = error.localizedDescription
+            if !stopped, request == sessionsRequest, !Task.isCancelled {
+                loadError = error.localizedDescription
+            }
+        }
+    }
+
+    private enum SessionListError: LocalizedError {
+        case repeatedCursor
+
+        var errorDescription: String? {
+            "Session pagination returned a repeated cursor"
         }
     }
 
@@ -81,12 +140,30 @@ final class SessionListStore {
     private var refreshScheduled = false
 
     func scheduleSessionsRefresh() {
-        guard !refreshScheduled else { return }
+        guard !stopped else { return }
+        if refreshScheduled {
+            refreshAgain = true
+            return
+        }
         refreshScheduled = true
-        Task {
-            try? await Task.sleep(for: .milliseconds(300))
-            refreshScheduled = false
-            await loadSessions()
+        refreshTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(300))
+                guard let self, !Task.isCancelled, !stopped else { return }
+                // Changes during the debounce are included in this request;
+                // only changes after it starts require another fetch.
+                refreshAgain = false
+                await loadSessions()
+                let again = refreshAgain
+                refreshScheduled = false
+                refreshTask = nil
+                if again {
+                    scheduleSessionsRefresh()
+                }
+            } catch {
+                self?.refreshScheduled = false
+                self?.refreshTask = nil
+            }
         }
     }
 
@@ -99,9 +176,9 @@ final class SessionListStore {
         guard pollTask == nil else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(15))
-                guard !Task.isCancelled else { return }
-                await self?.loadSessions()
+                do { try await Task.sleep(for: .seconds(15)) } catch { return }
+                guard !Task.isCancelled, let self, !self.stopped else { return }
+                await loadSessions()
             }
         }
     }
@@ -124,8 +201,10 @@ final class SessionListStore {
     }
 
     func loadModels() async {
+        guard !stopped else { return }
         do {
             let catalog = try await api.metaModels()
+            guard !stopped, !Task.isCancelled else { return }
             models = catalog.models
             defaultModelRef = catalog.default
             // Live stores read the default ref for their picker
@@ -164,8 +243,10 @@ final class SessionListStore {
         store.onTurnActivity = { [weak self] in
             self?.scheduleSessionsRefresh()
         }
-        stores[sessionId] = store
-        store.start()
+        if !stopped {
+            stores[sessionId] = store
+            store.start()
+        }
         return store
     }
 
@@ -225,6 +306,10 @@ final class SessionListStore {
     func deleteWorkspace(_ workspaceId: String) async {
         do {
             try await api.deleteWorkspace(workspaceId)
+            for (id, store) in stores where store.workspaceId == workspaceId {
+                store.stop()
+                stores[id] = nil
+            }
             await loadWorkspaces()
             await loadSessions()
         } catch {

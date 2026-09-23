@@ -87,11 +87,6 @@ struct RootView: View {
             guard let list = appState.sessionList, !list.isLoading else { return }
             Task { await list.loadSessions() }
         }
-        .onReceive(NotificationCenter.default.publisher(
-            for: NSApplication.willTerminateNotification,
-        )) { _ in
-            appState.server.stop()
-        }
     }
 
     /// Creates a session in the current selection's workspace and
@@ -110,6 +105,7 @@ struct RootView: View {
     /// per open keeps stale state out of the sheet. Shared by the
     /// sidebar gear and ⌘,.
     private func openSettings(list: SessionListStore) {
+        guard settingsStore == nil else { return }
         let store = SettingsStore(api: list.api)
         // WebUI controller.refreshModelCatalog: saving config may
         // change the composer's model catalog.

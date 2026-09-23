@@ -79,6 +79,93 @@ final class SettingsConvertTests: XCTestCase {
         }
     }
 
+    func testInvalidGlobalNumberAndFloatListBlockSaveAndLocateField() async {
+        for (key, value, tab) in [
+            ("limits.max_tokens", "not-a-number", "limits"),
+            ("limits.max_tokens", "NaN", "limits"),
+            ("context.notice_levels", "0.6, nope", "limits"),
+            ("context.notice_levels", "0.6,", "limits"),
+        ] {
+            let store = await MainActor.run { () -> SettingsStore in
+                let store = SettingsStore(api: APIClient(baseURL: URL(string: "http://127.0.0.1:1")!, token: "test"))
+                store.draft.providers = [provider("provider")]
+                store.draft.globals[key] = .text(value)
+                store.markDirty()
+                return store
+            }
+            await store.save()
+            await MainActor.run {
+                XCTAssertTrue(store.msgIsError)
+                XCTAssertEqual(store.activeTab, tab)
+                XCTAssertEqual(store.invalid, key)
+                XCTAssertTrue(store.dirty)
+                XCTAssertFalse(store.saving)
+                XCTAssertEqual(store.revision, "")
+            }
+        }
+    }
+
+    func testInvalidProviderModelAndMcpFieldsBlockSaveAndLocateCard() async {
+        let store = await MainActor.run { () -> SettingsStore in
+            let store = SettingsStore(api: APIClient(baseURL: URL(string: "http://127.0.0.1:1")!, token: "test"))
+            store.draft.providers = [provider("provider")]
+            store.draft.providers[0].fields["max_retries"] = .text("oops")
+            store.draft.providers[0].models[0].fields["context_window"] = .text("oops")
+            store.draft.mcpServers = [McpDraft(name: "server", stdio: [
+                "command": .text("run"), "env": .text("OK=1\ninvalid"),
+            ])]
+            store.markDirty()
+            return store
+        }
+        await store.save()
+        await MainActor.run {
+            let card = store.draft.providers[0]
+            XCTAssertEqual(store.invalid, "\(card.id.uuidString):max_retries")
+            XCTAssertEqual(store.openProviderId, card.id)
+            store.patchProvider(card.id, key: "max_retries", .text("2"))
+            let model = card.models[0]
+            XCTAssertEqual(store.firstInvalid()?.fieldId, "\(model.id.uuidString):context_window")
+            store.patchModel(card.id, modelId: model.id, key: "context_window", .text("65536"))
+            let mcp = store.draft.mcpServers[0]
+            XCTAssertEqual(store.firstInvalid()?.fieldId, "\(mcp.id.uuidString):env")
+        }
+        await store.save()
+        await MainActor.run {
+            let mcp = store.draft.mcpServers[0]
+            XCTAssertEqual(store.activeTab, "mcp")
+            XCTAssertEqual(store.openMcpId, mcp.id)
+            XCTAssertEqual(store.invalid, "\(mcp.id.uuidString):env")
+            XCTAssertTrue(store.msg.contains("第 2 行"))
+            XCTAssertTrue(store.dirty)
+        }
+    }
+
+    func testPairListRejectsEmptyNameAndTristateDoesNotCoerceUnknownValue() {
+        let pairs = FieldSpec("knowledge_base.collections", type: .pairList)
+        XCTAssertNotNil(invalidInput(pairs, .text(": description")))
+        XCTAssertNil(invalidInput(pairs, .text("docs: description")))
+
+        let toggle = FieldSpec("knowledge_base.enabled", type: .tristate)
+        XCTAssertNotNil(invalidInput(toggle, .text("auto")))
+        var cfg: [String: JSONValue] = [:]
+        collectValue(toggle, .text("auto"), into: &cfg)
+        XCTAssertNil(getPath(cfg, toggle.key))
+        XCTAssertEqual(fillValue(toggle, .string("auto")).textValue, "auto")
+    }
+
+    func testNumberWhitespaceAndCRLFKeyValuesCollectConsistently() {
+        let number = FieldSpec("limits.max_tokens", type: .number)
+        XCTAssertNil(invalidInput(number, .text("42\n")))
+        let env = FieldSpec("env", type: .kvText)
+        XCTAssertNil(invalidInput(env, .text("FIRST=one\r\nSECOND=two")))
+        var cfg: [String: JSONValue] = [:]
+        collectValue(number, .text("42\n"), into: &cfg)
+        collectValue(env, .text("FIRST=one\r\nSECOND=two"), into: &cfg)
+        XCTAssertEqual(getPath(cfg, number.key), .int(42))
+        XCTAssertEqual(getPath(cfg, env.key)?["FIRST"], .string("one"))
+        XCTAssertEqual(getPath(cfg, env.key)?["SECOND"], .string("two"))
+    }
+
     // MARK: cfgpath
 
     func testGetSetPath() {
@@ -182,7 +269,7 @@ final class SettingsConvertTests: XCTestCase {
         XCTAssertTrue(collect(FieldSpec("a.b", type: .select), .text("")).isEmpty)
         XCTAssertTrue(collect(FieldSpec("a.b", type: .tristate), .text("")).isEmpty)
         XCTAssertTrue(collect(FieldSpec("a.b", type: .listText), .text("\n \n")).isEmpty)
-        XCTAssertTrue(collect(FieldSpec("a.b", type: .kvText), .text("=v\nk")).isEmpty)
+        XCTAssertTrue(collect(FieldSpec("a.b", type: .kvText), .text("\n ")).isEmpty)
         XCTAssertTrue(collect(FieldSpec("a.b", type: .bool), .flag(false)).isEmpty)
     }
 
@@ -216,7 +303,7 @@ final class SettingsConvertTests: XCTestCase {
             ["skills": .object(["extra_roots": .array([.string("~/a"), .string("~/b")])])],
         )
         XCTAssertEqual(
-            collect(FieldSpec("mcp.env", type: .kvText), .text("A=1\nB=x=y\nbad")),
+            collect(FieldSpec("mcp.env", type: .kvText), .text("A=1\nB=x=y")),
             ["mcp": .object(["env": .object(["A": .string("1"), "B": .string("x=y")])])],
         )
         XCTAssertEqual(
@@ -227,7 +314,7 @@ final class SettingsConvertTests: XCTestCase {
             ])])],
         )
         XCTAssertEqual(
-            collect(FieldSpec("context.notice_levels", type: .floatList), .text("0.6, 0.75 junk")),
+            collect(FieldSpec("context.notice_levels", type: .floatList), .text("0.6, 0.75")),
             ["context": .object(["notice_levels": .array([.double(0.6), .double(0.75)])])],
         )
         // flag-list checked writes the fixed array verbatim.
@@ -235,6 +322,24 @@ final class SettingsConvertTests: XCTestCase {
             collect(FieldSpec("modalities", type: .flagList, flagValue: ["text", "image"]), .flag(true)),
             ["modalities": .array([.string("text"), .string("image")])],
         )
+    }
+
+    func testInputValidationPreservesValidAndEmptyValues() {
+        let number = FieldSpec("n", type: .number)
+        let kv = FieldSpec("env", type: .kvText)
+        let floats = FieldSpec("levels", type: .floatList)
+        XCTAssertNil(invalidInput(number, .text(" 0.95 ")))
+        XCTAssertNil(invalidInput(number, .text("  ")))
+        XCTAssertNotNil(invalidInput(number, .text("1e999")))
+        XCTAssertNotNil(invalidInput(number, .text("abc")))
+        XCTAssertNil(invalidInput(kv, .text(" A=1\nB=x=y\n\n")))
+        XCTAssertNil(invalidInput(kv, .text("  ")))
+        XCTAssertNotNil(invalidInput(kv, .text("A=1\n =bad")))
+        XCTAssertNotNil(invalidInput(kv, .text("A=1\nbad")))
+        XCTAssertNil(invalidInput(floats, .text(" 0.6, 0.75 0.8 ")))
+        XCTAssertNil(invalidInput(floats, .text("  ")))
+        XCTAssertNotNil(invalidInput(floats, .text("0.6, NaN")))
+        XCTAssertNotNil(invalidInput(floats, .text("0.6,,0.8")))
     }
 
     // MARK: Round trip

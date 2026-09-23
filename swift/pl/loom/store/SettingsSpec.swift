@@ -590,6 +590,55 @@ func preserveUnmanaged(_ cfg: inout [String: JSONValue], orig: [String: JSONValu
 
 // MARK: - Fill / collect (convert.ts)
 
+/// Returns a field-specific error before lossy collection can omit invalid input.
+/// Empty values still mean "use the default".
+func invalidInput(_ spec: FieldSpec, _ state: ControlState) -> String? {
+    let text = state.textValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    switch spec.type {
+    case .number:
+        let numberText = state.textValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !numberText.isEmpty, Int64(numberText) == nil, !(Double(numberText)?.isFinite ?? false) {
+            return "请输入有效数字"
+        }
+    case .kvText:
+        for (index, line) in state.textValue.components(separatedBy: .newlines).enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            guard let equal = trimmed.firstIndex(of: "="),
+                  !trimmed[..<equal].trimmingCharacters(in: .whitespaces).isEmpty
+            else {
+                return "第 \(index + 1) 行应为 KEY=VALUE"
+            }
+        }
+    case .pairList:
+        for (index, line) in state.textValue.components(separatedBy: .newlines).enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            let name = trimmed.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)[0]
+                .trimmingCharacters(in: .whitespaces)
+            if name.isEmpty {
+                return "第 \(index + 1) 行缺少名称"
+            }
+        }
+    case .tristate:
+        if !text.isEmpty, text != "true", text != "false" {
+            return "请选择自动、开启或关闭"
+        }
+    case .floatList:
+        if !text.isEmpty {
+            for part in text.split(separator: ",", omittingEmptySubsequences: false) {
+                let items = part.split(whereSeparator: \.isWhitespace)
+                if items.isEmpty || items.contains(where: { !(Double($0)?.isFinite ?? false) }) {
+                    return "请输入以逗号或空格分隔的有效数字"
+                }
+            }
+        }
+    default:
+        break
+    }
+    return nil
+}
+
 /// Converts a config value to control state (fills on load).
 func fillValue(_ spec: FieldSpec, _ value: JSONValue?) -> ControlState {
     guard let value, value != .null else {
@@ -666,7 +715,7 @@ func collectValue(_ spec: FieldSpec, _ state: ControlState, into obj: inout [Str
             setPath(&obj, spec.key, .string(state.textValue))
         }
     case .number:
-        let trimmed = state.textValue.trimmingCharacters(in: .whitespaces)
+        let trimmed = state.textValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
             if let int = Int64(trimmed) {
                 setPath(&obj, spec.key, .int(int))
@@ -685,8 +734,9 @@ func collectValue(_ spec: FieldSpec, _ state: ControlState, into obj: inout [Str
             setPath(&obj, spec.key, .array((spec.flagValue ?? []).map { .string($0) }))
         }
     case .tristate:
-        if !state.textValue.isEmpty {
-            setPath(&obj, spec.key, .bool(state.textValue == "true"))
+        let value = state.textValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value == "true" || value == "false" {
+            setPath(&obj, spec.key, .bool(value == "true"))
         }
     case .select:
         if !state.textValue.isEmpty {
@@ -711,7 +761,7 @@ func collectValue(_ spec: FieldSpec, _ state: ControlState, into obj: inout [Str
         }
     case .kvText:
         var map: [String: JSONValue] = [:]
-        for line in state.textValue.split(separator: "\n", omittingEmptySubsequences: false) {
+        for line in state.textValue.components(separatedBy: .newlines) {
             guard let index = line.firstIndex(of: "="), index > line.startIndex else { continue }
             let key = line[line.startIndex ..< index].trimmingCharacters(in: .whitespaces)
             guard !key.isEmpty else { continue }

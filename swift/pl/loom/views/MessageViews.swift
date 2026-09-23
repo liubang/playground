@@ -538,33 +538,36 @@ struct ToolBlock: View {
 
     private func outputDisclosure(_ output: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.15)) { outputExpanded.toggle() }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: outputExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 9))
-                    Text("Output · \(output.count) chars\(output.hasSuffix("\n…") ? " · truncated" : "")")
-                        .font(.system(size: 12))
-                    Spacer()
-                    Button(action: copyOutput) {
-                        Text(copied ? "✓ Copied" : "Copy")
-                            .font(.system(size: Theme.textXs))
-                            .foregroundStyle(copied ? Theme.success : Theme.muted)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 1)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 5)
-                                    .strokeBorder(copied ? Theme.success : Theme.bg2, lineWidth: 1),
-                            )
+            HStack(spacing: 8) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { outputExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: outputExpanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 9))
+                        Text("Output · \(output.count) chars\(output.hasSuffix("\n…") ? " · truncated" : "")")
+                            .font(.system(size: 12))
+                        Spacer()
                     }
-                    .buttonStyle(.plain)
-                    .help("Copy full output")
+                    .foregroundStyle(Theme.muted)
+                    .contentShape(Rectangle())
                 }
-                .foregroundStyle(Theme.muted)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+
+                Button(action: copyOutput) {
+                    Text(copied ? "✓ Copied" : "Copy")
+                        .font(.system(size: Theme.textXs))
+                        .foregroundStyle(copied ? Theme.success : Theme.muted)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 1)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5)
+                                .strokeBorder(copied ? Theme.success : Theme.bg2, lineWidth: 1),
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("Copy full output")
             }
-            .buttonStyle(.plain)
 
             if outputExpanded {
                 ScrollView {
@@ -1086,14 +1089,29 @@ struct DiffView: View {
         .contentShape(Rectangle())
     }
 
+    @ViewBuilder
     private func bodyLines(_ parsed: ParsedDiff) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(parsed.lines.enumerated()), id: \.offset) { _, line in
-                    DiffLineView(line: line)
+        if parsed.lines.count > Self.collapseLines {
+            ScrollView(.horizontal, showsIndicators: false) {
+                ScrollView(.vertical) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(parsed.lines.indices, id: \.self) { index in
+                            DiffLineView(line: parsed.lines[index])
+                        }
+                    }
+                    .padding(.vertical, 6)
                 }
+                .frame(maxHeight: 400)
             }
-            .padding(.vertical, 6)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(parsed.lines.indices, id: \.self) { index in
+                        DiffLineView(line: parsed.lines[index])
+                    }
+                }
+                .padding(.vertical, 6)
+            }
         }
     }
 

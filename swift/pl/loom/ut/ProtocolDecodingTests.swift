@@ -53,12 +53,14 @@ private final class RunStatsURLProtocol: URLProtocol {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var pending: [RunStatsURLProtocol] = []
     private nonisolated(unsafe) static var paths: [String] = []
-    nonisolated(unsafe) static var requested: (() -> Void)?
+    private nonisolated(unsafe) static var urls: [URL] = []
+    private nonisolated(unsafe) static var requested: (() -> Void)?
 
     static func reset() {
         lock.lock()
         pending.removeAll()
         paths.removeAll()
+        urls.removeAll()
         requested = nil
         lock.unlock()
     }
@@ -67,6 +69,21 @@ private final class RunStatsURLProtocol: URLProtocol {
         lock.lock()
         defer { lock.unlock() }
         return paths.filter { $0.hasSuffix(suffix) }.count
+    }
+
+    static func query(_ suffix: String, occurrence: Int = 0) -> [String: String] {
+        lock.lock()
+        let matches = urls.filter { $0.path.hasSuffix(suffix) }
+        let url = matches[occurrence]
+        lock.unlock()
+        return Dictionary(uniqueKeysWithValues: URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.compactMap { item in item.value.map { (item.name, $0) } } ?? [])
+    }
+
+    static func onRequest(_ callback: (() -> Void)?) {
+        lock.lock()
+        requested = callback
+        lock.unlock()
     }
 
     static func complete(_ suffix: String, occurrence: Int = 0, body: String, status: Int = 200) {
@@ -89,6 +106,7 @@ private final class RunStatsURLProtocol: URLProtocol {
     override func startLoading() {
         Self.lock.lock()
         Self.paths.append(request.url!.path)
+        Self.urls.append(request.url!)
         Self.pending.append(self)
         let callback = Self.requested
         Self.lock.unlock()
@@ -415,6 +433,161 @@ final class ProtocolDecodingTests: XCTestCase {
     }
 
     @MainActor
+    private func sessionListStore() throws -> (SessionListStore, URLSession) {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RunStatsURLProtocol.self]
+        let session = URLSession(configuration: config)
+        return try (SessionListStore(api: APIClient(
+            baseURL: XCTUnwrap(URL(string: "http://localhost")), token: "", session: session,
+        )), session)
+    }
+
+    @MainActor
+    func testSessionListLoadsAllPagesWithCursorAndDeduplicatesBeforeSorting() async throws {
+        RunStatsURLProtocol.reset()
+        defer { RunStatsURLProtocol.reset() }
+        let (store, session) = try sessionListStore()
+        defer { session.invalidateAndCancel() }
+        let path = "/v1/sessions"
+        var load: Task<Void, Never>!
+        await waitForRunRequest { load = Task { await store.loadSessions() } }
+        XCTAssertTrue(store.isLoading)
+        XCTAssertEqual(RunStatsURLProtocol.query(path), ["limit": "200", "workspace_id": "all"])
+        let second = expectation(description: "second session page")
+        RunStatsURLProtocol.onRequest { second.fulfill() }
+        RunStatsURLProtocol.complete(path, body: #"{"sessions":[{"id":"older","updated_at":"2026-09-19T08:00:00Z","title":"first"},{"id":"duplicate","updated_at":"2026-09-19T09:00:00Z","title":"original"}],"next_cursor":"next /+?"}"#)
+        await fulfillment(of: [second], timeout: 5)
+        RunStatsURLProtocol.onRequest(nil)
+        XCTAssertTrue(store.isLoading)
+        XCTAssertEqual(RunStatsURLProtocol.query(path, occurrence: 1),
+                       ["limit": "200", "workspace_id": "all", "cursor": "next /+?"])
+        RunStatsURLProtocol.complete(path, body: #"{"sessions":[{"id":"duplicate","updated_at":"2026-09-19T11:00:00Z","title":"later"},{"id":"newer","updated_at":"2026-09-19T10:00:00Z","title":"new"}],"next_cursor":""}"#)
+        await load.value
+        XCTAssertEqual(store.sessions.map(\.id), ["newer", "duplicate", "older"])
+        XCTAssertEqual(store.sessions.first { $0.id == "duplicate" }?.title, "original")
+        XCTAssertNil(store.loadError)
+        XCTAssertFalse(store.isLoading)
+        XCTAssertEqual(RunStatsURLProtocol.count(path), 2)
+    }
+
+    @MainActor
+    func testSessionListEmptyCursorStopsAfterFirstPage() async throws {
+        RunStatsURLProtocol.reset()
+        defer { RunStatsURLProtocol.reset() }
+        let (store, session) = try sessionListStore()
+        defer { session.invalidateAndCancel() }
+        let path = "/v1/sessions"
+        var load: Task<Void, Never>!
+        await waitForRunRequest { load = Task { await store.loadSessions() } }
+        RunStatsURLProtocol.complete(path, body: #"{"sessions":[{"id":"session-1"}],"next_cursor":""}"#)
+        await load.value
+        XCTAssertEqual(store.sessions.map(\.id), ["session-1"])
+        XCTAssertEqual(RunStatsURLProtocol.count(path), 1)
+        XCTAssertNil(store.loadError)
+        XCTAssertFalse(store.isLoading)
+    }
+
+    @MainActor
+    func testSessionListRepeatedCursorDoesNotPublishPartialPages() async throws {
+        RunStatsURLProtocol.reset()
+        defer { RunStatsURLProtocol.reset() }
+        let (store, session) = try sessionListStore()
+        defer { session.invalidateAndCancel() }
+        let path = "/v1/sessions"
+        var load: Task<Void, Never>!
+        await waitForRunRequest { load = Task { await store.loadSessions() } }
+        let second = expectation(description: "repeated cursor page")
+        RunStatsURLProtocol.onRequest { second.fulfill() }
+        RunStatsURLProtocol.complete(path, body: #"{"sessions":[{"id":"partial"}],"next_cursor":"same"}"#)
+        await fulfillment(of: [second], timeout: 5)
+        RunStatsURLProtocol.onRequest(nil)
+        RunStatsURLProtocol.complete(path, body: #"{"sessions":[{"id":"another"}],"next_cursor":"same"}"#)
+        await load.value
+        XCTAssertTrue(store.sessions.isEmpty)
+        XCTAssertNotNil(store.loadError)
+        XCTAssertFalse(store.isLoading)
+        XCTAssertEqual(RunStatsURLProtocol.count(path), 2)
+    }
+
+    @MainActor
+    func testSessionListToggleRejectsOlderActiveResponse() async throws {
+        RunStatsURLProtocol.reset()
+        defer { RunStatsURLProtocol.reset() }
+        let (store, session) = try sessionListStore()
+        defer { session.invalidateAndCancel() }
+        let path = "/v1/sessions"
+        var active: Task<Void, Never>!
+        await waitForRunRequest { active = Task { await store.loadSessions() } }
+        var archived: Task<Void, Never>!
+        await waitForRunRequest { archived = Task { await store.toggleArchivedView() } }
+        XCTAssertTrue(store.showArchived)
+        XCTAssertNil(RunStatsURLProtocol.query(path)["archived"])
+        XCTAssertEqual(RunStatsURLProtocol.query(path, occurrence: 1)["archived"], "1")
+        RunStatsURLProtocol.complete(path, occurrence: 1,
+                                     body: #"{"sessions":[{"id":"archived"}],"next_cursor":null}"#)
+        await archived.value
+        RunStatsURLProtocol.complete(path,
+                                     body: #"{"sessions":[{"id":"active"}],"next_cursor":null}"#)
+        await active.value
+        XCTAssertTrue(store.showArchived)
+        XCTAssertEqual(store.sessions.map(\.id), ["archived"])
+        XCTAssertNil(store.loadError)
+        XCTAssertFalse(store.isLoading)
+    }
+
+    @MainActor
+    func testSessionListRefreshDuringPendingLoadRequestsAnotherFetch() async throws {
+        RunStatsURLProtocol.reset()
+        defer { RunStatsURLProtocol.reset() }
+        let (store, session) = try sessionListStore()
+        defer { session.invalidateAndCancel() }
+        let path = "/v1/sessions"
+        let first = expectation(description: "first refresh request")
+        RunStatsURLProtocol.onRequest { first.fulfill() }
+        store.scheduleSessionsRefresh()
+        await fulfillment(of: [first], timeout: 5)
+        RunStatsURLProtocol.onRequest(nil)
+        store.scheduleSessionsRefresh()
+        let second = expectation(description: "follow-up refresh request")
+        RunStatsURLProtocol.onRequest { second.fulfill() }
+        RunStatsURLProtocol.complete(path, body: #"{"sessions":[{"id":"old"}],"next_cursor":""}"#)
+        await fulfillment(of: [second], timeout: 5)
+        RunStatsURLProtocol.onRequest(nil)
+        RunStatsURLProtocol.complete(path, body: #"{"sessions":[{"id":"new"}],"next_cursor":""}"#)
+        // Wait for the second response to be applied before inspecting the list.
+        let applied = expectation(description: "follow-up response applied")
+        Task {
+            while store.isLoading {
+                await Task.yield()
+            }
+            applied.fulfill()
+        }
+        await fulfillment(of: [applied], timeout: 5)
+        XCTAssertEqual(store.sessions.map(\.id), ["new"])
+        XCTAssertEqual(RunStatsURLProtocol.count(path), 2)
+        store.stop()
+    }
+
+    @MainActor
+    func testSessionListStopRejectsPendingResponse() async throws {
+        RunStatsURLProtocol.reset()
+        defer { RunStatsURLProtocol.reset() }
+        let (store, session) = try sessionListStore()
+        defer { session.invalidateAndCancel() }
+        let path = "/v1/sessions"
+        var load: Task<Void, Never>!
+        await waitForRunRequest { load = Task { await store.loadSessions() } }
+        store.stop()
+        RunStatsURLProtocol.complete(path,
+                                     body: #"{"sessions":[{"id":"late"}],"next_cursor":null}"#)
+        await load.value
+        XCTAssertTrue(store.sessions.isEmpty)
+        XCTAssertNil(store.loadError)
+        await store.loadSessions()
+        XCTAssertEqual(RunStatsURLProtocol.count(path), 1)
+    }
+
+    @MainActor
     private func runStatsStore() throws -> (SessionStore, URLSession) {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [RunStatsURLProtocol.self]
@@ -427,10 +600,102 @@ final class ProtocolDecodingTests: XCTestCase {
     @MainActor
     private func waitForRunRequest(_ action: () -> Void) async {
         let arrived = expectation(description: "run stats HTTP request")
-        RunStatsURLProtocol.requested = { arrived.fulfill() }
+        RunStatsURLProtocol.onRequest { arrived.fulfill() }
         action()
         await fulfillment(of: [arrived], timeout: 5)
-        RunStatsURLProtocol.requested = nil
+        RunStatsURLProtocol.onRequest(nil)
+    }
+
+    @MainActor
+    func testFailedApprovalRestoresPendingAfterConcurrentSnapshot() async throws {
+        RunStatsURLProtocol.reset()
+        defer { RunStatsURLProtocol.reset() }
+        let (store, session) = try runStatsStore()
+        defer { session.invalidateAndCancel() }
+        let snapshotPath = "/v1/sessions/s/snapshot"
+        let approvalPath = "/v1/sessions/s/approvals/original"
+        let original = #"{"kind":"approval","id":"original","approval":{"approval_id":"original","call_id":"call","tool_name":"run_cmd","risk":2,"description":"original","args_hash":"hash"}}"#
+        let other = #"{"kind":"approval","id":"other","approval":{"approval_id":"other","call_id":"call2","tool_name":"edit_file","risk":1,"description":"other","args_hash":"hash2"}}"#
+
+        var initial: Task<Void, Never>!
+        await waitForRunRequest { initial = Task { await store.refresh() } }
+        RunStatsURLProtocol.complete(snapshotPath, body: #"{"state":"awaiting_approval","session_id":"s","model_name":"test","turn_count":1,"event_seq":1,"pending_requests":[\#(original)]}"#)
+        await initial.value
+        let approval = try XCTUnwrap(store.pendingApprovals.first)
+        XCTAssertEqual(approval.approvalId, "original")
+
+        var resolving: Task<Void, Never>!
+        await waitForRunRequest {
+            resolving = Task { await store.resolveApproval(approval, decision: .allow) }
+        }
+        XCTAssertTrue(store.pendingApprovals.isEmpty)
+        var concurrent: Task<Void, Never>!
+        await waitForRunRequest { concurrent = Task { await store.refresh() } }
+        RunStatsURLProtocol.complete(snapshotPath, body: #"{"state":"awaiting_approval","session_id":"s","model_name":"test","turn_count":1,"event_seq":2,"pending_requests":[\#(other)]}"#)
+        await concurrent.value
+        XCTAssertEqual(store.pendingApprovals.map(\.approvalId), ["other"])
+
+        let retrySnapshot = expectation(description: "approval failure triggers refresh")
+        RunStatsURLProtocol.onRequest { retrySnapshot.fulfill() }
+        RunStatsURLProtocol.complete(approvalPath,
+                                     body: #"{"error":{"code":"binding_mismatch","message":"stale binding"}}"#,
+                                     status: 409)
+        await fulfillment(of: [retrySnapshot], timeout: 5)
+        RunStatsURLProtocol.onRequest(nil)
+        XCTAssertEqual(Set(store.pendingApprovals.map(\.approvalId)), ["original", "other"])
+        RunStatsURLProtocol.complete(snapshotPath,
+                                     body: #"{"error":{"code":"unavailable","message":"offline"}}"#,
+                                     status: 503)
+        await resolving.value
+        XCTAssertEqual(Set(store.pendingApprovals.map(\.approvalId)), ["original", "other"])
+        XCTAssertEqual(RunStatsURLProtocol.count(approvalPath), 1)
+        XCTAssertEqual(RunStatsURLProtocol.count(snapshotPath), 3)
+    }
+
+    @MainActor
+    func testFailedQuestionRestoresPendingAfterConcurrentSnapshot() async throws {
+        RunStatsURLProtocol.reset()
+        defer { RunStatsURLProtocol.reset() }
+        let (store, session) = try runStatsStore()
+        defer { session.invalidateAndCancel() }
+        let snapshotPath = "/v1/sessions/s/snapshot"
+        let questionPath = "/v1/sessions/s/questions/original"
+        let original = #"{"kind":"question","id":"original","question":{"id":"original","text":"Choose?","options":[]}}"#
+        let other = #"{"kind":"question","id":"other","question":{"id":"other","text":"Other?","options":[]}}"#
+
+        var initial: Task<Void, Never>!
+        await waitForRunRequest { initial = Task { await store.refresh() } }
+        RunStatsURLProtocol.complete(snapshotPath, body: #"{"state":"running","session_id":"s","model_name":"test","turn_count":1,"event_seq":1,"pending_requests":[\#(original)]}"#)
+        await initial.value
+        let question = try XCTUnwrap(store.pendingQuestions.first)
+        XCTAssertEqual(question.id, "original")
+
+        var answering: Task<Void, Never>!
+        await waitForRunRequest {
+            answering = Task { await store.answerQuestion(question, selected: [], customText: nil, skipped: true) }
+        }
+        XCTAssertTrue(store.pendingQuestions.isEmpty)
+        var concurrent: Task<Void, Never>!
+        await waitForRunRequest { concurrent = Task { await store.refresh() } }
+        RunStatsURLProtocol.complete(snapshotPath, body: #"{"state":"running","session_id":"s","model_name":"test","turn_count":1,"event_seq":2,"pending_requests":[\#(other)]}"#)
+        await concurrent.value
+        XCTAssertEqual(store.pendingQuestions.map(\.id), ["other"])
+
+        let retrySnapshot = expectation(description: "question failure triggers refresh")
+        RunStatsURLProtocol.onRequest { retrySnapshot.fulfill() }
+        RunStatsURLProtocol.complete(questionPath,
+                                     body: #"{"error":{"code":"binding_mismatch","message":"stale question"}}"#,
+                                     status: 409)
+        await fulfillment(of: [retrySnapshot], timeout: 5)
+        RunStatsURLProtocol.onRequest(nil)
+        XCTAssertEqual(Set(store.pendingQuestions.map(\.id)), ["original", "other"])
+        RunStatsURLProtocol.complete(snapshotPath,
+                                     body: #"{"error":{"code":"unavailable","message":"offline"}}"#,
+                                     status: 503)
+        await answering.value
+        XCTAssertEqual(Set(store.pendingQuestions.map(\.id)), ["original", "other"])
+        XCTAssertEqual(RunStatsURLProtocol.count(questionPath), 1)
+        XCTAssertEqual(RunStatsURLProtocol.count(snapshotPath), 3)
     }
 
     @MainActor

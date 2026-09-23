@@ -342,6 +342,57 @@ final class SettingsStore {
     // MARK: Validation (SettingsPanel firstInvalid)
 
     func firstInvalid() -> InvalidTarget? {
+        for tab in settingsTabs {
+            for (_, fields) in tab.sections ?? [] {
+                for spec in fields {
+                    if let error = invalidInput(spec, draft.globals[spec.key] ?? .text("")) {
+                        return InvalidTarget(msg: "\(spec.label ?? spec.key)：\(error)", tab: tab.id, fieldId: spec.key)
+                    }
+                }
+            }
+        }
+        for spec in [defaultModelField] + skillsConfigFields {
+            if let error = invalidInput(spec, draft.globals[spec.key] ?? .text("")) {
+                return InvalidTarget(
+                    msg: "\(spec.label ?? spec.key)：\(error)",
+                    tab: spec.key == defaultModelField.key ? "providers" : "skills", fieldId: spec.key,
+                )
+            }
+        }
+        for card in draft.providers {
+            for spec in providerAllFields {
+                if let error = invalidInput(spec, card.fields[spec.key] ?? .text("")) {
+                    return InvalidTarget(
+                        msg: "\(spec.label ?? spec.key)：\(error)", tab: "providers",
+                        fieldId: "\(card.id.uuidString):\(spec.key)", providerCardId: card.id,
+                    )
+                }
+            }
+            for model in card.models {
+                for spec in modelFields {
+                    if let error = invalidInput(spec, model.fields[spec.key] ?? .text("")) {
+                        return InvalidTarget(
+                            msg: "\(spec.label ?? spec.key)：\(error)", tab: "providers",
+                            fieldId: "\(model.id.uuidString):\(spec.key)",
+                            providerCardId: card.id, modelCardId: model.id,
+                        )
+                    }
+                }
+            }
+        }
+        for card in draft.mcpServers {
+            let fields = card.transport == .http ? mcpHTTPFields : mcpStdioFields
+            let states = card.transport == .http ? card.http : card.stdio
+            for spec in mcpCommonFields + fields {
+                let state = card.common[spec.key] ?? states[spec.key] ?? .text("")
+                if let error = invalidInput(spec, state) {
+                    return InvalidTarget(
+                        msg: "\(spec.label ?? spec.key)：\(error)", tab: "mcp",
+                        fieldId: "\(card.id.uuidString):\(spec.key)", mcpCardId: card.id,
+                    )
+                }
+            }
+        }
         var namedProviders = 0
         var providerNames = Set<String>()
         for card in draft.providers {

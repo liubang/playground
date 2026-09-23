@@ -36,6 +36,7 @@ struct LoomApp: App {
         // single-connection client.
         Window("Loom", id: "main") {
             RootView(appState: appState)
+                .onAppear { delegate.appState = appState }
                 .frame(minWidth: 900, minHeight: 580)
                 // The WebUI's default (and reference) theme is dark
                 // Everforest; light is its Everforest Light Medium.
@@ -106,6 +107,12 @@ extension Notification.Name {
 /// keep the old flag there as a fallback (and the divider's
 /// NonDraggableStrip still covers its worst symptom).
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    var appState: AppState?
+
+    func applicationWillTerminate(_: Notification) {
+        appState?.shutdown()
+    }
+
     func applicationDidFinishLaunching(_: Notification) {
         enableBackgroundDragFallback()
     }

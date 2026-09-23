@@ -58,9 +58,10 @@ final class ServerManager {
     /// Reuses a healthy server or spawns the bundled one; returns the
     /// endpoint to connect to.
     func ensureRunning() async throws -> Endpoint {
-        if await healthy(address: Self.defaultAddress, token: Self.readServeToken() ?? "") {
+        let token = Self.readServeToken() ?? ""
+        if await healthy(address: Self.defaultAddress, token: token) {
             mode = .external
-            return Endpoint(address: Self.defaultAddress, token: Self.readServeToken() ?? "")
+            return Endpoint(address: Self.defaultAddress, token: token)
         }
 
         guard let cli = Bundle.main.resourceURL?.appendingPathComponent("loom"),
@@ -77,8 +78,13 @@ final class ServerManager {
         process.currentDirectoryURL = URL(fileURLWithPath: NSHomeDirectory())
         process.standardOutput = try Self.serverLogHandle()
         process.standardError = process.standardOutput
+        do {
+            try process.run()
+        } catch {
+            mode = nil
+            throw error
+        }
         self.process = process
-        try process.run()
         mode = .managed(pid: process.processIdentifier)
 
         // Wait for readiness. First-ever launch generates the token file
@@ -101,20 +107,32 @@ final class ServerManager {
         if let token = Self.readServeToken(),
            await healthy(address: Self.defaultAddress, token: token)
         {
-            mode = .external
-            self.process = nil
+            // A healthy endpoint does not prove which process owns it.
+            // Keep our child if it is still alive so quit can terminate it.
+            if !process.isRunning {
+                mode = .external
+                self.process = nil
+            }
             return Endpoint(address: Self.defaultAddress, token: token)
         }
         let status = process.isRunning ? -1 : process.terminationStatus
+        // Do not leave an unhealthy child running after a failed startup.
+        if process.isRunning {
+            process.terminate()
+        }
         self.process = nil
+        mode = nil
         throw ServerError.startFailed(terminationStatus: status)
     }
 
     /// Terminates a managed server (SIGTERM → serve's graceful shutdown).
     /// No-op for external instances.
     func stop() {
-        guard let process, process.isRunning else { return }
-        process.terminate()
+        if let process, process.isRunning {
+            process.terminate()
+        }
+        process = nil
+        mode = nil
     }
 
     // MARK: - Internals

@@ -47,9 +47,12 @@ struct APIClient: Sendable {
     // MARK: - Sessions
 
     func listSessions(
-        workspaceId: String? = nil, limit: Int = 200, archived: Bool = false,
+        workspaceId: String? = nil, limit: Int = 200, archived: Bool = false, cursor: String? = nil,
     ) async throws -> SessionListResponse {
         var query = [URLQueryItem(name: "limit", value: String(limit))]
+        if let cursor, !cursor.isEmpty {
+            query.append(URLQueryItem(name: "cursor", value: cursor))
+        }
         if let workspaceId {
             query.append(URLQueryItem(name: "workspace_id", value: workspaceId))
         }

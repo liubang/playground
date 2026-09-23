@@ -50,6 +50,8 @@ final class AppState {
     private static let addressKey = "loom.serverAddress"
     private static let tokenKey = "loom.token"
     private var didAutoStart = false
+    /// Invalidates any startup or handshake suspended across an await.
+    private var connectionGeneration: UInt64 = 0
 
     init() {
         serverAddress = defaults.string(forKey: Self.addressKey) ?? ServerManager.defaultAddress
@@ -62,26 +64,36 @@ final class AppState {
     func start() {
         guard !didAutoStart, status == .disconnected else { return }
         didAutoStart = true
+        connectionGeneration &+= 1
+        let generation = connectionGeneration
         status = .connecting
         statusDetail = "Starting loom serve…"
         Task {
             do {
                 let endpoint = try await server.ensureRunning()
+                guard generation == connectionGeneration else { return }
                 serverAddress = endpoint.address
                 if !endpoint.token.isEmpty {
                     token = endpoint.token
                 }
             } catch {
+                guard generation == connectionGeneration else { return }
                 statusDetail = nil
                 status = .failed(error.localizedDescription)
                 return
             }
             statusDetail = nil
-            connect()
+            beginConnect(generation: generation)
         }
     }
 
     func connect() {
+        guard status != .connecting else { return }
+        connectionGeneration &+= 1
+        beginConnect(generation: connectionGeneration)
+    }
+
+    private func beginConnect(generation: UInt64) {
         guard let url = URL(string: serverAddress), url.host != nil else {
             status = .failed("Invalid server address")
             return
@@ -91,23 +103,35 @@ final class AppState {
         Task {
             do {
                 let meta = try await api.metaVersion()
+                guard generation == connectionGeneration else { return }
                 guard meta.protocolField == 1 else {
                     status = .failed("Unsupported protocol version \(meta.protocolField) (client speaks v1)")
                     return
                 }
+                sessionList?.stop()
                 let list = SessionListStore(api: api)
                 sessionList = list
                 status = .connected(version: meta.version)
                 await list.load()
             } catch {
+                guard generation == connectionGeneration else { return }
                 status = .failed(error.localizedDescription)
             }
         }
     }
 
     func disconnect() {
+        connectionGeneration &+= 1
+        sessionList?.stop()
         sessionList = nil
+        statusDetail = nil
         status = .disconnected
+    }
+
+    /// Synchronous app-level cleanup before the process exits.
+    func shutdown() {
+        disconnect()
+        server.stop()
     }
 
     func refetchTokenFromDisk() {
