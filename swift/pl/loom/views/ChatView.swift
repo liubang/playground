@@ -15,10 +15,8 @@
 import AppKit
 import SwiftUI
 
-/// Session detail: a 44px toolbar in the mac idiom (chrome controls
-/// left, centered document title, status + actions right), the
-/// transcript with edge scroll-fades, pending cards, the composer,
-/// and a 28px statusbar (bg1, hairline top border) closing the pane.
+/// Session detail beneath the window-wide toolbar: the transcript with
+/// edge scroll-fades, pending cards, the composer, and a 28px statusbar.
 ///
 /// Each pane is its own View reading only the SessionStore properties
 /// it needs: @Observable tracks access per property, so a streaming
@@ -27,33 +25,11 @@ import SwiftUI
 /// no longer re-layout the transcript).
 struct ChatView: View {
     let store: SessionStore
-    /// Server-derived session title (first user message); the header
-    /// shows it once the conversation has started, falling back to the
-    /// short session id before that.
-    var sessionTitle: String?
-    var workspaceName: String?
     var version: String = ""
     /// Model catalog for the composer picker (SessionListStore.models).
     var models: [MetaModels.ModelInfo] = []
-    /// Browsing the sidebar's archive listing: the session is read-only
-    /// (WebUI archived badge).
-    var archived: Bool = false
-    @Binding var sidebarCollapsed: Bool
-
     var body: some View {
         VStack(spacing: 0) {
-            ChatHeaderView(
-                store: store,
-                sessionTitle: sessionTitle,
-                workspaceName: workspaceName,
-                archived: archived,
-                sidebarCollapsed: $sidebarCollapsed,
-            )
-            // The share toast draws outside the header's bounds —
-            // lift the header above the transcript siblings so the
-            // toast never slides under scrolling content.
-            .zIndex(1)
-            Hairline(axis: .horizontal)
             TranscriptView(store: store)
             PendingAreaView(store: store)
             ComposerView(store: store, models: models)
@@ -66,20 +42,13 @@ struct ChatView: View {
 
 // MARK: - Header (mac toolbar idiom)
 
-/// The window's title bar, redesigned after the macOS toolbar idiom:
-/// window-chrome controls on the left (sidebar, theme), a centered
-/// document title (session title over a quiet `workspace · id`
-/// subtitle), and status + actions on the right. Status is quiet by
-/// default — a pill appears only when something needs attention (a
-/// busy turn, a read-only session, a dropped connection); an idle,
-/// live session shows none. Supersedes the WebUI's badge row, whose
-/// always-on "idle"/"live" labels were pure noise.
-private struct ChatHeaderView: View {
+/// Chat-side toolbar. RootView places it after the sidebar chrome when
+/// expanded, or after the traffic-light region when collapsed.
+struct ChatHeaderView: View {
     let store: SessionStore
     var sessionTitle: String?
     var workspaceName: String?
     var archived: Bool
-    @Binding var sidebarCollapsed: Bool
 
     /// WebUI loom_theme: "dark" (default) or "light"; LoomApp applies
     /// it as the window's preferredColorScheme.
@@ -92,92 +61,102 @@ private struct ChatHeaderView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 0) {
-            leadingCluster
-            Spacer(minLength: 12)
-            titleCluster
-            Spacer(minLength: 12)
-            trailingCluster
-        }
-        .padding(.horizontal, 12)
-        .frame(minHeight: 44)
-        // Custom titlebar: empty header areas move the window (the
-        // buttons keep their clicks — see windowDragSurface).
-        .windowDragSurface()
-    }
+        GeometryReader { geometry in
+            HStack(spacing: 8) {
+                titleCluster
+                    .layoutPriority(1)
 
-    // MARK: Leading (window chrome)
-
-    private var leadingCluster: some View {
-        HStack(spacing: 2) {
-            GhostButton {
-                sidebarCollapsed.toggle()
-            } label: {
-                // sidebar.left: the platform's sidebar-toggle glyph
-                // (was line.3.horizontal — a web hamburger).
-                Image(systemName: "sidebar.left")
-            }
-            .help("Toggle sidebar (⌃⌘S)")
-            .accessibilityLabel("Toggle sidebar")
-
-            GhostButton {
-                theme = theme == "dark" ? "light" : "dark"
-            } label: {
-                Image(systemName: "circle.lefthalf.filled")
-            }
-            .help(theme == "dark" ? "Switch to light mode" : "Switch to dark mode")
-            .accessibilityLabel("Toggle color theme")
-        }
-    }
-
-    // MARK: Center (document title)
-
-    /// macOS document-title idiom: the session title in semibold over
-    /// a quiet `workspace · id` subtitle. Clicking the title copies
-    /// the full session id (the WebUI's hdr-session); clicking the
-    /// workspace name reveals it in the sidebar.
-    private var titleCluster: some View {
-        VStack(spacing: 1) {
-            Button(action: copySessionId) {
-                Text(displayTitle)
-                    .font(.system(size: Theme.textMd, weight: .semibold))
-                    .foregroundStyle(copiedSessionId ? Theme.success : (hasTitle ? Theme.fg : Theme.muted))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            .buttonStyle(.plain)
-            .help(copiedSessionId ? "Copied" : "\(store.sessionId) — click to copy the session ID")
-            .accessibilityLabel("Session \(displayTitle)")
-
-            HStack(spacing: 4) {
-                if let workspaceName, !workspaceName.isEmpty {
-                    Button {
-                        sidebarCollapsed = false
-                    } label: {
-                        Text(workspaceName)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Locate the owning workspace")
-                    Text("·")
+                Spacer(minLength: 12)
+                if geometry.size.width >= 620 {
+                    statusPills
+                } else if !statusSummary.isEmpty {
+                    compactStatus
                 }
-                Text(shortSessionId)
-                    .font(Theme.monoXs)
+
+                HStack(spacing: 2) {
+                    themeButton
+                    shareButton
+                    compactButton
+                }
             }
-            .font(.system(size: Theme.textXs))
-            .foregroundStyle(Theme.muted)
-            .lineLimit(1)
+            .padding(.leading, 4)
+            .padding(.trailing, 16)
+            .frame(height: Theme.toolbarHeight)
+            .windowDragSurface()
         }
-        .frame(maxWidth: .infinity)
+        .frame(height: Theme.toolbarHeight)
     }
 
-    // MARK: Trailing (status pills + actions)
+    // MARK: Document title
 
-    /// Status first, then the two actions. Pills render only for
-    /// exceptional states: an idle turn and a live connection are the
-    /// default and stay invisible.
-    private var trailingCluster: some View {
+    /// The title stays on one line. Its tooltip retains the workspace
+    /// and full session ID; clicking it still copies the ID.
+    private var titleCluster: some View {
+        Button(action: copySessionId) {
+            Text(displayTitle)
+                .font(.system(size: Theme.textMd, weight: .semibold))
+                .foregroundStyle(copiedSessionId ? Theme.success : (hasTitle ? Theme.fg : Theme.muted))
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .buttonStyle(.plain)
+        .help(copiedSessionId ? "Copied" : "\(workspaceName.map { "\($0) · " } ?? "")\(store.sessionId) — click to copy the session ID")
+        .accessibilityLabel("Session \(displayTitle), click to copy session ID")
+    }
+
+    // MARK: Actions and exceptional status
+
+    private var shareButton: some View {
+        GhostButton(action: shareSession) {
+            // The toast confirms that the link has reached the clipboard.
+            if sharing {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 15, height: 15)
+            } else {
+                Image(systemName: copiedShareLink ? "check" : "square.and.arrow.up")
+                    .foregroundStyle(copiedShareLink ? Theme.success : Theme.muted)
+            }
+        }
+        .disabled(sharing)
+        .help(sharing
+            ? "Creating share link…"
+            : copiedShareLink
+            ? "Share link copied — anyone with the link can view this session read-only"
+            : "Share session: copy a public read-only link (Shift+click to unshare)")
+        .accessibilityLabel("Share session")
+        .overlay(alignment: .bottomTrailing) {
+            if copiedShareLink {
+                ShareCopiedToast()
+                    .offset(y: 34)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: copiedShareLink)
+    }
+
+    private var themeButton: some View {
+        GhostButton {
+            theme = theme == "dark" ? "light" : "dark"
+        } label: {
+            Image(systemName: "circle.lefthalf.filled")
+        }
+        .help(theme == "dark" ? "Switch to light mode" : "Switch to dark mode")
+        .accessibilityLabel("Toggle color theme")
+    }
+
+    private var compactButton: some View {
+        GhostButton {
+            Task { await store.requestCompaction() }
+        } label: {
+            Image(systemName: "rectangle.compress.vertical")
+        }
+        .help("Compact context on next turn")
+        .accessibilityLabel("Compact context")
+        .disabled(store.isBusy)
+    }
+
+    private var statusPills: some View {
         HStack(spacing: 6) {
             if store.readOnly {
                 StatusPill(color: Theme.warning, text: "sub-agent · read-only")
@@ -187,51 +166,38 @@ private struct ChatHeaderView: View {
             }
             statePill
             connectionPill
-
-            GhostButton(action: shareSession) {
-                // Minting the link is a network round-trip: spin
-                // while it is in flight (the button is disabled, so
-                // no double-mint), swap to a check on success — and
-                // the toast below says WHAT happened, so the icon
-                // swap never reads as "the button vanished".
-                if sharing {
-                    ProgressView()
-                        .controlSize(.small)
-                        .frame(width: 15, height: 15)
-                } else {
-                    Image(systemName: copiedShareLink ? "check" : "square.and.arrow.up")
-                        .foregroundStyle(copiedShareLink ? Theme.success : Theme.muted)
-                }
-            }
-            .disabled(sharing)
-            .help(sharing
-                ? "Creating share link…"
-                : copiedShareLink
-                ? "Share link copied — anyone with the link can view this session read-only"
-                : "Share session: copy a public read-only link (Shift+click to unshare)")
-            .accessibilityLabel("Share session")
-            .overlay(alignment: .bottomTrailing) {
-                if copiedShareLink {
-                    ShareCopiedToast()
-                        .offset(y: 34)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-            }
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: copiedShareLink)
-
-            GhostButton {
-                Task { await store.requestCompaction() }
-            } label: {
-                Image(systemName: "rectangle.compress.vertical")
-            }
-            .help("Compact context on next turn")
-            .accessibilityLabel("Compact context")
-            .disabled(store.isBusy)
         }
     }
 
-    private var shortSessionId: String {
-        store.sessionId.count > 8 ? String(store.sessionId.prefix(8)) : store.sessionId
+    private var compactStatus: some View {
+        Image(systemName: "circle.fill")
+            .font(.system(size: 7))
+            .foregroundStyle(Theme.warning)
+            .frame(width: 28, height: 28)
+            .help(statusSummary)
+            .accessibilityLabel(statusSummary)
+    }
+
+    private var statusSummary: String {
+        var details: [String] = []
+        if store.readOnly { details.append("Sub-agent · read-only") }
+        else if archived { details.append("Archived · read-only") }
+        switch store.state {
+        case .running: details.append("Running")
+        case .awaitingApproval: details.append("Awaiting approval")
+        case .cancelling: details.append("Cancelling")
+        case .booting: details.append("Booting")
+        case .closed: details.append("Closed")
+        case .fatal: details.append("Fatal")
+        default: break
+        }
+        switch store.connection {
+        case .live: break
+        case .connecting: details.append("Connecting")
+        case let .offline(attempt): details.append("Reconnecting (\(attempt))")
+        case .drained: details.append("Server shut down")
+        }
+        return details.joined(separator: " · ")
     }
 
     private var hasTitle: Bool {
@@ -239,7 +205,7 @@ private struct ChatHeaderView: View {
     }
 
     /// The derived title once the conversation has started; a quiet
-    /// placeholder before that (the full id sits in the subtitle).
+    /// placeholder before that (the full ID remains in the tooltip).
     private var displayTitle: String {
         hasTitle ? sessionTitle! : "New Session"
     }

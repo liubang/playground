@@ -66,7 +66,8 @@ enum Theme {
     static let radiusLg: CGFloat = 12
     static let radiusXl: CGFloat = 16
 
-    // Layout
+    // Keep the custom toolbar compact and aligned with the native window controls.
+    static let toolbarHeight: CGFloat = 32
     static let contentWidth: CGFloat = 960
     static let sidebarWidth: CGFloat = 288
     /// Sidebar drag-resize clamp (SidebarDivider).

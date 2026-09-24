@@ -50,13 +50,15 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 8) {
-                workspaceBar
-                newSessionButton
-            }
-            .padding(.horizontal, 10)
-            .padding(.top, 12)
-            .padding(.bottom, 12)
+            workspaceBar
+                .frame(height: 28)
+                .padding(.horizontal, 10)
+                .padding(.top, 12)
+                .padding(.bottom, 4)
+
+            newSessionButton
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
 
             Hairline(axis: .horizontal)
 

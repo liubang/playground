@@ -124,47 +124,107 @@ struct RootView: View {
         selection = ids[next]
     }
 
-    private func shell(list: SessionListStore, version: String) -> some View {
-        HStack(spacing: 0) {
-            // The landing page is a dead end without the sidebar (its
-            // only navigation IS the session list, and the sidebar
-            // toggle lives in the chat header), so a collapsed sidebar
-            // is force-shown while no session is selected.
-            if !sidebarCollapsed || selection == nil {
-                SidebarView(
-                    list: list,
-                    selection: $selection,
-                    onDisconnect: {
-                        appState.disconnect()
-                        selection = nil
-                    },
-                    onOpenSettings: { openSettings(list: list) },
-                )
-                .frame(width: sidebarWidth)
-                .transition(.move(edge: .leading))
-                SidebarDivider(width: $sidebarWidth)
-            }
+    private var sidebarVisible: Bool { !sidebarCollapsed }
 
-            Group {
-                if let sessionId = selection {
-                    ChatView(
-                        store: list.store(for: sessionId),
-                        sessionTitle: list.sessions.first { $0.id == sessionId }?.title,
-                        workspaceName: list.workspace(
-                            for: list.sessions.first { $0.id == sessionId }?.workspaceId,
-                        )?.name,
-                        version: version,
-                        models: list.models,
-                        archived: list.showArchived,
-                        sidebarCollapsed: $sidebarCollapsed,
-                    )
-                    .id(sessionId)
-                } else {
-                    emptyState(list: list)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    private var sidebarToggle: some View {
+        GhostButton {
+            sidebarCollapsed.toggle()
+        } label: {
+            Image(systemName: "sidebar.left")
         }
+        .help("Toggle sidebar (⌃⌘S)")
+        .accessibilityLabel("Toggle sidebar")
+    }
+
+    private func shell(list: SessionListStore, version: String) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                // The sidebar title region is empty when expanded: the
+                // toggle belongs beside the chat title, not the traffic lights.
+                HStack(spacing: 0) {
+                    if !sidebarVisible {
+                        sidebarToggle
+                            .padding(.leading, 116)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .frame(width: sidebarVisible ? sidebarWidth : 156)
+                .frame(height: Theme.toolbarHeight)
+                .background(sidebarVisible ? Theme.bg1 : Theme.bg0)
+                .windowDragSurface()
+
+                if sidebarVisible {
+                    Hairline(axis: .vertical)
+                        .frame(height: Theme.toolbarHeight)
+                }
+
+                HStack(spacing: 0) {
+                    if sidebarVisible {
+                        sidebarToggle
+                            .padding(.leading, 12)
+                    }
+                    if let sessionId = selection {
+                        ChatHeaderView(
+                            store: list.store(for: sessionId),
+                            sessionTitle: list.sessions.first { $0.id == sessionId }?.title,
+                            workspaceName: list.workspace(
+                                for: list.sessions.first { $0.id == sessionId }?.workspaceId,
+                            )?.name,
+                            archived: list.showArchived,
+                        )
+                        .id(sessionId)
+                    } else {
+                        Text("Loom")
+                            .font(.system(size: Theme.textMd, weight: .semibold))
+                            .foregroundStyle(Theme.fg)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.leading, sidebarVisible ? 10 : 4)
+                            .frame(height: Theme.toolbarHeight)
+                            .windowDragSurface()
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .background(Theme.bg0)
+            }
+            .frame(height: Theme.toolbarHeight)
+            .zIndex(1) // The share confirmation floats below the toolbar.
+            Hairline(axis: .horizontal)
+
+            HStack(spacing: 0) {
+                // The empty state also offers New Session when the sidebar is hidden.
+                if sidebarVisible {
+                    SidebarView(
+                        list: list,
+                        selection: $selection,
+                        onDisconnect: {
+                            appState.disconnect()
+                            selection = nil
+                        },
+                        onOpenSettings: { openSettings(list: list) },
+                    )
+                    .frame(width: sidebarWidth)
+                    .transition(.move(edge: .leading))
+                    SidebarDivider(width: $sidebarWidth)
+                }
+
+                Group {
+                    if let sessionId = selection {
+                        ChatView(
+                            store: list.store(for: sessionId),
+                            version: version,
+                            models: list.models,
+                        )
+                        .id(sessionId)
+                    } else {
+                        emptyState(list: list)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .background(Theme.bg0)
+        // The split toolbar takes the place of the hidden titlebar.
+        .ignoresSafeArea(.container, edges: .top)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: sidebarCollapsed)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: selection == nil)
         .sheet(isPresented: Binding(
