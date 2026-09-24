@@ -385,11 +385,84 @@ func renderInlineMarkdown(_ source: String, size: CGFloat = Theme.textLg) -> Att
     return rendered
 }
 
+/// Single tildes in numeric ranges (e.g. 6~8°C) are prose, not GFM
+/// strikethrough delimiters. Leave escaped text, code spans and ~~ pairs
+/// alone so intentional Markdown keeps its original meaning.
+func escapeNumericRangeTildes(_ source: String) -> String {
+    guard source.contains("~") else { return source }
+    let chars = Array(source)
+    var result = ""
+    result.reserveCapacity(source.utf8.count)
+    var codeDelimiter = 0
+    var i = 0
+    while i < chars.count {
+        let char = chars[i]
+        if char == "`" {
+            var end = i + 1
+            while end < chars.count, chars[end] == "`" {
+                end += 1
+            }
+            let count = end - i
+            var slashes = 0
+            var j = i
+            while j > 0, chars[j - 1] == "\\" {
+                slashes += 1
+                j -= 1
+            }
+            if slashes.isMultiple(of: 2) {
+                if codeDelimiter == count {
+                    codeDelimiter = 0
+                } else if codeDelimiter == 0 {
+                    // An unmatched backtick is literal text, not a code span.
+                    var closing = end
+                    while closing < chars.count {
+                        if chars[closing] != "`" {
+                            closing += 1
+                            continue
+                        }
+                        var next = closing + 1
+                        while next < chars.count, chars[next] == "`" {
+                            next += 1
+                        }
+                        if next - closing == count {
+                            break
+                        }
+                        closing = next
+                    }
+                    if closing < chars.count {
+                        codeDelimiter = count
+                    }
+                }
+            }
+            result.append(contentsOf: chars[i ..< end])
+            i = end
+            continue
+        }
+        if char == "~", codeDelimiter == 0, i + 1 < chars.count {
+            // Skip backslash escapes to find the actual preceding character.
+            var j = i
+            while j > 0, chars[j - 1] == "\\" {
+                j -= 1
+            }
+            if j > 0, chars[j - 1].isNumber, chars[i + 1].isNumber,
+               j < 2 || chars[j - 2] != "~",
+               i + 2 == chars.count || chars[i + 2] != "~",
+               (i - j).isMultiple(of: 2)
+            {
+                result.append("\\")
+            }
+        }
+        result.append(char)
+        i += 1
+    }
+    return result
+}
+
 private func parseInlineMarkdown(_ source: String, size: CGFloat) -> AttributedString {
     typealias SwiftUIAttrs = AttributeScopes.SwiftUIAttributes
 
     guard var parsed = try? AttributedString(
-        markdown: source,
+        markdown: escapeNumericRangeTildes(source),
         options: .init(interpretedSyntax: .full),
     ) else {
         return AttributedString(source)

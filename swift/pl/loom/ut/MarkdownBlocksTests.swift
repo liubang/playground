@@ -47,6 +47,25 @@ final class MarkdownBlocksTests: XCTestCase {
         ])
     }
 
+    // MARK: Inline Markdown numeric ranges
+
+    func testNumericRangesDoNotBecomeStrikethrough() {
+        let source = "今天 32.5°C，明天 6~8°C，周五 25~27°C；PM2.5 8~92，风速 14~15 km/h。"
+        XCTAssertEqual(String(renderInlineMarkdown(source).characters), source)
+        XCTAssertEqual(escapeNumericRangeTildes(source),
+                       "今天 32.5°C，明天 6\\~8°C，周五 25\\~27°C；PM2.5 8\\~92，风速 14\\~15 km/h。")
+    }
+
+    func testNumericTildesRespectCodeEscapesAndIntentionalStrikethrough() {
+        let source = "`6~8` 和 ``25~27``，6\\~8、6\\\\~8，~~已过时~~，6～8，6~8"
+        XCTAssertEqual(escapeNumericRangeTildes(source),
+                       "`6~8` 和 ``25~27``，6\\~8、6\\\\\\~8，~~已过时~~，6～8，6\\~8")
+        XCTAssertEqual(String(renderInlineMarkdown("~~已过时~~ 与 6~8").characters), "已过时 与 6~8")
+        XCTAssertEqual(escapeNumericRangeTildes("`未闭合 6~8 与 25~27"),
+                       "`未闭合 6\\~8 与 25\\~27")
+        XCTAssertEqual(escapeNumericRangeTildes("\\`转义 25~27"), "\\`转义 25\\~27")
+    }
+
     // MARK: LiveBlockCache invariants
 
     /// Feeds the chunks as an append-only stream; after each append
