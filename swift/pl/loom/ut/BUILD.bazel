@@ -20,6 +20,10 @@ swift_library(
 swift_test(
     name = "loom_tests",
     srcs = glob(["*.swift"]),
+    # PerfBenchmarksTests loads the real highlight.js bundle from
+    # runfiles to measure cold-highlight cost on the same engine the
+    # app embeds (views/SyntaxHighlighter.swift).
+    data = ["@highlight_js//file:highlight.min.js"],
     target_compatible_with = ["@platforms//os:macos"],
     deps = [":testable_lib"],
 )

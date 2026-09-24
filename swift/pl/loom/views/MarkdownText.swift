@@ -164,7 +164,7 @@ struct MarkdownText: View {
             ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
                 switch block {
                 case let .prose(markdown):
-                    ProseText(markdown: markdown, cursor: streamCursor && index == blocks.count - 1)
+                    ProseText(markdown: markdown, cursor: streamCursor && index == blocks.count - 1, live: live)
                 case let .code(language, code):
                     CodeBlockView(language: language, code: code, deferHighlight: live)
                 case let .table(header, rows):
@@ -317,9 +317,17 @@ private struct ProseText: View {
     let markdown: String
     /// Append the streaming cursor at the end of this paragraph.
     var cursor = false
+    /// Live (still-streaming) prose: sealed paragraphs render once
+    /// ever; only the growing tail re-parses per flush
+    /// (LiveInlineCache). Sealed prose renders whole.
+    var live = false
+
+    /// Per-view append-only render state (same pattern as
+    /// MarkdownText.liveCache).
+    @State private var liveInlineCache = LiveInlineCache()
 
     var body: some View {
-        var text = Text(renderInlineMarkdown(markdown))
+        var text = Text(live ? liveInlineCache.render(markdown) : renderInlineMarkdown(markdown))
         if cursor {
             // The WebUI's cursor also pulses (1.2s); SwiftUI can't
             // animate a concatenated Text run, so the gradient glyph
@@ -366,6 +374,100 @@ private struct StreamCursorGlyph: View {
                 }
             }
     }
+}
+
+/// Incremental inline renderer for live (append-only) prose, held per
+/// ProseText via @State. Split at the LAST blank line: paragraphs
+/// before it are sealed — parse each ONCE on the frame it seals and
+/// append; only the growing tail paragraph is re-parsed per 40ms
+/// flush. Without this a long prose-only stream re-parses the whole
+/// block every frame — measured 10.6s cumulative / 16.4ms worst frame
+/// over a 24KB stream (PerfBenchmarksTests.testBenchStreamingTailReparse),
+/// blowing the 16.6ms frame budget late in the stream. Sealed prose
+/// never takes this path — the final render is always the exact
+/// whole-block parse, the same tradeoff as deferHighlight for live
+/// code blocks.
+final class LiveInlineCache {
+    private var sealedSource = ""
+    private var sealedRendered = AttributedString()
+    private var maxIdentity = 0
+
+    func render(_ markdown: String, size: CGFloat = Theme.textLg) -> AttributedString {
+        guard let split = stableProsePrefixSplit(markdown) else {
+            // No sealed paragraph yet (a single growing paragraph):
+            // the whole source is a changing tail — same cost as the
+            // old path, minus the cache pollution.
+            return parseInlineMarkdown(markdown, size: size)
+        }
+        let prefix = String(markdown[..<split])
+        if prefix != sealedSource {
+            guard prefix.hasPrefix(sealedSource) else {
+                // Wholesale replacement (new stream): start over.
+                sealedSource = ""
+                sealedRendered = AttributedString()
+                maxIdentity = 0
+                return render(markdown, size: size)
+            }
+            // Only the NEWLY sealed paragraphs parse — never the whole
+            // prefix again (a re-parse per seal spiked the worst frame
+            // to 30ms).
+            let rendered = parseWithIdentityOffset(String(prefix.dropFirst(sealedSource.count)), size: size)
+            bumpIdentity(rendered)
+            sealedRendered.append(rendered)
+            sealedSource = prefix
+        }
+        let tail = parseWithIdentityOffset(String(markdown[split...]), size: size)
+        var result = sealedRendered
+        result.append(tail)
+        return result
+    }
+
+    /// presentationIntent identities restart at 1 in a fresh parse, so
+    /// appending a raw parse MERGES its first paragraph with the
+    /// previous one (identical attributes → one run, and the markdown
+    /// parser strips the "\n\n" separator — the paragraph break is
+    /// GONE). Parse behind one dummy paragraph per consumed identity so
+    /// the numbering continues, then drop the dummy characters.
+    private func parseWithIdentityOffset(_ source: String, size: CGFloat) -> AttributedString {
+        guard maxIdentity > 0 else { return parseInlineMarkdown(source, size: size) }
+        let padded = parseInlineMarkdown(String(repeating: "x\n\n", count: maxIdentity) + source, size: size)
+        // Each dummy paragraph renders as exactly one "x" character
+        // (the parser strips the "\n\n" separators); dropping them
+        // leaves the source with identities maxIdentity+1….
+        let dummyEnd = padded.characters.index(padded.characters.startIndex, offsetBy: maxIdentity)
+        return AttributedString(padded[dummyEnd...])
+    }
+
+    private func bumpIdentity(_ rendered: AttributedString) {
+        for run in rendered.runs {
+            guard let intent = run.presentationIntent else { continue }
+            for component in intent.components {
+                maxIdentity = max(maxIdentity, component.identity)
+            }
+        }
+    }
+}
+
+/// Start of the growing tail: just past the newline of the LAST blank
+/// (whitespace-only) line, or nil when no blank line precedes any
+/// content. Paragraph breaks end every GFM inline construct, so the
+/// prefix and tail parse independently to the same characters and
+/// attributes as the whole (link-reference definitions are the known
+/// exception — live-only, resolved by the sealed whole-parse).
+func stableProsePrefixSplit(_ markdown: String) -> String.Index? {
+    var split: String.Index?
+    var lineStart = markdown.startIndex
+    while lineStart < markdown.endIndex {
+        let lineEnd = markdown[lineStart...].firstIndex(of: "\n") ?? markdown.endIndex
+        if markdown[lineStart ..< lineEnd].allSatisfy({ $0 == " " || $0 == "\t" || $0 == "\r" }),
+           lineEnd < markdown.endIndex, markdown.index(after: lineEnd) < markdown.endIndex
+        {
+            split = markdown.index(after: lineEnd)
+        }
+        guard lineEnd < markdown.endIndex else { break }
+        lineStart = markdown.index(after: lineEnd)
+    }
+    return split
 }
 
 /// Inline markdown → AttributedString with the WebUI's .md styling:
