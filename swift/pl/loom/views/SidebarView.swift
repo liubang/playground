@@ -31,8 +31,6 @@ struct SidebarView: View {
     let onDisconnect: () -> Void
     let onOpenSettings: () -> Void
 
-    @State private var pendingDelete: SessionSummary?
-    @State private var pendingDeleteWorkspace: Workspace?
     /// Collapse state, persisted as a JSON string through AppStorage —
     /// the canonical SwiftUI path (a @State + manual UserDefaults
     /// round-trip proved unreliable across relaunches).
@@ -41,7 +39,6 @@ struct SidebarView: View {
     /// footer acts on the set). Sidebar-local: `selection` stays the
     /// single session shown in the main column.
     @State private var markedSessions: Set<String> = []
-    @State private var pendingBatchDelete = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var collapsedGroups: Set<String> {
@@ -80,68 +77,51 @@ struct SidebarView: View {
         .onChange(of: list.showArchived) { _, _ in
             markedSessions.removeAll()
         }
-        .confirmationDialog(
-            "Delete this session? Its history is removed from the store.",
-            // A real binding — .constant(...) swallowed the system's
-            // own dismiss paths (Esc, the cancel role's default).
-            isPresented: Binding(
-                get: { pendingDelete != nil },
-                set: {
-                    if !$0 {
-                        pendingDelete = nil
-                    }
-                },
-            ),
-            titleVisibility: .visible,
+    }
+
+    // MARK: Delete confirmations (window-level dialog via ConfirmCenter)
+
+    private func postConfirm(_ request: ConfirmRequest) {
+        ConfirmCenter.shared.ask(request)
+    }
+
+    private func confirmDelete(_ target: SessionSummary) {
+        postConfirm(ConfirmRequest(
+            title: "Delete this session?",
+            message: "Its history is removed from the store.",
+            confirmTitle: "Delete",
         ) {
-            Button("Delete", role: .destructive) {
-                if let target = pendingDelete {
-                    Task {
-                        guard await list.deleteSession(target.id) else { return }
-                        if selection == target.id {
-                            selection = nil
-                        }
-                        markedSessions.remove(target.id)
-                    }
+            Task {
+                guard await list.deleteSession(target.id) else { return }
+                if selection == target.id {
+                    selection = nil
                 }
-                pendingDelete = nil
+                markedSessions.remove(target.id)
             }
-            Button("Cancel", role: .cancel) { pendingDelete = nil }
-        }
-        .confirmationDialog(
-            "Delete the selected sessions? Their history is removed from the store.",
-            isPresented: $pendingBatchDelete,
-            titleVisibility: .visible,
+        })
+    }
+
+    private func confirmBatchDelete() {
+        postConfirm(ConfirmRequest(
+            title: "Delete the selected sessions?",
+            message: "Their history is removed from the store.",
+            confirmTitle: "Delete \(markedSessions.count) Sessions",
         ) {
-            Button("Delete \(markedSessions.count) Sessions", role: .destructive) {
-                Task { await batchDelete() }
-                pendingBatchDelete = false
-            }
-            Button("Cancel", role: .cancel) { pendingBatchDelete = false }
-        }
-        .confirmationDialog(
-            "Delete this workspace and all its sessions? The directory on disk is left untouched.",
-            isPresented: Binding(
-                get: { pendingDeleteWorkspace != nil },
-                set: {
-                    if !$0 {
-                        pendingDeleteWorkspace = nil
-                    }
-                },
-            ),
-            titleVisibility: .visible,
+            Task { await batchDelete() }
+        })
+    }
+
+    private func confirmDeleteWorkspace(_ target: Workspace) {
+        postConfirm(ConfirmRequest(
+            title: "Delete this workspace and all its sessions?",
+            message: "The directory on disk is left untouched.",
+            confirmTitle: "Delete Workspace",
         ) {
-            Button("Delete Workspace", role: .destructive) {
-                if let target = pendingDeleteWorkspace {
-                    if list.sessions(for: target.id).contains(where: { $0.id == selection }) {
-                        selection = nil
-                    }
-                    Task { await list.deleteWorkspace(target.id) }
-                }
-                pendingDeleteWorkspace = nil
+            if list.sessions(for: target.id).contains(where: { $0.id == selection }) {
+                selection = nil
             }
-            Button("Cancel", role: .cancel) { pendingDeleteWorkspace = nil }
-        }
+            Task { await list.deleteWorkspace(target.id) }
+        })
     }
 
     // MARK: Top (.ws-bar + .new-session)
@@ -249,10 +229,10 @@ struct SidebarView: View {
             },
             onDeleteWorkspace: workspace.isDefault == true
                 ? nil
-                : { pendingDeleteWorkspace = workspace },
+                : { confirmDeleteWorkspace(workspace) },
             archivedView: list.showArchived,
             onArchiveSession: archiveOrUnarchive,
-            onDeleteSession: { pendingDelete = $0 },
+            onDeleteSession: { confirmDelete($0) },
             marked: markedSessions,
             onToggleMark: toggleMark,
             onMarkAll: { mark in markAll(list.sessions(for: workspace.id), mark) },
@@ -271,7 +251,7 @@ struct SidebarView: View {
             onDeleteWorkspace: nil,
             archivedView: list.showArchived,
             onArchiveSession: archiveOrUnarchive,
-            onDeleteSession: { pendingDelete = $0 },
+            onDeleteSession: { confirmDelete($0) },
             marked: markedSessions,
             onToggleMark: toggleMark,
             onMarkAll: { mark in markAll(group.sessions, mark) },
@@ -452,7 +432,7 @@ struct SidebarView: View {
             }
             .buttonStyle(BatchActionStyle())
 
-            Button("Delete") { pendingBatchDelete = true }
+            Button("Delete") { confirmBatchDelete() }
                 .buttonStyle(BatchActionStyle(danger: true))
 
             GhostButton(size: 11) { markedSessions.removeAll() } label: {

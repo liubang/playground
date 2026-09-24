@@ -100,6 +100,22 @@ struct APIClient: Sendable {
         return try await get("/v1/sessions/\(id)/transcript", query: query)
     }
 
+    /// Server-side execution projection: verdicts and detour classification
+    /// are authoritative; clients only render this shape.
+    func maze(_ id: String) async throws -> MazeData {
+        try await get("/v1/sessions/\(id)/maze")
+    }
+
+    /// GET /v1/sessions/{id}/export — the raw event log (NDJSON) as
+    /// bytes; the trace tab's "Session log" button saves it to disk.
+    func exportSessionLog(_ id: String) async throws -> Data {
+        var request = authorizedRequest("GET", "/v1/sessions/\(id)/export", query: [])
+        request.timeoutInterval = 120
+        let (data, response) = try await perform(request)
+        try checkStatus(response, data: data)
+        return data
+    }
+
     // MARK: - Turn control
 
     @discardableResult

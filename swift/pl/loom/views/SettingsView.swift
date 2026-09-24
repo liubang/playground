@@ -38,8 +38,6 @@ struct SettingsView: View {
         }
     }
 
-    @State private var pendingDiscard: DiscardAction?
-
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -48,8 +46,21 @@ struct SettingsView: View {
             Hairline(axis: .horizontal)
             footer
         }
-        .frame(minWidth: 680, idealWidth: 940, minHeight: 440, idealHeight: 660)
-        .background(Theme.bg0)
+        .frame(minWidth: 720, idealWidth: 860, maxWidth: 960,
+               minHeight: 480, idealHeight: 640, maxHeight: 800)
+        .background(Theme.bg1)
+        // Toasts surface above the sheet (the window-level host sits
+        // underneath it). Clears the header row, like the WebUI's
+        // #toasts top: 56px.
+        .overlay(alignment: .topTrailing) {
+            ToastHost()
+                .padding(.top, 52)
+                .padding(.trailing, 16)
+        }
+        // The sheet-level confirm-dialog host: it registers AFTER the
+        // window root's, so it renders the dialog while the sheet is up
+        // (ConfirmCenter: topmost host wins).
+        .overlay { ConfirmDialogHost() }
         .environment(
             \.secretIdentity,
             [store.revision, String(store.dirty)] + store.draft.providers.flatMap { card in
@@ -57,50 +68,43 @@ struct SettingsView: View {
             },
         )
         .task { await store.load() }
-        .confirmationDialog(
-            "你有未保存的修改，这些修改将会丢失。",
-            isPresented: Binding(
-                get: { pendingDiscard != nil },
-                set: {
-                    if !$0 {
-                        pendingDiscard = nil
-                    }
-                },
-            ),
-            titleVisibility: .visible,
-        ) {
-            Button("放弃修改", role: .destructive) {
-                switch pendingDiscard {
-                case .close:
-                    onClose()
-                case .reload:
-                    Task { await store.load() }
-                case nil:
-                    break
-                }
-                pendingDiscard = nil
-            }
-            Button("继续编辑", role: .cancel) { pendingDiscard = nil }
-        }
     }
 
-    // MARK: Header (.settings-head)
+    /// Dirty-state guard for close/reload: confirm via the in-app
+    /// dialog, then run the pending action.
+    private func confirmDiscard(_ action: DiscardAction) {
+        ConfirmCenter.shared.ask(ConfirmRequest(
+            title: "放弃未保存的修改？",
+            message: "这些修改将会丢失。",
+            confirmTitle: "放弃修改",
+            cancelTitle: "继续编辑",
+        ) {
+            switch action {
+            case .close:
+                onClose()
+            case .reload:
+                Task { await store.load(manual: true) }
+            }
+        })
+    }
+
+    // MARK: Header (.settings-head: compact title + path + close)
 
     private var header: some View {
         HStack(spacing: 10) {
             Text("设置")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: Theme.textLg, weight: .semibold))
                 .foregroundStyle(Theme.fg)
             Text(store.cfgPath)
-                .font(Theme.monoSm)
+                .font(Theme.monoXs)
                 .foregroundStyle(Theme.muted)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .help(store.cfgPath)
-            Spacer()
+            Spacer(minLength: 12)
             GhostButton(action: attemptClose) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 12, weight: .semibold))
             }
             .help("关闭 (Esc)")
             .accessibilityLabel("关闭设置")
@@ -116,33 +120,16 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(settingsTabs, id: \.id) { tab in
-                        Button {
+                        SettingsTabButton(tab: tab, active: store.activeTab == tab.id) {
                             store.activeTab = tab.id
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: tab.icon)
-                                    .font(.system(size: 12))
-                                    .frame(width: 16)
-                                Text(tab.label)
-                                    .font(.system(size: Theme.textMd))
-                                Spacer()
-                            }
-                            .foregroundStyle(store.activeTab == tab.id ? Theme.primary : Theme.fg)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 7)
-                            .background(
-                                store.activeTab == tab.id ? Theme.bg2 : Color.clear,
-                                in: RoundedRectangle(cornerRadius: Theme.radiusMd),
-                            )
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
                     }
                 }
-                .padding(10)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(width: 148)
-            .background(Theme.bg1)
+            .frame(width: 132)
 
             Hairline(axis: .vertical)
 
@@ -175,8 +162,8 @@ struct SettingsView: View {
     /// mount-on-demand; the draft lives in the store and survives).
     private var tabContent: some View {
         ScrollViewReader { proxy in
-            ScrollView([.horizontal, .vertical]) {
-                VStack(alignment: .leading, spacing: 20) {
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 12) {
                     switch store.activeTab {
                     case "providers":
                         ProvidersTabView(store: store)
@@ -198,10 +185,11 @@ struct SettingsView: View {
                         }
                     }
                 }
-                .padding(18)
-                .frame(minWidth: 590, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
             }
+            .id(store.activeTab)
             .onChange(of: store.invalid) { _, fieldId in
                 // WebUI locate: scroll the failing field into view.
                 guard let fieldId else { return }
@@ -216,48 +204,129 @@ struct SettingsView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Text(store.msg)
-                .font(.system(size: Theme.textSm))
-                .foregroundStyle(store.msgIsError ? Theme.error : Theme.muted)
-                .lineLimit(2)
-                .truncationMode(.tail)
-                .help(store.msg)
-                .layoutPriority(1)
-            Spacer(minLength: 0)
-            Button("重新加载") {
+            Button {
                 if store.dirty {
-                    pendingDiscard = .reload
+                    confirmDiscard(.reload)
                 } else {
-                    Task { await store.load() }
+                    Task { await store.load(manual: true) }
                 }
+            } label: {
+                Label("重新加载", systemImage: "arrow.clockwise")
             }
-            .buttonStyle(OutlineButtonStyle())
-            Button("关闭", action: attemptClose)
-                .buttonStyle(OutlineButtonStyle())
+            .buttonStyle(SettingsSecondaryButtonStyle())
+            Spacer(minLength: 8)
+            // .settings-msg: width-capped, right-aligned against the buttons.
+            if !store.msg.isEmpty {
+                Text(store.msg)
+                    .font(.system(size: Theme.textSm))
+                    .foregroundStyle(store.msgIsError ? Theme.error : Theme.muted)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(store.msg)
+                    .frame(maxWidth: 320, alignment: .trailing)
+            }
+            Button("取消", action: attemptClose)
+                .buttonStyle(SettingsSecondaryButtonStyle())
                 .keyboardShortcut(.cancelAction)
-            Button("保存") { Task { await store.save() } }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(store.saving)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.radiusMd)
-                        .strokeBorder(
-                            store.flashSave ? Theme.success
-                                : (store.dirty ? Theme.warning : Color.clear),
-                            lineWidth: 1.5,
-                        ),
-                )
-                .help(store.dirty ? "有未保存的修改" : "保存到 config.yaml")
+            Button { Task { await store.save() } } label: {
+                Label("保存设置", systemImage: "checkmark")
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(store.saving)
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusSm + 2)
+                    .strokeBorder(
+                        store.flashSave ? Theme.success
+                            : (store.dirty ? Theme.warning : Color.clear),
+                        lineWidth: 2,
+                    )
+                    .padding(-2),
+            )
+            .help(store.dirty ? "有未保存的修改" : "保存到 config.yaml")
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.vertical, 12)
     }
 
     private func attemptClose() {
         if store.dirty {
-            pendingDiscard = .close
+            confirmDiscard(.close)
         } else {
             onClose()
         }
+    }
+}
+
+/// WebUI .settings-tab: muted by default, fg + bg2 wash on hover,
+/// primary + semibold when active.
+private struct SettingsTabButton: View {
+    let tab: TabSpec
+    let active: Bool
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: tab.icon)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .frame(width: 16)
+                    .opacity(active || hovered ? 1 : 0.85)
+                Text(tab.label)
+                    .font(.system(size: Theme.textMd, weight: active ? .semibold : .regular))
+                Spacer()
+            }
+            .foregroundStyle(active ? Theme.primary : (hovered ? Theme.fg : Theme.muted))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                active || hovered ? Theme.bg2 : Color.clear,
+                in: RoundedRectangle(cornerRadius: Theme.radiusSm),
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+    }
+}
+
+/// ui.css .btn-secondary: transparent with a muted outline; pressed
+/// fills fg at 8%.
+private struct SettingsSecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: Theme.textMd, weight: .medium))
+            .foregroundStyle(Theme.fg)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(
+                Theme.fg.opacity(configuration.isPressed ? 0.08 : 0),
+                in: RoundedRectangle(cornerRadius: Theme.radiusSm),
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusSm)
+                    .strokeBorder(Theme.muted, lineWidth: 1),
+            )
+    }
+}
+
+/// ui.css .btn-secondary.btn-sm: the compact variant used by the
+/// "+ 添加 xxx" buttons (.set-add).
+private struct SettingsSmallSecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: Theme.textSm, weight: .medium))
+            .foregroundStyle(Theme.fg)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(
+                Theme.fg.opacity(configuration.isPressed ? 0.08 : 0),
+                in: RoundedRectangle(cornerRadius: Theme.radiusSm),
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusSm)
+                    .strokeBorder(Theme.muted, lineWidth: 1),
+            )
     }
 }
 
@@ -269,10 +338,7 @@ struct SectionsTabView: View {
 
     var body: some View {
         ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
-            VStack(alignment: .leading, spacing: 10) {
-                Text(section.0)
-                    .font(.system(size: Theme.textMd, weight: .semibold))
-                    .foregroundStyle(Theme.fg)
+            SettingsSection(section.0) {
                 ForEach(section.1, id: \.key) { spec in
                     FieldRow(
                         spec: spec,
@@ -320,36 +386,44 @@ struct FieldRow: View {
         return revealedSecret
     }
 
+    static let labelWidth: CGFloat = 172
+    static let columnSpacing: CGFloat = 12
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                if let label = spec.label {
-                    HStack(spacing: 4) {
+        HStack(alignment: .top, spacing: Self.columnSpacing) {
+            if let label = spec.label {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .firstTextBaseline, spacing: 3) {
                         Text(label)
-                            .font(.system(size: Theme.textMd))
                             .foregroundStyle(Theme.fg)
                         if spec.required {
                             Text("*")
-                                .font(.system(size: Theme.textMd))
                                 .foregroundStyle(Theme.error)
                         }
-                        if let def = spec.def {
-                            Text("默认：\(def)")
-                                .font(.system(size: Theme.textXs))
-                                .foregroundStyle(Theme.muted)
-                        }
                     }
-                    .frame(width: 168, alignment: .leading)
+                    .font(.system(size: Theme.textMd, weight: .medium))
+                    if let def = spec.def {
+                        Text("默认：\(def)")
+                            .font(.system(size: Theme.textXs))
+                            .foregroundStyle(Theme.muted)
+                    }
                 }
+                .frame(width: Self.labelWidth, alignment: .leading)
+                .padding(.top, 6)
+            }
+            VStack(alignment: .leading, spacing: 5) {
                 control
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let hint = effectiveHint {
+                    Text(hint)
+                        .font(.system(size: Theme.textXs))
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            if let hint = effectiveHint {
-                Text(hint)
-                    .font(.system(size: Theme.textXs))
-                    .foregroundStyle(Theme.muted)
-                    .padding(.leading, spec.label == nil ? 0 : 176)
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onChange(of: value) { _, _ in hideSecret() }
         .onChange(of: secretIdentity) { _, _ in hideSecret() }
         .onDisappear { hideSecret() }
@@ -370,6 +444,7 @@ struct FieldRow: View {
             Toggle("", isOn: flagBinding)
                 .toggleStyle(.switch)
                 .labelsHidden()
+                .tint(Theme.primary)
         case .tristate:
             Picker("", selection: textBinding) {
                 Text("开").tag("true")
@@ -377,15 +452,16 @@ struct FieldRow: View {
                 Text("自动").tag("")
             }
             .pickerStyle(.segmented)
-            .frame(width: 180)
+            .frame(width: 210)
         case .select:
+            // .set-input.sel: dropdowns don't span the full row.
             Picker("", selection: textBinding) {
                 ForEach(spec.options ?? [], id: \.0) { option in
                     Text(option.1).tag(option.0)
                 }
             }
             .pickerStyle(.menu)
-            .frame(maxWidth: 380, alignment: .leading)
+            .frame(maxWidth: 320, alignment: .leading)
         case .textarea, .listText, .kvText, .pairList:
             multiline(text: textBinding, rows: spec.rows ?? (spec.type == .textarea ? 4 : 3))
         case .password:
@@ -456,32 +532,19 @@ struct FieldRow: View {
     }
 
     private func input(_ field: some View) -> some View {
-        field
-            .textFieldStyle(.plain)
-            .font(.system(size: Theme.textMd))
-            .padding(.horizontal, 9)
-            .padding(.vertical, 6)
-            .frame(maxWidth: 380)
-            .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.radiusSm)
-                    .strokeBorder(invalid ? Theme.error : Theme.bg2, lineWidth: 1),
-            )
+        SettingsControlShell(invalid: invalid) {
+            field
+                .textFieldStyle(.plain)
+        }
     }
 
     private func multiline(text: Binding<String>, rows: Int) -> some View {
-        TextEditor(text: text)
-            .font(.system(size: Theme.textMd))
-            .lineSpacing(2)
-            .scrollContentBackground(.hidden)
-            .padding(5)
-            .frame(height: CGFloat(rows) * 20 + 12)
-            .frame(maxWidth: 520)
-            .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.radiusSm)
-                    .strokeBorder(invalid ? Theme.error : Theme.bg2, lineWidth: 1),
-            )
+        SettingsControlShell(invalid: invalid) {
+            TextEditor(text: text)
+                .lineSpacing(2)
+                .scrollContentBackground(.hidden)
+                .frame(height: CGFloat(rows) * 20 + 10)
+        }
     }
 
     private var textBinding: Binding<String> {
@@ -501,10 +564,94 @@ struct FieldRow: View {
 
 // MARK: - Card chrome shared by the custom tabs
 
-/// One collapsible card (WebUI .set-card): the header shows the
-/// summary line and the delete action; expanding reveals the fields.
+/// WebUI .set-input: bg0 field with a bg2 border (radius-sm); the
+/// border flips to primary while focused, is-invalid pins it to error.
+struct SettingsControlShell<Content: View>: View {
+    var invalid = false
+    @ViewBuilder var content: Content
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        content
+            .font(.system(size: Theme.textMd))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.bg0, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusSm)
+                    .strokeBorder(
+                        invalid ? Theme.error : (focused ? Theme.primary : Theme.bg2),
+                        lineWidth: 1,
+                    ),
+            )
+            .focused($focused)
+    }
+}
+
+/// One form section as a card with the title floating on the top-left
+/// border (WebUI .set-sec-card, fieldset/legend style): the title chip
+/// paints over the border to form the "gap". Sections with a corner
+/// action (e.g. the environment report's refresh) keep it in the
+/// card's top-right corner so it doesn't sit on the border line.
+struct SettingsSection<Content: View, Trailing: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+    @ViewBuilder var trailing: Trailing
+
+    init(_ title: String, @ViewBuilder content: () -> Content) where Trailing == EmptyView {
+        self.title = title
+        self.content = content()
+        trailing = EmptyView()
+    }
+
+    init(
+        _ title: String,
+        @ViewBuilder content: () -> Content,
+        @ViewBuilder trailing: () -> Trailing,
+    ) {
+        self.title = title
+        self.content = content()
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            content
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+        .padding(.bottom, 14)
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMd)
+                .strokeBorder(Theme.bg2, lineWidth: 1),
+        )
+        .overlay(alignment: .topTrailing) {
+            trailing
+                .padding(.trailing, 8)
+                .padding(.top, 6)
+        }
+        .overlay(alignment: .topLeading) {
+            Text(title)
+                .font(.system(size: Theme.textMd, weight: .semibold))
+                .foregroundStyle(Theme.fg)
+                .padding(.horizontal, 6)
+                .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
+                .offset(x: 10, y: -9)
+        }
+        // Reserve space for the floating title (WebUI margin-top: 10px).
+        .padding(.top, 10)
+    }
+}
+
+/// One collapsible card (WebUI .set-card): bg0 at 45% over the bg1
+/// panel with a bg2 border; nested cards (models inside a provider)
+/// use a solid bg0 (.set-card.is-nested). The header shows the summary
+/// line and the delete action; expanding reveals the fields.
 struct SettingsCard<Header: View, Content: View>: View {
     let isOpen: Bool
+    var nested = false
     let onToggle: () -> Void
     @ViewBuilder var header: Header
     @ViewBuilder var content: Content
@@ -518,8 +665,8 @@ struct SettingsCard<Header: View, Content: View>: View {
                     .rotationEffect(.degrees(isOpen ? 90 : 0))
                 header
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .contentShape(Rectangle())
             .onTapGesture(perform: onToggle)
 
@@ -529,19 +676,21 @@ struct SettingsCard<Header: View, Content: View>: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.bottom, 12)
-                .padding(.top, 2)
             }
         }
-        .background(Theme.bg1, in: RoundedRectangle(cornerRadius: 10))
+        .background(
+            nested ? Theme.bg0 : Theme.bg0.opacity(0.45),
+            in: RoundedRectangle(cornerRadius: Theme.radiusMd),
+        )
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: Theme.radiusMd)
                 .strokeBorder(Theme.bg2, lineWidth: 1),
         )
     }
 }
 
-/// Section title shared by the custom tabs (.set-sec-title).
-struct SettingsSectionTitle: View {
+/// Muted uppercase tag on card headers (WebUI .set-card-tag).
+struct SettingsCardTag: View {
     let text: String
 
     init(_ text: String) {
@@ -550,8 +699,10 @@ struct SettingsSectionTitle: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: Theme.textMd, weight: .semibold))
-            .foregroundStyle(Theme.fg)
+            .font(.system(size: Theme.textXs, weight: .semibold))
+            .foregroundStyle(Theme.muted)
+            .tracking(0.5)
+            .textCase(.uppercase)
     }
 }
 
@@ -563,8 +714,7 @@ struct SettingsAddButton: View {
     var body: some View {
         Button(action: action) {
             Label(title, systemImage: "plus")
-                .font(.system(size: Theme.textSm, weight: .medium))
         }
-        .buttonStyle(OutlineButtonStyle())
+        .buttonStyle(SettingsSmallSecondaryButtonStyle())
     }
 }

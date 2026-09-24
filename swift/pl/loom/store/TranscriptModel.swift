@@ -249,6 +249,7 @@ extension Message {
 /// re-run the DP.
 struct ToolRenderModel: Equatable {
     var name = "tool"
+    var callId: String?
     var target: String?
     var status = Status.running
     var durationMs: Int64?
@@ -279,6 +280,7 @@ struct ToolRenderModel: Equatable {
     /// Finalized history block (snapshot rebuild).
     init(item: ToolBlockItem) {
         name = item.name
+        callId = item.call?.id ?? item.result?.callId
         if let result = item.result {
             if result.error != nil {
                 status = .failed
@@ -314,6 +316,7 @@ struct ToolRenderModel: Equatable {
     /// display-bound artifact refs.
     init(live state: ToolCallState) {
         name = state.name
+        callId = state.id
         target = state.target
         switch state.status {
         case .prepared, .running:

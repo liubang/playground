@@ -26,13 +26,10 @@ import SwiftUI
 struct ProvidersTabView: View {
     @Bindable var store: SettingsStore
 
-    @State private var pendingDeleteProvider: ProviderDraft?
-    @State private var pendingDeleteModel: (card: ProviderDraft, modelId: UUID)?
     @State private var advancedOpen: Set<UUID> = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SettingsSectionTitle("默认模型")
+        SettingsSection("默认模型") {
             FieldRow(
                 spec: defaultModelField,
                 value: store.draft.globals[defaultModelField.key] ?? .text(""),
@@ -42,62 +39,42 @@ struct ProvidersTabView: View {
             .id(defaultModelField.key)
         }
 
-        VStack(alignment: .leading, spacing: 10) {
-            SettingsSectionTitle("模型 Provider（至少一个）")
+        SettingsSection("模型 Provider（至少一个）") {
             ForEach(store.draft.providers) { card in
                 providerCard(card)
             }
             SettingsAddButton(title: "添加 Provider") { store.addProvider() }
                 .id("add-provider")
         }
-        .confirmationDialog(
-            providerDeleteMessage,
-            isPresented: Binding(
-                get: { pendingDeleteProvider != nil },
-                set: {
-                    if !$0 {
-                        pendingDeleteProvider = nil
-                    }
-                },
-            ),
-            titleVisibility: .visible,
-        ) {
-            Button("删除", role: .destructive) {
-                if let card = pendingDeleteProvider {
-                    store.deleteProvider(card)
-                }
-                pendingDeleteProvider = nil
-            }
-            Button("取消", role: .cancel) { pendingDeleteProvider = nil }
-        }
-        .confirmationDialog(
-            "将删除该模型的配置，保存后生效；保存前重新加载可恢复。",
-            isPresented: Binding(
-                get: { pendingDeleteModel != nil },
-                set: {
-                    if !$0 {
-                        pendingDeleteModel = nil
-                    }
-                },
-            ),
-            titleVisibility: .visible,
-        ) {
-            Button("删除", role: .destructive) {
-                if let pending = pendingDeleteModel {
-                    store.deleteModel(pending.card, modelId: pending.modelId)
-                }
-                pendingDeleteModel = nil
-            }
-            Button("取消", role: .cancel) { pendingDeleteModel = nil }
-        }
     }
 
-    private var providerDeleteMessage: String {
-        guard let card = pendingDeleteProvider else { return "" }
+    // MARK: Delete confirmations (ConfirmCenter)
+
+    private func confirmDeleteProvider(_ card: ProviderDraft) {
         let name = card.fields["name"]?.textValue.trimmingCharacters(in: .whitespaces)
-        return "删除 provider \"\(name?.isEmpty == false ? name! : "未命名")\""
-            + (card.models.isEmpty ? "" : "及其 \(card.models.count) 个模型")
-            + "？保存后生效；保存前重新加载可恢复。"
+        let label = name?.isEmpty == false ? name! : "未命名"
+        let message = card.models.isEmpty
+            ? "保存后生效；保存前重新加载可恢复。"
+            : "将同时删除其 \(card.models.count) 个模型的配置；保存后生效，保存前重新加载可恢复。"
+        ConfirmCenter.shared.ask(ConfirmRequest(
+            title: "删除 provider \"\(label)\"？",
+            message: message,
+            confirmTitle: "删除",
+            cancelTitle: "取消",
+        ) {
+            store.deleteProvider(card)
+        })
+    }
+
+    private func confirmDeleteModel(_ card: ProviderDraft, modelId: UUID) {
+        ConfirmCenter.shared.ask(ConfirmRequest(
+            title: "删除该模型？",
+            message: "将删除该模型的配置，保存后生效；保存前重新加载可恢复。",
+            confirmTitle: "删除",
+            cancelTitle: "取消",
+        ) {
+            store.deleteModel(card, modelId: modelId)
+        })
     }
 
     // MARK: Provider card
@@ -126,7 +103,7 @@ struct ProvidersTabView: View {
                         .truncationMode(.tail)
                 }
                 Spacer()
-                GhostButton { pendingDeleteProvider = card } label: {
+                GhostButton { confirmDeleteProvider(card) } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
                 }
@@ -191,9 +168,10 @@ struct ProvidersTabView: View {
                     .foregroundStyle(Theme.muted)
             }
 
+            // .set-subtitle
             Text("模型目录")
-                .font(.system(size: Theme.textSm, weight: .semibold))
-                .foregroundStyle(Theme.fg)
+                .font(.system(size: Theme.textXs, weight: .semibold))
+                .foregroundStyle(Theme.muted)
             ForEach(card.models) { model in
                 modelCard(card, model)
             }
@@ -209,6 +187,7 @@ struct ProvidersTabView: View {
         let summary = modelSummary(model)
         return SettingsCard(
             isOpen: isOpen,
+            nested: true,
             onToggle: { store.openModelId = isOpen ? nil : model.id },
         ) {
             HStack(spacing: 8) {
@@ -222,17 +201,9 @@ struct ProvidersTabView: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
-                Text("模型")
-                    .font(.system(size: Theme.textXs))
-                    .foregroundStyle(Theme.muted)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 1)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .strokeBorder(Theme.bg2, lineWidth: 1),
-                    )
+                SettingsCardTag("模型")
                 Spacer()
-                GhostButton { pendingDeleteModel = (card, model.id) } label: {
+                GhostButton { confirmDeleteModel(card, modelId: model.id) } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
                 }
@@ -257,37 +228,25 @@ struct ProvidersTabView: View {
 struct McpTabView: View {
     @Bindable var store: SettingsStore
 
-    @State private var pendingDelete: McpDraft?
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SettingsSectionTitle("MCP 服务器")
+        SettingsSection("MCP 服务器") {
             ForEach(store.draft.mcpServers) { card in
                 mcpCard(card)
             }
             SettingsAddButton(title: "添加 MCP 服务器") { store.addMcpServer() }
         }
         .task { await store.loadMcpStatus() }
-        .confirmationDialog(
-            "将删除该 MCP 服务器的配置，保存后生效；保存前重新加载可恢复。",
-            isPresented: Binding(
-                get: { pendingDelete != nil },
-                set: {
-                    if !$0 {
-                        pendingDelete = nil
-                    }
-                },
-            ),
-            titleVisibility: .visible,
+    }
+
+    private func confirmDelete(_ card: McpDraft) {
+        ConfirmCenter.shared.ask(ConfirmRequest(
+            title: "删除该 MCP 服务器？",
+            message: "将删除该服务器的配置，保存后生效；保存前重新加载可恢复。",
+            confirmTitle: "删除",
+            cancelTitle: "取消",
         ) {
-            Button("删除", role: .destructive) {
-                if let card = pendingDelete {
-                    store.deleteMcpServer(card)
-                }
-                pendingDelete = nil
-            }
-            Button("取消", role: .cancel) { pendingDelete = nil }
-        }
+            store.deleteMcpServer(card)
+        })
     }
 
     private func mcpCard(_ card: McpDraft) -> some View {
@@ -302,18 +261,10 @@ struct McpTabView: View {
                     ? "（未命名服务器）" : card.name)
                     .font(.system(size: Theme.textMd, weight: .semibold))
                     .foregroundStyle(card.name.isEmpty ? Theme.muted : Theme.fg)
-                Text(card.transport.rawValue)
-                    .font(.system(size: Theme.textXs))
-                    .foregroundStyle(Theme.muted)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 1)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .strokeBorder(Theme.bg2, lineWidth: 1),
-                    )
+                SettingsCardTag(card.transport.rawValue)
                 statusBadge(status)
                 Spacer()
-                GhostButton { pendingDelete = card } label: {
+                GhostButton { confirmDelete(card) } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
                 }
@@ -328,11 +279,11 @@ struct McpTabView: View {
             )
             .id("\(card.id.uuidString):name")
 
-            HStack(spacing: 8) {
+            HStack(spacing: FieldRow.columnSpacing) {
                 Text("传输方式")
                     .font(.system(size: Theme.textMd))
                     .foregroundStyle(Theme.fg)
-                    .frame(width: 168, alignment: .leading)
+                    .frame(width: FieldRow.labelWidth, alignment: .leading)
                 Picker("", selection: Binding(
                     get: { card.transport },
                     set: { store.patchMcpTransport(card.id, $0) },
@@ -408,11 +359,8 @@ struct McpTabView: View {
 struct SkillsTabView: View {
     @Bindable var store: SettingsStore
 
-    @State private var pendingDelete: SkillsOverview.SkillInfo?
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SettingsSectionTitle("技能设置")
+        SettingsSection("技能设置") {
             ForEach(skillsConfigFields, id: \.key) { spec in
                 FieldRow(
                     spec: spec,
@@ -424,31 +372,28 @@ struct SkillsTabView: View {
             }
         }
 
-        VStack(alignment: .leading, spacing: 10) {
-            SettingsSectionTitle("已发现的技能")
+        SettingsSection("已发现的技能") {
             runtimeContent
+        } trailing: {
+            GhostButton {
+                Task { await store.loadSkills(force: true) }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .help("重新扫描")
         }
         .task { await store.loadSkills() }
-        .confirmationDialog(
-            "将从磁盘删除该技能的目录，此操作不可撤销。",
-            isPresented: Binding(
-                get: { pendingDelete != nil },
-                set: {
-                    if !$0 {
-                        pendingDelete = nil
-                    }
-                },
-            ),
-            titleVisibility: .visible,
+    }
+
+    private func confirmDelete(_ skill: SkillsOverview.SkillInfo) {
+        ConfirmCenter.shared.ask(ConfirmRequest(
+            title: "删除技能 \"\(skill.name)\"？",
+            message: "将从磁盘删除该技能的目录，此操作不可撤销。",
+            confirmTitle: "删除",
+            cancelTitle: "取消",
         ) {
-            Button("删除", role: .destructive) {
-                if let skill = pendingDelete {
-                    Task { await store.deleteSkill(path: skill.path) }
-                }
-                pendingDelete = nil
-            }
-            Button("取消", role: .cancel) { pendingDelete = nil }
-        }
+            Task { await store.deleteSkill(path: skill.path, name: skill.name) }
+        })
     }
 
     @ViewBuilder private var runtimeContent: some View {
@@ -502,13 +447,16 @@ struct SkillsTabView: View {
                         .font(.system(size: Theme.textMd, weight: .medium))
                         .foregroundStyle(Theme.fg)
                     if let scope = skill.scope, !scope.isEmpty {
+                        // .skill-scope: pill, uppercase, letter-spaced.
                         Text(scope)
-                            .font(.system(size: Theme.textXs))
+                            .font(.system(size: 10))
                             .foregroundStyle(Theme.muted)
-                            .padding(.horizontal, 6)
+                            .tracking(0.4)
+                            .textCase(.uppercase)
+                            .padding(.horizontal, 7)
                             .padding(.vertical, 1)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 4)
+                                Capsule()
                                     .strokeBorder(Theme.bg2, lineWidth: 1),
                             )
                     }
@@ -534,15 +482,21 @@ struct SkillsTabView: View {
             ))
             .toggleStyle(.checkbox)
             .font(.system(size: Theme.textSm))
-            GhostButton { pendingDelete = skill } label: {
+            GhostButton { confirmDelete(skill) } label: {
                 Image(systemName: "trash")
                     .font(.system(size: 11))
             }
             .help("删除该技能（不可撤销）")
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusMd))
+        // .skill-row (+ .skill-row.is-disabled dims the whole row)
+        .background(Theme.bg0.opacity(0.45), in: RoundedRectangle(cornerRadius: Theme.radiusMd))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMd)
+                .strokeBorder(Theme.bg2, lineWidth: 1),
+        )
+        .opacity(skill.disabled == true ? 0.55 : 1)
     }
 }
 
@@ -552,8 +506,7 @@ struct RulePacksView: View {
     @Bindable var store: SettingsStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SettingsSectionTitle("规则包")
+        SettingsSection("规则包") {
             if let error = store.rulePacksError {
                 Label("规则包加载失败：\(error)", systemImage: "exclamationmark.triangle")
                     .font(.system(size: Theme.textSm))
@@ -575,6 +528,13 @@ struct RulePacksView: View {
                     .font(.system(size: Theme.textSm))
                     .foregroundStyle(Theme.muted)
             }
+        } trailing: {
+            GhostButton {
+                Task { await store.loadRulePacks(force: true) }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .help("重新加载")
         }
         .task { await store.loadRulePacks() }
     }
@@ -588,12 +548,14 @@ struct RulePacksView: View {
                         .foregroundStyle(Theme.fg)
                     if let risk = pack.risk, !risk.isEmpty {
                         Text(risk)
-                            .font(.system(size: Theme.textXs))
+                            .font(.system(size: 10))
                             .foregroundStyle(riskColor(risk))
-                            .padding(.horizontal, 6)
+                            .tracking(0.4)
+                            .textCase(.uppercase)
+                            .padding(.horizontal, 7)
                             .padding(.vertical, 1)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 4)
+                                Capsule()
                                     .strokeBorder(riskColor(risk).opacity(0.5), lineWidth: 1),
                             )
                     }
@@ -611,13 +573,19 @@ struct RulePacksView: View {
             }
             Spacer()
             Button(pack.installed == true ? "卸载" : "安装") {
-                Task { await store.installRulePack(pack.id, install: pack.installed != true) }
+                Task {
+                    await store.installRulePack(pack.id, name: pack.name, install: pack.installed != true)
+                }
             }
             .buttonStyle(OutlineButtonStyle())
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusMd))
+        .background(Theme.bg0.opacity(0.45), in: RoundedRectangle(cornerRadius: Theme.radiusMd))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusMd)
+                .strokeBorder(Theme.bg2, lineWidth: 1),
+        )
     }
 
     private func riskColor(_ risk: String) -> Color {
@@ -636,27 +604,16 @@ struct SystemExtrasView: View {
 
     var body: some View {
         // Workspaces (config.yaml workspaces[]) — WebUI SystemExtras card.
-        VStack(alignment: .leading, spacing: 10) {
-            SettingsSectionTitle("工作区")
+        SettingsSection("工作区") {
             ForEach(store.draft.workspaces) { card in
                 workspaceCard(card)
             }
             SettingsAddButton(title: "添加工作区") { store.addWorkspaceCard() }
         }
 
-        // Dev-environment runtime report (read-only).
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                SettingsSectionTitle("开发环境")
-                Spacer()
-                GhostButton {
-                    Task { await store.loadEnvironment() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .help("重新检测")
-            }
-
+        // Dev-environment runtime report (read-only); the refresh button
+        // stays in the card's top-right corner, off the floating title.
+        SettingsSection("开发环境") {
             if let error = store.environmentError {
                 Label("环境检测失败：\(error)", systemImage: "exclamationmark.triangle")
                     .font(.system(size: Theme.textSm))
@@ -725,6 +682,13 @@ struct SystemExtrasView: View {
                     .font(.system(size: Theme.textSm))
                     .foregroundStyle(Theme.muted)
             }
+        } trailing: {
+            GhostButton {
+                Task { await store.loadEnvironment(force: true) }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .help("重新检测")
         }
         .task { await store.loadEnvironment() }
     }
@@ -757,10 +721,11 @@ struct SystemExtrasView: View {
             )
             .id("\(card.id.uuidString):root")
         }
-        .padding(12)
-        .background(Theme.bg1, in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Theme.bg0.opacity(0.45), in: RoundedRectangle(cornerRadius: Theme.radiusMd))
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: Theme.radiusMd)
                 .strokeBorder(Theme.bg2, lineWidth: 1),
         )
     }

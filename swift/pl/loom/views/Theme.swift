@@ -236,6 +236,242 @@ struct ThinkingDots: View {
 
 // MARK: - Buttons (ui.css .btn variants)
 
+/// maze.css .maze-btn: bordered bg1 button, primary border/text on hover.
+/// Shared by the maze toolbar/detail panel and the trace view.
+struct MazeButton: View {
+    let title: String
+    var systemImage: String?
+    var help: String?
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if let systemImage {
+                    Image(systemName: systemImage).font(.system(size: 10))
+                }
+                Text(title)
+            }
+            .font(.system(size: Theme.textXs))
+            .foregroundStyle(hovered ? Theme.primary : Theme.fg)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 3)
+            .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
+            .overlay(RoundedRectangle(cornerRadius: Theme.radiusSm)
+                .strokeBorder(hovered ? Theme.primary : Theme.bg2, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+        .help(help ?? "")
+    }
+}
+
+/// maze.css .maze-search: bg1 box with a bg2 border that flips primary
+/// on focus. Shared by the maze and trace toolbars.
+struct MiniSearchField: View {
+    let placeholder: String
+    @Binding var text: String
+    var width: CGFloat = 180
+    /// Hosts that drive focus themselves (e.g. a keyboard shortcut)
+    /// pass their own FocusState binding; otherwise the field uses an
+    /// internal one.
+    var externalFocus: FocusState<Bool>.Binding?
+    @FocusState private var focused: Bool
+
+    private var isFocused: Bool {
+        externalFocus?.wrappedValue ?? focused
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 10))
+                .foregroundStyle(Theme.muted)
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: Theme.textXs))
+                .foregroundStyle(Theme.fg)
+                .focused(externalFocus ?? $focused)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .frame(width: width)
+        .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radiusSm)
+            .strokeBorder(isFocused ? Theme.primary : Theme.bg2, lineWidth: 1))
+    }
+}
+
+// MARK: - Confirmation dialog
+
+/// A destructive-confirmation request handed to ConfirmCenter.shared;
+/// the topmost mounted ConfirmDialogHost renders it (ToastCenter
+/// precedent), so a sheet's dialog covers the window-level one.
+struct ConfirmRequest {
+    let title: String
+    let message: String
+    let confirmTitle: String
+    var cancelTitle = "Cancel"
+    let action: @MainActor () -> Void
+}
+
+/// Singleton confirm-dialog state (ToastCenter precedent). Callers ask;
+/// ConfirmDialogHost overlays render — but only the LAST registered,
+/// i.e. topmost, host (window root + a sheet on top of it), otherwise
+/// the dialog would show once per host.
+@MainActor
+@Observable
+final class ConfirmCenter {
+    static let shared = ConfirmCenter()
+
+    private(set) var current: ConfirmRequest?
+
+    /// Mounted hosts in appearance order; the last one wins.
+    private var hostIds: [Int] = []
+    private var nextHostId = 1
+
+    /// The host that currently renders the dialog (nil = none mounted).
+    var activeHostId: Int? {
+        hostIds.last
+    }
+
+    func registerHost() -> Int {
+        let id = nextHostId
+        nextHostId += 1
+        hostIds.append(id)
+        return id
+    }
+
+    func unregisterHost(_ id: Int) {
+        let wasActive = activeHostId == id
+        hostIds.removeAll { $0 == id }
+        if wasActive {
+            // A host vanishing mid-dialog (its sheet closed) drops the
+            // request — the context it belonged to is gone.
+            current = nil
+        }
+    }
+
+    func ask(_ request: ConfirmRequest) {
+        current = request
+    }
+
+    func dismiss() {
+        current = nil
+    }
+}
+
+/// Mounts the singleton confirmation dialog; several hosts can coexist
+/// (window root + a sheet on top of it) but only the topmost renders.
+struct ConfirmDialogHost: View {
+    var center = ConfirmCenter.shared
+
+    @State private var hostId = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Group {
+            if center.activeHostId == hostId, let request = center.current {
+                ConfirmDialogView(request: request) { center.dismiss() }
+            }
+        }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: center.current != nil)
+        .onAppear { hostId = center.registerHost() }
+        .onDisappear { center.unregisterHost(hostId) }
+    }
+}
+
+/// In-app confirmation dialog replacing the system .confirmationDialog:
+/// the system's material and typography clash with the app palette,
+/// its dark-mode destructive button renders low-contrast red-on-maroon,
+/// and everything was crammed into a single bold title line. Here the
+/// title/body hierarchy matches the rest of the app, and the danger
+/// button is solid Theme.error with onAccent text (real contrast).
+///
+/// Cancel is the only keyboard-exposed action (Esc / backdrop click) —
+/// destructive confirms stay pointer-only, matching macOS convention.
+struct ConfirmDialogView: View {
+    let request: ConfirmRequest
+    let dismiss: () -> Void
+
+    @State private var confirmHovered = false
+    @State private var cancelHovered = false
+
+    var body: some View {
+        ZStack {
+            // Backdrop: clicking it cancels (system behavior), and it
+            // swallows every hit so the content below stays inert.
+            Color.black.opacity(0.35)
+                .contentShape(Rectangle())
+                .onTapGesture { dismiss() }
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(request.title)
+                    .font(.system(size: Theme.textMd, weight: .semibold))
+                    .foregroundStyle(Theme.fg)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(request.message)
+                    .font(.system(size: Theme.textSm))
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 5)
+                HStack(spacing: 8) {
+                    Spacer(minLength: 0)
+                    Button { dismiss() } label: {
+                        Text(request.cancelTitle)
+                            .font(.system(size: Theme.textSm, weight: .medium))
+                            .foregroundStyle(Theme.fg)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 5)
+                            .background(
+                                cancelHovered ? Theme.bg3 : Theme.bg2,
+                                in: RoundedRectangle(cornerRadius: Theme.radiusSm),
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { cancelHovered = $0 }
+                    Button {
+                        let action = request.action
+                        dismiss()
+                        action()
+                    } label: {
+                        Text(request.confirmTitle)
+                            .font(.system(size: Theme.textSm, weight: .semibold))
+                            .foregroundStyle(Theme.onAccent)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 5)
+                            .background(
+                                Theme.error.opacity(confirmHovered ? 0.85 : 1),
+                                in: RoundedRectangle(cornerRadius: Theme.radiusSm),
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { confirmHovered = $0 }
+                }
+                .padding(.top, 16)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            .frame(width: 340)
+            .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusLg))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusLg)
+                    .strokeBorder(Theme.bg2, lineWidth: 1),
+            )
+            .shadow(color: .black.opacity(0.4), radius: 16, y: 6)
+            .background {
+                // Esc cancels; the destructive action stays pointer-only.
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.escape, modifiers: [])
+                    .opacity(0)
+                    .frame(width: 0, height: 0)
+            }
+        }
+        .transition(.opacity)
+    }
+}
+
 /// The WebUI's .icon-btn as a VIEW: bare muted glyph, fg + bg2 wash on
 /// hover. This used to be a ButtonStyle holding @State for the hover
 /// flag — but SwiftUI does not guarantee stable state storage for
@@ -319,6 +555,136 @@ struct OutlineButtonStyle: ButtonStyle {
                     .strokeBorder(color, lineWidth: 1),
             )
             .opacity(isEnabled ? 1 : 0.5)
+    }
+}
+
+// MARK: - Toasts (ui/Toast.tsx + modal.css #toasts)
+
+/// One toast (WebUI ToastItem): error style by default, `info` mutes
+/// the border; sticky toasts never auto-dismiss.
+struct ToastItem: Identifiable, Equatable, Sendable {
+    let id: Int
+    let msg: String
+    let info: Bool
+    let sticky: Bool
+}
+
+/// Global toast bus (WebUI toastStore): post from anywhere; a
+/// ToastHost overlay renders the stack. Over the 4-toast cap the
+/// oldest drop; non-sticky toasts auto-dismiss after 5s.
+///
+/// Several hosts can be mounted (window root + a sheet on top of it),
+/// but only the LAST registered — i.e. topmost — host renders the
+/// stack; otherwise the same toast would show once per host (a sheet
+/// doesn't fully cover its window, so the window host peeks out).
+@MainActor
+@Observable
+final class ToastCenter {
+    static let shared = ToastCenter()
+
+    private(set) var items: [ToastItem] = []
+    private var nextId = 1
+    private static let maxToasts = 4
+
+    /// Mounted hosts in appearance order; the last one wins.
+    private var hostIds: [Int] = []
+    private var nextHostId = 1
+
+    /// The host that currently renders the stack (nil = none mounted).
+    var activeHostId: Int? {
+        hostIds.last
+    }
+
+    func registerHost() -> Int {
+        let id = nextHostId
+        nextHostId += 1
+        hostIds.append(id)
+        return id
+    }
+
+    func unregisterHost(_ id: Int) {
+        hostIds.removeAll { $0 == id }
+    }
+
+    func post(_ msg: String, info: Bool = false, sticky: Bool = false) {
+        let id = nextId
+        nextId += 1
+        items.append(ToastItem(id: id, msg: msg, info: info, sticky: sticky))
+        if items.count > Self.maxToasts {
+            items = Array(items.suffix(Self.maxToasts))
+        }
+        if !sticky {
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(5))
+                self?.dismiss(id)
+            }
+        }
+    }
+
+    func dismiss(_ id: Int) {
+        items.removeAll { $0.id == id }
+    }
+}
+
+/// #toasts: top-right overlay stack — bg1 card with an error (default)
+/// or muted (info) border, text-sm, max-width 380, manually closable,
+/// fadein 0.15s. Mount one per window/sheet layer that should show
+/// toasts; they all read the shared ToastCenter.
+struct ToastHost: View {
+    var center = ToastCenter.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hostId = 0
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            // Only the topmost mounted host renders; the rest stay
+            // empty so one toast never shows twice (window + sheet).
+            if center.activeHostId == hostId {
+                ForEach(center.items) { item in
+                    HStack(alignment: .top, spacing: 9) {
+                        Image(systemName: item.info
+                            ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(item.info ? Theme.success : Theme.error)
+                            .padding(.top, 1)
+                        Text(item.msg)
+                            .font(.system(size: Theme.textSm))
+                            .foregroundStyle(Theme.fg)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button {
+                            center.dismiss(item.id)
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(Theme.muted)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("关闭提示")
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: 380)
+                    // bg2, not the WebUI's bg1: the settings panel IS
+                    // bg1, so a bg1 toast melts into it — bg2 keeps the
+                    // elevation contrast the WebUI gets for free from
+                    // its bg0 backdrop.
+                    .background(Theme.bg2, in: RoundedRectangle(cornerRadius: Theme.radiusMd))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.radiusMd)
+                            .strokeBorder(
+                                item.info ? Theme.success.opacity(0.45) : Theme.error.opacity(0.6),
+                                lineWidth: 1,
+                            ),
+                    )
+                    .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
+                    .transition(.opacity)
+                }
+            }
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: center.items)
+        .onAppear { hostId = center.registerHost() }
+        .onDisappear { center.unregisterHost(hostId) }
     }
 }
 

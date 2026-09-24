@@ -28,15 +28,73 @@ struct ChatView: View {
     var version: String = ""
     /// Model catalog for the composer picker (SessionListStore.models).
     var models: [MetaModels.ModelInfo] = []
+    @State private var viewMode: SessionViewMode = .chat
+    @State private var locateTurn: Int?
+    @State private var traceTurn: Int?
+    @State private var locateCallId: String?
+
     var body: some View {
         VStack(spacing: 0) {
-            TranscriptView(store: store)
-            PendingAreaView(store: store)
-            ComposerView(store: store, models: models)
+            HStack(spacing: 0) {
+                ForEach(SessionViewMode.allCases) { mode in
+                    Button {
+                        viewMode = mode
+                    } label: {
+                        Text(mode.rawValue)
+                            .font(.system(size: Theme.textSm, weight: viewMode == mode ? .semibold : .regular))
+                            .foregroundStyle(viewMode == mode ? Theme.primary : Theme.muted)
+                            .padding(.horizontal, 13)
+                            .frame(height: 34)
+                            .overlay(alignment: .bottom) {
+                                if viewMode == mode {
+                                    Rectangle().fill(Theme.primary).frame(height: 2)
+                                }
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(viewMode == mode ? .isSelected : [])
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .background(Theme.bg1)
+            Hairline(axis: .horizontal)
+
+            ZStack {
+                // Keep the transcript mounted so switching tabs preserve its scroll position.
+                TranscriptView(store: store, locateTurn: $locateTurn, locateCallId: $locateCallId)
+                    .opacity(viewMode == .chat ? 1 : 0)
+                    .allowsHitTesting(viewMode == .chat)
+                    .accessibilityHidden(viewMode != .chat)
+                if viewMode == .trace {
+                    SessionTraceView(store: store, locateInChat: { turn, callId in
+                        locateTurn = turn
+                        locateCallId = callId
+                        viewMode = .chat
+                    }, targetTurn: $traceTurn)
+                } else if viewMode == .maze {
+                    SessionMazeView(store: store, locateInTrace: { turn in
+                        traceTurn = turn
+                        viewMode = .trace
+                    })
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if viewMode == .chat {
+                PendingAreaView(store: store)
+                ComposerView(store: store, models: models)
+            }
             Hairline(axis: .horizontal)
             StatusBarView(store: store, version: version)
         }
         .background(Theme.bg0)
+    }
+}
+
+private enum SessionViewMode: String, CaseIterable, Identifiable {
+    case chat = "Chat", trace = "Trace", maze = "Maze"
+    var id: String {
+        rawValue
     }
 }
 
@@ -114,7 +172,7 @@ struct ChatHeaderView: View {
                     .controlSize(.small)
                     .frame(width: 15, height: 15)
             } else {
-                Image(systemName: copiedShareLink ? "check" : "square.and.arrow.up")
+                Image(systemName: copiedShareLink ? "checkmark" : "square.and.arrow.up")
                     .foregroundStyle(copiedShareLink ? Theme.success : Theme.muted)
             }
         }
@@ -180,8 +238,11 @@ struct ChatHeaderView: View {
 
     private var statusSummary: String {
         var details: [String] = []
-        if store.readOnly { details.append("Sub-agent · read-only") }
-        else if archived { details.append("Archived · read-only") }
+        if store.readOnly {
+            details.append("Sub-agent · read-only")
+        } else if archived {
+            details.append("Archived · read-only")
+        }
         switch store.state {
         case .running: details.append("Running")
         case .awaitingApproval: details.append("Awaiting approval")
@@ -344,6 +405,8 @@ private struct StatusPill: View {
 
 private struct TranscriptView: View {
     let store: SessionStore
+    @Binding var locateTurn: Int?
+    @Binding var locateCallId: String?
 
     /// Tracks the bottom sentinel's visibility: scrolling up reveals
     /// the jump-to-bottom button; returning hides it.
@@ -378,6 +441,7 @@ private struct TranscriptView: View {
                             // the draft, so unchanged rows skip body
                             // evaluation entirely.
                             .equatable()
+                            .id("chat-row-\(row.id)")
                         case let .turnSummary(summary):
                             // .block-turn-summary: the turn's closing
                             // review card. Revert stays hidden for
@@ -391,6 +455,9 @@ private struct TranscriptView: View {
                                     ? nil
                                     : { runId in await store.revertRun(runId: runId) },
                             )
+                        }
+                        if case let .message(model) = row, model.message.role == .user {
+                            Color.clear.frame(height: 0).id("chat-turn-\(row.id)")
                         }
                     }
 
@@ -466,7 +533,42 @@ private struct TranscriptView: View {
                 }
             }
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: awayFromBottom)
+            .onChange(of: locateTurn) { _, turn in
+                guard let turn else { return }
+                guard let messageId = turnAnchors[turn] else { locateTurn = nil; return }
+                proxy.scrollTo("chat-turn-\(messageId)", anchor: .top)
+                locateTurn = nil
+            }
+            .onChange(of: locateCallId) { _, callId in
+                guard let callId else { return }
+                if let row = store.transcript.rows.first(where: { row in
+                    if case let .message(model) = row {
+                        return model.items.contains { item in
+                            if case let .tool(tool) = item {
+                                return tool.callId == callId
+                            }
+                            return false
+                        }
+                    }
+                    return false
+                }) {
+                    proxy.scrollTo("chat-row-\(row.id)", anchor: .center)
+                }
+                locateCallId = nil
+            }
         }
+    }
+
+    private var turnAnchors: [Int: String] {
+        var result: [Int: String] = [:]
+        var turn = 0
+        for row in store.transcript.rows {
+            if case let .message(model) = row, model.message.role == .user {
+                turn += 1
+                result[turn] = row.id
+            }
+        }
+        return result
     }
 
     private func scrollFade(fromTop: Bool) -> some View {

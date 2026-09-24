@@ -46,6 +46,7 @@ filegroup(
         "store/*.swift",
     ]) + [
         "views/MarkdownText.swift",
+        "views/MazeAxis.swift",
         "views/SyntaxHighlighter.swift",
         "views/Theme.swift",
     ],

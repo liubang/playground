@@ -53,6 +53,16 @@ struct RootView: View {
                 ImageLightboxView(image: image) { lightboxImage = nil }
             }
         }
+        // Global toasts (WebUI ToastHost at the App root), top-right
+        // under the toolbar. The settings sheet mounts its own host.
+        .overlay(alignment: .topTrailing) {
+            ToastHost()
+                .padding(.top, Theme.toolbarHeight + 12)
+                .padding(.trailing, 16)
+        }
+        // The window-level confirm-dialog host; a sheet mounts its own
+        // host on top and wins while presented (ConfirmCenter).
+        .overlay { ConfirmDialogHost() }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: lightboxImage != nil)
         .onReceive(NotificationCenter.default.publisher(for: .loomZoomImage)) { note in
             lightboxImage = note.object as? NSImage
@@ -124,7 +134,9 @@ struct RootView: View {
         selection = ids[next]
     }
 
-    private var sidebarVisible: Bool { !sidebarCollapsed }
+    private var sidebarVisible: Bool {
+        !sidebarCollapsed
+    }
 
     private var sidebarToggle: some View {
         GhostButton {

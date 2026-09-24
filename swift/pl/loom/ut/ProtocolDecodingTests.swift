@@ -876,6 +876,40 @@ final class ProtocolDecodingTests: XCTestCase {
         XCTAssertEqual(RunStatsURLProtocol.count(path), 2)
     }
 
+    func testMazeProjectionDecodesMainDetoursAndNullableToolEnd() throws {
+        let maze = try decode(MazeData.self, """
+        {
+          "tmax": 48.5,
+          "lanes": [{
+            "key": "main", "session_id": "session-1", "model": "model-a",
+            "stats": {"steps": 2, "tools": 2, "rz": 1, "in_tok": 12,
+                      "rz_tok": 3, "out_tok": 8, "t": 48.5, "main": 1, "detours": 1},
+            "main": [{"step": 1, "turn": 1, "s": 0, "e": 10, "tools": [],
+                       "rz": 0, "v": "answer", "live": false}],
+            "detours": [{"step": 2, "turn": 1, "s": 11, "e": 48.5,
+                         "rz": 1, "rz_txt": "Thinking", "rz_ms": 300,
+                         "v": "retry", "why": "Repeated call", "attach": 1,
+                         "sub": true, "label": "Delegate", "retries": 2,
+                         "tools": [{"name": "delegate_task", "args": "inspect",
+                                    "s": 12, "e": null, "dur": 0,
+                                    "res": "", "v": "pending", "call_id": "call-1",
+                                    "child_id": "child-1"}]}]
+          }]
+        }
+        """)
+        let lane = try XCTUnwrap(maze.lanes.first)
+        XCTAssertEqual(lane.sessionId, "session-1")
+        XCTAssertEqual(lane.stats.inTok, 12)
+        XCTAssertEqual(lane.main.first?.v, .answer)
+        let branch = try XCTUnwrap(lane.detours.first)
+        XCTAssertEqual(branch.attach, 1)
+        XCTAssertEqual(branch.rzTxt, "Thinking")
+        XCTAssertEqual(branch.v, .retry)
+        XCTAssertEqual(branch.tools.first?.v, .pending)
+        XCTAssertNil(branch.tools.first?.e)
+        XCTAssertEqual(branch.tools.first?.childId, "child-1")
+    }
+
     func testRFC3339WithAndWithoutFraction() {
         XCTAssertNotNil(LoomJSON.parseRFC3339("2026-09-19T10:20:30Z"))
         XCTAssertNotNil(LoomJSON.parseRFC3339("2026-09-19T10:20:30.123456789Z"))

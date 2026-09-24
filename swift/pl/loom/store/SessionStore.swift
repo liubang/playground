@@ -407,6 +407,28 @@ final class SessionStore {
         state == .running || state == .awaitingApproval || state == .cancelling
     }
 
+    /// SSE-driven activity signal: bumps on substantive execution events
+    /// (turn start/end, model requests/responses, tool lifecycle, gate
+    /// changes, budget updates). The maze/trace views schedule their
+    /// debounced /maze refetch off this — fresher than usage signals and
+    /// cheaper than polling, since the event stream already knows exactly
+    /// when the execution shape changed.
+    private(set) var activityGeneration = 0
+
+    /// Bumps every time buffered stream deltas are applied to the draft
+    /// (~25fps while streaming): the trace view's continuous-follow
+    /// trigger — the viewport tracks every flush, not 256-char buckets.
+    private(set) var streamRevision = 0
+
+    func maze() async throws -> MazeData {
+        try await api.maze(sessionId)
+    }
+
+    /// Raw event log (NDJSON) for the trace tab's "Session log" export.
+    func exportSessionLog() async throws -> Data {
+        try await api.exportSessionLog(sessionId)
+    }
+
     private func rebuildTranscript() {
         let midTurn = state == .running || state == .cancelling || state == .awaitingApproval
         transcript = TranscriptModel.build(
@@ -1169,6 +1191,7 @@ final class SessionStore {
                 draft?.pendingArgs[index] = entry
             }
         }
+        streamRevision += 1
     }
 
     private func apply(_ event: RuntimeEvent) {
@@ -1177,6 +1200,16 @@ final class SessionStore {
             break // buffered below; applied at display cadence
         default:
             flushPendingDeltas()
+        }
+        switch event.kind {
+        case .turnStarted, .modelRequestStarted, .modelResponseCompleted,
+             .toolPrepared, .toolStarted, .toolCompleted,
+             .approvalRequested, .approvalResolved, .questionAsked, .questionAnswered,
+             .contextCompacted, .modelRequestFailed, .runCancelRequested, .turnFinished,
+             .subagentStarted, .subagentFinished, .budgetUpdated:
+            activityGeneration += 1
+        default:
+            break
         }
         switch event.kind {
         case .turnStarted:

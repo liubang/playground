@@ -128,7 +128,9 @@ final class SettingsStore {
 
     // MARK: Load (fill)
 
-    func load() async {
+    /// manual: the user clicked 重新加载 — the result is toasted
+    /// (WebUI: '已是最新，配置无变化' / '配置已重新加载').
+    func load(manual: Bool = false) async {
         if loadState != .loaded {
             loadState = .loading
         }
@@ -154,8 +156,17 @@ final class SettingsStore {
             } else {
                 await loadMcpStatus()
             }
+            if manual {
+                ToastCenter.shared.post(
+                    envelope.revision == prevRevision ? "已是最新，配置无变化" : "配置已重新加载",
+                    info: true,
+                )
+            }
         } catch {
             showMsg("配置加载失败：\(error.localizedDescription)", isError: true)
+            if manual {
+                ToastCenter.shared.post("配置加载失败：\(error.localizedDescription)")
+            }
             if loadState != .loaded {
                 loadState = .failed(error.localizedDescription)
             }
@@ -547,6 +558,7 @@ final class SettingsStore {
         if let bad = firstInvalid() {
             locate(bad)
             showMsg(bad.msg, isError: true)
+            ToastCenter.shared.post(bad.msg)
             return
         }
         var cfg: [String: JSONValue] = [:]
@@ -617,6 +629,9 @@ final class SettingsStore {
             cfg["workspaces"] = .array(wss)
         }
         preserveUnmanaged(&cfg, orig: origCfg)
+        if skippedCards > 0 {
+            ToastCenter.shared.post("\(skippedCards) 张卡片因缺少必填字段（名称/根目录）未被保存")
+        }
         showMsg("正在保存…（MCP 变更需要建立连接，可能需要几秒）")
         do {
             let result = try await api.putConfig(revision: revision, config: .object(cfg))
@@ -629,6 +644,7 @@ final class SettingsStore {
                 skippedCards > 0 ? "\(success)；\(skippedCards) 张卡片未保存（缺少必填字段或名称重复）" : success,
                 isError: skippedCards > 0,
             )
+            ToastCenter.shared.post(success, info: true)
             flashSave = true
             Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(1300))
@@ -641,8 +657,10 @@ final class SettingsStore {
             onConfigSaved?()
         } catch let LoomAPIError.http(_, code, _) where code == "config_conflict" {
             showMsg("配置文件已被外部修改——请重新加载后再保存", isError: true)
+            ToastCenter.shared.post("配置文件已被外部修改——请重新加载后再保存")
         } catch {
             showMsg("保存失败：\(error.localizedDescription)", isError: true)
+            ToastCenter.shared.post("保存失败：\(error.localizedDescription)")
         }
     }
 
@@ -653,29 +671,47 @@ final class SettingsStore {
     func reveal(_ ref: SecretRef) async -> String? {
         if (ref.name ?? "").isEmpty, ref.kind == "provider" || ref.kind == "mcp_header" {
             showMsg("请先填写名称并保存配置后再查看", isError: true)
+            ToastCenter.shared.post("请先填写名称并保存配置后再查看")
             return nil
         }
         do {
             return try await api.revealSecret(ref)
         } catch let LoomAPIError.http(status, _, _) where status == 404 {
             showMsg("此处没有已保存的密钥（请先保存配置）", isError: true)
+            ToastCenter.shared.post("此处没有已保存的密钥（请先保存配置）")
             return nil
         } catch {
             showMsg("查看密钥失败：\(error.localizedDescription)", isError: true)
+            ToastCenter.shared.post("查看密钥失败：\(error.localizedDescription)")
             return nil
         }
     }
 
     // MARK: Runtime data (skills / mcp / packs / environment)
 
-    func loadSkills() async {
+    /// force: the user clicked the rescan button — the discovery
+    /// result is toasted (WebUI SkillsTab force load).
+    func loadSkills(force: Bool = false) async {
         skillsError = nil
         do {
-            skills = try await api.listSkills()
+            let overview = try await api.listSkills()
+            skills = overview
             skillsLoaded = true
+            if force {
+                let groups = overview.groups ?? []
+                let total = groups.reduce(0) { $0 + ($1.skills ?? []).count }
+                let issues = groups.reduce(0) { $0 + ($1.issues ?? []).count }
+                ToastCenter.shared.post(
+                    "发现 \(total) 个 skill" + (issues > 0 ? "，\(issues) 个加载失败" : ""),
+                    info: issues == 0,
+                )
+            }
         } catch {
             skillsError = error.localizedDescription
             showMsg("技能加载失败：\(error.localizedDescription)", isError: true)
+            if force {
+                ToastCenter.shared.post("技能扫描失败：\(error.localizedDescription)")
+            }
         }
     }
 
@@ -691,23 +727,26 @@ final class SettingsStore {
             if let disabled = result.disabled {
                 setPath(&origCfg, "skills.disabled", .array(disabled.map { .string($0) }))
             }
+            ToastCenter.shared.post(disabled ? "已禁用 \(name)（立即生效）" : "已启用 \(name)", info: true)
             await loadSkills()
         } catch {
             showMsg("更新技能状态失败：\(error.localizedDescription)", isError: true)
+            ToastCenter.shared.post((disabled ? "禁用失败：" : "启用失败：") + error.localizedDescription)
         }
     }
 
-    func deleteSkill(path: String) async {
+    func deleteSkill(path: String, name: String) async {
         do {
             try await api.deleteSkill(path: path)
             // Deleting a skill removes its directory, not config.yaml. Keep
             // the unsaved draft and revision intact while refreshing the list.
             await loadSkills()
             if skillsError == nil {
-                showMsg("技能已删除")
+                ToastCenter.shared.post("已删除 \(name)", info: true)
             }
         } catch {
             showMsg("删除技能失败：\(error.localizedDescription)", isError: true)
+            ToastCenter.shared.post("删除技能失败：\(error.localizedDescription)")
         }
     }
 
@@ -718,42 +757,69 @@ final class SettingsStore {
     func reconnectMcpServer(_ name: String) async {
         do {
             try await api.reconnectMcpServer(name)
+            await loadMcpStatus()
+            if let status = mcpStatus.first(where: { $0.name == name }) {
+                if status.connected == true {
+                    ToastCenter.shared.post("MCP 服务器 \(name) 已连接", info: true)
+                } else {
+                    ToastCenter.shared.post("MCP 服务器 \(name) 连接失败：\(status.error ?? "unknown")")
+                }
+            }
         } catch {
             showMsg("重新连接失败：\(error.localizedDescription)", isError: true)
+            ToastCenter.shared.post("重新连接失败：\(error.localizedDescription)")
         }
-        await loadMcpStatus()
     }
 
-    func loadRulePacks() async {
+    /// force: the user clicked the refresh button — the result count
+    /// is toasted (WebUI RulePacks force load).
+    func loadRulePacks(force: Bool = false) async {
         rulePacksError = nil
         do {
-            rulePacks = try await api.listRulePacks()
+            let packs = try await api.listRulePacks()
+            rulePacks = packs
+            if force {
+                ToastCenter.shared.post("共 \(packs.count) 个规则包", info: true)
+            }
         } catch {
             rulePacksError = error.localizedDescription
             showMsg("规则包加载失败：\(error.localizedDescription)", isError: true)
+            if force {
+                ToastCenter.shared.post("规则包加载失败：\(error.localizedDescription)")
+            }
         }
     }
 
-    func installRulePack(_ id: String, install: Bool) async {
+    func installRulePack(_ id: String, name: String, install: Bool) async {
         do {
             if install {
                 try await api.installRulePack(id)
             } else {
                 try await api.uninstallRulePack(id)
             }
+            ToastCenter.shared.post(
+                install ? "已启用 \(name)（立即生效）" : "已停用 \(name)（立即生效）",
+                info: true,
+            )
             await loadRulePacks()
         } catch {
             showMsg("规则包操作失败：\(error.localizedDescription)", isError: true)
+            ToastCenter.shared.post((install ? "启用失败：" : "停用失败：") + error.localizedDescription)
         }
     }
 
-    func loadEnvironment() async {
+    /// force: the user clicked 重新检测 — failures are toasted (WebUI
+    /// SectionsTab force load).
+    func loadEnvironment(force: Bool = false) async {
         environmentError = nil
         do {
             environment = try await api.metaEnvironment()
         } catch {
             environmentError = error.localizedDescription
             showMsg("环境检测失败：\(error.localizedDescription)", isError: true)
+            if force {
+                ToastCenter.shared.post("环境报告加载失败：\(error.localizedDescription)")
+            }
         }
     }
 }

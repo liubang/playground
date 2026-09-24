@@ -318,6 +318,119 @@ struct Message: Decodable, Sendable, Identifiable, Equatable {
     }
 }
 
+// MARK: - Execution maze (GET /v1/sessions/{id}/maze)
+
+struct MazeData: Decodable, Sendable {
+    let tmax: Double
+    let lanes: [MazeLane]
+}
+
+struct MazeLane: Decodable, Sendable {
+    let key: String
+    let sessionId: String
+    let title: String?
+    let model: String?
+    let main: [MazeNode]
+    let detours: [MazeNode]
+    let stats: MazeStats
+
+    enum CodingKeys: String, CodingKey {
+        case key, title, model, main, detours, stats
+        case sessionId = "session_id"
+    }
+}
+
+struct MazeStats: Decodable, Sendable {
+    let steps: Int
+    let tools: Int
+    let rz: Int
+    let rzMs: Int64?
+    let inTok: Int64
+    let rzTok: Int64
+    let outTok: Int64
+    let t: Double
+    let main: Int
+    let detours: Int
+
+    enum CodingKeys: String, CodingKey {
+        case steps, tools, rz, t, main, detours
+        case rzMs = "rz_ms"
+        case inTok = "in_tok"
+        case rzTok = "rz_tok"
+        case outTok = "out_tok"
+    }
+}
+
+enum MazeVerdict: String, Decodable, Sendable {
+    case ok, answer, error, deadend, retry, pending
+}
+
+struct MazeNode: Decodable, Sendable, Identifiable {
+    let step: Int
+    let turn: Int
+    let s: Double
+    let e: Double
+    let tools: [MazeTool]
+    let rz: Int
+    let rzTxt: String?
+    let rzMs: Int64?
+    let inTok: Int64?
+    let rzTok: Int64?
+    let outTok: Int64?
+    let v: MazeVerdict
+    let why: String?
+    let sub: Bool?
+    let label: String?
+    let attach: Int?
+    /// Anchors the trace jump to the assistant message sequence
+    /// (0 = no anchor; WebUI MazeView gates its locate button on it).
+    let msgSeq: Int64?
+    let retries: Int?
+    let live: Bool?
+
+    var id: Int {
+        step
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case step, turn, s, e, tools, rz, v, why, sub, label, attach, retries, live
+        case rzTxt = "rz_txt"
+        case rzMs = "rz_ms"
+        case inTok = "in_tok"
+        case rzTok = "rz_tok"
+        case outTok = "out_tok"
+        case msgSeq = "msg_seq"
+    }
+}
+
+struct MazeTool: Decodable, Sendable, Identifiable {
+    let name: String
+    let args: String
+    let argsFull: String?
+    let s: Double
+    let e: Double?
+    let dur: Double
+    let res: String
+    let resFull: String?
+    let v: MazeVerdict
+    let why: String?
+    let callId: String
+    let status: String?
+    let childId: String?
+
+    var id: String {
+        callId
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name, args, s, e, dur, res, v, why, status
+        case argsFull = "args_full"
+        case resFull = "res_full"
+        case callId = "call_id"
+        case childId = "child_id"
+    }
+}
+
 // MARK: - Turn summary (internal/app/turn_summary.go)
 
 /// One write-tool file mutation within a finished turn
