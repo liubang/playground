@@ -23,6 +23,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -41,7 +42,7 @@ import (
 // daemon exposing the REST+SSE protocol (docs/SERVE_DESIGN.md §5).
 func runServe(ctx context.Context, args []string) error {
 	var listen, token, allowOrigin string
-	var noWeb bool
+	var noWeb, parentStdin bool
 	for i := 0; i < len(args); i++ {
 		switch {
 		case args[i] == "--listen" && i+1 < len(args):
@@ -55,8 +56,10 @@ func runServe(ctx context.Context, args []string) error {
 			allowOrigin = args[i]
 		case args[i] == "--no-web":
 			noWeb = true
+		case args[i] == "--parent-stdin":
+			parentStdin = true
 		default:
-			return fmt.Errorf("usage: loom serve [--listen <addr|unix:path>] [--token <token>] [--allow-origin <origin>] [--no-web]")
+			return fmt.Errorf("usage: loom serve [--listen <addr|unix:path>] [--token <token>] [--allow-origin <origin>] [--no-web] [--parent-stdin]")
 		}
 	}
 	if listen == "" {
@@ -170,8 +173,18 @@ func runServe(ctx context.Context, args []string) error {
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve() }()
 
+	// The bundled desktop app keeps stdin's pipe writer open while it owns
+	// this server. On normal exit, crash or SIGKILL the writer closes and the
+	// read returns EOF. Manual `loom serve` never opts in to this behavior.
+	var parentGone <-chan struct{}
+	if parentStdin {
+		parentGone = watchParentInput(os.Stdin)
+	}
+
 	select {
 	case <-ctx.Done():
+	case <-parentGone:
+		logger.Info("desktop parent disconnected; shutting down")
 	case err := <-serveErr:
 		return err
 	}
@@ -189,6 +202,17 @@ func runServe(ctx context.Context, args []string) error {
 	}
 	broker.Close()
 	return nil
+}
+
+// watchParentInput signals when the desktop app closes its pipe, including
+// when the app is killed without running its termination callback.
+func watchParentInput(input io.Reader) <-chan struct{} {
+	gone := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, input)
+		close(gone)
+	}()
+	return gone
 }
 
 // generateServeToken creates a random bearer token and persists it

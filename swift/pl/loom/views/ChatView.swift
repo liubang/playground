@@ -403,15 +403,18 @@ private struct NoticeBannerView: View {
             Text(message)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Button(actionTitle, action: action)
-                .font(.system(size: Theme.textXs))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 2)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.radiusSm)
-                        .strokeBorder(Theme.highlight, lineWidth: 1),
-                )
-                .buttonStyle(.plain)
+            Button(action: action) {
+                Text(actionTitle)
+                    .font(.system(size: Theme.textXs))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 2)
+                    .contentShape(Rectangle())
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.radiusSm)
+                            .strokeBorder(Theme.highlight, lineWidth: 1),
+                    )
+            }
+            .buttonStyle(.plain)
         }
         .font(.system(size: Theme.textSm))
         .foregroundStyle(Theme.highlight)

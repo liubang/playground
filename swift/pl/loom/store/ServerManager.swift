@@ -20,7 +20,8 @@ import Foundation
 /// is a reuse-or-spawn decision: if a healthy server already answers on
 /// the default address we attach to it and leave it alone on quit;
 /// otherwise we spawn the CLI shipped inside the app bundle, wait for
-/// readiness, and terminate that child when the app quits.
+/// readiness, and keep its stdin pipe open while the app lives. The child
+/// drains on pipe EOF even if the app exits without a termination callback.
 @MainActor
 @Observable
 final class ServerManager {
@@ -54,12 +55,20 @@ final class ServerManager {
 
     private(set) var mode: Mode?
     private var process: Process?
+    private var stopped = false
+    /// The write end stays open for the lifetime of the bundled server.
+    /// The child treats EOF on stdin as a parent-exit signal.
+    private var serverInput: Pipe?
 
     /// Reuses a healthy server or spawns the bundled one; returns the
     /// endpoint to connect to.
     func ensureRunning() async throws -> Endpoint {
+        guard !stopped else { throw CancellationError() }
         let token = Self.readServeToken() ?? ""
-        if await healthy(address: Self.defaultAddress, token: token) {
+        let isHealthy = await healthy(address: Self.defaultAddress, token: token)
+        // stop() may have run while the health check was suspended.
+        guard !stopped else { throw CancellationError() }
+        if isHealthy {
             mode = .external
             return Endpoint(address: Self.defaultAddress, token: token)
         }
@@ -71,8 +80,10 @@ final class ServerManager {
         }
 
         let process = Process()
+        let input = Pipe()
         process.executableURL = cli
-        process.arguments = ["serve", "--listen", "127.0.0.1:7680"]
+        process.arguments = ["serve", "--listen", "127.0.0.1:7680", "--parent-stdin"]
+        process.standardInput = input
         // serve resolves its default workspace from the cwd — LaunchServices
         // starts apps in "/", which is a useless workspace root.
         process.currentDirectoryURL = URL(fileURLWithPath: NSHomeDirectory())
@@ -81,22 +92,27 @@ final class ServerManager {
         do {
             try process.run()
         } catch {
+            try? input.fileHandleForWriting.close()
             mode = nil
             throw error
         }
+        serverInput = input
         self.process = process
         mode = .managed(pid: process.processIdentifier)
 
         // Wait for readiness. First-ever launch generates the token file
         // during startup, so re-read it on every poll.
         for _ in 0 ..< 100 {
+            guard !stopped else { throw CancellationError() }
             if !process.isRunning {
                 break
             }
-            if let token = Self.readServeToken(),
-               await healthy(address: Self.defaultAddress, token: token)
-            {
-                return Endpoint(address: Self.defaultAddress, token: token)
+            if let token = Self.readServeToken() {
+                let isHealthy = await healthy(address: Self.defaultAddress, token: token)
+                guard !stopped else { throw CancellationError() }
+                if isHealthy {
+                    return Endpoint(address: Self.defaultAddress, token: token)
+                }
             }
             try await Task.sleep(for: .milliseconds(150))
         }
@@ -104,22 +120,28 @@ final class ServerManager {
         // The child died (e.g. another loom holds the data dir lock) or
         // never came up. One last health check in case an external
         // instance won the race and is actually serving.
-        if let token = Self.readServeToken(),
-           await healthy(address: Self.defaultAddress, token: token)
-        {
-            // A healthy endpoint does not prove which process owns it.
-            // Keep our child if it is still alive so quit can terminate it.
-            if !process.isRunning {
-                mode = .external
-                self.process = nil
+        if let token = Self.readServeToken() {
+            let isHealthy = await healthy(address: Self.defaultAddress, token: token)
+            guard !stopped else { throw CancellationError() }
+            if isHealthy {
+                // A healthy endpoint does not prove which process owns it.
+                // Keep our child if it is still alive so quit can terminate it.
+                if !process.isRunning {
+                    try? serverInput?.fileHandleForWriting.close()
+                    serverInput = nil
+                    mode = .external
+                    self.process = nil
+                }
+                return Endpoint(address: Self.defaultAddress, token: token)
             }
-            return Endpoint(address: Self.defaultAddress, token: token)
         }
         let status = process.isRunning ? -1 : process.terminationStatus
         // Do not leave an unhealthy child running after a failed startup.
         if process.isRunning {
             process.terminate()
         }
+        try? serverInput?.fileHandleForWriting.close()
+        serverInput = nil
         self.process = nil
         mode = nil
         throw ServerError.startFailed(terminationStatus: status)
@@ -128,9 +150,12 @@ final class ServerManager {
     /// Terminates a managed server (SIGTERM → serve's graceful shutdown).
     /// No-op for external instances.
     func stop() {
+        stopped = true
         if let process, process.isRunning {
             process.terminate()
         }
+        try? serverInput?.fileHandleForWriting.close()
+        serverInput = nil
         process = nil
         mode = nil
     }

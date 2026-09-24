@@ -192,6 +192,9 @@ export function TraceView({
   // as the user stays parked at the bottom.
   const [following, setFollowing] = useState(true)
   const listRef = useRef<HTMLDivElement>(null)
+  const onListScroll = useRafScroll<HTMLDivElement>((el) => {
+    setFollowing(el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_THRESHOLD_PX)
+  })
 
   useLayoutEffect(() => {
     if (!scrollerOut) return
@@ -362,13 +365,7 @@ export function TraceView({
           No trace yet — start a conversation and the full execution appears here
         </div>
       ) : (
-        <div
-          className="trace-list"
-          ref={listRef}
-          onScroll={useRafScroll<HTMLDivElement>((el) => {
-            setFollowing(el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_THRESHOLD_PX)
-          })}
-        >
+        <div className="trace-list" ref={listRef} onScroll={onListScroll}>
           {visible.groups.map((g) => (
             <div key={g.turn} className="trace-turn" data-turn={g.turn}>
               {g.rows.map((r) => (

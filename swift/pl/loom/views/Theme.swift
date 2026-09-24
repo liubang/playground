@@ -256,20 +256,23 @@ struct GhostButton<Label: View>: View {
     }
 
     var body: some View {
-        Button(action: action) { label }
-            .buttonStyle(.plain)
-            .font(.system(size: size))
-            .foregroundStyle(
-                isEnabled ? (hovered ? Theme.fg : Theme.muted) : Theme.muted.opacity(0.4),
-            )
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
-            .background(
-                hovered ? Theme.bg2 : Color.clear,
-                in: RoundedRectangle(cornerRadius: Theme.radiusSm),
-            )
-            .contentShape(Rectangle())
-            .onHover { hovered = $0 }
+        Button(action: action) {
+            label
+                .font(.system(size: size))
+                .foregroundStyle(
+                    isEnabled ? (hovered ? Theme.fg : Theme.muted) : Theme.muted.opacity(0.4),
+                )
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .frame(minWidth: 32, minHeight: 28)
+                .contentShape(Rectangle())
+                .background(
+                    hovered ? Theme.bg2 : Color.clear,
+                    in: RoundedRectangle(cornerRadius: Theme.radiusSm),
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
     }
 }
 
@@ -285,6 +288,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             .foregroundStyle(onTint)
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
+            .contentShape(Rectangle())
             .background(
                 tint.opacity(configuration.isPressed ? 0.85 : 1),
                 in: RoundedRectangle(cornerRadius: Theme.radiusSm),
@@ -304,6 +308,7 @@ struct OutlineButtonStyle: ButtonStyle {
             .foregroundStyle(color)
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
+            .contentShape(Rectangle())
             .background(
                 color.opacity(configuration.isPressed ? 0.12 : 0),
                 in: RoundedRectangle(cornerRadius: Theme.radiusSm),

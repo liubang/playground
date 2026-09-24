@@ -89,12 +89,17 @@ struct ConnectView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                 } else {
-                    Button("Connect") { appState.connect() }
-                        .buttonStyle(PrimaryButtonStyle())
-                        .keyboardShortcut(.defaultAction)
-                        .disabled(appState.token.trimmingCharacters(in: .whitespaces).isEmpty)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 4)
+                    Button {
+                        appState.connect()
+                    } label: {
+                        Text("Connect")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(appState.token.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
             .padding(.top, 14)

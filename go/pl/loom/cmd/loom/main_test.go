@@ -24,6 +24,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -35,6 +36,70 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 )
+
+// The bundled desktop server must outlive neither its pipe writer nor its
+// parent, even when the parent exits without sending SIGTERM.
+func TestWatchParentInput(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	defer writer.Close()
+	gone := watchParentInput(reader)
+
+	select {
+	case <-gone:
+		t.Fatal("watcher exited while the parent pipe is still open")
+	default:
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-gone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("watcher did not observe parent pipe EOF")
+	}
+}
+
+func TestWatchParentProcessExit(t *testing.T) {
+	cmd := exec.Command(os.Args[0], "-test.run=^TestWatchParentProcessHelper$")
+	cmd.Env = append(os.Environ(), "LOOM_PARENT_WATCH_HELPER=1")
+	reader, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	}()
+	gone := watchParentInput(reader)
+	select {
+	case <-gone:
+		t.Fatal("watcher exited while the parent process is running")
+	default:
+	}
+	if err := cmd.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-gone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("watcher did not observe parent process exit")
+	}
+}
+
+func TestWatchParentProcessHelper(t *testing.T) {
+	if os.Getenv("LOOM_PARENT_WATCH_HELPER") != "1" {
+		return
+	}
+	time.Sleep(30 * time.Second)
+}
 
 // writeTestConfig points LOOM_HOME at baseDir with an empty offline
 // config inside — the loom home is the data root.

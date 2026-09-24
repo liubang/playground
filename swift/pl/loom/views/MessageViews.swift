@@ -560,6 +560,7 @@ struct ToolBlock: View {
                         .foregroundStyle(copied ? Theme.success : Theme.muted)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 1)
+                        .contentShape(Rectangle())
                         .overlay(
                             RoundedRectangle(cornerRadius: 5)
                                 .strokeBorder(copied ? Theme.success : Theme.bg2, lineWidth: 1),
@@ -934,12 +935,16 @@ struct ImageLightboxView: View {
                 HStack(spacing: 8) {
                     Button(action: copy) {
                         Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                            .padding(8)
+                            .contentShape(Rectangle())
                     }
                     .help("Copy image (⌘C)")
                     .accessibilityLabel("Copy image")
 
                     Button(action: close) {
                         Image(systemName: "xmark")
+                            .padding(8)
+                            .contentShape(Rectangle())
                     }
                     .help("Close (Esc)")
                     .accessibilityLabel("Close image preview")
@@ -947,7 +952,6 @@ struct ImageLightboxView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(copied ? Theme.success : Theme.muted)
                 .buttonStyle(.plain)
-                .padding(8)
                 .background(Theme.bg1, in: Capsule())
                 .overlay(Capsule().strokeBorder(Theme.bg2, lineWidth: 1))
                 .padding(20)

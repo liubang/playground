@@ -478,6 +478,9 @@ private struct BatchActionStyle: ButtonStyle {
         configuration.label
             .font(.system(size: Theme.textXs, weight: .medium))
             .foregroundStyle(danger ? Theme.error : Theme.primary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .contentShape(Rectangle())
             .opacity(configuration.isPressed ? 0.6 : 1)
     }
 }
@@ -861,18 +864,6 @@ private struct SessionRow: View {
                 topTrailingRadius: Theme.radiusSm,
             ),
         )
-        // Selection accent: a primary bar on the leading edge, so the
-        // active session reads at a glance even when nothing is
-        // hovered (previously active and hover were the same wash).
-        .overlay(alignment: .leading) {
-            if isActive {
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(Theme.primary)
-                    .frame(width: 3)
-                    .padding(.vertical, 3)
-                    .padding(.leading, isChild ? 2 : 0)
-            }
-        }
         // .sess-item.is-child: 12px indent + 1px left hierarchy guide.
         .overlay(alignment: .leading) {
             if isChild {

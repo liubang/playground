@@ -69,7 +69,11 @@ struct QuestionCard: View {
                                 : (allowMultiple ? "square" : "circle"))
                                 .foregroundStyle(isSelected(option.label) ? Theme.primary : Theme.muted)
                             optionLabel(option)
+                            Spacer(minLength: 0)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 3)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(option.label)
