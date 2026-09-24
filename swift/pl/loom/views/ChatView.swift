@@ -54,7 +54,6 @@ struct ChatView: View {
             // toast never slides under scrolling content.
             .zIndex(1)
             Hairline(axis: .horizontal)
-            NoticeBannerView(store: store)
             TranscriptView(store: store)
             PendingAreaView(store: store)
             ComposerView(store: store, models: models)
@@ -265,8 +264,8 @@ private struct ChatHeaderView: View {
         Task {
             let link = await store.shareLink()
             sharing = false
-            // Failure: shareLink() already set store.lastError, which
-            // the notice banner surfaces — no local flash needed.
+            // Failure: shareLink() already sets store.lastError,
+            // shown beside the composer rather than over the transcript.
             guard let link else { return }
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(link, forType: .string)
@@ -375,58 +374,6 @@ private struct StatusPill: View {
     }
 }
 
-// MARK: - Notices (.banner)
-
-private struct NoticeBannerView: View {
-    let store: SessionStore
-
-    var body: some View {
-        VStack(spacing: 0) {
-            if let error = store.lastError {
-                banner(error, icon: "exclamationmark.triangle", actionTitle: "Retry now") {
-                    Task { await store.refresh() }
-                }
-            }
-            if !store.notices.isEmpty {
-                banner(store.notices.joined(separator: " · "), icon: "info.circle", actionTitle: "Dismiss") {
-                    store.dismissNotices()
-                }
-            }
-        }
-    }
-
-    private func banner(
-        _ message: String, icon: String, actionTitle: String, action: @escaping () -> Void,
-    ) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-            Text(message)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Button(action: action) {
-                Text(actionTitle)
-                    .font(.system(size: Theme.textXs))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 2)
-                    .contentShape(Rectangle())
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.radiusSm)
-                            .strokeBorder(Theme.highlight, lineWidth: 1),
-                    )
-            }
-            .buttonStyle(.plain)
-        }
-        .font(.system(size: Theme.textSm))
-        .foregroundStyle(Theme.highlight)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(Theme.highlight.opacity(0.14))
-        .overlay(alignment: .bottom) {
-            Hairline(axis: .horizontal)
-        }
-    }
-}
-
 // MARK: - Transcript (with the WebUI's edge scroll-fades)
 
 private struct TranscriptView: View {
@@ -457,6 +404,8 @@ private struct TranscriptView: View {
                             MessageRow(
                                 row: model,
                                 artifactLoader: { await store.artifactData($0) },
+                                hidesInterruptedStatus: store.turnFeedback != nil && !store.isBusy
+                                    && row.id == store.transcript.rows.last?.id,
                             )
                             // Rows are values precomputed at turn
                             // boundaries: a streaming frame only mutates
@@ -486,6 +435,16 @@ private struct TranscriptView: View {
                         )
                     } else if store.state == .running || store.state == .cancelling {
                         ThinkingDots()
+                    }
+
+                    if !store.isBusy, let feedback = store.turnFeedback {
+                        TurnStatusView(
+                            feedback: feedback,
+                            canContinue: store.canContinueTurn,
+                            canRetry: store.canRetryLastTurn,
+                            continueTurn: { store.prepareContinuation() },
+                            retry: { store.retryLastTurn() },
+                        )
                     }
 
                     // Bottom sentinel: drives the jump button's visibility.
@@ -552,6 +511,62 @@ private struct TranscriptView: View {
         )
         .frame(height: 28)
         .allowsHitTesting(false)
+    }
+}
+
+/// A turn's terminal state belongs with its conversation, not the window chrome.
+private struct TurnStatusView: View {
+    let feedback: SessionStore.TurnFeedback
+    let canContinue: Bool
+    let canRetry: Bool
+    let continueTurn: () -> Void
+    let retry: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: isCancelled ? "stop.circle" : "exclamationmark.circle")
+                .foregroundStyle(isCancelled ? Theme.muted : Theme.warning)
+            Text(isCancelled ? "Stopped" : "Response interrupted")
+                .foregroundStyle(Theme.muted)
+            if !isCancelled, canContinue {
+                Button(action: continueTurn) {
+                    Label("Continue…", systemImage: "arrow.right")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Theme.onAccent)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 5)
+                        .background(Theme.primary, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
+                        .contentShape(RoundedRectangle(cornerRadius: Theme.radiusSm))
+                }
+                .buttonStyle(.plain)
+                .help("Prepare a continuation in the composer for review")
+                .accessibilityLabel("Continue interrupted response")
+            }
+            if !isCancelled, canRetry {
+                Button(action: retry) {
+                    Label("Retry", systemImage: "arrow.clockwise")
+                        .fontWeight(.medium)
+                        .foregroundStyle(Theme.primary)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 5)
+                        .background(Theme.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.radiusSm))
+                        .overlay(RoundedRectangle(cornerRadius: Theme.radiusSm)
+                            .strokeBorder(Theme.primary.opacity(0.35), lineWidth: 1))
+                        .contentShape(RoundedRectangle(cornerRadius: Theme.radiusSm))
+                }
+                .buttonStyle(.plain)
+                .help("Run the last prompt again; tools may run again")
+                .accessibilityLabel("Retry interrupted response")
+            }
+        }
+        .font(.system(size: Theme.textSm))
+    }
+
+    private var isCancelled: Bool {
+        if case .cancelled = feedback {
+            return true
+        }
+        return false
     }
 }
 

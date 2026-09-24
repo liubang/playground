@@ -433,6 +433,95 @@ final class ProtocolDecodingTests: XCTestCase {
     }
 
     @MainActor
+    func testTurnFailureSnapshotIsContextualAndDismissalSurvivesRefresh() async throws {
+        let protocolMock = PromptURLProtocol.self
+        protocolMock.requests = []
+        protocolMock.reply = { _ in
+            (200, Data(#"{"state":"idle","session_id":"s","model_name":"test","turn_count":1,"event_seq":1,"last_error":{"message":"provider unavailable"}}"#.utf8))
+        }
+        defer { protocolMock.reply = nil; protocolMock.requests = [] }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [protocolMock]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let store = try SessionStore(sessionId: "s", api: APIClient(
+            baseURL: XCTUnwrap(URL(string: "http://localhost")), token: "", session: session,
+        ))
+
+        await store.refresh()
+        XCTAssertEqual(store.turnFeedback, .failed("provider unavailable"))
+        XCTAssertEqual(store.visibleTurnFailure, "provider unavailable")
+        XCTAssertNil(store.lastError)
+
+        store.dismissTurnFailure()
+        await store.refresh()
+        XCTAssertNil(store.visibleTurnFailure)
+        XCTAssertEqual(store.turnFeedback, .failed("provider unavailable"))
+    }
+
+    @MainActor
+    func testContinuePreparesEditableDraftWithoutSubmitting() async throws {
+        let protocolMock = PromptURLProtocol.self
+        protocolMock.requests = []
+        protocolMock.reply = { _ in
+            (200, Data(#"{"state":"idle","session_id":"s","model_name":"test","turn_count":1,"event_seq":1,"last_error":{"message":"request interrupted"}}"#.utf8))
+        }
+        defer { protocolMock.reply = nil; protocolMock.requests = [] }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [protocolMock]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let store = try SessionStore(sessionId: "s", api: APIClient(
+            baseURL: XCTUnwrap(URL(string: "http://localhost")), token: "", session: session,
+        ))
+        await store.refresh()
+
+        store.composerDraft = "my unfinished draft"
+        XCTAssertFalse(store.prepareContinuation())
+        XCTAssertEqual(store.composerDraft, "my unfinished draft")
+        store.composerDraft = ""
+        let focusRequest = store.composerFocusRequest
+        XCTAssertTrue(store.prepareContinuation())
+        XCTAssertTrue(store.composerDraft.contains("do not repeat completed actions"))
+        XCTAssertNotEqual(store.composerFocusRequest, focusRequest)
+        XCTAssertTrue(protocolMock.requests.isEmpty)
+        XCTAssertFalse(store.prepareContinuation())
+        XCTAssertFalse(store.canRetryLastTurn)
+    }
+
+    @MainActor
+    func testRetryLastTurnSubmitsOnlyOnClickAndPreservesDraft() async throws {
+        let protocolMock = PromptURLProtocol.self
+        protocolMock.requests = []
+        protocolMock.reply = { request in
+            if request.url?.path.hasSuffix("/snapshot") == true {
+                return (200, Data(#"{"state":"idle","session_id":"s","model_name":"test","turn_count":1,"event_seq":1,"last_error":{"message":"provider unavailable"},"messages":[{"id":"u1","role":"user","status":"final","parts":[{"kind":"text","text":"previous prompt"}]}]}"#.utf8))
+            }
+            return (202, Data(#"{"turn":2}"#.utf8))
+        }
+        defer { protocolMock.reply = nil; protocolMock.requests = [] }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [protocolMock]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let store = try SessionStore(sessionId: "s", api: APIClient(
+            baseURL: XCTUnwrap(URL(string: "http://localhost")), token: "", session: session,
+        ))
+        await store.refresh()
+        store.composerDraft = "unsent text"
+        XCTAssertNil(store.retryLastTurn())
+        XCTAssertEqual(store.composerDraft, "unsent text")
+        XCTAssertTrue(protocolMock.requests.isEmpty)
+
+        store.composerDraft = ""
+        await store.retryLastTurn()?.value
+        XCTAssertEqual(protocolMock.requests.count, 1)
+        XCTAssertNil(store.turnFeedback)
+        XCTAssertEqual(store.composerDraft, "")
+        XCTAssertNil(store.retryLastTurn())
+    }
+
+    @MainActor
     private func sessionListStore() throws -> (SessionListStore, URLSession) {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [RunStatsURLProtocol.self]

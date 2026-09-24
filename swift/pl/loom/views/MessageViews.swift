@@ -26,6 +26,7 @@ struct MessageRow: View {
     /// Authenticated artifact loader (SessionStore.artifactData);
     /// artifact parts fall back to a plain label when absent.
     var artifactLoader: ((ContentPart.Artifact) async -> (data: Data, mediaType: String?)?)?
+    var hidesInterruptedStatus = false
 
     private var message: Message {
         row.message
@@ -119,18 +120,10 @@ struct MessageRow: View {
                 }
             }
 
-            if message.status == .interrupted {
-                // .block-interrupted: warning text on a 9% warning wash.
-                Text("interrupted")
-                    .font(.system(size: Theme.textMd))
-                    .foregroundStyle(Theme.warning)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        Theme.warning.opacity(0.09),
-                        in: RoundedRectangle(cornerRadius: Theme.radiusMd),
-                    )
+            if message.status == .interrupted, !hidesInterruptedStatus {
+                Label("Response interrupted", systemImage: "exclamationmark.circle")
+                    .font(.system(size: Theme.textSm))
+                    .foregroundStyle(Theme.muted)
             }
 
             // .msg-actions: copy + time, the "this message is finished"
@@ -172,7 +165,7 @@ extension MessageRow: Equatable {
     /// untouched by a streaming frame (previously every 40ms delta
     /// flush re-evaluated every row in the transcript).
     static func == (lhs: MessageRow, rhs: MessageRow) -> Bool {
-        lhs.row == rhs.row
+        lhs.row == rhs.row && lhs.hidesInterruptedStatus == rhs.hidesInterruptedStatus
     }
 }
 

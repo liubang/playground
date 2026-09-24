@@ -36,28 +36,49 @@ struct ComposerView: View {
     /// which reads as "no hover feedback at all").
     @State private var gaugeCardShown = false
     @State private var gaugeHoverTask: Task<Void, Never>?
+    @State private var steerQueueExpanded = false
 
     var body: some View {
         VStack(spacing: 8) {
+            if let error = store.lastError {
+                feedbackCard(title: "Action couldn't complete", detail: error, icon: "exclamationmark.circle", tint: Theme.warning) {
+                    store.dismissError()
+                }
+            }
+
+            if !store.notices.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "info.circle")
+                    Text(store.notices.joined(separator: " · "))
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button { store.dismissNotices() } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Dismiss notices")
+                    .accessibilityLabel("Dismiss notices")
+                }
+                .font(.system(size: Theme.textXs))
+                .foregroundStyle(Theme.muted)
+                .padding(.horizontal, 4)
+                .frame(maxWidth: Theme.contentWidth)
+            }
+
             if let plan = store.plan, !plan.items.isEmpty {
                 PlanPanel(plan: plan)
                     .id("\(store.planIdentity.uuidString):\(([plan.title ?? ""] + plan.items.map(\.goal)).joined(separator: "\u{1f}"))")
                     .frame(maxWidth: Theme.contentWidth)
                     .frame(maxWidth: .infinity)
-            }
-
-            if !store.pendingSteers.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "text.badge.plus")
-                    Text("\(store.pendingSteers.count) steered message(s) queued")
-                        .font(.system(size: Theme.textXs))
-                    Spacer()
-                }
-                .foregroundStyle(Theme.warning)
-                .padding(.horizontal, 4)
+                    .padding(.bottom, 6)
             }
 
             VStack(spacing: 0) {
+                if !store.pendingSteers.isEmpty {
+                    steerQueue
+                        .padding(.horizontal, -6)
+                }
+
                 // Textarea (composer.css .composer textarea): the
                 // placeholder rides in the editor's own background so it
                 // shares the frame — only the editor's internal text
@@ -79,6 +100,7 @@ struct ComposerView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 4)
+                    .padding(.top, 6)
                     .background(alignment: .topLeading) {
                         if store.composerDraft.isEmpty {
                             // Match the editor's internal text inset
@@ -148,11 +170,11 @@ struct ComposerView: View {
                     Hairline(axis: .horizontal)
                 }
             }
-            // composer-box: padding 6px 6px 0 — the textarea's 14px CSS
-            // padding lands on top of it, so text starts 20px in.
-            .padding(.top, 6)
+            // Keep the queue flush with the box edge while the editor and
+            // toolbar retain their 6px horizontal inset.
             .padding(.horizontal, 6)
             .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusXl))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusXl))
             // Focus treatment (composer.css .composer-box:focus-within):
             // a crisp 1px primary border plus a crisp 3px halo drawn
             // just OUTSIDE the box (the CSS `0 0 0 3px` spread) — no
@@ -205,6 +227,146 @@ struct ComposerView: View {
         }
         .animation(.easeInOut(duration: 0.12), value: gaugeCardShown)
         .onAppear { focused = true }
+        .onChange(of: store.composerFocusRequest) { _, _ in focused = true }
+        .onChange(of: store.pendingSteers.isEmpty) { _, empty in
+            if empty {
+                steerQueueExpanded = false
+            }
+        }
+    }
+
+    // MARK: Queued steering
+
+    /// Pending steers belong to the composer, not the transcript. The server
+    /// injects them before the next model call, or relays them into a new turn
+    /// if the current turn ends first. There is no queue mutation API yet.
+    private var steerQueue: some View {
+        VStack(spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    steerQueueExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "arrow.turn.down.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.primary)
+                        .frame(width: 16)
+
+                    Text("Queued")
+                        .font(.system(size: Theme.textXs, weight: .medium))
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize()
+
+                    Text(steerPreview)
+                        .font(.system(size: Theme.textSm))
+                        .foregroundStyle(Theme.fg)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if store.pendingSteers.count > 1 {
+                        Text("+\(store.pendingSteers.count - 1)")
+                            .font(.system(size: Theme.textXs, weight: .medium))
+                            .foregroundStyle(Theme.muted)
+                    }
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Theme.muted)
+                        .rotationEffect(.degrees(steerQueueExpanded ? 180 : 0))
+                }
+                .padding(.horizontal, 16)
+                .frame(height: 42)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Queued for the next model step; if this turn finishes first, sent in the next turn")
+            .accessibilityLabel("\(store.pendingSteers.count) queued steering messages. \(steerPreview)")
+            .accessibilityHint("Expand to read all queued messages")
+
+            if steerQueueExpanded {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(store.pendingSteers.enumerated()), id: \.offset) { index, text in
+                            HStack(alignment: .top, spacing: 10) {
+                                Text("\(index + 1)")
+                                    .foregroundStyle(Theme.muted)
+                                    .frame(width: 16, alignment: .leading)
+                                Text(text)
+                                    .foregroundStyle(Theme.fg)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .font(.system(size: Theme.textSm))
+                            .padding(.vertical, 7)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+                .frame(height: min(CGFloat(store.pendingSteers.count) * 56, 160))
+
+                Text("Added before the next model step, or sent after this turn ends.")
+                    .font(.system(size: Theme.textXs))
+                    .foregroundStyle(Theme.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 10)
+            }
+
+            Hairline(axis: .horizontal)
+        }
+        .background(Theme.bg2.opacity(0.35))
+    }
+
+    private var steerPreview: String {
+        store.pendingSteers.last?
+            .split(whereSeparator: \.isNewline)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    // MARK: Contextual feedback
+
+    private func feedbackCard(
+        title: String, detail: String, icon: String, tint: Color,
+        dismiss: @escaping () -> Void,
+    ) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 15))
+                .foregroundStyle(tint)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: Theme.textSm, weight: .medium))
+                    .foregroundStyle(Theme.fg)
+                DisclosureGroup("Details") {
+                    Text(detail)
+                        .font(Theme.monoXs)
+                        .foregroundStyle(Theme.muted)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+                }
+                .font(.system(size: Theme.textXs))
+                .foregroundStyle(Theme.muted)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 20, height: 20)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.muted)
+            .help("Dismiss")
+            .accessibilityLabel("Dismiss \(title)")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusLg))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radiusLg)
+            .strokeBorder(Theme.bg2, lineWidth: 1))
+        .frame(maxWidth: Theme.contentWidth)
     }
 
     // MARK: Send / stop (twin-circle with the ctx gauge)
@@ -536,16 +698,15 @@ private struct PickerMenuItem: View {
     }
 }
 
-// MARK: - Plan panel (plan.css — V2 variant A)
+// MARK: - Plan panel
 
-/// Bare status row in the steady state (title · progress dots · count ·
-/// current goal); expanding stitches header and list into one card.
-/// Once everything is done it lingers briefly on "All done ✓" and then
-/// retires.
+/// A quiet work trail: a task title and completion count above the steps,
+/// with one marker per step and a connector leading to the next. The active
+/// step gets the emphasis; completed plans retire after a short pause.
 struct PlanPanel: View {
     let plan: PlanPayload
 
-    @State private var expanded = false
+    @State private var expanded = true
     @State private var retiring = false
     @State private var retired = false
     @State private var hovered = false
@@ -563,6 +724,11 @@ struct PlanPanel: View {
         items.firstIndex { $0.status == "in_progress" }
     }
 
+    private var title: String {
+        let value = plan.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return value.isEmpty ? "Plan" : value
+    }
+
     private var allDone: Bool {
         doneCount == items.count
     }
@@ -570,143 +736,120 @@ struct PlanPanel: View {
     var body: some View {
         Group {
             if !retired {
-                VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
                     summaryRow
 
                     if expanded {
                         itemList
                     }
                 }
-                .font(.system(size: Theme.textSm))
-                // Expand stitching (plan.css [open]): summary and list join
-                // into ONE card — bg1 fill, 1px bg2 border, shadow-sm;
-                // collapsed there is no card chrome at all.
-                .background(
-                    expanded ? Theme.bg1 : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 10),
-                )
+                .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusLg))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusLg))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .strokeBorder(expanded ? Theme.bg2 : Color.clear, lineWidth: 1),
-                )
-                .shadow(
-                    color: expanded ? .black.opacity(0.25) : .clear,
-                    radius: 4, y: 2,
+                    RoundedRectangle(cornerRadius: Theme.radiusLg)
+                        .strokeBorder(Theme.bg2.opacity(0.65), lineWidth: 1),
                 )
                 .opacity(retiring ? 0 : 1)
                 .offset(y: retiring ? 3 : 0)
                 .animation(.easeInOut(duration: 0.3), value: retiring)
             }
         }
-        .onAppear { updateRetirement() }
-        .onChange(of: allDone) { _, _ in updateRetirement() }
+        .onAppear {
+            if allDone {
+                expanded = false
+            }
+            updateRetirement()
+        }
+        .onChange(of: allDone) { _, done in
+            if done {
+                expanded = false
+            }
+            updateRetirement()
+        }
         .onChange(of: expanded) { _, _ in updateRetirement() }
         .onDisappear { retirementTask?.cancel() }
     }
 
-    /// summary: ▸ title · ●●●○ 3/7 · In progress: goal
     private var summaryRow: some View {
         Button {
             withAnimation(.easeInOut(duration: 0.18)) { expanded.toggle() }
         } label: {
-            HStack(spacing: 9) {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Theme.muted)
-                    .rotationEffect(.degrees(expanded ? 90 : 0))
-                    .frame(width: 18)
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(title)
+                        .font(.system(size: Theme.textMd, weight: .semibold))
+                        .foregroundStyle(Theme.fg)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                Text(plan.title ?? "plan")
-                    .font(.system(size: Theme.textSm, weight: .semibold))
-                    .foregroundStyle(Theme.fg)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: 320, alignment: .leading)
-                    .fixedSize()
-
-                // Segmented progress dots.
-                HStack(spacing: 3) {
-                    ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                        if item.status == "in_progress" {
-                            PulsingDot(color: Theme.primary, size: 6)
-                        } else {
-                            Circle()
-                                .fill(item.status == "done"
-                                    ? Theme.success
-                                    : Theme.muted.opacity(0.28))
-                                .frame(width: 6, height: 6)
-                        }
+                    if !expanded {
+                        Text(allDone ? "All done" : currentIndex.map { items[$0].goal } ?? "Not started")
+                            .font(.system(size: Theme.textSm))
+                            .foregroundStyle(allDone ? Theme.success : currentIndex == nil ? Theme.muted : Theme.primary)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
 
-                Text("\(doneCount)/\(items.count)")
-                    .font(.system(size: Theme.textXs, weight: allDone ? .bold : .regular))
+                Text("\(doneCount) / \(items.count)")
+                    .font(.system(size: Theme.textXs, weight: .medium, design: .monospaced))
                     .foregroundStyle(allDone ? Theme.success : Theme.muted)
                     .monospacedDigit()
+                    .padding(.top, 2)
 
-                if let currentIndex {
-                    HStack(spacing: 4) {
-                        Text("In progress:")
-                            .foregroundStyle(Theme.muted)
-                        Text(items[currentIndex].goal)
-                            .font(.system(size: Theme.textSm, weight: .medium))
-                            .foregroundStyle(Theme.primary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                } else {
-                    Text(allDone ? "All done ✓" : "Not started…")
-                        .font(.system(size: Theme.textSm, weight: .medium))
-                        .foregroundStyle(allDone ? Theme.success : Theme.fg)
-                }
-
-                Spacer(minLength: 0)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+                    .rotationEffect(.degrees(expanded ? 0 : -90))
+                    .padding(.top, 3)
             }
-            .padding(.vertical, 3)
-            .padding(.leading, 14)
-            .padding(.trailing, 8)
-            // Collapsed: the hover wash wraps the row (bg1 65%); when
-            // expanded the outer card supplies the chrome.
-            .background(
-                !expanded && hovered ? Theme.bg1.opacity(0.65) : Color.clear,
-                in: RoundedRectangle(cornerRadius: 6),
-            )
+            .padding(.horizontal, 18)
+            .padding(.vertical, 15)
+            .background(hovered ? Theme.bg2.opacity(0.35) : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
+        .accessibilityLabel("\(title), \(doneCount) of \(items.count) steps complete")
+        .accessibilityHint(expanded ? "Collapse plan" : "Show plan steps")
     }
 
     private var itemRows: some View {
-        VStack(spacing: 3) {
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                HStack(spacing: 9) {
-                    stepBadge(index: index, status: item.status)
+                HStack(alignment: .top, spacing: 12) {
+                    stepMarker(status: item.status)
+                        .frame(width: 16, height: 16)
+                        .frame(width: 18)
                     Text(item.goal)
-                        .foregroundStyle(item.status == "todo" ? Theme.muted : Theme.fg)
                         .font(.system(
                             size: Theme.textSm,
                             weight: item.status == "in_progress" ? .medium : .regular,
                         ))
-                        .strikethrough(item.status == "done", color: Theme.muted)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer(minLength: 0)
+                        .foregroundStyle(item.status == "in_progress" ? Theme.fg : Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.vertical, 3)
-                .frame(minHeight: 26, alignment: .center)
+                .frame(minHeight: index == items.count - 1 ? 18 : 36, alignment: .top)
+                .overlay(alignment: .topLeading) {
+                    if index < items.count - 1 {
+                        Rectangle()
+                            .fill(Theme.bg3)
+                            .frame(width: 1)
+                            .padding(.leading, 8.5)
+                            .padding(.top, 20)
+                            .padding(.bottom, 4)
+                            .frame(maxHeight: .infinity)
+                    }
+                }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 5)
-        .padding(.bottom, 8)
+        .padding(.horizontal, 18)
+        .padding(.bottom, 16)
     }
 
     @ViewBuilder
     private var itemList: some View {
-        // .pp-list: max-height 220px with its own scroll ONLY when the
-        // content can actually overflow — a ScrollView would otherwise
-        // stretch to the cap and leave dead space under a short plan.
         if items.count > 6 {
             ScrollView { itemRows }
                 .frame(maxHeight: 220)
@@ -715,29 +858,21 @@ struct PlanPanel: View {
         }
     }
 
-    /// 18px step circle: number (todo), filled + pulsing (in progress),
-    /// green check (done).
-    private func stepBadge(index: Int, status: String) -> some View {
+    private func stepMarker(status: String) -> some View {
         ZStack {
             switch status {
             case "done":
-                Circle().fill(Theme.success)
+                Circle().fill(Theme.success.opacity(0.18))
                 Image(systemName: "checkmark")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(Theme.onAccent)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Theme.success)
             case "in_progress":
-                Circle().fill(Theme.primary.opacity(0.18))
-                Text("\(index + 1)")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Theme.primary)
+                Circle().strokeBorder(Theme.primary.opacity(0.6), lineWidth: 1)
+                Circle().fill(Theme.primary).frame(width: 6, height: 6)
             default:
-                Circle().strokeBorder(Theme.muted.opacity(0.5), lineWidth: 1)
-                Text("\(index + 1)")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Theme.muted)
+                Circle().strokeBorder(Theme.muted.opacity(0.42), lineWidth: 1)
             }
         }
-        .frame(width: 18, height: 18)
     }
 
     private func updateRetirement() {

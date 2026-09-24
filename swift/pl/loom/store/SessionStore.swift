@@ -338,6 +338,8 @@ final class SessionStore {
     /// switches (SessionListStore keeps stores warm; the chat view
     /// itself is destroyed on every switch via .id(sessionId)).
     var composerDraft = ""
+    /// Signals the composer to focus after a recovery action prepares a draft.
+    private(set) var composerFocusRequest = UUID()
     private(set) var sendingPrompt = false
     /// Retain the key only when the outcome is unknown and the exact request is retried.
     private var uncertainPrompt: (text: String, key: String)?
@@ -358,6 +360,13 @@ final class SessionStore {
     private(set) var notices: [String] = []
     private static let maxNotices = 10
     private(set) var lastError: String?
+    enum TurnFeedback: Equatable {
+        case cancelled
+        case failed(String)
+    }
+
+    private(set) var turnFeedback: TurnFeedback?
+    private var dismissedTurnFailure: String?
     private(set) var connection: SessionConnection = .connecting
     private(set) var hasLoaded = false
 
@@ -481,6 +490,7 @@ final class SessionStore {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sendingPrompt, !trimmed.isEmpty, state != .closed, state != .booting else { return nil }
         sendingPrompt = true
+        lastError = nil
         composerDraft = ""
         let key: String = if let uncertainPrompt, uncertainPrompt.text == trimmed {
             uncertainPrompt.key
@@ -735,6 +745,62 @@ final class SessionStore {
         notices.removeAll()
     }
 
+    func dismissError() {
+        lastError = nil
+    }
+
+    func dismissTurnFailure() {
+        if case let .failed(message) = turnFeedback {
+            dismissedTurnFailure = message
+        }
+    }
+
+    var visibleTurnFailure: String? {
+        guard !isBusy, case let .failed(message) = turnFeedback,
+              dismissedTurnFailure != message else { return nil }
+        return message
+    }
+
+    var canContinueTurn: Bool {
+        visibleTurnFailure != nil && state == .idle && !readOnly
+            && !sendingPrompt && composerDraft.isEmpty
+    }
+
+    /// Prepares a new instruction against the existing conversation, without
+    /// resubmitting the last prompt or automatically running any tools.
+    @discardableResult
+    func prepareContinuation() -> Bool {
+        guard canContinueTurn else { return false }
+        composerDraft = "Continue the unfinished task from where you left off. Review what has already been done and do not repeat completed actions."
+        composerFocusRequest = UUID()
+        return true
+    }
+
+    /// Retry the last user prompt as a new turn. Never overwrite an unsent draft.
+    /// A retry can repeat tool side effects; it is only invoked by an explicit click.
+    var canRetryLastTurn: Bool {
+        guard canContinueTurn,
+              let prompt = messages.last(where: { $0.role == .user })?.copyText
+        else { return false }
+        return !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    @discardableResult
+    func retryLastTurn() -> Task<Void, Never>? {
+        guard canRetryLastTurn,
+              let prompt = messages.last(where: { $0.role == .user })?.copyText
+        else { return nil }
+        composerDraft = prompt
+        turnFeedback = nil
+        return sendComposerDraft()
+    }
+
+    private func setTurnFailure(_ message: String) {
+        guard turnFeedback != .cancelled else { return }
+        turnFeedback = .failed(message)
+        dismissedTurnFailure = nil
+    }
+
     // MARK: Snapshot (authoritative reconcile)
 
     /// Full resync: re-read the snapshot and re-stitch the cursor. Called
@@ -812,7 +878,15 @@ final class SessionStore {
         contextWindow = snap.window?.effective ?? snap.contextWindow
         turnCount = snap.turnCount
         pendingSteers = snap.pendingSteers ?? []
-        lastError = snap.lastError?.message
+        if let failure = snap.lastError?.message, !failure.isEmpty {
+            // The server may retain a request's cancellation text in last_error.
+            // A run.cancelled event is authoritative: never turn that user action into a failure.
+            if turnFeedback != .cancelled {
+                turnFeedback = .failed(failure)
+            }
+        } else if turnFeedback != .cancelled {
+            turnFeedback = nil
+        }
         readOnly = snap.delegated ?? false
         readOnlyTitle = snap.parentSessionId.map { "parent: \($0)" } ?? ""
 
@@ -1107,6 +1181,8 @@ final class SessionStore {
         switch event.kind {
         case .turnStarted:
             let payload = tryDecode(TurnStartedPayload.self, from: event)
+            turnFeedback = nil
+            dismissedTurnFailure = nil
             state = .running
             pendingSteers = []
             if let prompt = payload?.prompt, !prompt.isEmpty {
@@ -1317,15 +1393,30 @@ final class SessionStore {
             turnRefreshRequested = true
             onTurnActivity?()
 
-        case .runCompleted, .runCancelled:
+        case .runCancelled:
+            turnFeedback = .cancelled
+            dismissedTurnFailure = nil
+
+        case .runCompleted:
             break // turn.finished follows with the final canonical projection
 
         case .sessionClosed:
             state = .closed
 
-        case .runtimeWarning, .runtimeFatal:
+        case .runtimeWarning:
             if let payload = tryDecode(RuntimeMessagePayload.self, from: event) {
                 addNotice(payload.message)
+            }
+
+        case .runtimeFatal:
+            if let payload = tryDecode(RuntimeMessagePayload.self, from: event) {
+                if payload.message.hasPrefix("run failed") {
+                    let reason = payload.message.hasPrefix("run failed: ")
+                        ? String(payload.message.dropFirst("run failed: ".count)) : payload.message
+                    setTurnFailure(reason)
+                } else {
+                    addNotice(payload.message)
+                }
             }
 
         case .sessionOpened, .unknown:
