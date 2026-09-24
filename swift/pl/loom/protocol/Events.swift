@@ -180,8 +180,9 @@ struct ApprovalRequestedPayload: Decodable, Sendable {
     let readPaths: [String]?
     let writePaths: [String]?
     let arguments: JSONValue?
-    /// The operation's derived target (command/path); shown in the cmd
-    /// block when it differs from the description.
+    /// The operation's derived target (command/path); always shown in
+    /// the mono cmd block when present — if it repeats the description,
+    /// the prose copy is suppressed instead (ApprovalCard).
     let target: String?
     /// Human-readable consequence of the operation ("will do" row).
     let consequence: String?

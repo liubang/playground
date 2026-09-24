@@ -2530,6 +2530,11 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				ReadPaths:   payload.ReadPaths,
 				WritePaths:  payload.WritePaths,
 				Arguments:   s.pendingArgs[payload.CallID],
+				// Same derivation as ToolPrepared: for run_cmd the raw
+				// command line, so frontends can render the audited
+				// command in a mono block instead of leaving it buried
+				// inside the prose approval description.
+				Target: toolCallTarget(payload, s.pendingArgs[payload.CallID]),
 			}
 			// Surface what "allow always" would remember so frontends can label
 			// (or hide) the option honestly instead of offering a no-op, the

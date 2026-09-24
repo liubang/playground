@@ -254,6 +254,11 @@ type ApprovalRequestedPayload struct {
 	ArgsHash    string            `json:"args_hash"`
 	ReadPaths   []string          `json:"read_paths,omitempty"`
 	WritePaths  []string          `json:"write_paths,omitempty"`
+	// Target is the primary subject of the call (the raw command line
+	// for run_cmd, else the first write/read path) — the same derivation
+	// as ToolPreparedPayload.Target. Frontends render it in a mono block
+	// so the audited command is not buried inside the prose description.
+	Target string `json:"target,omitempty"`
 	// The argument diff is NOT part of this payload: it already travels
 	// with tool.prepared (single source), and frontends render it on the
 	// tool block. Duplicating it here sent the same diff twice per call.
