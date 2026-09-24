@@ -329,7 +329,10 @@ private struct ProseText: View {
                 .foregroundStyle(Self.cursorGradient)
         }
         return text
-            .font(.system(size: Theme.textLg))
+            // SwiftUI's system text reads heavier than WKWebView's antialiased
+            // 400-weight prose at the same point size on dark surfaces.
+            .font(.system(size: Theme.textLg, weight: .light))
+            .foregroundStyle(Theme.fg)
             .lineSpacing(7) // ≈ the WebUI's 1.7 line-height
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -485,12 +488,11 @@ private func parseInlineMarkdown(_ source: String, size: CGFloat) -> AttributedS
                 Font.system(size: 15, weight: .semibold)
             continue
         }
-        // Strong emphasis renders as semibold, not the parser's
-        // default bold: **-heavy assistant prose became a glaring
-        // bright wall at weight 700 on the dark surfaces.
+        // Preserve a clear step above the lighter native prose without
+        // making **-heavy assistant replies look uniformly bold.
         if run.inlinePresentationIntent?.contains(.stronglyEmphasized) == true {
             parsed[run.range][SwiftUIAttrs.FontAttribute.self] =
-                Font.system(size: size, weight: .semibold)
+                Font.system(size: size, weight: .medium)
         }
     }
     return parsed
@@ -531,7 +533,7 @@ private struct MarkdownTableView: View {
 
     private func cell(text: String, isHeader: Bool) -> some View {
         Text(renderInlineMarkdown(text, size: Theme.textMd))
-            .font(.system(size: Theme.textMd, weight: isHeader ? .semibold : .regular))
+            .font(.system(size: Theme.textMd, weight: isHeader ? .semibold : .light))
             .foregroundStyle(Theme.fg)
             .lineSpacing(5.5) // .md table inherits the body's 1.65 line-height at 13px
             .textSelection(.enabled)
