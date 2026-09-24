@@ -29,6 +29,6 @@ cc_binary(
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [
-        "@croaring//:croaring",
+        "@croaring",
     ],
 )
