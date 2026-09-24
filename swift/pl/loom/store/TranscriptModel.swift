@@ -262,6 +262,15 @@ struct ToolRenderModel: Equatable {
     var diff: String?
     var images: [ContentPart.ImageContent] = []
     var artifacts: [ContentPart.Artifact] = []
+    /// Text attachments already represented by this command's output disclosure.
+    var outputAttachments: [OutputAttachment] = []
+    var commandOutputTruncated = false
+    var commandOutputFormatted = false
+
+    struct OutputAttachment: Equatable {
+        let name: String
+        let artifact: ContentPart.Artifact
+    }
 
     enum Status {
         case running, success, failed, cancelled
@@ -295,6 +304,7 @@ struct ToolRenderModel: Equatable {
         }
         images = Self.resultImages(of: item)
         artifacts = Self.resultArtifacts(of: item, images: images)
+        mergeCommandOutput()
         diff = Self.diffText(of: item)
     }
 
@@ -323,6 +333,61 @@ struct ToolRenderModel: Equatable {
         }
         diff = state.diff
         artifacts = state.artifacts
+        mergeCommandOutput()
+    }
+
+    /// Parse only complete run_cmd JSON. A live preview may contain a truncated
+    /// JSON prefix; leave both it and its attachments untouched in that case.
+    private mutating func mergeCommandOutput() {
+        guard name == "run_cmd", let fullOutput,
+              let data = fullOutput.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let stdout = json["stdout"] as? String,
+              let stderr = json["stderr"] as? String
+        else { return }
+
+        var lines: [String] = []
+        for (name, body) in [("stdout", stdout), ("stderr", stderr)] {
+            let clipped = json["\(name)_preview_truncated"] as? Bool == true
+            if !body.isEmpty {
+                lines.append("\(name)\(clipped ? " (preview truncated)" : ""):\n\(body)")
+            }
+            if let ref = json["\(name)_artifact"] as? [String: Any],
+               let id = ref["id"] as? String,
+               ref["media_type"] == nil || ref["media_type"] as? String == "text/plain",
+               let index = artifacts.firstIndex(where: { $0.id == id && ($0.mediaType == nil || $0.mediaType == "text/plain") })
+            {
+                outputAttachments.append(OutputAttachment(name: name, artifact: artifacts.remove(at: index)))
+            }
+        }
+        var status: [String] = []
+        if let exitCode = json["exit_code"] as? Int {
+            status.append("exit code: \(exitCode)")
+        }
+        if let signal = json["signal"] as? String, !signal.isEmpty {
+            status.append("signal: \(signal)")
+        }
+        if json["timed_out"] as? Bool == true {
+            status.append("timed out")
+        }
+        if json["cancelled"] as? Bool == true {
+            status.append("cancelled")
+        }
+        if !status.isEmpty {
+            lines.append(status.joined(separator: " · "))
+        }
+        if let note = json["note"] as? String, !note.isEmpty {
+            lines.append("note: \(note)")
+        }
+        commandOutputFormatted = true
+        let formatted = lines.joined(separator: "\n\n")
+        let rendered = formatted.isEmpty ? "(no stdout/stderr)" : formatted
+        let excerptTruncated = rendered.count > 600
+        commandOutputTruncated = excerptTruncated || json["truncated"] as? Bool == true ||
+            json["stdout_preview_truncated"] as? Bool == true ||
+            json["stderr_preview_truncated"] as? Bool == true
+        output = excerptTruncated ? String(rendered.prefix(600)) + "\n…" : rendered
+        self.fullOutput = rendered
     }
 
     // MARK: Derivation (snapshot history)

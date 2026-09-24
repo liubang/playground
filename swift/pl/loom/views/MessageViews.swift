@@ -545,7 +545,9 @@ struct ToolBlock: View {
                     HStack(spacing: 8) {
                         Image(systemName: outputExpanded ? "chevron.down" : "chevron.right")
                             .font(.system(size: 9))
-                        Text("Output · \(output.count) chars\(output.hasSuffix("\n…") ? " · truncated" : "")")
+                        Text(model.commandOutputFormatted
+                            ? "Output · preview\(model.commandOutputTruncated ? " · truncated" : "")"
+                            : "Output · \(output.count) chars\(output.hasSuffix("\n…") ? " · truncated" : "")")
                             .font(.system(size: 12))
                         Spacer()
                     }
@@ -555,7 +557,7 @@ struct ToolBlock: View {
                 .buttonStyle(.plain)
 
                 Button(action: copyOutput) {
-                    Text(copied ? "✓ Copied" : "Copy")
+                    Text(copied ? "✓ Copied" : (model.commandOutputFormatted ? "Copy preview" : "Copy"))
                         .font(.system(size: Theme.textXs))
                         .foregroundStyle(copied ? Theme.success : Theme.muted)
                         .padding(.horizontal, 10)
@@ -567,7 +569,7 @@ struct ToolBlock: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .help("Copy full output")
+                .help(model.commandOutputFormatted ? "Copy command preview; use the attachment to copy the original stream" : "Copy full output")
             }
 
             if outputExpanded {
@@ -583,6 +585,11 @@ struct ToolBlock: View {
                 }
                 .frame(maxHeight: 200)
                 .background(Theme.bg0, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
+                if let artifactLoader {
+                    ForEach(model.outputAttachments, id: \.name) { entry in
+                        RunCmdAttachmentView(name: entry.name, artifact: entry.artifact, loader: artifactLoader)
+                    }
+                }
             }
         }
     }
@@ -596,6 +603,88 @@ struct ToolBlock: View {
         Task {
             try? await Task.sleep(for: .seconds(1.5))
             copied = false
+        }
+    }
+}
+
+/// Original command stream controls live inside the single output disclosure.
+private struct RunCmdAttachmentView: View {
+    let name: String
+    let artifact: ContentPart.Artifact
+    let loader: (ContentPart.Artifact) async -> (data: Data, mediaType: String?)?
+
+    @State private var data: Data?
+    @State private var expanded = false
+    @State private var failed = false
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                Button {
+                    expanded.toggle()
+                    if expanded {
+                        load()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        Text("\(name) · full output · \(artifact.size.map(String.init) ?? "?")B")
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                Spacer()
+                Button(copied ? "Copied" : "Copy full") {
+                    load { bytes in
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(String(decoding: bytes, as: UTF8.self), forType: .string)
+                        copied = true
+                    }
+                }
+                .buttonStyle(.plain)
+                Button("Download") {
+                    load { bytes in
+                        let panel = NSSavePanel()
+                        panel.nameFieldStringValue = "\(name).txt"
+                        if panel.runModal() == .OK, let url = panel.url {
+                            try? bytes.write(to: url)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .font(.system(size: Theme.textXs))
+            .foregroundStyle(Theme.muted)
+            if failed {
+                Text("Output attachment failed to load").foregroundStyle(Theme.warning)
+            }
+            if expanded, let data {
+                ScrollView {
+                    Text(String(decoding: data, as: UTF8.self).prefix(8000))
+                        .font(Theme.monoSm)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 200)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Theme.bg0, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
+    }
+
+    private func load(_ onSuccess: ((Data) -> Void)? = nil) {
+        if let data {
+            onSuccess?(data); return
+        }
+        Task {
+            if let entry = await loader(artifact) {
+                data = entry.data
+                onSuccess?(entry.data)
+            } else {
+                failed = true
+            }
         }
     }
 }

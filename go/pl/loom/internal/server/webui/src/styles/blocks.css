@@ -473,6 +473,20 @@
   max-height: 200px;
   overflow-y: auto;
 }
+.block-tool .run-cmd-attachment {
+  margin-top: 6px;
+}
+.block-tool .run-cmd-attachment summary {
+  gap: 8px;
+  font-size: 12px;
+}
+.block-tool .run-cmd-attachment summary > span {
+  min-width: 0;
+  flex: 1;
+}
+.block-tool .run-cmd-attachment .tool-copy {
+  margin-left: 0;
+}
 .block-tool .tool-error {
   margin-top: 8px;
   font-size: var(--text-sm);

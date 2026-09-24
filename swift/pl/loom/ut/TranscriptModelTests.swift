@@ -267,6 +267,57 @@ final class TranscriptModelTests: XCTestCase {
         XCTAssertEqual(DiffParseCache.parse(text).lines.count, parseDiff(text).lines.count)
     }
 
+    // MARK: Command output / attachment merging
+
+    func testRunCmdHistoryMergesOnlyMatchingOutputArtifacts() {
+        let stdout = ContentPart.Artifact(id: "stdout-id", size: 738, mediaType: "text/plain")
+        let unrelated = ContentPart.Artifact(id: "other-id", size: 12, mediaType: "text/plain")
+        let payload = """
+        {"stdout":"first\\nsecond","stderr":"","exit_code":0,"stdout_artifact":{"id":"stdout-id","size":738}}
+        """
+        let result = ContentPart.ToolResult(
+            callId: "cmd", status: "success",
+            content: [.text(payload), .artifact(stdout), .artifact(unrelated)],
+            error: nil, startedAt: nil, finishedAt: nil,
+        )
+        let model = ToolRenderModel(item: ToolBlockItem(
+            call: ContentPart.ToolCall(id: "cmd", name: "run_cmd", arguments: nil), result: result,
+        ))
+        XCTAssertTrue(model.output?.contains("first\nsecond") == true)
+        XCTAssertFalse(model.output?.contains("\\n") == true)
+        XCTAssertEqual(model.outputAttachments.map(\.name), ["stdout"])
+        XCTAssertEqual(model.outputAttachments.first?.artifact.id, stdout.id)
+        XCTAssertEqual(model.artifacts.map(\.id), [unrelated.id])
+        XCTAssertTrue(model.fullOutput?.contains("exit code: 0") == true)
+    }
+
+    func testRunCmdLiveCompleteJSONMergesBothStreams() {
+        var state = ToolCallState(id: "cmd", name: "run_cmd")
+        state.preview = """
+        {"stdout":"ok","stderr":"warning","stdout_artifact":{"id":"out"},"stderr_artifact":{"id":"err"},"stdout_preview_truncated":true}
+        """
+        state.artifacts = [
+            ContentPart.Artifact(id: "out", size: 120, mediaType: "text/plain"),
+            ContentPart.Artifact(id: "err", size: 8, mediaType: "text/plain"),
+        ]
+        let model = ToolRenderModel(live: state)
+        XCTAssertEqual(model.outputAttachments.map(\.name), ["stdout", "stderr"])
+        XCTAssertTrue(model.artifacts.isEmpty)
+        XCTAssertTrue(model.commandOutputFormatted)
+        XCTAssertTrue(model.commandOutputTruncated)
+        XCTAssertTrue(model.output?.contains("warning") == true)
+    }
+
+    func testRunCmdLiveTruncatedJSONPreservesPreviewAndArtifact() {
+        var state = ToolCallState(id: "cmd", name: "run_cmd")
+        state.preview = "{\"stdout\":\"partial"
+        state.artifacts = [ContentPart.Artifact(id: "stdout-id", size: 738, mediaType: "text/plain")]
+        let model = ToolRenderModel(live: state)
+        XCTAssertEqual(model.output, state.preview)
+        XCTAssertTrue(model.outputAttachments.isEmpty)
+        XCTAssertEqual(model.artifacts.map(\.id), ["stdout-id"])
+    }
+
     // MARK: Live conversion
 
     func testLiveToolCallStateConvertsToSameShape() {

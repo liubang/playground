@@ -5,7 +5,7 @@
 
 import { useEffect, useState, type KeyboardEvent } from 'react'
 import type { ArtifactRef } from '../../protocol/events'
-import { fmtBytes } from '../../lib/format'
+import { copyText, fmtBytes } from '../../lib/format'
 import { useBlocksIO } from './context'
 
 // --- Image lightbox (click to zoom): singleton overlay, closed by clicking the backdrop or pressing ESC ---
@@ -183,6 +183,104 @@ export function ArtifactBlock({ artifact }: { artifact: ArtifactRef }) {
     <div className="block block-artifact">
       <ArtifactFile url={resolved.url} mediaType={type} size={artifact.size} blob={resolved.blob} />
     </div>
+  )
+}
+
+// run_cmd's stdout/stderr artifacts belong inside the single Output disclosure.
+// Resolve the authenticated blob only when the user views, copies, or downloads it.
+export function RunCmdAttachment({
+  name,
+  artifact,
+}: {
+  name: 'stdout' | 'stderr'
+  artifact: ArtifactRef
+}) {
+  const { fetchArtifactURL } = useBlocksIO()
+  const [text, setText] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
+  const load = async () => {
+    const entry = await fetchArtifactURL(artifact.id, artifact.size)
+    return { url: entry.url, text: await entry.blob.text() }
+  }
+  const view = async () => {
+    if (text !== null || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      setText((await load()).text)
+    } catch {
+      setError('Attachment failed to load; close and reopen to retry')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <details
+      className="run-cmd-attachment disclosure"
+      onToggle={(e) => {
+        if (e.currentTarget.open) void view()
+      }}
+    >
+      <summary>
+        <span>
+          {name} · full attachment · {fmtBytes(artifact.size)}
+        </span>
+        <button
+          type="button"
+          className="tool-copy"
+          title={`Copy full ${name}`}
+          onClick={async (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            if (busy) return
+            setBusy(true)
+            setError('')
+            try {
+              const content = text ?? (await load()).text
+              if (!(await copyText(content))) throw new Error('clipboard unavailable')
+              setCopied(true)
+              setTimeout(() => setCopied(false), 1500)
+            } catch {
+              setError('Copy failed; retry')
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          {copied ? 'Copied' : 'Copy full'}
+        </button>
+        <button
+          type="button"
+          className="tool-copy"
+          title={`Download full ${name}`}
+          onClick={async (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            if (busy) return
+            setBusy(true)
+            setError('')
+            try {
+              const { url } = await fetchArtifactURL(artifact.id, artifact.size)
+              const link = document.createElement('a')
+              link.href = url
+              link.download = `${name}.txt`
+              link.click()
+            } catch {
+              setError('Download failed; retry')
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          Download
+        </button>
+      </summary>
+      {busy && text === null && <div className="tool-preview mono">Loading…</div>}
+      {error && <div className="notice is-warn">{error}</div>}
+      {text !== null && <div className="tool-preview mono">{text}</div>}
+    </details>
   )
 }
 

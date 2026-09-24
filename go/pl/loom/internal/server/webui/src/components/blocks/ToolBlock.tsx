@@ -8,7 +8,8 @@ import { fmtDuration, copyText } from '../../lib/format'
 import { diffForToolCall } from '../../lib/diff'
 import { Icon, type IconName } from '../../lib/icons'
 import { DiffView } from './DiffView'
-import { ArtifactBlock, InlineImage } from './images'
+import { ArtifactBlock, InlineImage, RunCmdAttachment } from './images'
+import type { ArtifactRef } from '../../protocol/events'
 import { useBlocksIO } from './context'
 
 // st → [icon, label]; className uses English short codes (err/canceled).
@@ -81,6 +82,60 @@ export interface ToolBlockProps {
   fetchToolOutput?: () => Promise<string>
 }
 
+// Only a complete command result can be formatted. Live previews are slices of the
+// OUTER JSON, not slices of stdout: never guess at fields in a cut-off object.
+function runCmdResult(text: string): {
+  text: string
+  truncated: boolean
+  attachments: { name: 'stdout' | 'stderr'; id: string }[]
+} | null {
+  try {
+    const value: unknown = JSON.parse(text)
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const r = value as Record<string, unknown>
+    if (typeof r.stdout !== 'string' || typeof r.stderr !== 'string') return null
+    const lines: string[] = []
+    for (const name of ['stdout', 'stderr'] as const) {
+      const body = r[name]
+      if (body) {
+        const clipped = r[`${name}_preview_truncated`] === true
+        lines.push(`${name}${clipped ? ' (preview truncated)' : ''}:\n${body}`)
+      }
+    }
+    const status: string[] = []
+    if (typeof r.exit_code === 'number') status.push(`exit code: ${r.exit_code}`)
+    if (typeof r.signal === 'string' && r.signal) status.push(`signal: ${r.signal}`)
+    if (r.timed_out === true) status.push('timed out')
+    if (r.cancelled === true) status.push('cancelled')
+    if (status.length) lines.push(status.join(' · '))
+    if (typeof r.note === 'string' && r.note) lines.push(`note: ${r.note}`)
+    const attachments: { name: 'stdout' | 'stderr'; id: string }[] = []
+    for (const name of ['stdout', 'stderr'] as const) {
+      const ref = r[`${name}_artifact`]
+      if (ref && typeof ref === 'object' && !Array.isArray(ref)) {
+        const a = ref as Record<string, unknown>
+        if (
+          typeof a.id === 'string' &&
+          a.id &&
+          (a.media_type == null || a.media_type === 'text/plain')
+        ) {
+          attachments.push({ name, id: a.id })
+        }
+      }
+    }
+    return {
+      text: lines.join('\n\n') || '(no stdout/stderr)',
+      truncated:
+        r.truncated === true ||
+        r.stdout_preview_truncated === true ||
+        r.stderr_preview_truncated === true,
+      attachments,
+    }
+  } catch {
+    return null
+  }
+}
+
 export const ToolBlock = memo(function ToolBlock({
   callId,
   toolName,
@@ -137,6 +192,23 @@ export const ToolBlock = memo(function ToolBlock({
     return completion?.preview || '' // fall back to copying the excerpt when the server is unreachable
   }
 
+  const command =
+    toolName === 'run_cmd' && (completion?.full_text || completion?.preview)
+      ? runCmdResult(completion.full_text || completion.preview || '')
+      : null
+  const commandPreview =
+    command?.text && command.text.length > 600 ? command.text.slice(0, 600) + '\n…' : command?.text
+  const artifacts = completion?.artifacts || []
+  // Merge only text artifacts referenced by a complete JSON result. Keep the
+  // actual completion ref (including its size/type); never manufacture one.
+  const attachments =
+    command?.attachments.flatMap(({ name, id }) => {
+      const artifact = artifacts.find(
+        (a) => a.id === id && (a.media_type == null || a.media_type === 'text/plain'),
+      )
+      return artifact ? [{ name, artifact }] : []
+    }) || []
+  const mergedIds = new Set(attachments.map(({ artifact }) => artifact.id))
   const [icon, verb] = toolMeta(toolName)
   return (
     <div className="block block-tool" data-call-id={callId || undefined}>
@@ -180,7 +252,22 @@ export const ToolBlock = memo(function ToolBlock({
       {completion && (completion.error_message || completion.error) && (
         <div className="tool-error">{completion.error_message || completion.error}</div>
       )}
-      {completion?.preview && <ToolOutput preview={completion.preview} getFullText={getFullText} />}
+      {(completion?.preview || command) && (
+        <ToolOutput
+          preview={commandPreview || completion?.preview || ''}
+          getFullText={
+            toolName === 'run_cmd'
+              ? async () => {
+                  const full = await getFullText()
+                  return runCmdResult(full)?.text || full
+                }
+              : getFullText
+          }
+          commandOutput={command ? { text: command.text, truncated: command.truncated } : undefined}
+          isRunCmd={toolName === 'run_cmd'}
+          attachments={attachments}
+        />
+      )}
       {/* Render images from tool results: inline base64 first (synchronously
           available, no second authenticated request); the artifact path is used
           only when there are no inline images. An artifact is not necessarily an
@@ -191,23 +278,29 @@ export const ToolBlock = memo(function ToolBlock({
           ? (completion.images || []).map((img, i) => (
               <InlineImage key={i} mediaType={img.media_type} data={img.data} />
             ))
-          : (completion.artifacts || []).map((art) => (
-              <ArtifactBlock key={art.id} artifact={art} />
-            )))}
+          : artifacts
+              .filter((art) => !mergedIds.has(art.id))
+              .map((art) => <ArtifactBlock key={art.id} artifact={art} />))}
       {diffText && !diffSuppressed && <DiffView diffText={diffText} />}
     </div>
   )
 })
 
-// Tool output area: collapsed by default; expanding shows the bounded preview
-// (truncation marked by a trailing "\n…"); the copy button always copies the
-// full output. Memoized: tool blocks re-render on every streaming tick.
+// Tool output area: collapsed by default; expanding shows the bounded preview.
+// For parsed run_cmd JSON, stdout/stderr are themselves bounded: copy the formatted
+// preview, not a purportedly complete process output. Other tools retain full copy.
 const ToolOutput = memo(function ToolOutput({
   preview,
   getFullText,
+  commandOutput,
+  isRunCmd = false,
+  attachments = [],
 }: {
   preview: string
   getFullText: () => Promise<string>
+  commandOutput?: { text: string; truncated: boolean }
+  isRunCmd?: boolean
+  attachments?: { name: 'stdout' | 'stderr'; artifact: ArtifactRef }[]
 }) {
   // 'Copying…' disables the button while the full-output fetch is in flight — a double
   // click previously kicked off two fetches; 'Copy failed' is clickable again so a flaky
@@ -218,19 +311,25 @@ const ToolOutput = memo(function ToolOutput({
     <details className="tool-output disclosure">
       <summary>
         <span className="tool-output-label">
-          {`Output · ${preview.length} chars${truncated ? ' · truncated' : ''}`}
+          {`Output · ${commandOutput ? 'preview · ' : ''}${preview.length} chars${truncated || commandOutput?.truncated ? ' · truncated' : ''}`}
         </span>
         <button
           type="button"
           className="tool-copy"
-          title="Copy full output"
+          title={
+            commandOutput
+              ? 'Copy formatted stdout/stderr preview'
+              : isRunCmd
+                ? 'Copy tool output (stdout/stderr may be bounded)'
+                : 'Copy full output'
+          }
           onClick={async (e) => {
             e.preventDefault() // don't toggle the details disclosure
             e.stopPropagation()
             if (label === 'Copying…') return
             setLabel('Copying…')
             try {
-              const text = await getFullText()
+              const text = commandOutput ? commandOutput.text : await getFullText()
               if (!(await copyText(text))) throw new Error('clipboard unavailable')
               setLabel('Copied')
             } catch {
@@ -243,12 +342,17 @@ const ToolOutput = memo(function ToolOutput({
             <>
               <Icon name="check" /> Copied
             </>
+          ) : label === 'Copy' && commandOutput ? (
+            'Copy preview'
           ) : (
             label
           )}
         </button>
       </summary>
       <div className="tool-preview mono">{preview}</div>
+      {attachments.map(({ name, artifact }) => (
+        <RunCmdAttachment key={name} name={name} artifact={artifact} />
+      ))}
     </details>
   )
 })
