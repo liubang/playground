@@ -658,6 +658,8 @@ struct ToastHost: View {
                             Image(systemName: "xmark")
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(Theme.muted)
+                                .frame(width: 20, height: 20)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("关闭提示")

@@ -54,6 +54,8 @@ struct ComposerView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Button { store.dismissNotices() } label: {
                         Image(systemName: "xmark")
+                            .frame(width: 20, height: 20)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .help("Dismiss notices")
@@ -355,6 +357,7 @@ struct ComposerView: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .semibold))
                     .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .foregroundStyle(Theme.muted)

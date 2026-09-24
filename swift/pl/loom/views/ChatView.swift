@@ -45,6 +45,9 @@ struct ChatView: View {
                             .foregroundStyle(viewMode == mode ? Theme.primary : Theme.muted)
                             .padding(.horizontal, 13)
                             .frame(height: 34)
+                            // Without an explicit hit shape only the glyphs are
+                            // clickable — the transparent padding is dead space.
+                            .contentShape(Rectangle())
                             .overlay(alignment: .bottom) {
                                 if viewMode == mode {
                                     Rectangle().fill(Theme.primary).frame(height: 2)
