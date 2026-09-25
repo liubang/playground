@@ -404,6 +404,13 @@ data: {…}
 - 断线恢复：浏览器 `EventSource` 自动带 `Last-Event-ID` 重连；server 走 §4.5 的"补拉-订阅原子衔接"。ephemeral delta 允许在重连间隙丢失——`model.response_completed` 的 canonical `Text` 会校正草稿（现有协议设计原样生效）。
 - 背压：每客户端有界队列 256，溢出即断开（客户端重连自愈）；每 session 最多 8 个并发 SSE（`LOOM_SERVE_MAX_SSE_PER_SESSION`）。
 
+**WebSocket 传输（同端点原地升级）**。浏览器/WebKit 对单 host 的 HTTP/1.1 连接数上限为 6，每条 SSE 流终生独占一条连接——六七个会话窗口并存即耗尽连接池，此后普通 API 调用（含 prompt 提交）在客户端排队直至超时，请求根本到不了服务端（2026-09 桌面端 "The request timed out" 事故：服务端无 `prompt.submit` 审计、事件库无新事件，全部死在路上）。WebSocket 连接不计入该池，故 `GET /v1/sessions/{id}/events` 检测 `Upgrade: websocket` 后原地升级：同 URL、同游标语义、同帧格式——每条 WS text message 恰好装载一个完整 SSE 帧，服务端帧构造函数与客户端帧解析器与 SSE 路径共享，SessionService 的补拉/慢消费者/游标语义零改动。订阅阶段的失败（session 不在线 404 / cursor 失效 409 / draining 503）一律在 101 升级之前以普通 HTTP 错误应答——浏览器读不到握手失败的状态码，会回退 SSE 并复现同一状态走精确处理；若先 101 再静默关闭，客户端将陷入无限重连。两个例外：
+
+- **鉴权**：浏览器 WebSocket API 无法设置 header，WS 握手（且仅 WS 握手）允许 `?token=` query 传 token（auth.go）；原生客户端（Swift `URLSessionWebSocketTask`）仍走 `Authorization` header。
+- **CSP**：`connect-src` 显式放行 loopback `ws://`（老 WebKit 不把 `'self'` 扩展到 ws scheme）。
+
+客户端策略统一为「WS 优先，未开张自动回退 SSE」：握手阶段失败（老服务端、吃 upgrade 的代理、CSP 拦截）浏览器拿不到具体状态码，回退 SSE 后由 SSE 路径精确处理 401/404/429；一旦流过帧再断则交给既有重连退避。回退发生过一次即记住，后续重连直连 SSE。TUI/Go 客户端始终走 SSE（单流无连接池压力）。
+
 ### 5.5 版本演进策略
 
 - 协议主版本 = 路径前缀 `/v1` + `RuntimeEvent.Version`；破坏性变更（字段删除/语义变化）→ `/v2`。

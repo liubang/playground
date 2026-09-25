@@ -287,7 +287,7 @@ final class SessionStore {
     /// quick toggle is a workspace-level override.
     let workspaceId: String?
     private let api: APIClient
-    private let sse: SSEClient
+    private let eventStream: EventStreamClient
 
     private(set) var state: SessionState = .booting {
         didSet {
@@ -400,7 +400,7 @@ final class SessionStore {
         self.sessionId = sessionId
         self.workspaceId = workspaceId
         self.api = api
-        sse = SSEClient(baseURL: api.baseURL, token: api.token)
+        eventStream = EventStreamClient(baseURL: api.baseURL, token: api.token)
     }
 
     var isBusy: Bool {
@@ -992,9 +992,9 @@ final class SessionStore {
     private func consumeStream() async -> ConsumeOutcome {
         lastFrameAt = Date()
         return await withTaskGroup(of: ConsumeOutcome.self, returning: ConsumeOutcome.self) { group in
-            group.addTask { [sse, sessionId, cursor] in
+            group.addTask { [eventStream, sessionId, cursor] in
                 do {
-                    for try await frame in sse.frames(sessionId: sessionId, after: cursor) {
+                    for try await frame in eventStream.frames(sessionId: sessionId, after: cursor) {
                         await self.handleFrame(frame)
                         if await self.takeTurnRefreshRequest() {
                             // Keep the stream's event projection paused until the

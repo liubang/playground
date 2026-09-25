@@ -17,9 +17,10 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    // Dev-time proxy to the loom serve default listener (internal/server/server.go)
+    // Dev-time proxy to the loom serve default listener (internal/server/server.go).
+    // ws: the event stream prefers a WebSocket transport (protocol/sse.ts).
     proxy: {
-      '/v1': 'http://127.0.0.1:7680',
+      '/v1': { target: 'http://127.0.0.1:7680', ws: true },
     },
   },
 })

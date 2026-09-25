@@ -360,7 +360,11 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 		// img-src allows blob: because artifact images are fetched with the
 		// bearer token and rendered through URL.createObjectURL — <img> cannot
 		// carry the Authorization header itself (see artifactBlock).
-		header.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'")
+		// connect-src allows loopback ws:// for the event stream's WebSocket
+		// transport (handlers_events.go): older WebKit does not extend 'self'
+		// to ws: URLs, and without an explicit entry the CSP blocks the
+		// upgrade in the desktop webview.
+		header.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws://127.0.0.1:* ws://localhost:* ws://[::1]:*")
 		header.Set("X-Content-Type-Options", "nosniff")
 		header.Set("Referrer-Policy", "no-referrer")
 		header.Set("X-Frame-Options", "DENY")

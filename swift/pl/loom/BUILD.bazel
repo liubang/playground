@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Loom — pure-SwiftUI peer client of `loom serve`'s REST+SSE protocol.
+# Loom — pure-SwiftUI peer client of `loom serve`'s REST+events protocol
+# (WebSocket-first with SSE fallback, protocol/EventStreamClient.swift).
 # Replaces the Wails webview shell with a fully native macOS UI; the Go
 # backend is untouched (SERVE_DESIGN §3.1: every frontend is an equal
 # pure-rendering client of the /v1 protocol). The loom CLI is embedded

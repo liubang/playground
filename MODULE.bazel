@@ -356,6 +356,7 @@ use_repo(
     "com_github_charmbracelet_glamour",
     "com_github_charmbracelet_lipgloss",
     "com_github_go_rod_rod",
+    "com_github_gorilla_websocket",
     "com_github_mattn_go_runewidth",
     "com_github_onsi_ginkgo_v2",
     "com_github_onsi_gomega",

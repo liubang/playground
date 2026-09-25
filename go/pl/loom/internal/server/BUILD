@@ -49,6 +49,7 @@ go_library(
         "//go/pl/loom/internal/server/web",
         "//go/pl/loom/internal/skill:skill_lib",
         "//go/pl/loom/internal/workspace:workspace_lib",
+        "@com_github_gorilla_websocket//:websocket",
         "@org_golang_x_sys//unix",
     ],
 )
@@ -59,6 +60,7 @@ go_test(
         "errors_test.go",
         "handlers_artifacts_test.go",
         "handlers_config_test.go",
+        "handlers_events_ws_test.go",
         "handlers_export_test.go",
         "handlers_maze_test.go",
         "handlers_packs_test.go",
@@ -80,5 +82,6 @@ go_test(
         "//go/pl/loom/internal/runtimeevent",
         "//go/pl/loom/internal/session:session_lib",
         "//go/pl/loom/internal/trace",
+        "@com_github_gorilla_websocket//:websocket",
     ],
 )
