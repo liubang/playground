@@ -19,7 +19,7 @@
 //     brushes (vertical drags stay native scrolls via touch-action),
 //     two-finger pinch zooms and pans.
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { MazeData, MazeLane, MazeNode, MazeTool, MazeVerdict } from '../../protocol/types'
 import { axisTicks, buildFoldedAxis, formatDur, type FoldedAxis } from './axis'
 import { Icon } from '../../lib/icons'
@@ -191,6 +191,11 @@ export const MazeView = memo(function MazeView({
   // so a gesture costs one SVG re-render per frame, not one per input event.
   const [win, setWin] = useRafState<[number, number] | null>(null) // display-domain window; null = whole map
   const [hover, setHover] = useState<HoverCard | null>(null)
+  // Measured hover-card size: the render pass clamps the card into the
+  // canvas using its REAL size (the old code hardcoded a 240px guess while
+  // the card can grow to 320px — so it overflowed the window's right edge).
+  const tipRef = useRef<HTMLDivElement>(null)
+  const [tipSize, setTipSize] = useState<{ w: number; h: number } | null>(null)
   const [selected, setSelected] = useState<SelectedNode | null>(null)
   const [failOnly, setFailOnly] = useState(false)
   const [query, setQuery] = useState('')
@@ -207,6 +212,16 @@ export const MazeView = memo(function MazeView({
   // whatever node happens to sit under the mouse-up point.
   const suppressClickRef = useRef(false)
   const [panning, setPanning] = useState(false)
+
+  // Re-measure whenever the hovered node changes (content → size).
+  useLayoutEffect(() => {
+    if (!hover) return
+    const el = tipRef.current
+    if (!el) return
+    const w = el.offsetWidth
+    const h = el.offsetHeight
+    setTipSize((prev) => (prev && prev.w === w && prev.h === h ? prev : { w, h }))
+  }, [hover])
 
   // Esc closes the detail panel first. Capture phase + stopPropagation so
   // the keypress never reaches outer overlays (the compare view closes
@@ -839,16 +854,33 @@ export const MazeView = memo(function MazeView({
               <span className="maze-brush-label">{brushLabel}</span>
             </div>
           )}
-          {hover && (
-            <div className="maze-tip" style={{ left: hover.x, top: hover.y }}>
-              <div className="maze-tip-title">{hover.title}</div>
-              {hover.lines.map((l, i) => (
-                <div key={i} className="maze-tip-line">
-                  {l}
+          {hover &&
+            (() => {
+              const wrap = wrapRef.current
+              const cw = wrap?.clientWidth ?? canvasW
+              const ch = wrap?.clientHeight ?? 0
+              const tw = tipSize?.w ?? 0
+              const th = tipSize?.h ?? 0
+              // Clamp into the canvas: hug the left edge on overflow, flip
+              // above the cursor near the bottom. hover.y is in canvas
+              // CONTENT coordinates (scrollTop already folded in), so the
+              // visible band is [scrollTop, scrollTop + clientHeight].
+              const left = tw ? Math.max(4, Math.min(hover.x, cw - tw - 8)) : hover.x
+              let top = hover.y
+              if (th > 0 && ch > 0 && top + th > wrap!.scrollTop + ch - 8) {
+                top = Math.max(wrap!.scrollTop + 4, hover.y - th - 24)
+              }
+              return (
+                <div ref={tipRef} className="maze-tip" style={{ left, top }}>
+                  <div className="maze-tip-title">{hover.title}</div>
+                  {hover.lines.map((l, i) => (
+                    <div key={i} className="maze-tip-line">
+                      {l}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+              )
+            })()}
         </div>
 
         {selected && (
@@ -928,7 +960,9 @@ const MainNode = memo(function MainNode({
         if (!canvas) return
         const rect = canvas.getBoundingClientRect()
         onHover({
-          x: Math.min(e.clientX - rect.left + 10, rect.width - 240),
+          // Raw cursor position + offset; the render pass clamps the card
+          // into the canvas using its measured size.
+          x: e.clientX - rect.left + 10,
           y: e.clientY - rect.top + 12 + canvas.scrollTop,
           title: `${nodeTitle(n)} · ${meta.label}`,
           lines: [
@@ -1026,7 +1060,9 @@ const DetourNode = memo(function DetourNode({
         if (!canvas) return
         const rect = canvas.getBoundingClientRect()
         onHover({
-          x: Math.min(e.clientX - rect.left + 10, rect.width - 240),
+          // Raw cursor position + offset; the render pass clamps the card
+          // into the canvas using its measured size.
+          x: e.clientX - rect.left + 10,
           y: e.clientY - rect.top + 12 + canvas.scrollTop,
           title: `${nodeTitle(n)} · ${meta.label}`,
           lines: [

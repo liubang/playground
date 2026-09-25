@@ -224,6 +224,10 @@ struct SessionMazeView: View {
     @State private var dragState: DragState?
     @State private var pinchLast: CGFloat = 1
     @State private var hover: (point: CGPoint, card: HoverCard)?
+    /// Measured hover-card size: the position clamp needs the REAL size
+    /// (the old code hardcoded a 240px width guess while the card can be
+    /// ~320px wide — so it overflowed the window's right edge).
+    @State private var hoverCardSize: CGSize = .zero
     @State private var refreshGeneration = 0
     /// Vertical scroll offset of the maze content (wheel-driven; the
     /// content is taller than the viewport only on dense maps).
@@ -466,7 +470,8 @@ struct SessionMazeView: View {
                         brushView(brush, scene: scene)
                     }
                     if let hover {
-                        hoverCardView(hover, scene: scene)
+                        hoverCardView(hover, scene: scene,
+                                      viewportH: geo.size.height, offsetY: offsetY)
                     }
                 }
                 .frame(width: scene.width, height: max(scene.totalH, geo.size.height),
@@ -1043,11 +1048,28 @@ struct SessionMazeView: View {
         return HoverCard(title: "\(nodeTitle(node)) · \(node.v.title)", lines: lines)
     }
 
-    private func hoverCardView(_ hover: (point: CGPoint, card: HoverCard), scene: MazeScene) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+    private func hoverCardView(_ hover: (point: CGPoint, card: HoverCard), scene: MazeScene,
+                               viewportH: CGFloat, offsetY: CGFloat) -> some View
+    {
+        // Clamp into the canvas using the card's measured size: hug the
+        // left edge on horizontal overflow, flip above the cursor when
+        // the card would cross the visible bottom. hover.point is in
+        // CONTENT coordinates, so the visible band is
+        // [offsetY, offsetY + viewportH].
+        let maxX = max(4, scene.width - hoverCardSize.width - 8)
+        let x = hoverCardSize.width > 0 ? min(hover.point.x + 10, maxX) : hover.point.x + 10
+        let bottomLimit = offsetY + viewportH - 8
+        var y = hover.point.y + 12
+        if hoverCardSize.height > 0, y + hoverCardSize.height > bottomLimit {
+            y = max(offsetY + 4, hover.point.y - hoverCardSize.height - 8)
+        }
+        return VStack(alignment: .leading, spacing: 2) {
             Text(hover.card.title)
                 .font(.system(size: Theme.textXs, weight: .semibold))
                 .foregroundStyle(Theme.fg)
+                // Same cap as the body lines: long sub-agent titles used
+                // to size the card unboundedly (no clamp could save it).
+                .frame(maxWidth: 300, alignment: .leading)
             ForEach(hover.card.lines, id: \.self) { line in
                 Text(line)
                     .font(.system(size: Theme.textXs))
@@ -1061,7 +1083,14 @@ struct SessionMazeView: View {
         .overlay(RoundedRectangle(cornerRadius: Theme.radiusMd).strokeBorder(Theme.bg0, lineWidth: 1))
         .shadow(color: .black.opacity(0.35), radius: 8, y: 2)
         .fixedSize()
-        .offset(x: min(hover.point.x + 10, max(scene.width - 240, 0)), y: hover.point.y + 12)
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { hoverCardSize = proxy.size }
+                    .onChange(of: proxy.size) { _, size in hoverCardSize = size }
+            },
+        )
+        .offset(x: x, y: y)
         .allowsHitTesting(false)
     }
 

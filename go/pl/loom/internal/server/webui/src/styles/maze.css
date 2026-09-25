@@ -323,7 +323,11 @@ brush/pinch pointer handlers. */
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   padding: 8px 10px;
-  max-width: 320px;
+  /* Never wider than the canvas itself (position clamping assumes it fits). */
+  max-width: min(320px, calc(100% - 16px));
+  /* Long unbroken strings (judge reasons, URLs, base64-ish blobs) must wrap
+     inside the card instead of spilling past its border. */
+  overflow-wrap: anywhere;
   pointer-events: none;
   font-size: var(--text-xs);
 }
