@@ -33,7 +33,16 @@ final class OverlayWindow: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
-        ignoresMouseEvents = false
+        // Frozen phase: click-through. A hit-testable full-screen panel
+        // ordered above every window becomes "the window under the
+        // cursor" in the WindowServer's eyes — the previously hovered
+        // window gets a mouse-exited and its hover popup (CSS :hover,
+        // tracking-area-driven overlays) collapses BEFORE the async
+        // SCKit snapshot runs, so the popup never makes it into the
+        // frozen image. NonactivatingPanel protects the KEYBOARD focus
+        // only; hit-testing is a separate channel. arm() flips this
+        // back once the snapshot is frozen and hover no longer matters.
+        ignoresMouseEvents = true
         acceptsMouseMovedEvents = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         isReleasedWhenClosed = false
@@ -53,6 +62,11 @@ final class OverlayWindow: NSPanel {
         onOcr: @escaping () -> Void,
         onPin: @escaping () -> Void,
     ) {
+        // Snapshot is frozen — live interaction begins, so the panel
+        // must become hit-testable again (see init's ignoresMouseEvents
+        // note). The real desktop's hover popups may now collapse, but
+        // their image is already in the snapshot the user is looking at.
+        ignoresMouseEvents = false
         self.onConfirm = onConfirm
         self.onOcr = onOcr
         self.onPin = onPin
