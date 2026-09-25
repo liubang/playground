@@ -703,9 +703,16 @@ private struct PickerMenuItem: View {
 
 // MARK: - Plan panel
 
-/// A quiet work trail: a task title and completion count above the steps,
-/// with one marker per step and a connector leading to the next. The active
-/// step gets the emphasis; completed plans retire after a short pause.
+/// A live progress rail rather than a todo card. The header has two jobs:
+/// collapsed it is the "now playing" line — breathing node + current step
+/// + its ticking elapsed time + n/N, no card chrome; expanded it switches
+/// to the plan title and the timeline unfolds beneath, its left rail
+/// doubling as the progress bar (done segments solid, the active segment
+/// primary, upcoming dashed) with each node occluding the rail via an
+/// opaque base. The current step lives in exactly one place per state;
+/// a brief row flash guides the eye to it on unfold. The first appearance
+/// shows the whole plan and folds into the rail after a few seconds;
+/// completed plans linger briefly, then retire.
 struct PlanPanel: View {
     let plan: PlanPayload
 
@@ -714,6 +721,17 @@ struct PlanPanel: View {
     @State private var retired = false
     @State private var hovered = false
     @State private var retirementTask: Task<Void, Never>?
+    @State private var autoCollapseTask: Task<Void, Never>?
+    /// Row flash guiding the eye from the header text to the highlighted
+    /// active row when the list unfolds.
+    @State private var flashedStep: Int?
+    @State private var flashTask: Task<Void, Never>?
+    /// When the current step started (the elapsed readout's base) —
+    /// re-anchored on every step change.
+    @State private var currentSince = Date()
+    /// Panel birth / completion: the base of the "total" line.
+    @State private var startedAt = Date()
+    @State private var finishedAt: Date?
 
     private var items: [PlanPayload.Item] {
         plan.items
@@ -727,11 +745,6 @@ struct PlanPanel: View {
         items.firstIndex { $0.status == "in_progress" }
     }
 
-    private var title: String {
-        let value = plan.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return value.isEmpty ? "Plan" : value
-    }
-
     private var allDone: Bool {
         doneCount == items.count
     }
@@ -740,18 +753,29 @@ struct PlanPanel: View {
         Group {
             if !retired {
                 VStack(alignment: .leading, spacing: 0) {
-                    summaryRow
+                    headerRow
 
                     if expanded {
                         itemList
+                            .transition(.opacity)
                     }
                 }
-                .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusLg))
-                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusLg))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.radiusLg)
-                        .strokeBorder(Theme.bg2.opacity(0.65), lineWidth: 1),
-                )
+                // Chrome follows intent: none in the steady state (a soft
+                // hover wash only), a stitched card while inspecting.
+                .background {
+                    if expanded {
+                        RoundedRectangle(cornerRadius: Theme.radiusLg).fill(Theme.bg1)
+                    } else if hovered {
+                        RoundedRectangle(cornerRadius: Theme.radiusMd).fill(Theme.bg2.opacity(0.35))
+                    }
+                }
+                .overlay {
+                    if expanded {
+                        RoundedRectangle(cornerRadius: Theme.radiusLg)
+                            .strokeBorder(Theme.bg2.opacity(0.65), lineWidth: 1)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: expanded ? Theme.radiusLg : Theme.radiusMd))
                 .opacity(retiring ? 0 : 1)
                 .offset(y: retiring ? 3 : 0)
                 .animation(.easeInOut(duration: 0.3), value: retiring)
@@ -760,68 +784,126 @@ struct PlanPanel: View {
         .onAppear {
             if allDone {
                 expanded = false
+                finishedAt = Date()
             }
+            scheduleAutoCollapse()
             updateRetirement()
         }
         .onChange(of: allDone) { _, done in
             if done {
-                expanded = false
+                finishedAt = Date()
+                withAnimation(.easeInOut(duration: 0.18)) { expanded = false }
             }
             updateRetirement()
         }
-        .onChange(of: expanded) { _, _ in updateRetirement() }
-        .onDisappear { retirementTask?.cancel() }
+        .onChange(of: currentIndex) { _, _ in currentSince = Date() }
+        .onChange(of: expanded) { _, isExpanded in
+            autoCollapseTask?.cancel()
+            if isExpanded, let currentIndex {
+                flashTask?.cancel()
+                flashedStep = currentIndex
+                flashTask = Task {
+                    try? await Task.sleep(for: .milliseconds(120))
+                    guard !Task.isCancelled else { return }
+                    withAnimation(.easeOut(duration: 0.7)) { flashedStep = nil }
+                }
+            }
+            updateRetirement()
+        }
+        .onDisappear {
+            retirementTask?.cancel()
+            autoCollapseTask?.cancel()
+            flashTask?.cancel()
+        }
     }
 
-    private var summaryRow: some View {
+    // MARK: Header (steady state: the one "now playing" line)
+
+    /// Two jobs, two texts: collapsed = "now playing" (current step),
+    /// expanded = summary (plan title) — the current step then lives ONLY
+    /// in the highlighted list row, never duplicated in the header.
+    private var headerText: String {
+        if expanded {
+            let title = plan.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return title.isEmpty ? "Plan" : title
+        }
+        if allDone {
+            return "All done · \(items.count) steps"
+        }
+        if let currentIndex {
+            return items[currentIndex].goal
+        }
+        return items.first?.goal ?? "Plan"
+    }
+
+    private var headerTint: Color {
+        if expanded {
+            return Theme.fg
+        }
+        if allDone {
+            return Theme.success
+        }
+        return currentIndex == nil ? Theme.muted : Theme.fg
+    }
+
+    private var headerRow: some View {
         Button {
             withAnimation(.easeInOut(duration: 0.18)) { expanded.toggle() }
         } label: {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(title)
-                        .font(.system(size: Theme.textMd, weight: .semibold))
-                        .foregroundStyle(Theme.fg)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    if !expanded {
-                        Text(allDone ? "All done" : currentIndex.map { items[$0].goal } ?? "Not started")
-                            .font(.system(size: Theme.textSm))
-                            .foregroundStyle(allDone ? Theme.success : currentIndex == nil ? Theme.muted : Theme.primary)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+            HStack(spacing: 10) {
+                PlanStepNode(status: allDone ? "done" : currentIndex != nil ? "in_progress" : "todo")
+                    .frame(width: 16, height: 16)
+                    .frame(width: 18)
+                Text(headerText)
+                    .font(.system(size: Theme.textSm,
+                                  weight: expanded || allDone ? .semibold : .medium))
+                    .foregroundStyle(headerTint)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // Step advance = a departure-board flip, not a silent swap.
+                    .id(headerText)
+                    .transition(.opacity)
+                if !expanded, currentIndex != nil, !allDone {
+                    PlanElapsedText(since: currentSince)
                 }
-
-                Text("\(doneCount) / \(items.count)")
+                if !expanded, allDone, let finishedAt {
+                    Text("Total \(mazeFormatDur(max(0, finishedAt.timeIntervalSince(startedAt))))")
+                        .font(.system(size: Theme.textXs, design: .monospaced))
+                        .foregroundStyle(Theme.muted)
+                        .monospacedDigit()
+                }
+                Text("\(doneCount)/\(items.count)")
                     .font(.system(size: Theme.textXs, weight: .medium, design: .monospaced))
                     .foregroundStyle(allDone ? Theme.success : Theme.muted)
                     .monospacedDigit()
-                    .padding(.top, 2)
-
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(Theme.muted)
                     .rotationEffect(.degrees(expanded ? 0 : -90))
-                    .padding(.top, 3)
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 15)
-            .background(hovered ? Theme.bg2.opacity(0.35) : Color.clear)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { hovered = $0 }
-        .accessibilityLabel("\(title), \(doneCount) of \(items.count) steps complete")
+        .onHover {
+            hovered = $0
+            if $0 {
+                autoCollapseTask?.cancel() // reading the plan: don't fold it away
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: currentIndex)
+        .accessibilityLabel("\(headerText), \(doneCount) of \(items.count) steps complete")
         .accessibilityHint(expanded ? "Collapse plan" : "Show plan steps")
     }
+
+    // MARK: Expanded timeline (rail = progress bar)
 
     private var itemRows: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                HStack(alignment: .top, spacing: 12) {
-                    stepMarker(status: item.status)
+                HStack(spacing: 10) {
+                    PlanStepNode(status: item.status, base: Theme.bg1)
                         .frame(width: 16, height: 16)
                         .frame(width: 18)
                     Text(item.goal)
@@ -830,50 +912,80 @@ struct PlanPanel: View {
                             weight: item.status == "in_progress" ? .medium : .regular,
                         ))
                         .foregroundStyle(item.status == "in_progress" ? Theme.fg : Theme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(minHeight: index == items.count - 1 ? 18 : 36, alignment: .top)
-                .overlay(alignment: .topLeading) {
-                    if index < items.count - 1 {
-                        Rectangle()
-                            .fill(Theme.bg3)
-                            .frame(width: 1)
-                            .padding(.leading, 8.5)
-                            .padding(.top, 20)
-                            .padding(.bottom, 4)
-                            .frame(maxHeight: .infinity)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    if item.status == "in_progress" {
+                        PlanElapsedText(since: currentSince)
                     }
                 }
+                .frame(height: 24)
+                .background(
+                    flashedStep == index ? Theme.primary.opacity(0.12) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: Theme.radiusSm),
+                )
+                .background(alignment: .topLeading) {
+                    // Continuous center-to-center segment (rows are
+                    // contiguous 24pt, so node centers are 24 apart); each
+                    // node's opaque base occludes the rail where they meet.
+                    if index < items.count - 1 {
+                        PlanRailLine(status: item.status)
+                            .frame(width: 2, height: 24)
+                            .offset(x: 8, y: 12)
+                    }
+                }
+                .id(index)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.bottom, 16)
+        .animation(.easeOut(duration: 0.5), value: flashedStep)
+        .background(alignment: .topLeading) {
+            // Trunk stitching the header node to the first row, colored by
+            // the progress INTO step 1. The 7pt above the list top reaches
+            // into the header's bottom padding (the node ends there); in
+            // the scrolling variant that part clips at the viewport — the
+            // rail simply continues out of view.
+            PlanRailLine(status: items.first?.status ?? "todo")
+                .frame(width: 2, height: 11)
+                .offset(x: 8, y: -7)
+        }
     }
 
     @ViewBuilder
     private var itemList: some View {
+        // Leading inset aligns the rail with the header's node column
+        // (header padding 10 + node column 18 ⇒ node center x = 19).
         if items.count > 6 {
-            ScrollView { itemRows }
-                .frame(maxHeight: 220)
+            ScrollViewReader { proxy in
+                ScrollView { itemRows }
+                    .frame(maxHeight: 168) // ~7 rows
+                    .onAppear {
+                        if let currentIndex {
+                            proxy.scrollTo(currentIndex, anchor: .center)
+                        }
+                    }
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 10)
         } else {
             itemRows
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
         }
     }
 
-    private func stepMarker(status: String) -> some View {
-        ZStack {
-            switch status {
-            case "done":
-                Circle().fill(Theme.success.opacity(0.18))
-                Image(systemName: "checkmark")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Theme.success)
-            case "in_progress":
-                Circle().strokeBorder(Theme.primary.opacity(0.6), lineWidth: 1)
-                Circle().fill(Theme.primary).frame(width: 6, height: 6)
-            default:
-                Circle().strokeBorder(Theme.muted.opacity(0.42), lineWidth: 1)
+    // MARK: Lifecycle
+
+    /// The first appearance shows the full plan so the user can vet what
+    /// the agent intends to do, then folds into the single-line rail.
+    private func scheduleAutoCollapse() {
+        guard !allDone else { return }
+        autoCollapseTask?.cancel()
+        autoCollapseTask = Task {
+            do {
+                try await Task.sleep(for: .seconds(6))
+                guard !Task.isCancelled, !hovered, !allDone else { return }
+                withAnimation(.easeInOut(duration: 0.22)) { expanded = false }
+            } catch {
+                // Toggled or hovered first: the user owns the state now.
             }
         }
     }
@@ -898,6 +1010,100 @@ struct PlanPanel: View {
             } catch {
                 // A changed or expanded plan cancels the pending retirement.
             }
+        }
+    }
+}
+
+/// Timeline node: done pops a checkmark in (spring), the active node
+/// breathes (the agent-liveness signal), upcoming steps are quiet hollow
+/// rings.
+private struct PlanStepNode: View {
+    let status: String
+    /// Opaque disc behind the node: list rows pass it so the continuous
+    /// rail terminates visually at the node instead of showing through
+    /// the hollow rings (the trace dot's trick). The header node needs
+    /// none — no rail crosses it.
+    var base: Color? = nil
+
+    @State private var breathing = false
+
+    var body: some View {
+        ZStack {
+            if let base {
+                Circle().fill(base)
+            }
+            switch status {
+            case "done":
+                Circle().fill(Theme.success)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(Theme.onAccent)
+                    .transition(.scale(scale: 0.2).combined(with: .opacity))
+            case "in_progress":
+                Circle().strokeBorder(Theme.primary.opacity(0.7), lineWidth: 1.5)
+                Circle()
+                    .fill(Theme.primary)
+                    .frame(width: 6, height: 6)
+                    .scaleEffect(breathing ? 1.25 : 0.8)
+                    .opacity(breathing ? 1 : 0.55)
+            default:
+                Circle().strokeBorder(Theme.muted.opacity(0.42), lineWidth: 1)
+            }
+        }
+        .animation(.spring(duration: 0.34, bounce: 0.45), value: status)
+        .onAppear { startBreathing(if: status) }
+        .onChange(of: status) { _, new in
+            if new == "in_progress" {
+                startBreathing(if: new)
+            } else {
+                breathing = false
+            }
+        }
+    }
+
+    private func startBreathing(if status: String) {
+        guard status == "in_progress", !breathing else { return }
+        withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+            breathing = true
+        }
+    }
+}
+
+/// One rail segment between adjacent step nodes; the rail as a whole is
+/// the progress bar: done = success, active = primary, upcoming = dashed.
+private struct PlanRailLine: View {
+    let status: String
+
+    var body: some View {
+        switch status {
+        case "done":
+            Capsule().fill(Theme.success.opacity(0.55))
+        case "in_progress":
+            Capsule().fill(Theme.primary.opacity(0.55))
+        default:
+            Canvas { ctx, size in
+                var path = Path()
+                path.move(to: CGPoint(x: size.width / 2, y: 0))
+                path.addLine(to: CGPoint(x: size.width / 2, y: size.height))
+                ctx.stroke(
+                    path, with: .color(Theme.bg3),
+                    style: StrokeStyle(lineWidth: 1.5, dash: [2, 3]),
+                )
+            }
+        }
+    }
+}
+
+/// Ticking "time on this step" readout — the strongest "not stuck" signal.
+private struct PlanElapsedText: View {
+    let since: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            Text(mazeFormatDur(max(0, context.date.timeIntervalSince(since))))
+                .font(.system(size: Theme.textXs, design: .monospaced))
+                .foregroundStyle(Theme.muted)
+                .monospacedDigit()
         }
     }
 }
