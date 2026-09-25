@@ -105,7 +105,9 @@ func (s *Server) handleGetWorkspace(w http.ResponseWriter, r *http.Request) {
 // workspace entity and cascades to its sessions — live sessions are shut
 // down, persisted session history is deleted with the workspace
 // (docs/WORKSPACE_DESIGN.md §16.1). The on-disk root directory is never
-// touched. The default workspace cannot be deleted (409 workspace_in_use).
+// touched. Deleting the default workspace is allowed: the registry
+// re-pins the default to the newest remaining workspace, or clears it
+// when none remain.
 func (s *Server) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	id, err := parseWorkspaceIDParam(r.PathValue("id"))
 	if err != nil {

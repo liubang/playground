@@ -176,8 +176,9 @@ export function createApi({ getToken, onUnauthorized }: ApiOptions) {
     registerWorkspace: (rootPath: string, name: string) =>
       req<{ workspace: Workspace }>('POST', '/v1/workspaces', { root_path: rootPath, name }),
     // Delete workspace: cascades to all its sessions (live sessions are closed;
-    // unrecoverable); the on-disk directory is left untouched. The default
-    // workspace cannot be deleted (409 workspace_in_use)
+    // unrecoverable); the on-disk directory is left untouched. Deleting the
+    // default workspace is allowed — the server re-pins the default to the
+    // newest remaining workspace.
     deleteWorkspace: (id: string) => req('DELETE', `/v1/workspaces/${id}`),
     browseDirectories: (path: string) =>
       req<DirBrowseResult>('GET', `/v1/files/browse?path=${encodeURIComponent(path || '')}`),

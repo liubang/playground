@@ -227,9 +227,9 @@ struct SidebarView: View {
                     }
                 }
             },
-            onDeleteWorkspace: workspace.isDefault == true
-                ? nil
-                : { confirmDeleteWorkspace(workspace) },
+            // The default workspace is deletable too: the server
+            // re-pins the default to the newest remaining workspace.
+            onDeleteWorkspace: { confirmDeleteWorkspace(workspace) },
             archivedView: list.showArchived,
             onArchiveSession: archiveOrUnarchive,
             onDeleteSession: { confirmDelete($0) },
