@@ -34,11 +34,12 @@ type writeStdinArgs struct {
 
 const maxCharsBytes = 8192
 
-// WriteStdinTool feeds input to a running exec session and polls its output.
+// WriteStdinTool feeds input to a running exec session and polls its
+// output. The prepare/verify protocol is the shared toolkit.BaseTool
+// skeleton.
 type WriteStdinTool struct {
-	def     domain.ToolDefinition
+	base    toolkit.BaseTool
 	manager *Manager
-	signer  signer
 }
 
 // NewWriteStdinTool creates the write_stdin tool bound to the shared
@@ -46,10 +47,6 @@ type WriteStdinTool struct {
 func NewWriteStdinTool(manager *Manager) (*WriteStdinTool, error) {
 	if manager == nil {
 		return nil, domain.NewError(domain.ErrInvalidInput, "session manager is required")
-	}
-	s, err := newSigner()
-	if err != nil {
-		return nil, err
 	}
 	def := domain.ToolDefinition{
 		Name: "write_stdin",
@@ -69,26 +66,18 @@ func NewWriteStdinTool(manager *Manager) (*WriteStdinTool, error) {
 		// here (static R2) would reject every write_stdin call.
 		Source: domain.ToolSourceBuiltin,
 	}
-	if err := def.Validate(); err != nil {
-		return nil, domain.NewError(domain.ErrInvalidInput, "invalid tool definition", domain.WithCause(err))
+	base, err := toolkit.NewBaseTool(def)
+	if err != nil {
+		return nil, err
 	}
-	return &WriteStdinTool{def: def, manager: manager, signer: s}, nil
+	return &WriteStdinTool{base: base, manager: manager}, nil
 }
 
 func (t *WriteStdinTool) Definition() domain.ToolDefinition {
-	return t.def
+	return t.base.Def
 }
 
 func (t *WriteStdinTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	if err := ctx.Err(); err != nil {
-		return domain.PreparedCall{}, err
-	}
-	if err := call.Validate(); err != nil {
-		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "invalid tool call", domain.WithCause(err))
-	}
-	if call.Name != t.def.Name {
-		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("tool call name must be %q", t.def.Name))
-	}
 	args, err := toolkit.DecodeStrict[writeStdinArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
@@ -105,34 +94,30 @@ func (t *WriteStdinTool) Prepare(ctx context.Context, call domain.ToolCall) (dom
 	if args.MaxOutputBytes < 0 || args.MaxOutputBytes > maxMaxOutputBytes {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("max_output_bytes must be between 0 and %d", maxMaxOutputBytes))
 	}
-	canonicalBytes, err := json.Marshal(args)
+	canonical, err := json.Marshal(args)
 	if err != nil {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
-	// Keep the RawMessage type: see exec_session for why a plain []byte
-	// would break signature symmetry.
-	canonical := json.RawMessage(canonicalBytes)
 
 	// write_stdin starts no new process: the command it drives was approved
-	// at exec_session time, so the call itself is low risk.
-	prepared := domain.PreparedCall{
-		Call: domain.ToolCall{
-			ID:        call.ID,
-			Name:      t.def.Name,
-			Arguments: canonical,
-		},
-		Definition:   t.def,
-		Risk:         domain.R1,
+	// at exec_session time, so the call itself is low risk (R1, an
+	// elevation above the definition's capability-free R0 default).
+	risk := domain.R1
+	return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{
+		Risk:         &risk,
 		ApprovalDesc: fmt.Sprintf("Write %d bytes to session %s", len(args.Chars), args.SessionID),
-	}
-	prepared.ArgsHash = t.signer.sign(prepared.Call.ID.String(), t.def.Name, canonical, domain.R1)
-	return prepared, nil
+	})
 }
 
 func (t *WriteStdinTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
-	if err := t.verifyPreparedCall(prepared); err != nil {
+	if err := t.base.VerifyPreparedCallStructural(prepared); err != nil {
 		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
+	}
+	// Prepare pins every write_stdin call at R1 (an elevation above the
+	// definition's R0 default), so re-check the pinned tier here.
+	if prepared.Risk != domain.R1 {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call risk mismatch"))
 	}
 	args, err := toolkit.DecodeStrict[writeStdinArgs](prepared.Call.Arguments)
 	if err != nil {
@@ -161,21 +146,4 @@ func (t *WriteStdinTool) Execute(ctx context.Context, prepared domain.PreparedCa
 	awaitYield(ctx, entry, yieldMs)
 	output := drainSession(ctx, t.manager, entry, args.MaxOutputBytes)
 	return toolkit.SuccessResult(prepared.Call.ID, startedAt, output)
-}
-
-func (t *WriteStdinTool) verifyPreparedCall(prepared domain.PreparedCall) error {
-	if prepared.Call.Name != t.def.Name {
-		return domain.NewError(domain.ErrSecurity, "prepared call tool name mismatch")
-	}
-	if prepared.Definition.Name != t.def.Name || prepared.Definition.Source != t.def.Source {
-		return domain.NewError(domain.ErrSecurity, "prepared call definition mismatch")
-	}
-	if prepared.Risk != domain.R1 {
-		return domain.NewError(domain.ErrSecurity, "prepared call risk mismatch")
-	}
-	expected := t.signer.sign(prepared.Call.ID.String(), t.def.Name, prepared.Call.Arguments, domain.R1)
-	if !t.signer.verify(expected, prepared.ArgsHash) {
-		return domain.NewError(domain.ErrSecurity, "prepared call verification failed")
-	}
-	return nil
 }

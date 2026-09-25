@@ -16,9 +16,7 @@ package exsession
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -34,32 +32,7 @@ const (
 
 	defaultMaxOutputBytes int64 = 16384
 	maxMaxOutputBytes     int64 = 65536
-
-	maxJustificationBytes = 240
 )
-
-// signer is the exsession-local HMAC signer, wrapping the toolkit Signer
-// with a variadic-parts interface that exec_session and write_stdin share.
-type signer struct {
-	tk toolkit.Signer
-}
-
-func newSigner() (signer, error) {
-	tk, err := toolkit.NewSigner()
-	if err != nil {
-		return signer{}, err
-	}
-	return signer{tk: tk}, nil
-}
-
-func (s *signer) sign(parts ...any) string {
-	payload, _ := json.Marshal(parts)
-	return s.tk.SignRaw(payload)
-}
-
-func (s *signer) verify(expected, actual string) bool {
-	return s.tk.VerifyRaw(expected, actual)
-}
 
 // commandArgs is the shared command-line shape of exec_session.
 type commandArgs struct {
@@ -91,22 +64,24 @@ func validateCommandArgs(validator *workspacepkg.PathValidator, args *commandArg
 	}
 	args.WorkingDir = displayDir
 
-	switch args.SandboxPermissions {
-	case "":
-		args.SandboxPermissions = toolkit.SandboxUseDefault
-	case toolkit.SandboxUseDefault:
-	case toolkit.SandboxRequireEscalated:
+	// One lenient parsing behavior with run_cmd (toolkit owns it): "",
+	// the literal "null" and an absent field all mean the default sandbox.
+	permissions, err := toolkit.ParseSandboxPermissions(&args.SandboxPermissions)
+	if err != nil {
+		return "", err
+	}
+	args.SandboxPermissions = permissions
+	args.Justification = toolkit.NormalizeJustification(&args.Justification)
+	if args.SandboxPermissions == toolkit.SandboxRequireEscalated {
 		if args.NeedsGUIOpen {
 			return "", domain.NewError(domain.ErrInvalidInput, "needs_gui_open cannot be combined with sandbox_permissions=require_escalated (escalated runs already have GUI access; use needs_gui_open for the sandboxed path)")
 		}
-		if strings.TrimSpace(args.Justification) == "" {
+		if args.Justification == "" {
 			return "", domain.NewError(domain.ErrInvalidInput, "justification is required with sandbox_permissions=require_escalated (ask the user a short yes/no question)")
 		}
-	default:
-		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("sandbox_permissions must be %q or %q", toolkit.SandboxUseDefault, toolkit.SandboxRequireEscalated))
 	}
-	if len(args.Justification) > maxJustificationBytes {
-		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("justification exceeds %d bytes", maxJustificationBytes))
+	if len(args.Justification) > toolkit.MaxJustificationBytes {
+		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("justification exceeds %d bytes", toolkit.MaxJustificationBytes))
 	}
 	if args.YieldTimeMs < 0 || args.YieldTimeMs > maxYieldMs {
 		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("yield_time_ms must be between 0 and %d", maxYieldMs))

@@ -19,7 +19,6 @@ package command
 
 import (
 	"context"
-	"crypto/hmac"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,7 +43,6 @@ const (
 	maxTimeoutMs                int64 = 10 * 60 * 1000
 	maxOutputBytes              int64 = 1 << 20
 	defaultModelOutputBytes           = 64 * 1024
-	maxJustificationBytes             = 240
 	maxWritablePaths                  = 8
 )
 
@@ -102,29 +100,21 @@ type runCmdOutput struct {
 	Note               string `json:"note,omitempty"`
 }
 
-type preparedFingerprint struct {
-	CallID      string                `json:"call_id"`
-	Arguments   json.RawMessage       `json:"arguments"`
-	ReadPaths   []string              `json:"read_paths"`
-	WritePaths  []string              `json:"write_paths"`
-	Risk        domain.RiskLevel      `json:"risk"`
-	Definition  domain.ToolDefinition `json:"definition"`
-	ExecRequest *domain.ExecRequest   `json:"exec_request,omitempty"`
-}
-
 type resolvedWorkingDir struct {
 	Absolute string
 	Display  string
 }
 
 // RunCmdTool adapts process.Runner as the builtin run_cmd domain tool.
+// The prepare/verify protocol (definition checks, HMAC signing) is the
+// shared toolkit.BaseTool skeleton; only argument validation, risk
+// grading and output capture are run_cmd-specific.
 type RunCmdTool struct {
-	def              domain.ToolDefinition
+	base             toolkit.BaseTool
 	validator        *workspacepkg.PathValidator
 	runner           *process.Runner
 	artifacts        domain.ArtifactStore
 	modelOutputBytes int
-	signer           toolkit.Signer
 }
 
 // NewRunCmdTool creates a run_cmd tool bound to a workspace validator and process runner.
@@ -154,53 +144,42 @@ func NewRunCmdToolWithArtifacts(
 	}
 	def := domain.ToolDefinition{
 		Name: "run_cmd",
-		Description: "Execute a shell command inside a sandbox and return its stdout, stderr, exit code and timing. " +
-			"The command runs via 'sh -c' — write it exactly as you would type it in a terminal: pipes, redirection, '&&' chaining, globs and quoting all work. " +
-			"Examples: {\"command\":\"go test ./...\"} · {\"command\":\"python3 plot.py\",\"working_dir\":\"scripts\",\"timeout_ms\":300000} · {\"command\":\"curl -sI https://example.com\",\"needs_network\":true}. " +
-			"Set working_dir explicitly instead of wrapping the command in 'cd ... &&' — it keeps the audit trail accurate. " +
-			"Only 'command' is required: working_dir defaults to '.', env to empty, timeout_ms to 120000, max_output_bytes to 65536. " +
-			"Output beyond the limit is stored as an artifact with a head/tail preview. " +
-			"Inside the sandbox, env entries are filtered by a security allowlist; dropped keys are reported in the output's 'note' field (escalated runs inherit the full user environment). " +
-			"Commands run sandboxed without user approval; only danger-listed patterns and sandbox-escape grants ever prompt. " +
-			"The sandbox denies outbound network/DNS, GUI opens, and writes outside the workspace and temp dir: grant the matching capability when a command needs it — needs_network, needs_gui_open or writable_paths (each a lightweight, rememberable approval) — and reserve sandbox_permissions='require_escalated' (with a justification) for failures none of those explain. " +
+		// Keep the sandbox policy HERE, once: the property descriptions
+		// stay terse and cross-reference these rules instead of repeating
+		// them (every definition byte rides on every model request).
+		Description: "Execute a shell command inside a sandbox and return stdout, stderr, exit code and timing. " +
+			"Runs via 'sh -c' — pipes, redirection, '&&' chaining, globs and quoting all work " +
+			"(e.g. {\"command\":\"go test ./...\"} · {\"command\":\"curl -sI https://example.com\",\"needs_network\":true}). " +
+			"Set working_dir instead of prefixing the command with 'cd ... &&'. " +
+			"Output beyond max_output_bytes is stored as a readable artifact with a head/tail preview. " +
+			"env entries are filtered by a security allowlist; dropped keys are reported in the result's note field. " +
+			"The sandbox denies outbound network/DNS, GUI opens, and writes outside the workspace and temp dir: " +
+			"when a command needs one of these, set the matching scoped flag — needs_network, needs_gui_open or writable_paths " +
+			"(each a lightweight, rememberable approval) — and reserve sandbox_permissions='require_escalated' " +
+			"(with a justification; runs OUTSIDE the sandbox with the full user environment) for failures none of them explain. " +
 			"Never hand a sandbox-blocked command to the user before offering the matching approval.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string","minLength":1,"maxLength":32768,"description":"The shell command to execute, exactly as you would type it in a terminal (e.g. \"go test ./...\" or \"ls -la | head -20\"). Runs via 'sh -c', so pipes, redirection, '&&' chaining, globs and quoting all work."},"working_dir":{"type":"string","minLength":1,"maxLength":4096,"description":"Directory to run the command in, relative to the workspace root (default '.'). Set this instead of prefixing the command with 'cd ... &&'."},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192},"description":"Extra environment variables. Inside the sandbox they are filtered by a security allowlist; dropped keys are reported in the output's note field."},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000,"description":"Kill the command after this many milliseconds (default 120000)."},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576,"description":"Maximum bytes of stdout/stderr returned inline (default 65536); output beyond the limit is stored as an artifact with a head/tail preview."},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"],"description":"'require_escalated' runs OUTSIDE the sandbox with the full user environment after explicit approval and requires a justification; use it only when needs_network/needs_gui_open/writable_paths cannot explain the failure (TTY needs, credential files the sandbox hides, Security-framework TLS); never combine it with the scoped fields."},"needs_network":{"type":"boolean","description":"Grant outbound network and DNS inside the sandbox after a lightweight approval (credentials stay unreadable); do not combine with require_escalated."},"needs_gui_open":{"type":"boolean","description":"Allow opening URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval; do not combine with require_escalated."},"writable_paths":{"type":"array","maxItems":8,"items":{"type":"string","minLength":1,"maxLength":4096},"description":"Extra absolute directories ('~/' expands) the command may write after a lightweight approval; use it for outside-workspace write targets that cannot be stated literally in the command (shell variables, command substitution) and come back denied — literal targets already get a scoped one-shot approval; never credential locations or their ancestors; do not combine with require_escalated."},"justification":{"type":"string","minLength":1,"maxLength":240,"description":"Short note shown to the user at approval time; required with sandbox_permissions='require_escalated', informational otherwise."}},"required":["command"]}`),
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string","minLength":1,"maxLength":32768,"description":"The shell command, exactly as typed in a terminal."},"working_dir":{"type":"string","minLength":1,"maxLength":4096,"default":".","description":"Run directory, relative to the workspace root."},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192},"description":"Extra environment variables."},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000,"default":120000,"description":"Kill the command after this many milliseconds."},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576,"default":65536,"description":"Maximum stdout/stderr bytes returned inline."},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"],"default":"use_default","description":"'require_escalated' runs OUTSIDE the sandbox after explicit approval; requires justification; never combine with the scoped flags."},"needs_network":{"type":"boolean","description":"Grant outbound network/DNS inside the sandbox after a lightweight approval (credentials stay unreadable)."},"needs_gui_open":{"type":"boolean","description":"Allow opening URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval."},"writable_paths":{"type":"array","maxItems":8,"items":{"type":"string","minLength":1,"maxLength":4096},"description":"Extra absolute directories ('~/' expands) writable inside the sandbox after a lightweight approval; only for write targets the command cannot state literally (shell variables, command substitution) that come back denied; never credential locations."},"justification":{"type":"string","minLength":1,"maxLength":240,"description":"Short note shown at approval time; required with require_escalated, informational otherwise."}},"required":["command"]}`),
 		Capabilities: []domain.Capability{domain.CapProcessExec},
 		Source:       domain.ToolSourceBuiltin,
 	}
-	if err := def.Validate(); err != nil {
-		return nil, domain.NewError(domain.ErrInvalidInput, "invalid tool definition", domain.WithCause(err))
-	}
-
-	signer, err := toolkit.NewSigner()
+	base, err := toolkit.NewBaseTool(def)
 	if err != nil {
 		return nil, err
 	}
 	return &RunCmdTool{
-		def:              def,
+		base:             base,
 		validator:        validator,
 		runner:           runner,
 		artifacts:        artifacts,
 		modelOutputBytes: modelOutputBytes,
-		signer:           signer,
 	}, nil
 }
 
 func (t *RunCmdTool) Definition() domain.ToolDefinition {
-	return t.def
+	return t.base.Def
 }
 
 func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	if err := ctx.Err(); err != nil {
-		return domain.PreparedCall{}, err
-	}
-	if err := call.Validate(); err != nil {
-		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "invalid tool call", domain.WithCause(err))
-	}
-	if call.Name != t.def.Name {
-		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("tool call name must be %q", t.def.Name))
-	}
-
 	rawArgs, err := toolkit.DecodeStrict[rawRunCmdArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
@@ -215,18 +194,13 @@ func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 	}
 
 	root := t.validator.Root()
-	prepared := domain.PreparedCall{
-		Call: domain.ToolCall{
-			ID:        call.ID,
-			Name:      t.def.Name,
-			Arguments: toolkit.CloneRawMessage(canonical),
-		},
-		Definition: t.def,
-		Risk:       riskForArgs(args, t.def.Risk()),
+	risk := riskForArgs(args, t.base.Def.Risk())
+	prepared, err := t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{
 		ReadPaths:  []string{root},
 		WritePaths: []string{root},
+		Risk:       &risk,
 		// The typed execution contract the policy layer classifies on
-		// (REVIEW M17/A2); covered by the signature below.
+		// (REVIEW M17/A2); covered by the signature.
 		ExecRequest: &domain.ExecRequest{
 			Argv:          []string{"sh", "-c", args.Command},
 			Escalated:     args.SandboxPermissions == toolkit.SandboxRequireEscalated,
@@ -234,11 +208,14 @@ func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 			NeedsGUIOpen:  args.NeedsGUIOpen,
 			WritablePaths: append([]string(nil), args.WritablePaths...),
 		},
+	})
+	if err != nil {
+		return domain.PreparedCall{}, err
 	}
-	// Sign before rendering the description so the displayed args_hash
-	// correlates with the ArgsHash recorded in permission events.
-	prepared.ArgsHash = t.signPrepared(prepared)
-	prepared.ApprovalDesc = buildApprovalDesc(args, prepared, t.validator.Root())
+	// Render the description AFTER signing so the displayed args_hash
+	// correlates with the ArgsHash recorded in permission events; it is
+	// display-only and deliberately outside the signed fingerprint.
+	prepared.ApprovalDesc = buildApprovalDesc(args, prepared, root)
 	return prepared, nil
 }
 
@@ -260,7 +237,7 @@ func riskForArgs(args runCmdArgs, base domain.RiskLevel) domain.RiskLevel {
 
 func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
 	startedAt := time.Now()
-	if err := t.verifyPreparedCall(prepared); err != nil {
+	if err := t.base.VerifyPreparedCallStructural(prepared); err != nil {
 		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
 	if !hasOnlyWorkspaceRoot(prepared.ReadPaths, t.validator.Root()) || !hasOnlyWorkspaceRoot(prepared.WritePaths, t.validator.Root()) {
@@ -270,6 +247,12 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 	args, err := toolkit.DecodeStrict[runCmdArgs](prepared.Call.Arguments)
 	if err != nil {
 		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
+	}
+	// The risk tier depends on the program and sandbox mode (shell or
+	// escalated ⇒ R3), so recompute it from the signed arguments instead
+	// of assuming the definition default (same discipline as browser).
+	if prepared.Risk != riskForArgs(args, t.base.Def.Risk()) {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call risk mismatch"))
 	}
 	_, resolvedDir, err := validateCanonicalArgs(t.validator, args)
 	if err != nil {
@@ -396,42 +379,6 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 	return contentResultWithArtifacts(prepared.Call.ID, status, startedAt, payload, stdoutRef, stderrRef)
 }
 
-func (t *RunCmdTool) verifyPreparedCall(prepared domain.PreparedCall) error {
-	if prepared.Call.Name != t.def.Name {
-		return domain.NewError(domain.ErrSecurity, "prepared call tool name mismatch")
-	}
-	if !sameDefinition(prepared.Definition, t.def) {
-		return domain.NewError(domain.ErrSecurity, "prepared call definition mismatch")
-	}
-	// The risk tier depends on the program and sandbox mode (shell or
-	// escalated ⇒ R3), so recompute it from the signed arguments instead of
-	// assuming the definition default.
-	args, err := toolkit.DecodeStrict[runCmdArgs](prepared.Call.Arguments)
-	if err != nil {
-		return domain.NewError(domain.ErrSecurity, "prepared call arguments are unreadable")
-	}
-	if prepared.Risk != riskForArgs(args, t.def.Risk()) {
-		return domain.NewError(domain.ErrSecurity, "prepared call risk mismatch")
-	}
-	if expected := t.signPrepared(prepared); !hmac.Equal([]byte(prepared.ArgsHash), []byte(expected)) {
-		return domain.NewError(domain.ErrSecurity, "prepared call verification failed")
-	}
-	return nil
-}
-
-func (t *RunCmdTool) signPrepared(prepared domain.PreparedCall) string {
-	fingerprint := preparedFingerprint{
-		CallID:      prepared.Call.ID.String(),
-		Arguments:   toolkit.CloneRawMessage(prepared.Call.Arguments),
-		ReadPaths:   append([]string(nil), prepared.ReadPaths...),
-		WritePaths:  append([]string(nil), prepared.WritePaths...),
-		Risk:        prepared.Risk,
-		Definition:  prepared.Definition,
-		ExecRequest: prepared.ExecRequest,
-	}
-	return t.signer.SignFingerprint(fingerprint)
-}
-
 // Default values applied when the model omits optional parameters, keeping
 // run_cmd calls terse (only 'command' is required).
 const (
@@ -448,15 +395,16 @@ func validateArgs(
 	}
 
 	args := runCmdArgs{
-		Command:            strings.TrimSpace(*raw.Command),
-		Env:                map[string]string{},
-		TimeoutMs:          defaultTimeoutMs,
-		MaxOutputBytes:     defaultMaxOutputBytes,
-		SandboxPermissions: toolkit.SandboxUseDefault,
+		Command:        strings.TrimSpace(*raw.Command),
+		Env:            map[string]string{},
+		TimeoutMs:      defaultTimeoutMs,
+		MaxOutputBytes: defaultMaxOutputBytes,
 	}
-	if raw.SandboxPermissions != nil {
-		args.SandboxPermissions = strings.TrimSpace(*raw.SandboxPermissions)
+	permissions, err := toolkit.ParseSandboxPermissions(raw.SandboxPermissions)
+	if err != nil {
+		return runCmdArgs{}, resolvedWorkingDir{}, err
 	}
+	args.SandboxPermissions = permissions
 	if raw.NeedsNetwork != nil {
 		args.NeedsNetwork = *raw.NeedsNetwork
 	}
@@ -466,9 +414,7 @@ func validateArgs(
 	if raw.WritablePaths != nil {
 		args.WritablePaths = append([]string(nil), (*raw.WritablePaths)...)
 	}
-	if raw.Justification != nil {
-		args.Justification = strings.TrimSpace(*raw.Justification)
-	}
+	args.Justification = toolkit.NormalizeJustification(raw.Justification)
 	if raw.Env != nil {
 		args.Env = cloneStringMap(*raw.Env)
 	}
@@ -517,6 +463,15 @@ func validateCanonicalArgs(
 	}
 	args.WritablePaths = writable
 
+	// Canonical arguments re-parsed at Execute time may carry any string
+	// here (they are HMAC-covered, but the parse keeps one lenient
+	// behavior with Prepare); after normalization only the two enum
+	// values remain, so the switch below needs no default branch.
+	permissions, err := toolkit.ParseSandboxPermissions(&args.SandboxPermissions)
+	if err != nil {
+		return runCmdArgs{}, resolvedWorkingDir{}, err
+	}
+	args.SandboxPermissions = permissions
 	switch args.SandboxPermissions {
 	case toolkit.SandboxUseDefault:
 		// A justification is accepted on any call: it is only an
@@ -524,9 +479,6 @@ func validateCanonicalArgs(
 		// privileges. Rejecting it for sandboxed calls taught models to
 		// retry the same call in a loop (observed 11 consecutive
 		// prepare_failed results in one session).
-		if len(args.Justification) > maxJustificationBytes {
-			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("justification exceeds %d bytes", maxJustificationBytes))
-		}
 	case toolkit.SandboxRequireEscalated:
 		if args.NeedsNetwork || args.NeedsGUIOpen || len(args.WritablePaths) > 0 {
 			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "needs_network/needs_gui_open/writable_paths cannot be combined with sandbox_permissions=require_escalated (escalated runs already have full network, GUI and write access; use the scoped flags for the sandboxed path)")
@@ -534,11 +486,9 @@ func validateCanonicalArgs(
 		if args.Justification == "" {
 			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, "justification is required with sandbox_permissions=require_escalated (ask the user a short yes/no question)")
 		}
-		if len(args.Justification) > maxJustificationBytes {
-			return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("justification exceeds %d bytes", maxJustificationBytes))
-		}
-	default:
-		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("sandbox_permissions must be %q or %q", toolkit.SandboxUseDefault, toolkit.SandboxRequireEscalated))
+	}
+	if len(args.Justification) > toolkit.MaxJustificationBytes {
+		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("justification exceeds %d bytes", toolkit.MaxJustificationBytes))
 	}
 	return args, resolvedDir, nil
 }
@@ -960,24 +910,6 @@ func contentResultWithArtifacts(
 		FinishedAt: time.Now(),
 		Metadata:   metadata,
 	}
-}
-
-func sameDefinition(left, right domain.ToolDefinition) bool {
-	if left.Name != right.Name || left.Description != right.Description || left.Source != right.Source {
-		return false
-	}
-	if string(left.InputSchema) != string(right.InputSchema) {
-		return false
-	}
-	if len(left.Capabilities) != len(right.Capabilities) {
-		return false
-	}
-	for i := range left.Capabilities {
-		if left.Capabilities[i] != right.Capabilities[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func cloneStringMap(values map[string]string) map[string]string {

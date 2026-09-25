@@ -436,8 +436,27 @@ func TestRunCmdToolRejectsTamperingAndWorkspaceEscape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare(valid) error = %v", err)
 	}
-	prepared.WritePaths = []string{filepath.Join(root, "other")}
-	prepared.ArgsHash = tool.signPrepared(prepared)
+	// A properly-signed prepared call whose write binding is NOT the
+	// workspace root must still fail closed at Execute time: the binding
+	// check is semantic, not something a valid signature can paper over.
+	canonical := mustMarshalRaw(t, runCmdArgs{
+		Command:        pyCmd(python, "print('ok')"),
+		WorkingDir:     ".",
+		Env:            map[string]string{},
+		TimeoutMs:      1000,
+		MaxOutputBytes: 1024,
+	})
+	prepared, err = tool.base.PrepareCall(context.Background(), domain.ToolCall{
+		ID:        prepared.Call.ID,
+		Name:      "run_cmd",
+		Arguments: canonical,
+	}, canonical, toolkit.PrepareOptions{
+		ReadPaths:  []string{root},
+		WritePaths: []string{filepath.Join(root, "other")},
+	})
+	if err != nil {
+		t.Fatalf("PrepareCall(invalid binding) error = %v", err)
+	}
 	invalidBindings := tool.Execute(context.Background(), prepared)
 	assertToolResultError(t, invalidBindings, domain.ToolStatusError, domain.ErrSecurity)
 }
@@ -586,6 +605,40 @@ func TestRunCmdEscalationValidation(t *testing.T) {
 		assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 	})
 
+	t.Run("literal null and empty sandbox_permissions mean the default sandbox", func(t *testing.T) {
+		// Some models serialize an unset optional string as "" or the
+		// literal "null" when they fill every declared schema property
+		// (observed from deepseek-family models); rejecting the call costs
+		// a blind retry loop, so both spellings parse as use_default.
+		for _, spelling := range []string{"", "null", "NULL", " null "} {
+			prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+				Command:            stringPtr("ls -la"),
+				SandboxPermissions: stringPtr(spelling),
+				Justification:      stringPtr("null"),
+			}))
+			if err != nil {
+				t.Fatalf("Prepare(sandbox_permissions=%q) error = %v", spelling, err)
+			}
+			if prepared.Risk != domain.R2 {
+				t.Fatalf("sandbox_permissions=%q risk = %v, want R2 (default sandbox)", spelling, prepared.Risk)
+			}
+			if strings.Contains(prepared.ApprovalDesc, "ESCALATED") || strings.Contains(prepared.ApprovalDesc, "note[") {
+				t.Fatalf("sandbox_permissions=%q must not look escalated or carry a null note: %q", spelling, prepared.ApprovalDesc)
+			}
+		}
+	})
+
+	t.Run("invalid sandbox_permissions echoes the received value", func(t *testing.T) {
+		_, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+			Command:            stringPtr("ls"),
+			SandboxPermissions: stringPtr("escalated"),
+		}))
+		assertAgentErrorCode(t, err, domain.ErrInvalidInput)
+		if !strings.Contains(err.Error(), "got \"escalated\"") {
+			t.Fatalf("error must echo the received value, got %q", err.Error())
+		}
+	})
+
 	t.Run("justification accepted with use_default as informational note", func(t *testing.T) {
 		// A justification carries no privileges, so rejecting it on sandboxed
 		// calls only taught models to retry in a loop. It is accepted and
@@ -611,7 +664,7 @@ func TestRunCmdEscalationValidation(t *testing.T) {
 	t.Run("justification length bound still applies with use_default", func(t *testing.T) {
 		_, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
 			Command:       stringPtr("go build ./..."),
-			Justification: stringPtr(strings.Repeat("x", maxJustificationBytes+1)),
+			Justification: stringPtr(strings.Repeat("x", toolkit.MaxJustificationBytes+1)),
 		}))
 		assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 	})
@@ -1371,7 +1424,6 @@ func TestRunCmdToolRejectsKilledBindingMismatch(t *testing.T) {
 		t.Fatalf("Prepare() error = %v", err)
 	}
 	prepared.Call.Name = "other"
-	prepared.ArgsHash = tool.signPrepared(prepared)
 	result := tool.Execute(context.Background(), prepared)
 	assertToolResultError(t, result, domain.ToolStatusError, domain.ErrSecurity)
 }

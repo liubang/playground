@@ -41,6 +41,7 @@ go_test(
         "base_test.go",
         "binary_test.go",
         "cache_test.go",
+        "command_test.go",
         "text_test.go",
     ],
     embed = [":toolkit_lib"],

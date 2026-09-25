@@ -41,7 +41,50 @@ const (
 
 	SandboxUseDefault       = "use_default"
 	SandboxRequireEscalated = "require_escalated"
+
+	// MaxJustificationBytes bounds the approval-time note shared by
+	// run_cmd and exec_session (the JSON schemas declare the same limit).
+	MaxJustificationBytes = 240
 )
+
+// ParseSandboxPermissions normalizes the optional sandbox_permissions
+// field shared by run_cmd and exec_session, giving both shell tools one
+// lenient parsing behavior. Some models serialize an unset optional string
+// as "" or the literal "null" (observed from deepseek-family models that
+// fill every declared schema property); both mean the default sandbox,
+// and rejecting them costs a blind retry loop. A value outside the enum
+// is rejected WITH the received value echoed, so the model can correct
+// course in a single retry instead of guessing what it sent.
+func ParseSandboxPermissions(raw *string) (string, error) {
+	if raw == nil {
+		return SandboxUseDefault, nil
+	}
+	value := strings.TrimSpace(*raw)
+	if value == "" || strings.EqualFold(value, "null") {
+		return SandboxUseDefault, nil
+	}
+	if value == SandboxUseDefault || value == SandboxRequireEscalated {
+		return value, nil
+	}
+	return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf(
+		"sandbox_permissions must be %q or %q, got %q",
+		SandboxUseDefault, SandboxRequireEscalated, domain.TruncateForErrorEcho(value),
+	))
+}
+
+// NormalizeJustification trims the optional approval-time note, treating
+// the literal "null" (the same model serialization quirk as
+// sandbox_permissions) as unset so it never surfaces in the approval UI.
+func NormalizeJustification(raw *string) string {
+	if raw == nil {
+		return ""
+	}
+	value := strings.TrimSpace(*raw)
+	if strings.EqualFold(value, "null") {
+		return ""
+	}
+	return value
+}
 
 // ValidateCommandText trims and bounds a shell command; toolName labels the
 // missing-command error's fix hint.

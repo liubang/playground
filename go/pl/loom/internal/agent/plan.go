@@ -209,7 +209,7 @@ func NewUpdatePlanTool(cell *PlanCell) (*UpdatePlanTool, error) {
 		Description: "Update the task plan: the checklist you maintain for the current multi-step task. " +
 			"Submit the COMPLETE plan snapshot on every call — each call fully replaces the previous plan (not a diff). " +
 			"'plan' lists the steps (at least 2); each step carries a goal, a status ('todo' | 'in_progress' | 'done'), " +
-			"and an optional evidence note (a one-line verification) for a completed step. " +
+			"and optional evidence notes (one-line verifications, a list of strings) for a completed step. " +
 			"'title' is a few words naming the overall objective — required when you first create the plan, omittable on later revisions. " +
 			"The plan's latest state is automatically shown to you before every model call and persists across turns and compaction; " +
 			"when to plan, step granularity, and in_progress discipline follow the Task Planning guidance.",

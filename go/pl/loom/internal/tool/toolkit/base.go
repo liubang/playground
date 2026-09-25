@@ -62,6 +62,8 @@ type PrepareOptions struct {
 	WriteRequest *domain.WriteRequest
 	// URLRequest is the typed URL contract (web_fetch, browser).
 	URLRequest *domain.URLRequest
+	// ExecRequest is the typed execution contract (run_cmd, exec_session).
+	ExecRequest *domain.ExecRequest
 	// Risk overrides the definition's default risk level. Tools that
 	// grade risk per argument (browser's riskForAction) set it so the
 	// signed fingerprint carries the graded level.
@@ -99,6 +101,7 @@ func (b *BaseTool) PrepareCall(ctx context.Context, call domain.ToolCall, canoni
 		WritePaths:   SortedStrings(opts.WritePaths),
 		URLRequest:   opts.URLRequest,
 		WriteRequest: opts.WriteRequest,
+		ExecRequest:  opts.ExecRequest,
 	}
 	prepared.ArgsHash = b.signer.Sign(prepared)
 	return prepared, nil

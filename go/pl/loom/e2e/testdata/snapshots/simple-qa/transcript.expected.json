@@ -323,12 +323,12 @@
                 "capabilities": [
                   "process.exec"
                 ],
-                "description": "Start a long-running command as a background session inside the sandbox and return a session_id, without waiting for it to finish. Use it for processes that stay alive or need interaction: dev servers, watch-mode test runners, REPLs, database consoles; for one-shot commands that run to completion, prefer run_cmd. The command runs via 'sh -c' — write it exactly as you would type it in a terminal (e.g. {\"command\":\"npm run dev\",\"working_dir\":\"web\"}). Set working_dir explicitly instead of wrapping the command in 'cd ... \u0026\u0026'. Only 'command' is required: working_dir defaults to '.', yield_time_ms to 1000 (0 returns immediately; max 300000), max_output_bytes to 16384. The call returns early with status='running' and the output produced so far; drive the session afterwards with write_stdin (send input, or poll with empty chars). stdout and stderr are merged in arrival order like a terminal. The session runs sandboxed like run_cmd (no outbound network/DNS, no GUI opens, no writes outside the workspace and temp dir): grant GUI opens from inside the sandbox with needs_gui_open=true (e.g. a dev server opening the browser), and run outside the sandbox only via sandbox_permissions='require_escalated' with a justification. Sessions are killed automatically after 30 minutes without any write_stdin interaction — poll long-lived services periodically if they must stay up.",
+                "description": "Start a long-running command as a background session inside the sandbox and return a session_id without waiting for it to finish: dev servers, watch-mode test runners, REPLs, database consoles; for one-shot commands that run to completion, prefer run_cmd. Runs via 'sh -c' like run_cmd (e.g. {\"command\":\"npm run dev\",\"working_dir\":\"web\"}); run_cmd's sandbox rules and scoped flags apply — needs_gui_open covers a session opening URLs/apps, sandbox_permissions='require_escalated' with a justification runs the session OUTSIDE the sandbox. The call returns early with status='running' and the output produced so far; drive the session afterwards with write_stdin (send input, or poll with empty chars). stdout and stderr are merged in arrival order. Sessions are killed automatically after 30 minutes without write_stdin interaction — poll long-lived services periodically if they must stay up.",
                 "input_schema": {
                   "additionalProperties": false,
                   "properties": {
                     "command": {
-                      "description": "The shell command to run as a session, exactly as you would type it in a terminal (e.g. \"npm run dev\"). Runs via 'sh -c'.",
+                      "description": "The shell command to run as a session, via 'sh -c'.",
                       "maxLength": 32768,
                       "minLength": 1,
                       "type": "string"
@@ -338,18 +338,19 @@
                         "maxLength": 8192,
                         "type": "string"
                       },
-                      "description": "Extra environment variables (filtered by the sandbox security allowlist).",
+                      "description": "Extra environment variables (sandbox-filtered allowlist).",
                       "maxProperties": 64,
                       "type": "object"
                     },
                     "justification": {
-                      "description": "Short note shown to the user at approval time; required with sandbox_permissions='require_escalated'.",
+                      "description": "Short note shown at approval time; required with require_escalated.",
                       "maxLength": 240,
                       "minLength": 1,
                       "type": "string"
                     },
                     "max_output_bytes": {
-                      "description": "Maximum bytes of merged output returned (default 16384).",
+                      "default": 16384,
+                      "description": "Maximum bytes of merged output returned.",
                       "maximum": 65536,
                       "minimum": 0,
                       "type": "integer"
@@ -359,7 +360,8 @@
                       "type": "boolean"
                     },
                     "sandbox_permissions": {
-                      "description": "'require_escalated' runs the session OUTSIDE the sandbox with the full user environment after explicit approval; requires a justification.",
+                      "default": "use_default",
+                      "description": "'require_escalated' runs the session OUTSIDE the sandbox after explicit approval; requires justification.",
                       "enum": [
                         "use_default",
                         "require_escalated"
@@ -367,13 +369,15 @@
                       "type": "string"
                     },
                     "working_dir": {
-                      "description": "Directory to run the command in, relative to the workspace root (default '.'). Set this instead of prefixing the command with 'cd ... \u0026\u0026'.",
+                      "default": ".",
+                      "description": "Run directory, relative to the workspace root.",
                       "maxLength": 4096,
                       "minLength": 1,
                       "type": "string"
                     },
                     "yield_time_ms": {
-                      "description": "How long to wait for the first output before returning in milliseconds (default 1000; 0 returns immediately).",
+                      "default": 1000,
+                      "description": "Milliseconds to wait for the first output before returning (0 returns immediately).",
                       "maximum": 300000,
                       "minimum": 0,
                       "type": "integer"
@@ -968,12 +972,12 @@
                 "capabilities": [
                   "process.exec"
                 ],
-                "description": "Execute a shell command inside a sandbox and return its stdout, stderr, exit code and timing. The command runs via 'sh -c' — write it exactly as you would type it in a terminal: pipes, redirection, '\u0026\u0026' chaining, globs and quoting all work. Examples: {\"command\":\"go test ./...\"} · {\"command\":\"python3 plot.py\",\"working_dir\":\"scripts\",\"timeout_ms\":300000} · {\"command\":\"curl -sI https://example.com\",\"needs_network\":true}. Set working_dir explicitly instead of wrapping the command in 'cd ... \u0026\u0026' — it keeps the audit trail accurate. Only 'command' is required: working_dir defaults to '.', env to empty, timeout_ms to 120000, max_output_bytes to 65536. Output beyond the limit is stored as an artifact with a head/tail preview. Inside the sandbox, env entries are filtered by a security allowlist; dropped keys are reported in the output's 'note' field (escalated runs inherit the full user environment). Commands run sandboxed without user approval; only danger-listed patterns and sandbox-escape grants ever prompt. The sandbox denies outbound network/DNS, GUI opens, and writes outside the workspace and temp dir: grant the matching capability when a command needs it — needs_network, needs_gui_open or writable_paths (each a lightweight, rememberable approval) — and reserve sandbox_permissions='require_escalated' (with a justification) for failures none of those explain. Never hand a sandbox-blocked command to the user before offering the matching approval.",
+                "description": "Execute a shell command inside a sandbox and return stdout, stderr, exit code and timing. Runs via 'sh -c' — pipes, redirection, '\u0026\u0026' chaining, globs and quoting all work (e.g. {\"command\":\"go test ./...\"} · {\"command\":\"curl -sI https://example.com\",\"needs_network\":true}). Set working_dir instead of prefixing the command with 'cd ... \u0026\u0026'. Output beyond max_output_bytes is stored as a readable artifact with a head/tail preview. env entries are filtered by a security allowlist; dropped keys are reported in the result's note field. The sandbox denies outbound network/DNS, GUI opens, and writes outside the workspace and temp dir: when a command needs one of these, set the matching scoped flag — needs_network, needs_gui_open or writable_paths (each a lightweight, rememberable approval) — and reserve sandbox_permissions='require_escalated' (with a justification; runs OUTSIDE the sandbox with the full user environment) for failures none of them explain. Never hand a sandbox-blocked command to the user before offering the matching approval.",
                 "input_schema": {
                   "additionalProperties": false,
                   "properties": {
                     "command": {
-                      "description": "The shell command to execute, exactly as you would type it in a terminal (e.g. \"go test ./...\" or \"ls -la | head -20\"). Runs via 'sh -c', so pipes, redirection, '\u0026\u0026' chaining, globs and quoting all work.",
+                      "description": "The shell command, exactly as typed in a terminal.",
                       "maxLength": 32768,
                       "minLength": 1,
                       "type": "string"
@@ -983,32 +987,34 @@
                         "maxLength": 8192,
                         "type": "string"
                       },
-                      "description": "Extra environment variables. Inside the sandbox they are filtered by a security allowlist; dropped keys are reported in the output's note field.",
+                      "description": "Extra environment variables.",
                       "maxProperties": 64,
                       "type": "object"
                     },
                     "justification": {
-                      "description": "Short note shown to the user at approval time; required with sandbox_permissions='require_escalated', informational otherwise.",
+                      "description": "Short note shown at approval time; required with require_escalated, informational otherwise.",
                       "maxLength": 240,
                       "minLength": 1,
                       "type": "string"
                     },
                     "max_output_bytes": {
-                      "description": "Maximum bytes of stdout/stderr returned inline (default 65536); output beyond the limit is stored as an artifact with a head/tail preview.",
+                      "default": 65536,
+                      "description": "Maximum stdout/stderr bytes returned inline.",
                       "maximum": 1048576,
                       "minimum": 1,
                       "type": "integer"
                     },
                     "needs_gui_open": {
-                      "description": "Allow opening URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval; do not combine with require_escalated.",
+                      "description": "Allow opening URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval.",
                       "type": "boolean"
                     },
                     "needs_network": {
-                      "description": "Grant outbound network and DNS inside the sandbox after a lightweight approval (credentials stay unreadable); do not combine with require_escalated.",
+                      "description": "Grant outbound network/DNS inside the sandbox after a lightweight approval (credentials stay unreadable).",
                       "type": "boolean"
                     },
                     "sandbox_permissions": {
-                      "description": "'require_escalated' runs OUTSIDE the sandbox with the full user environment after explicit approval and requires a justification; use it only when needs_network/needs_gui_open/writable_paths cannot explain the failure (TTY needs, credential files the sandbox hides, Security-framework TLS); never combine it with the scoped fields.",
+                      "default": "use_default",
+                      "description": "'require_escalated' runs OUTSIDE the sandbox after explicit approval; requires justification; never combine with the scoped flags.",
                       "enum": [
                         "use_default",
                         "require_escalated"
@@ -1016,19 +1022,21 @@
                       "type": "string"
                     },
                     "timeout_ms": {
-                      "description": "Kill the command after this many milliseconds (default 120000).",
+                      "default": 120000,
+                      "description": "Kill the command after this many milliseconds.",
                       "maximum": 600000,
                       "minimum": 1,
                       "type": "integer"
                     },
                     "working_dir": {
-                      "description": "Directory to run the command in, relative to the workspace root (default '.'). Set this instead of prefixing the command with 'cd ... \u0026\u0026'.",
+                      "default": ".",
+                      "description": "Run directory, relative to the workspace root.",
                       "maxLength": 4096,
                       "minLength": 1,
                       "type": "string"
                     },
                     "writable_paths": {
-                      "description": "Extra absolute directories ('~/' expands) the command may write after a lightweight approval; use it for outside-workspace write targets that cannot be stated literally in the command (shell variables, command substitution) and come back denied — literal targets already get a scoped one-shot approval; never credential locations or their ancestors; do not combine with require_escalated.",
+                      "description": "Extra absolute directories ('~/' expands) writable inside the sandbox after a lightweight approval; only for write targets the command cannot state literally (shell variables, command substitution) that come back denied; never credential locations.",
                       "items": {
                         "maxLength": 4096,
                         "minLength": 1,
@@ -1048,7 +1056,7 @@
               },
               {
                 "capabilities": null,
-                "description": "Set, update, or close a cross-turn goal for long-running work. A goal persists across turns and context compactions; while a goal is active the run automatically continues with a reminder of the objective after each pause instead of ending, so use it for multi-step tasks that must be carried to a verified end state. Set 'objective' (with optional 'token_budget') to activate or redirect; the budget counts cumulative input+output tokens and, when exhausted, the goal is marked budget_limited and you get one final turn to summarize progress — it never hard-stops you mid-work. Call with status='complete' only when the objective is verifiably achieved (requirement-by-requirement evidence from the current state), or status='blocked' only when truly stuck without user input. When closing with status, you may also pass 'objective' as the final summary — it is recorded on the goal. Do not call this tool for trivial single-step tasks.",
+                "description": "Set, redirect, or close a cross-turn goal for long-running work. While a goal is active the run automatically continues with a reminder of the objective after each pause (the goal persists across turns and compactions), so use it only for multi-step tasks that must reach a verified end state — never for trivial single-step work. Set 'objective' to activate or redirect; optional 'token_budget' counts cumulative input+output tokens and, when exhausted, marks the goal budget_limited and gives you one final turn to summarize — it never hard-stops you mid-work. Call status='complete' only with requirement-by-requirement evidence from the current state, or status='blocked' only when truly stuck without user input; when closing with a status, 'objective' may carry the final summary recorded on the goal.",
                 "input_schema": {
                   "additionalProperties": false,
                   "properties": {
@@ -1076,7 +1084,7 @@
               },
               {
                 "capabilities": null,
-                "description": "Update the task plan: the checklist you maintain for the current multi-step task. Submit the COMPLETE plan snapshot on every call — each call fully replaces the previous plan (not a diff). 'plan' lists the steps (at least 2); each step carries a goal, a status ('todo' | 'in_progress' | 'done'), and an optional evidence note (a one-line verification) for a completed step. 'title' is a few words naming the overall objective — required when you first create the plan, omittable on later revisions. The plan's latest state is automatically shown to you before every model call and persists across turns and compaction; when to plan, step granularity, and in_progress discipline follow the Task Planning guidance.",
+                "description": "Update the task plan: the checklist you maintain for the current multi-step task. Submit the COMPLETE plan snapshot on every call — each call fully replaces the previous plan (not a diff). 'plan' lists the steps (at least 2); each step carries a goal, a status ('todo' | 'in_progress' | 'done'), and optional evidence notes (one-line verifications, a list of strings) for a completed step. 'title' is a few words naming the overall objective — required when you first create the plan, omittable on later revisions. The plan's latest state is automatically shown to you before every model call and persists across turns and compaction; when to plan, step granularity, and in_progress discipline follow the Task Planning guidance.",
                 "input_schema": {
                   "additionalProperties": false,
                   "properties": {

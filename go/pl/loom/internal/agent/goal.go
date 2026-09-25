@@ -229,16 +229,14 @@ func NewUpdateGoalTool(cell *GoalCell) (*UpdateGoalTool, error) {
 	}
 	def := domain.ToolDefinition{
 		Name: "update_goal",
-		Description: "Set, update, or close a cross-turn goal for long-running work. " +
-			"A goal persists across turns and context compactions; while a goal is active the run automatically continues " +
-			"with a reminder of the objective after each pause instead of ending, so use it for multi-step tasks that must " +
-			"be carried to a verified end state. Set 'objective' (with optional 'token_budget') to activate or redirect; " +
-			"the budget counts cumulative input+output tokens and, when exhausted, the goal is marked budget_limited and " +
-			"you get one final turn to summarize progress — it never hard-stops you mid-work. " +
-			"Call with status='complete' only when the objective is verifiably achieved (requirement-by-requirement " +
-			"evidence from the current state), or status='blocked' only when truly stuck without user input. " +
-			"When closing with status, you may also pass 'objective' as the final summary — it is recorded on the goal. " +
-			"Do not call this tool for trivial single-step tasks.",
+		Description: "Set, redirect, or close a cross-turn goal for long-running work. While a goal is active the run " +
+			"automatically continues with a reminder of the objective after each pause (the goal persists across turns " +
+			"and compactions), so use it only for multi-step tasks that must reach a verified end state — never for " +
+			"trivial single-step work. Set 'objective' to activate or redirect; optional 'token_budget' counts cumulative " +
+			"input+output tokens and, when exhausted, marks the goal budget_limited and gives you one final turn to " +
+			"summarize — it never hard-stops you mid-work. Call status='complete' only with requirement-by-requirement " +
+			"evidence from the current state, or status='blocked' only when truly stuck without user input; when closing " +
+			"with a status, 'objective' may carry the final summary recorded on the goal.",
 		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"objective":{"type":"string","minLength":1,"maxLength":8192},"token_budget":{"type":"integer","minimum":1},"status":{"type":"string","enum":["complete","blocked"]}}}`),
 		Source:      domain.ToolSourceBuiltin,
 	}
