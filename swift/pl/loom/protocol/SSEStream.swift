@@ -154,6 +154,21 @@ struct SSEClient: Sendable {
     let baseURL: URL
     let token: String
 
+    /// Dedicated session for long-lived streams: every SSE stream pins one
+    /// HTTP/1.1 connection for its whole lifetime, so streams must never
+    /// share URLSession.shared's per-host pool (httpMaximumConnectionsPerHost,
+    /// 6) with ordinary API calls — half a dozen streams starve the pool and
+    /// API calls queue client-side without ever reaching the server (the
+    /// 2026-09 incident; EventStreamClient's WS-first transport avoids this
+    /// path entirely, it is the fallback for WS-blind servers/proxies).
+    private static let streamSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        // Streams only ever compete with other streams on this session;
+        // keep headroom for many background sessions past the default 6.
+        config.httpMaximumConnectionsPerHost = 16
+        return URLSession(configuration: config)
+    }()
+
     init(baseURL: URL, token: String) {
         var base = baseURL.absoluteString
         while base.hasSuffix("/") {
@@ -188,7 +203,7 @@ struct SSEClient: Sendable {
                 request.timeoutInterval = .infinity
 
                 do {
-                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    let (bytes, response) = try await Self.streamSession.bytes(for: request)
                     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                     guard status == 200 else {
                         switch status {

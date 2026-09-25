@@ -233,6 +233,10 @@ final class SessionListStore {
 
     func store(for sessionId: String) -> SessionStore {
         if let existing = stores[sessionId] {
+            // A backgrounded store is paused (setActive); selecting it
+            // again resumes the snapshot+stream handshake. No-op while
+            // already running.
+            existing.start()
             return existing
         }
         let workspaceId = sessions.first { $0.id == sessionId }?.workspaceId
@@ -248,6 +252,18 @@ final class SessionListStore {
             store.start()
         }
         return store
+    }
+
+    /// Keeps only the selected session's store streaming. Background
+    /// stores keep their UI state (drafts, transcript rows) but pause
+    /// their event loops: every started store otherwise pins a stream
+    /// connection and a server-side subscriber for the rest of the app's
+    /// lifetime, so a long clicking session accumulates one live stream
+    /// per visited session.
+    func setActive(_ sessionId: String?) {
+        for (id, store) in stores where id != sessionId {
+            store.pause()
+        }
     }
 
     // MARK: Session commands

@@ -492,6 +492,28 @@ final class SessionStore {
         Task { [weak self] in await self?.loadApprovalMode() }
     }
 
+    /// Whether the event loop (snapshot refresh + event stream) is running.
+    var isStreaming: Bool { loopTask != nil }
+
+    /// Suspends the event loop and event stream without touching
+    /// accumulated state (rows, composer drafts, pending approvals).
+    /// Unlike stop() this is reversible: the next start() re-runs the
+    /// snapshot+stream handshake, which is gapless by design (snapshot
+    /// watermark → stream cursor). Applied to sessions that lose focus so
+    /// background stores stop pinning a stream connection and a
+    /// server-side subscriber each — N visited sessions would otherwise
+    /// hold N streams for the rest of the app's lifetime.
+    func pause() {
+        guard !stopped else { return }
+        loopTask?.cancel()
+        loopTask = nil
+        deltaFlushTask?.cancel()
+        deltaFlushTask = nil
+        // Buffered deltas are safe to drop: the restart's snapshot refresh
+        // replaces the projection wholesale from the canonical log.
+        deltaBuffer.removeAll()
+    }
+
     func stop() {
         stopped = true
         loopTask?.cancel()

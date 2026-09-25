@@ -239,6 +239,13 @@ struct RootView: View {
         .ignoresSafeArea(.container, edges: .top)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: sidebarCollapsed)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: selection == nil)
+        // Only the selected session streams: background stores pause their
+        // event loops (lossless — drafts/rows survive, resume is the
+        // gapless snapshot+stream handshake) instead of pinning one stream
+        // connection per visited session for the app's lifetime.
+        .onChange(of: selection) { _, newSelection in
+            list.setActive(newSelection)
+        }
         .sheet(isPresented: Binding(
             get: { settingsStore != nil },
             set: {
