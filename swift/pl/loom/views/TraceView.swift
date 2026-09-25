@@ -60,7 +60,8 @@ private struct TraceRow: Identifiable {
     var text = ""
     /// Seconds since the first prompt (user/assistant); -1 when unknown.
     var ts: Double = -1
-    /// Streaming assistant text (.trace-dur "Generating…").
+    /// Streaming assistant text (.trace-dur "Generating…") / open
+    /// reasoning segment — the semantic "this row is alive" flag.
     var live = false
     var reasoningMs: Int64?
     var tool: ToolRenderModel?
@@ -247,7 +248,7 @@ struct SessionTraceView: View {
                                   text: text.text, live: text.live))
                 case let .reasoning(reasoning) where !reasoning.text.isEmpty:
                     push(TraceRow(id: segment.id, kind: .reasoning, turn: activeTurn,
-                                  text: reasoning.text))
+                                  text: reasoning.text, live: reasoning.live))
                 case let .tool(tool):
                     push(TraceRow(id: segment.id, kind: .tool, turn: activeTurn,
                                   tool: ToolRenderModel(live: tool)))
@@ -632,10 +633,8 @@ private struct TraceRowView: View {
         VStack(alignment: .leading, spacing: 0) {
             Button(action: onToggle) {
                 HStack(spacing: 8) {
-                    Circle()
-                        .fill(row.kind.dotColor)
-                        .frame(width: 8, height: 8)
-                        .opacity(row.kind == .reasoning ? 0.5 : 1)
+                    TraceDot(color: row.kind.dotColor, dim: row.kind == .reasoning,
+                             live: isLive)
                         .padding(.leading, 12)
                     badge
                     rowText
@@ -659,6 +658,18 @@ private struct TraceRowView: View {
             if expanded {
                 TraceRowDetail(row: row, onLocateInChat: onLocateInChat)
             }
+        }
+    }
+
+    /// Semantic liveness — running tool / streaming text / open reasoning
+    /// segment. Position is never consulted: the tail row and the live row
+    /// routinely disagree (a streaming reply sits below finished tools,
+    /// parallel calls keep several rows alive at once).
+    private var isLive: Bool {
+        switch row.kind {
+        case .tool: row.tool?.status == .running
+        case .assistant, .reasoning: row.live
+        default: false
         }
     }
 
@@ -734,6 +745,51 @@ private struct TraceRowView: View {
     /// TraceView.tsx fmtMs: sub-second in ms, then formatDur.
     static func fmtMs(_ ms: Int64) -> String {
         ms < 1000 ? "\(ms)ms" : mazeFormatDur(Double(ms) / 1000)
+    }
+}
+
+/// Gutter dot. A live row emits a sonar ring at the shared 1.6s cadence
+/// (plan node, maze is-live) — an ambient "the agent is here" signal,
+/// never an alarm. Reduce Motion degrades the ring to a static halo.
+/// The opaque base occludes the gutter rail (the dim reasoning dot used
+/// to let it show through; composite color unchanged).
+private struct TraceDot: View {
+    let color: Color
+    let dim: Bool
+    let live: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var rippling = false
+
+    var body: some View {
+        ZStack {
+            Circle().fill(Theme.bg0)
+            Circle()
+                .fill(color)
+                .opacity(dim ? 0.5 : 1)
+            if live {
+                Circle()
+                    .stroke(color.opacity(0.55), lineWidth: 1)
+                    .scaleEffect(reduceMotion ? 1.6 : rippling ? 2.1 : 1)
+                    .opacity(reduceMotion ? 1 : rippling ? 0 : 0.9)
+            }
+        }
+        .frame(width: 8, height: 8)
+        .onAppear { startRipple() }
+        .onChange(of: live) { _, new in
+            if new {
+                startRipple()
+            } else {
+                rippling = false
+            }
+        }
+    }
+
+    private func startRipple() {
+        guard live, !reduceMotion, !rippling else { return }
+        withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) {
+            rippling = true
+        }
     }
 }
 
