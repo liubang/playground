@@ -353,19 +353,50 @@ struct ReasoningBlock: View {
     }
 
     /// Scans from the requested end and stops at the first non-empty
-    /// line — the previous implementation trimmed and filtered EVERY
-    /// line on every body evaluation (per streaming frame).
+    /// line (reasoningExcerpt) — the previous implementation split the
+    /// ENTIRE reasoning text, and for the tail copied a reversed
+    /// array, on every streaming frame.
     private func excerpt(fromEnd: Bool) -> String? {
-        let lines = text.components(separatedBy: "\n")
-        let ordered = fromEnd ? Array(lines.reversed()) : lines
-        for raw in ordered {
-            let line = raw.trimmingCharacters(in: .whitespaces)
-            if !line.isEmpty {
-                return line.count > 96 ? String(line.prefix(96)) + "…" : line
+        reasoningExcerpt(text, fromEnd: fromEnd)
+    }
+}
+
+/// First (or last) non-empty line of a reasoning text, trimmed and
+/// truncated to 96 chars — ReasoningBlock's .r-summary /
+/// .reasoning-tail. Scans from the requested end and stops at the
+/// first hit: a live reasoning block re-evaluates per streaming frame
+/// (~25fps), and splitting the whole text twice per frame measured
+/// O(text) allocations on the hot path
+/// (PerfBenchmarksTests.testBenchLiveReasoningExcerpt).
+func reasoningExcerpt(_ text: String, fromEnd: Bool) -> String? {
+    func clipped(_ line: Substring) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        return trimmed.count > 96 ? String(trimmed.prefix(96)) + "…" : trimmed
+    }
+
+    if fromEnd {
+        var end = text.endIndex
+        while end > text.startIndex {
+            let lineStart = text[..<end].lastIndex(of: "\n").map { text.index(after: $0) } ?? text.startIndex
+            if let hit = clipped(text[lineStart ..< end]) {
+                return hit
             }
+            guard lineStart > text.startIndex else { return nil }
+            end = text.index(before: lineStart) // step over the "\n"
         }
         return nil
     }
+    var start = text.startIndex
+    while start < text.endIndex {
+        let lineEnd = text[start...].firstIndex(of: "\n") ?? text.endIndex
+        if let hit = clipped(text[start ..< lineEnd]) {
+            return hit
+        }
+        guard lineEnd < text.endIndex else { return nil }
+        start = text.index(after: lineEnd)
+    }
+    return nil
 }
 
 // MARK: - Tool block (.block-tool)
@@ -377,27 +408,49 @@ struct ReasoningBlock: View {
 /// draft path), so a tool card looks identical during the turn and
 /// after it, and body evaluation never recomputes the diff.
 struct ToolBlock: View {
-    private let model: ToolRenderModel
+    private enum Source {
+        case model(ToolRenderModel)
+        case live(ToolCallState)
+    }
+
+    private let source: Source
     /// Authenticated artifact loader for result artifacts (image
     /// results from the image tool, stdout attachments from run_cmd).
     private let artifactLoader: ((ContentPart.Artifact) async -> (data: Data, mediaType: String?)?)?
+
+    /// Live-model memo (per view identity): the draft re-evaluates on
+    /// every streaming frame (~25fps text deltas), but a tool's state
+    /// only changes on tool lifecycle events — rebuilding
+    /// ToolRenderModel(live:) per frame re-ran a JSONSerialization of
+    /// run_cmd previews for every live tool.
+    @State private var liveCache = LiveToolModelCache()
 
     init(
         model: ToolRenderModel,
         artifactLoader: ((ContentPart.Artifact) async -> (data: Data, mediaType: String?)?)? = nil,
     ) {
-        self.model = model
+        source = .model(model)
         self.artifactLoader = artifactLoader
     }
 
     /// Live draft-turn block: converts the event stream's ToolCallState
     /// through the same ToolRenderModel history uses (WebUI: a single
-    /// ToolBlock.tsx renders the live and the rebuilt block alike).
+    /// ToolBlock.tsx renders the live and the rebuilt block alike) —
+    /// memoized by state, so streaming frames that don't touch this
+    /// tool skip the rebuild entirely.
     init(
         live state: ToolCallState,
         artifactLoader: ((ContentPart.Artifact) async -> (data: Data, mediaType: String?)?)? = nil,
     ) {
-        self.init(model: ToolRenderModel(live: state), artifactLoader: artifactLoader)
+        source = .live(state)
+        self.artifactLoader = artifactLoader
+    }
+
+    private var model: ToolRenderModel {
+        switch source {
+        case let .model(model): model
+        case let .live(state): liveCache.model(live: state)
+        }
     }
 
     @State private var targetExpanded = false
@@ -597,6 +650,24 @@ struct ToolBlock: View {
             try? await Task.sleep(for: .seconds(1.5))
             copied = false
         }
+    }
+}
+
+/// Memoizes ToolRenderModel(live:) by tool state: rebuilds only when
+/// the state actually changes (tool lifecycle events), not on every
+/// streaming frame.
+final class LiveToolModelCache {
+    private var state: ToolCallState?
+    private var cached: ToolRenderModel?
+
+    func model(live state: ToolCallState) -> ToolRenderModel {
+        if let cached, self.state == state {
+            return cached
+        }
+        let built = ToolRenderModel(live: state)
+        self.state = state
+        cached = built
+        return built
     }
 }
 

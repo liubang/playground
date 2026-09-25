@@ -47,6 +47,7 @@ filegroup(
     ]) + [
         "views/MarkdownText.swift",
         "views/MazeAxis.swift",
+        "views/MessageViews.swift",
         "views/SyntaxHighlighter.swift",
         "views/Theme.swift",
     ],

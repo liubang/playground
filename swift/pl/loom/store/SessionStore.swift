@@ -241,7 +241,7 @@ struct DraftText: Identifiable, Sendable {
     var live = true
 }
 
-struct ToolCallState: Identifiable, Sendable {
+struct ToolCallState: Identifiable, Sendable, Equatable {
     /// call_id.
     let id: String
     var name: String

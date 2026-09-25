@@ -544,6 +544,109 @@ final class PerfBenchmarksTests: XCTestCase {
         return messages
     }
 
+    // MARK: 8. Streaming — live reasoning excerpt per frame
+
+    /// ReasoningBlock derives its collapsed summary/tail line on every
+    /// streaming frame. The old excerpt split the ENTIRE reasoning
+    /// text and (for the tail) copied a reversed array — O(text) with
+    /// large allocations, twice per frame. reasoningExcerpt scans from
+    /// the relevant end and stops at the first non-empty line.
+    func testBenchLiveReasoningExcerpt() {
+        var beforeMs = 0.0
+        var afterMs = 0.0
+        var beforeMax = 0.0
+        var afterMax = 0.0
+        var frames = 0
+        var text = ""
+        for chunk in Self.streamChunks(finalSize: 24000, fenced: false) {
+            text += chunk
+            let t0 = ContinuousClock.now
+            let oldSummary = Self.legacyExcerpt(text, fromEnd: false)
+            let oldTail = Self.legacyExcerpt(text, fromEnd: true)
+            let t1 = ContinuousClock.now
+            let newSummary = reasoningExcerpt(text, fromEnd: false)
+            let newTail = reasoningExcerpt(text, fromEnd: true)
+            let t2 = ContinuousClock.now
+            // Equivalence at every frame, not just at the end.
+            XCTAssertEqual(newSummary, oldSummary)
+            XCTAssertEqual(newTail, oldTail)
+            let before = Self.milliseconds(t0, t1)
+            let after = Self.milliseconds(t1, t2)
+            beforeMs += before
+            afterMs += after
+            beforeMax = max(beforeMax, before)
+            afterMax = max(afterMax, after)
+            frames += 1
+        }
+        print(String(
+            format: "LOOM-BENCH %-46@ total=%8.2fms max-frame=%6.2fms frames=%d",
+            "reasoning-excerpt(24KB stream, before)" as NSString, beforeMs, beforeMax, frames,
+        ))
+        print(String(
+            format: "LOOM-BENCH %-46@ total=%8.2fms max-frame=%6.2fms frames=%d",
+            "reasoning-excerpt(24KB stream, after)" as NSString, afterMs, afterMax, frames,
+        ))
+        XCTAssertLessThan(afterMs, beforeMs)
+    }
+
+    /// Faithful re-implementation of the removed ReasoningBlock.excerpt
+    /// (full split + reversed copy).
+    private static func legacyExcerpt(_ text: String, fromEnd: Bool) -> String? {
+        let lines = text.components(separatedBy: "\n")
+        let ordered = fromEnd ? Array(lines.reversed()) : lines
+        for raw in ordered {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if !line.isEmpty {
+                return line.count > 96 ? String(line.prefix(96)) + "…" : line
+            }
+        }
+        return nil
+    }
+
+    // MARK: 9. Streaming — live tool render-model rebuild per frame
+
+    /// DraftView constructs ToolBlock(live:) on every streaming frame,
+    /// and its init rebuilt ToolRenderModel(live:) — including a
+    /// JSONSerialization of run_cmd previews — for EVERY live tool,
+    /// though a tool's state only changes on tool lifecycle events.
+    /// LiveToolModelCache rebuilds only on state change.
+    func testBenchLiveToolModelRebuild() {
+        let states = (0 ..< 10).map { Self.liveRunCmdState(index: $0) }
+        let frames = 600
+
+        let before = timed {
+            for _ in 0 ..< frames {
+                for state in states {
+                    _ = ToolRenderModel(live: state)
+                }
+            }
+        }
+        let caches = states.map { _ in LiveToolModelCache() }
+        let after = timed {
+            for _ in 0 ..< frames {
+                for (index, state) in states.enumerated() {
+                    _ = caches[index].model(live: state)
+                }
+            }
+        }
+        // The memo returns the same model a rebuild would produce.
+        for (index, state) in states.enumerated() {
+            XCTAssertEqual(caches[index].model(live: state), ToolRenderModel(live: state))
+        }
+        report("live-tool-model-rebuild(10 tools x \(frames) frames)", before: before, after: after)
+        XCTAssertLessThan(after, before)
+    }
+
+    private static func liveRunCmdState(index: Int) -> ToolCallState {
+        var state = ToolCallState(id: "call-\(index)", name: "run_cmd")
+        state.status = .running
+        state.target = "make test-\(index)"
+        state.preview = """
+        {"stdout":"\(String(repeating: "ok \(index)\\n", count: 40))","stderr":"","exit_code":0,"timed_out":false,"cancelled":false}
+        """
+        return state
+    }
+
     // MARK: Reporting
 
     private static func milliseconds(_ from: ContinuousClock.Instant, _ to: ContinuousClock.Instant) -> Double {
