@@ -110,6 +110,10 @@ struct ChatHeaderView: View {
     var sessionTitle: String?
     var workspaceName: String?
     var archived: Bool
+    /// Right workspace-explorer panel (RootView owns the collapse
+    /// flag; the badge reads the explorer's git change count).
+    let explorer: WorkspaceExplorerStore
+    @Binding var explorerCollapsed: Bool
 
     /// WebUI loom_theme: "dark" (default) or "light"; LoomApp applies
     /// it as the window's preferredColorScheme.
@@ -138,6 +142,7 @@ struct ChatHeaderView: View {
                     themeButton
                     shareButton
                     compactButton
+                    explorerButton
                 }
             }
             .padding(.leading, 4)
@@ -215,6 +220,25 @@ struct ChatHeaderView: View {
         .help("Compact context on next turn")
         .accessibilityLabel("Compact context")
         .disabled(store.isBusy)
+    }
+
+    /// Trailing-edge panel toggle (Xcode inspector idiom); the small
+    /// count surfaces pending working-tree changes while it is shut.
+    private var explorerButton: some View {
+        GhostButton {
+            explorerCollapsed.toggle()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "sidebar.right")
+                if explorer.changeCount > 0 {
+                    Text("\(explorer.changeCount)")
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundStyle(Theme.warning)
+                }
+            }
+        }
+        .help(explorerCollapsed ? "Show workspace panel (⌥⌘0)" : "Hide workspace panel (⌥⌘0)")
+        .accessibilityLabel("Toggle workspace panel")
     }
 
     private var statusPills: some View {
@@ -539,7 +563,9 @@ private struct TranscriptView: View {
                 while !Task.isCancelled {
                     let count = store.transcript.rows.count
                     let settled = store.hasLoaded || store.lastError != nil
-                    if tailWindow >= count, settled { break }
+                    if tailWindow >= count, settled {
+                        break
+                    }
                     try? await Task.sleep(for: .milliseconds(24))
                     if tailWindow < count {
                         tailWindow += Self.backfillBatch

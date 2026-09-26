@@ -24,6 +24,12 @@ import Foundation
 final class SessionListStore {
     let api: APIClient
 
+    /// Right-panel model (workspace explorer: git changes + file tree).
+    /// Eagerly created — it is a pure state holder until RootView binds
+    /// it to a workspace; its fetches are driven by panel visibility,
+    /// session file activity, and window focus.
+    let explorer: WorkspaceExplorerStore
+
     private(set) var workspaces: [Workspace] = []
     private(set) var sessions: [SessionSummary] = []
     private(set) var isLoading = false
@@ -61,6 +67,7 @@ final class SessionListStore {
 
     init(api: APIClient) {
         self.api = api
+        explorer = WorkspaceExplorerStore(api: api)
     }
 
     func load() async {
@@ -246,6 +253,11 @@ final class SessionListStore {
         // turn end → state) feeds the list the sidebar renders.
         store.onTurnActivity = { [weak self] in
             self?.scheduleSessionsRefresh()
+        }
+        // Turn file mutations feed the workspace explorer's git/tree
+        // revalidation (WebUI RightPanel gitStamp).
+        store.onFileActivity = { [weak self] in
+            self?.explorer.noteFileActivity()
         }
         if !stopped {
             stores[sessionId] = store

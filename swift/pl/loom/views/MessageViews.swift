@@ -1271,53 +1271,56 @@ struct DiffView: View {
             }
         }
     }
+}
 
-    private struct DiffLineView: View {
-        let line: ParsedDiff.Line
+/// One rendered diff line (hunk header, or sign gutter + content).
+/// File-scope so the workspace explorer's diff detail renders the same
+/// row as the transcript's DiffView without duplicating the styling.
+struct DiffLineView: View {
+    let line: ParsedDiff.Line
 
-        var body: some View {
-            Group {
-                if line.kind == .hunk {
-                    Text(line.text)
-                        .foregroundStyle(Theme.purple)
-                        .padding(.horizontal, 12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Theme.bg1)
-                } else {
-                    HStack(spacing: 0) {
-                        Text(line.sign)
-                            .frame(width: 28, alignment: .center)
-                            .foregroundStyle(signColor)
-                        Text(line.text.isEmpty ? " " : line.text)
-                            .foregroundStyle(textColor)
-                        Spacer(minLength: 12)
-                    }
-                    .background(background)
+    var body: some View {
+        Group {
+            if line.kind == .hunk {
+                Text(line.text)
+                    .foregroundStyle(Theme.purple)
+                    .padding(.horizontal, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.bg1)
+            } else {
+                HStack(spacing: 0) {
+                    Text(line.sign)
+                        .frame(width: 28, alignment: .center)
+                        .foregroundStyle(signColor)
+                    Text(line.text.isEmpty ? " " : line.text)
+                        .foregroundStyle(textColor)
+                    Spacer(minLength: 12)
                 }
-            }
-            .font(Theme.monoSm)
-            .lineSpacing(4.5) // ≈ the WebUI's 1.55 line-height (.diff)
-        }
-
-        private var signColor: Color {
-            switch line.kind {
-            case .add: Theme.success
-            case .del: Theme.error
-            default: Theme.muted
+                .background(background)
             }
         }
+        .font(Theme.monoSm)
+        .lineSpacing(4.5) // ≈ the WebUI's 1.55 line-height (.diff)
+    }
 
-        private var textColor: Color {
-            line.kind == .hunk ? Theme.purple : Theme.fg
+    private var signColor: Color {
+        switch line.kind {
+        case .add: Theme.success
+        case .del: Theme.error
+        default: Theme.muted
         }
+    }
 
-        private var background: Color {
-            switch line.kind {
-            case .add: Theme.success.opacity(0.12)
-            case .del: Theme.error.opacity(0.12)
-            case .hunk: Theme.bg1
-            case .ctx: .clear
-            }
+    private var textColor: Color {
+        line.kind == .hunk ? Theme.purple : Theme.fg
+    }
+
+    private var background: Color {
+        switch line.kind {
+        case .add: Theme.success.opacity(0.12)
+        case .del: Theme.error.opacity(0.12)
+        case .hunk: Theme.bg1
+        case .ctx: .clear
         }
     }
 }

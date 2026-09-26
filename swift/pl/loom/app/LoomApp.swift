@@ -29,6 +29,9 @@ struct LoomApp: App {
     /// directly (AppStorage shares the UserDefaults value, so the
     /// sidebar reacts without a notification hop).
     @AppStorage("loom.sidebarCollapsed") private var sidebarCollapsed = false
+    /// Mirrors RootView's key: the View menu's Workspace Panel entry
+    /// flips the right explorer panel the same way (⌥⌘0).
+    @AppStorage("loom.explorerCollapsed") private var explorerCollapsed = true
 
     var body: some Scene {
         // Single-window scene: WindowGroup's "New Window" spawned
@@ -72,6 +75,12 @@ struct LoomApp: App {
                     sidebarCollapsed.toggle()
                 }
                 .keyboardShortcut("s", modifiers: [.control, .command])
+                .disabled(appState.sessionList == nil)
+                // Right workspace explorer (Xcode's ⌥⌘0 inspector idiom).
+                Button(explorerCollapsed ? "Show Workspace Panel" : "Hide Workspace Panel") {
+                    explorerCollapsed.toggle()
+                }
+                .keyboardShortcut("0", modifiers: [.option, .command])
                 .disabled(appState.sessionList == nil)
                 Divider()
                 Button("Previous Session") {

@@ -695,3 +695,117 @@ struct Workspace: Decodable, Sendable, Identifiable, Hashable {
 struct WorkspaceListResponse: Decodable, Sendable {
     let workspaces: [Workspace]
 }
+
+// MARK: - Workspace explorer (right panel)
+
+/// One node of the workspace file tree (GET /v1/workspaces/{id}/files).
+/// Paths are workspace-relative on the wire; the server confines every
+/// listing to the registered root, so clients trust them as-is.
+struct WorkspaceFileEntry: Decodable, Sendable, Hashable, Identifiable {
+    enum Kind: String, Decodable, Sendable {
+        case dir, file
+    }
+
+    let name: String
+    let path: String
+    let kind: Kind
+    let size: Int64?
+    let modTime: Date?
+
+    var id: String {
+        path
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name, path, kind, size
+        case modTime = "mod_time"
+    }
+}
+
+struct WorkspaceFileListResponse: Decodable, Sendable {
+    let path: String
+    let entries: [WorkspaceFileEntry]
+    let truncated: Bool?
+}
+
+/// GET /v1/workspaces/{id}/file — text content is inlined (capped
+/// server-side at 256 KB); binary files answer binary=true with no
+/// content at all.
+struct WorkspaceFileContent: Decodable, Sendable {
+    let path: String
+    let size: Int64
+    let truncated: Bool?
+    let binary: Bool?
+    let content: String?
+}
+
+/// One fuzzy-search candidate (GET /v1/workspaces/{id}/files/search).
+struct WorkspaceFileMatch: Decodable, Sendable, Hashable, Identifiable {
+    let path: String
+    let name: String
+    let kind: WorkspaceFileEntry.Kind
+
+    var id: String {
+        path
+    }
+}
+
+struct WorkspaceFileSearchResponse: Decodable, Sendable {
+    let query: String
+    let matches: [WorkspaceFileMatch]
+    let truncated: Bool?
+}
+
+/// One changed file in the git working tree. Status is a single
+/// letter: M/A/D/R/T (tracked) or U (untracked); adds/dels merge the
+/// staged and unstaged numstats, no_stat marks binary/untracked rows.
+struct WorkspaceGitFile: Decodable, Sendable, Hashable, Identifiable {
+    let path: String
+    let status: String
+    let staged: Bool?
+    let unstaged: Bool?
+    let adds: Int?
+    let dels: Int?
+    let noStat: Bool?
+
+    var id: String {
+        path
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case path, status, staged, unstaged, adds, dels
+        case noStat = "no_stat"
+    }
+}
+
+/// GET /v1/workspaces/{id}/git/status — a non-git workspace answers
+/// is_git=false with every other field absent (not an error), so the
+/// panel can hide the changes list instead of showing a failure.
+struct WorkspaceGitStatus: Decodable, Sendable {
+    let isGit: Bool
+    let branch: String?
+    let files: [WorkspaceGitFile]?
+    let adds: Int?
+    let dels: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case branch, files, adds, dels
+        case isGit = "is_git"
+    }
+}
+
+/// GET /v1/workspaces/{id}/git/diff — tracked files get `git diff
+/// HEAD`, untracked ones a synthesized full-addition diff; untracked
+/// directories answer is_dir=true with no diff text.
+struct WorkspaceGitDiff: Decodable, Sendable {
+    let path: String
+    let diff: String?
+    let isDir: Bool?
+    let untracked: Bool?
+    let truncated: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case path, diff, untracked, truncated
+        case isDir = "is_dir"
+    }
+}

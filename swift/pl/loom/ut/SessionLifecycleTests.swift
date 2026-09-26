@@ -28,10 +28,17 @@ private final class LifecycleURLProtocol: URLProtocol {
             #""messages":[{"id":"a1","role":"assistant","status":"final","parts":[{"kind":"text","text":"done"}]}]}"#
     ).utf8)
 
-    static func reset() { snapshotHits = 0 }
+    static func reset() {
+        snapshotHits = 0
+    }
 
-    override class func canInit(with _: URLRequest) -> Bool { true }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override class func canInit(with _: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
 
     override func startLoading() {
         let path = request.url?.path ?? ""
@@ -73,7 +80,9 @@ final class SessionLifecycleTests: XCTestCase {
     ) async throws {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if condition() { return }
+            if condition() {
+                return
+            }
             try await Task.sleep(for: .milliseconds(20))
         }
         XCTFail("condition not met within \(timeout)s")

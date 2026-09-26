@@ -307,6 +307,97 @@ struct APIClient: Sendable {
         _ = response
     }
 
+    // MARK: - Workspace explorer (right panel)
+
+    /// GET /v1/workspaces/{id}/files?path= — one directory listing.
+    /// The server answers a weak ETag over the listing signature; pass
+    /// the cached tag back and an unchanged directory comes out as
+    /// .notModified, so tree refreshes keep their cached children
+    /// instead of re-downloading every expanded directory.
+    func workspaceFiles(
+        _ workspaceId: String, path: String, ifNoneMatch: String? = nil,
+    ) async throws -> WorkspaceFileListResult {
+        let query = [URLQueryItem(name: "path", value: path)]
+        var request = authorizedRequest("GET", "/v1/workspaces/\(workspaceId)/files", query: query)
+        request.timeoutInterval = 30
+        if let ifNoneMatch {
+            request.setValue(ifNoneMatch, forHTTPHeaderField: "If-None-Match")
+        }
+        let (data, response) = try await perform(request)
+        if let http = response as? HTTPURLResponse {
+            if http.statusCode == 304 {
+                return .notModified
+            }
+            let etag = http.value(forHTTPHeaderField: "ETag")
+            try checkStatus(response, data: data)
+            do {
+                let listing = try LoomJSON.decoder.decode(WorkspaceFileListResponse.self, from: data)
+                return .modified(listing, etag: etag)
+            } catch {
+                throw LoomAPIError.decoding("GET /v1/workspaces/\(workspaceId)/files: \(error)")
+            }
+        }
+        try checkStatus(response, data: data)
+        do {
+            return try .modified(LoomJSON.decoder.decode(WorkspaceFileListResponse.self, from: data), etag: nil)
+        } catch {
+            throw LoomAPIError.decoding("GET /v1/workspaces/\(workspaceId)/files: \(error)")
+        }
+    }
+
+    /// GET /v1/workspaces/{id}/file?path= — inline text preview
+    /// (256 KB cap server-side); binary files carry no content.
+    func workspaceFileContent(_ workspaceId: String, path: String) async throws -> WorkspaceFileContent {
+        try await get(
+            "/v1/workspaces/\(workspaceId)/file",
+            query: [URLQueryItem(name: "path", value: path)],
+        )
+    }
+
+    /// GET /v1/workspaces/{id}/file?path=&raw=1 — raw image bytes plus
+    /// the sniffed Content-Type (images only, 16 MB cap server-side);
+    /// the JSON preview deliberately carries no binary content.
+    func workspaceFileRaw(_ workspaceId: String, path: String) async throws -> (data: Data, mediaType: String?) {
+        let query = [
+            URLQueryItem(name: "path", value: path),
+            URLQueryItem(name: "raw", value: "1"),
+        ]
+        var request = authorizedRequest("GET", "/v1/workspaces/\(workspaceId)/file", query: query)
+        request.timeoutInterval = 60
+        let (data, response) = try await perform(request)
+        try checkStatus(response, data: data)
+        let sniffed = (response as? HTTPURLResponse)?
+            .value(forHTTPHeaderField: "Content-Type")?
+            .components(separatedBy: ";").first
+        return (data, sniffed)
+    }
+
+    /// GET /v1/workspaces/{id}/files/search?q= — ranked fuzzy path
+    /// search (bounded walk, max 50 matches server-side).
+    func searchWorkspaceFiles(_ workspaceId: String, query q: String) async throws -> WorkspaceFileSearchResponse {
+        try await get(
+            "/v1/workspaces/\(workspaceId)/files/search",
+            query: [URLQueryItem(name: "q", value: q)],
+        )
+    }
+
+    /// GET /v1/workspaces/{id}/git/status — branch + working-tree
+    /// changes with merged +/− numstats. Non-git workspaces answer
+    /// is_git=false (not an error).
+    func workspaceGitStatus(_ workspaceId: String) async throws -> WorkspaceGitStatus {
+        try await get("/v1/workspaces/\(workspaceId)/git/status")
+    }
+
+    /// GET /v1/workspaces/{id}/git/diff?path= — `git diff HEAD` for
+    /// tracked files, a synthesized full-addition diff for untracked
+    /// ones (512 KB cap server-side).
+    func workspaceGitDiff(_ workspaceId: String, path: String) async throws -> WorkspaceGitDiff {
+        try await get(
+            "/v1/workspaces/\(workspaceId)/git/diff",
+            query: [URLQueryItem(name: "path", value: path)],
+        )
+    }
+
     // MARK: - Config (settings panel)
 
     /// GET /v1/config — the whole config.yaml with secrets masked.
@@ -493,6 +584,14 @@ struct ShareLink: Decodable, Sendable {
     let token: String
     let path: String
     let url: String?
+}
+
+/// Conditional directory-listing answer: .notModified means the cached
+/// entries are still current (304); .modified carries the fresh listing
+/// and its new ETag.
+enum WorkspaceFileListResult: Sendable {
+    case notModified
+    case modified(WorkspaceFileListResponse, etag: String?)
 }
 
 enum ApprovalDecision: String, Sendable {

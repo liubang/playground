@@ -375,6 +375,11 @@ final class SessionStore {
     /// derived title and status dots are fed by it). SessionListStore
     /// wires this when vending the store.
     var onTurnActivity: (@MainActor () -> Void)?
+    /// File-activity hook (WebUI RightPanel gitStamp): tool.completed
+    /// and turn.finished may have touched workspace files, so the
+    /// workspace explorer revalidates git status + its expanded tree.
+    /// Fired in bursts; the receiver is expected to coalesce.
+    var onFileActivity: (@MainActor () -> Void)?
     /// Sub-agent sessions are read-only (WebUI hdr-readonly badge,
     /// sourced from snapshot.delegated); the title shows the parent id.
     private(set) var readOnly = false
@@ -493,7 +498,9 @@ final class SessionStore {
     }
 
     /// Whether the event loop (snapshot refresh + event stream) is running.
-    var isStreaming: Bool { loopTask != nil }
+    var isStreaming: Bool {
+        loopTask != nil
+    }
 
     /// Suspends the event loop and event stream without touching
     /// accumulated state (rows, composer drafts, pending approvals).
@@ -522,6 +529,7 @@ final class SessionStore {
         deltaFlushTask = nil
         deltaBuffer.removeAll()
         onTurnActivity = nil
+        onFileActivity = nil
     }
 
     // MARK: Commands
@@ -1326,6 +1334,7 @@ final class SessionStore {
                     tool.artifacts = payload.artifacts ?? []
                 }
             }
+            onFileActivity?()
 
         case .approvalRequested:
             if let payload = tryDecode(ApprovalRequestedPayload.self, from: event),
@@ -1447,6 +1456,7 @@ final class SessionStore {
             state = .idle
             turnRefreshRequested = true
             onTurnActivity?()
+            onFileActivity?()
 
         case .runCancelled:
             turnFeedback = .cancelled

@@ -73,6 +73,11 @@ enum Theme {
     /// Sidebar drag-resize clamp (SidebarDivider).
     static let sidebarMinWidth: CGFloat = 220
     static let sidebarMaxWidth: CGFloat = 420
+    /// Right workspace-explorer panel (RootView): default width + the
+    /// drag-resize clamp of its divider.
+    static let explorerWidth: CGFloat = 300
+    static let explorerMinWidth: CGFloat = 240
+    static let explorerMaxWidth: CGFloat = 480
 }
 
 /// A token color resolved from the hosting view's effective appearance,

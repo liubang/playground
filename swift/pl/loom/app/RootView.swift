@@ -31,6 +31,10 @@ struct RootView: View {
     @State private var settingsStore: SettingsStore?
     @AppStorage("loom.sidebarCollapsed") private var sidebarCollapsed = false
     @AppStorage("loom.sidebarWidth") private var sidebarWidth = Theme.sidebarWidth
+    /// Right workspace-explorer panel: collapsed by default, width
+    /// persisted like the sidebar's.
+    @AppStorage("loom.explorerCollapsed") private var explorerCollapsed = true
+    @AppStorage("loom.explorerWidth") private var explorerWidth = Theme.explorerWidth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -95,6 +99,10 @@ struct RootView: View {
             for: NSApplication.didBecomeActiveNotification,
         )) { _ in
             guard let list = appState.sessionList, !list.isLoading else { return }
+            // The user's own edits in another app (or another loom
+            // client) produce no local events — the explorer's git
+            // view revalidates on focus instead.
+            list.explorer.noteAppFocus()
             Task { await list.loadSessions() }
         }
     }
@@ -136,6 +144,40 @@ struct RootView: View {
 
     private var sidebarVisible: Bool {
         !sidebarCollapsed
+    }
+
+    private var explorerVisible: Bool {
+        !explorerCollapsed
+    }
+
+    /// The panel binds to the selected session's workspace; with no
+    /// selection it falls back to the default workspace (WebUI
+    /// RightPanel usePanelWorkspace).
+    private func bindExplorer(_ list: SessionListStore) {
+        let workspaceId = selection
+            .flatMap { id in list.sessions.first { $0.id == id }?.workspaceId }
+            ?? list.workspaces.first { $0.isDefault == true }?.id
+            ?? list.workspaces.first?.id
+        list.explorer.bind(workspaceId: workspaceId)
+    }
+
+    /// Header toggle for the workspace panel; the trailing count
+    /// surfaces pending working-tree changes while the panel is shut.
+    private func explorerToggle(list: SessionListStore) -> some View {
+        GhostButton {
+            explorerCollapsed.toggle()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "sidebar.right")
+                if list.explorer.changeCount > 0 {
+                    Text("\(list.explorer.changeCount)")
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundStyle(Theme.warning)
+                }
+            }
+        }
+        .help(explorerCollapsed ? "Show workspace panel (⌥⌘0)" : "Hide workspace panel (⌥⌘0)")
+        .accessibilityLabel("Toggle workspace panel")
     }
 
     private var sidebarToggle: some View {
@@ -183,20 +225,36 @@ struct RootView: View {
                                 for: list.sessions.first { $0.id == sessionId }?.workspaceId,
                             )?.name,
                             archived: list.showArchived,
+                            explorer: list.explorer,
+                            explorerCollapsed: $explorerCollapsed,
                         )
                         .id(sessionId)
                     } else {
-                        Text("Loom")
-                            .font(.system(size: Theme.textMd, weight: .semibold))
-                            .foregroundStyle(Theme.fg)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.leading, sidebarVisible ? 10 : 4)
-                            .frame(height: Theme.toolbarHeight)
-                            .windowDragSurface()
+                        HStack(spacing: 0) {
+                            Text("Loom")
+                                .font(.system(size: Theme.textMd, weight: .semibold))
+                                .foregroundStyle(Theme.fg)
+                                .padding(.leading, sidebarVisible ? 10 : 4)
+                            Spacer(minLength: 0)
+                            explorerToggle(list: list)
+                                .padding(.trailing, 16)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: Theme.toolbarHeight)
+                        .windowDragSurface()
                     }
                 }
                 .frame(maxWidth: .infinity)
                 .background(Theme.bg0)
+
+                if explorerVisible {
+                    Hairline(axis: .vertical)
+                        .frame(height: Theme.toolbarHeight)
+                    ExplorerTabStrip(store: list.explorer) {
+                        explorerCollapsed = true
+                    }
+                    .frame(width: explorerWidth)
+                }
             }
             .frame(height: Theme.toolbarHeight)
             .zIndex(1) // The share confirmation floats below the toolbar.
@@ -216,7 +274,7 @@ struct RootView: View {
                     )
                     .frame(width: sidebarWidth)
                     .transition(.move(edge: .leading))
-                    SidebarDivider(width: $sidebarWidth)
+                    PanelDivider(width: $sidebarWidth)
                 }
 
                 Group {
@@ -232,12 +290,24 @@ struct RootView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if explorerVisible {
+                    PanelDivider(
+                        width: $explorerWidth,
+                        range: Theme.explorerMinWidth ... Theme.explorerMaxWidth,
+                        inverted: true,
+                    )
+                    WorkspaceExplorerView(store: list.explorer)
+                        .frame(width: explorerWidth)
+                        .transition(.move(edge: .trailing))
+                }
             }
         }
         .background(Theme.bg0)
         // The split toolbar takes the place of the hidden titlebar.
         .ignoresSafeArea(.container, edges: .top)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: sidebarCollapsed)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: explorerCollapsed)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: selection == nil)
         // Only the selected session streams: background stores pause their
         // event loops (lossless — drafts/rows survive, resume is the
@@ -245,7 +315,14 @@ struct RootView: View {
         // connection per visited session for the app's lifetime.
         .onChange(of: selection) { _, newSelection in
             list.setActive(newSelection)
+            bindExplorer(list)
         }
+        // The default-workspace fallback may arrive after the shell
+        // first renders (workspaces load async).
+        .onChange(of: list.workspaces) { _, _ in
+            bindExplorer(list)
+        }
+        .onAppear { bindExplorer(list) }
         .sheet(isPresented: Binding(
             get: { settingsStore != nil },
             set: {
@@ -288,12 +365,14 @@ struct RootView: View {
     }
 }
 
-/// The sidebar's right edge: a 1pt hairline carrying a 9pt invisible
+/// A panel's resize edge: a 1pt hairline carrying a 9pt invisible
 /// hit strip (overlay, so the layout stays 1pt). Dragging resizes the
-/// sidebar within Theme.sidebarMinWidth…sidebarMaxWidth; the resize
-/// cursor shows on hover.
-private struct SidebarDivider: View {
+/// panel within `range`; the resize cursor shows on hover. `inverted`
+/// flips the drag direction for right-edge panels (drag left to widen).
+private struct PanelDivider: View {
     @Binding var width: Double
+    var range: ClosedRange<Double> = Theme.sidebarMinWidth ... Theme.sidebarMaxWidth
+    var inverted = false
     @GestureState private var dragStart: Double?
 
     var body: some View {
@@ -321,9 +400,10 @@ private struct SidebarDivider: View {
                                 var transaction = Transaction()
                                 transaction.disablesAnimations = true
                                 withTransaction(transaction) {
+                                    let delta = inverted ? -value.translation.width : value.translation.width
                                     width = min(
-                                        Theme.sidebarMaxWidth,
-                                        max(Theme.sidebarMinWidth, start + value.translation.width),
+                                        range.upperBound,
+                                        max(range.lowerBound, start + delta),
                                     )
                                 }
                             },

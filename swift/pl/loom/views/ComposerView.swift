@@ -1023,7 +1023,7 @@ private struct PlanStepNode: View {
     /// rail terminates visually at the node instead of showing through
     /// the hollow rings (the trace dot's trick). The header node needs
     /// none — no rail crosses it.
-    var base: Color? = nil
+    var base: Color?
 
     @State private var breathing = false
 
