@@ -18,7 +18,9 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -257,5 +259,68 @@ func TestWorkspaceApprovalModeRoundtrip(t *testing.T) {
 	// The live override must be readable back (the reload-consistency fix).
 	if got := get(); got != "danger-only" {
 		t.Fatalf("mode after switch = %q, want danger-only", got)
+	}
+}
+
+func TestWorkspaceFileRawImage(t *testing.T) {
+	dir := t.TempDir()
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = resolved
+	}
+	png := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00}
+	if err := os.WriteFile(filepath.Join(dir, "pic.png"), png, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("plain\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ts, svc := newTestServer(t, fakes.NewFakeModel())
+	ws, err := svc.RegisterWorkspace(t.Context(), dir, "raw-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	get := func(path string) *http.Response {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodGet, ts.URL+path, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		authed(t, req)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+
+	// Images are served raw with the sniffed content type.
+	resp := get("/v1/workspaces/" + ws.ID.String() + "/file?path=pic.png&raw=1")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("raw status = %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "image/png" {
+		t.Fatalf("content-type = %q, want image/png", ct)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(body, png) {
+		t.Fatalf("raw body = %v, want the exact file bytes", body)
+	}
+
+	// Non-image content is rejected (stays on the JSON preview path).
+	resp2 := get("/v1/workspaces/" + ws.ID.String() + "/file?path=notes.txt&raw=1")
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusBadRequest {
+		t.Fatalf("non-image raw status = %d, want 400", resp2.StatusCode)
+	}
+
+	// The confinement rules apply to the raw path exactly as to JSON.
+	resp3 := get("/v1/workspaces/" + ws.ID.String() + "/file?path=../../../etc/hosts&raw=1")
+	defer resp3.Body.Close()
+	if resp3.StatusCode != http.StatusBadRequest {
+		t.Fatalf("escape raw status = %d, want 400", resp3.StatusCode)
 	}
 }

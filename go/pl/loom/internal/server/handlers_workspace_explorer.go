@@ -46,12 +46,14 @@ import (
 // write/commit surface here.
 
 // maxWorkspaceEntries caps one directory listing; maxWorkspaceFileBytes caps
-// inline file previews; maxGitDiffBytes caps a served unified diff.
+// inline file previews; maxGitDiffBytes caps a served unified diff;
+// maxWorkspaceImageBytes caps raw image responses.
 const (
-	maxWorkspaceEntries   = 1000
-	maxWorkspaceFileBytes = 256 << 10
-	maxGitDiffBytes       = 512 << 10
-	gitCmdTimeout         = 10 * time.Second
+	maxWorkspaceEntries    = 1000
+	maxWorkspaceFileBytes  = 256 << 10
+	maxGitDiffBytes        = 512 << 10
+	maxWorkspaceImageBytes = 16 << 20
+	gitCmdTimeout          = 10 * time.Second
 )
 
 // workspaceExplorerRoot resolves the canonical (symlink-evaluated) root of
@@ -243,6 +245,10 @@ func (s *Server) handleReadWorkspaceFile(w http.ResponseWriter, r *http.Request)
 		writeError(w, invalidInput("path is a directory"))
 		return
 	}
+	if r.URL.Query().Get("raw") == "1" {
+		s.serveRawWorkspaceFile(w, r, abs, rel, info)
+		return
+	}
 	f, err := os.Open(abs)
 	if err != nil {
 		writeError(w, invalidInput("cannot read file"))
@@ -266,6 +272,51 @@ func (s *Server) handleReadWorkspaceFile(w http.ResponseWriter, r *http.Request)
 		resp["content"] = string(buf)
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// imageExtTypes maps image extensions Go's content sniffer misses: an
+// SVG with an XML prolog sniffs as text/xml, and HEIC is unknown to
+// the sniffer entirely.
+var imageExtTypes = map[string]string{
+	".svg":  "image/svg+xml",
+	".heic": "image/heic",
+	".heif": "image/heif",
+}
+
+// serveRawWorkspaceFile handles GET /v1/workspaces/{id}/file?raw=1 —
+// the image-preview byte channel for native clients (the JSON preview
+// deliberately carries no binary content). Images only: the sniffed
+// content type must be image/* (with a small extension fallback for
+// types the sniffer misses), everything else stays on the JSON path.
+// ServeContent provides Last-Modified and range handling for free.
+func (s *Server) serveRawWorkspaceFile(w http.ResponseWriter, r *http.Request, abs, rel string, info os.FileInfo) {
+	if info.Size() > maxWorkspaceImageBytes {
+		writeError(w, invalidInput("image exceeds the preview size cap"))
+		return
+	}
+	f, err := os.Open(abs)
+	if err != nil {
+		writeError(w, invalidInput("cannot read file"))
+		return
+	}
+	defer f.Close()
+	head := make([]byte, 512)
+	n, _ := f.Read(head)
+	ct := http.DetectContentType(head[:n])
+	if !strings.HasPrefix(ct, "image/") {
+		mapped, ok := imageExtTypes[strings.ToLower(filepath.Ext(rel))]
+		if !ok {
+			writeError(w, invalidInput("not an image"))
+			return
+		}
+		ct = mapped
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		writeError(w, invalidInput("cannot read file"))
+		return
+	}
+	w.Header().Set("Content-Type", ct)
+	http.ServeContent(w, r, info.Name(), info.ModTime(), f)
 }
 
 // looksBinary sniffs the content sample: a NUL byte or a non-textual
