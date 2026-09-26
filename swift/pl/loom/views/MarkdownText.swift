@@ -48,10 +48,10 @@ private enum MarkdownCache {
 
 /// Incremental block parser for a live (append-only) streaming source,
 /// held per MarkdownText view via @State. Scan only newly completed
-/// lines for a fence-balanced blank-line boundary. Reuse split blocks
-/// when that boundary really separates code/table blocks; prose spans
-/// blank lines and still needs a whole parse to preserve exact text.
-/// Live, one-shot full-text keys never reach the shared NSCache.
+/// lines for a fence-balanced blank-line boundary; every block type
+/// terminates at a blank line, so the sealed prefix's blocks are
+/// reused as-is and only the growing tail re-parses per frame. Live,
+/// one-shot full-text keys never reach the shared NSCache.
 final class LiveBlockCache {
     private var parsedPrefix = ""
     private var prefixBlocks: [MarkdownText.Block] = []
@@ -80,14 +80,9 @@ final class LiveBlockCache {
             return prefixBlocks
         }
         let tailBlocks = MarkdownText.splitBlocks(tail)
-        // splitBlocks carries prose across blank lines; only code and
-        // table boundaries can safely seal a block for reuse.
-        if case .prose? = prefixBlocks.last, case .prose? = tailBlocks.first {
-            // A blank line does not seal prose: splitBlocks joins it into
-            // one block, preserving the exact number of blank lines. Do
-            // not mutate cached prefixBlocks or normalize that separator.
-            return MarkdownText.splitBlocks(source)
-        }
+        // Every block terminates at a blank line, so the boundary
+        // always seals whole blocks: prefix + tail equals the
+        // whole-source parse exactly.
         return prefixBlocks + tailBlocks
     }
 
@@ -145,6 +140,12 @@ struct MarkdownText: View {
 
     enum Block: Equatable {
         case prose(String)
+        /// ATX heading line (# … ######); the marker is consumed by
+        /// the parser, the view supplies the heading style.
+        case heading(level: Int, text: String)
+        /// Consecutive list lines grouped into one block so the view
+        /// controls inter-item spacing.
+        case list([ListItem])
         case code(language: String?, code: String)
         /// GFM pipe table: header row + body rows (the dashed separator
         /// row is consumed by the parser).
@@ -158,6 +159,16 @@ struct MarkdownText: View {
         }
     }
 
+    /// One list line. ordinal == nil is a bullet (-, *, +); checkbox
+    /// is non-nil for GFM task items ([ ] / [x]); indent counts
+    /// 2-space nesting levels.
+    struct ListItem: Equatable {
+        let ordinal: Int?
+        let indent: Int
+        let checkbox: Bool?
+        let text: String
+    }
+
     var body: some View {
         let blocks = resolvedBlocks
         VStack(alignment: .leading, spacing: 10) {
@@ -165,6 +176,10 @@ struct MarkdownText: View {
                 switch block {
                 case let .prose(markdown):
                     ProseText(markdown: markdown, cursor: streamCursor && index == blocks.count - 1, live: live)
+                case let .heading(level, text):
+                    HeadingText(level: level, text: text)
+                case let .list(items):
+                    MarkdownListView(items: items)
                 case let .code(language, code):
                     CodeBlockView(language: language, code: code, deferHighlight: live)
                 case let .table(header, rows):
@@ -202,6 +217,8 @@ struct MarkdownText: View {
         let cost = source.utf8.count + blocks.reduce(0) { total, block in
             switch block {
             case let .prose(text): total + text.utf8.count
+            case let .heading(_, text): total + text.utf8.count
+            case let .list(items): total + items.reduce(0) { $0 + $1.text.utf8.count }
             case let .code(language, code): total + (language?.utf8.count ?? 0) + code.utf8.count
             case let .table(header, rows):
                 total + (header + rows.flatMap(\.self)).reduce(0) { $0 + $1.utf8.count }
@@ -213,20 +230,43 @@ struct MarkdownText: View {
         return blocks
     }
 
+    /// Splits on ``` fences, GFM table blocks, and block-level line
+    /// structure (headings, list items, blank-line paragraph breaks).
+    /// An unterminated fence — the common case mid-stream — treats the
+    /// rest of the input as code, so streaming code blocks render as
+    /// code from the first line. Two renderer gaps force this to be
+    /// real view structure: AttributedString's inline parser has no
+    /// table support, and SwiftUI's Text ignores block-level
+    /// presentationIntent entirely (verified empirically on macOS 26 —
+    /// paragraph breaks, headers and lists all collapse into one
+    /// run-on paragraph; only inline attributes apply).
     static func splitBlocks(_ source: String) -> [Block] {
         var blocks: [Block] = []
-        var prose: [String] = []
+        var paragraph: [String] = []
+        var listItems: [ListItem] = []
         var code: [String] = []
         var language: String?
         var inCode = false
 
-        func flushProse() {
-            let markdown = prose.joined(separator: "\n")
+        func flushParagraph() {
+            let markdown = paragraph.joined(separator: "\n")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !markdown.isEmpty {
                 blocks.append(.prose(markdown))
             }
-            prose = []
+            paragraph = []
+        }
+
+        func flushList() {
+            if !listItems.isEmpty {
+                blocks.append(.list(listItems))
+                listItems = []
+            }
+        }
+
+        func flushProse() {
+            flushParagraph()
+            flushList()
         }
 
         let lines = source.components(separatedBy: "\n")
@@ -268,7 +308,18 @@ struct MarkdownText: View {
                 blocks.append(.table(header: header, rows: rows))
                 continue
             }
-            prose.append(line)
+            if trimmed.isEmpty {
+                flushProse()
+            } else if let heading = parseHeading(line) {
+                flushProse()
+                blocks.append(heading)
+            } else if let item = parseListItem(line) {
+                flushParagraph()
+                listItems.append(item)
+            } else {
+                flushList()
+                paragraph.append(line)
+            }
             i += 1
         }
         if inCode {
@@ -277,6 +328,67 @@ struct MarkdownText: View {
             flushProse()
         }
         return blocks
+    }
+
+    /// ATX heading line: up to 3 leading spaces, 1–6 #s, then a space
+    /// or end of line (no space → plain prose, e.g. "#hashtag").
+    private static func parseHeading(_ line: String) -> Block? {
+        var rest = Substring(line)
+        var leading = 0
+        while rest.first == " ", leading < 3 {
+            rest = rest.dropFirst()
+            leading += 1
+        }
+        var level = 0
+        while rest.first == "#" {
+            rest = rest.dropFirst()
+            level += 1
+        }
+        guard (1 ... 6).contains(level) else { return nil }
+        guard rest.isEmpty || rest.first == " " || rest.first == "\t" else { return nil }
+        return .heading(level: level, text: rest.trimmingCharacters(in: .whitespaces))
+    }
+
+    /// List item line: optional indent (2 spaces per level), a bullet
+    /// (-, *, +) or ordered (1. / 1)) marker, then the text with an
+    /// optional GFM task checkbox. Lazy continuation lines are NOT
+    /// folded into the previous item — they start a paragraph.
+    private static func parseListItem(_ line: String) -> ListItem? {
+        var rest = Substring(line)
+        var spaces = 0
+        while rest.first == " " {
+            rest = rest.dropFirst()
+            spaces += 1
+        }
+        var ordinal: Int?
+        if let first = rest.first, first == "-" || first == "*" || first == "+" {
+            let after = rest.dropFirst()
+            guard after.first == " " || after.first == "\t" else { return nil }
+            rest = after
+        } else {
+            var digits = 0
+            var index = rest.startIndex
+            while index < rest.endIndex, rest[index].isNumber, digits < 9 {
+                index = rest.index(after: index)
+                digits += 1
+            }
+            guard digits > 0, index < rest.endIndex,
+                  rest[index] == "." || rest[index] == ")" else { return nil }
+            ordinal = Int(rest[..<index])
+            let after = rest[rest.index(after: index)...]
+            guard after.first == " " || after.first == "\t" else { return nil }
+            rest = after
+        }
+        var text = rest.trimmingCharacters(in: .whitespaces)
+        var checkbox: Bool?
+        if text.hasPrefix("[ ]") {
+            checkbox = false
+            text = String(text.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+        } else if text.hasPrefix("[x]") || text.hasPrefix("[X]") {
+            checkbox = true
+            text = String(text.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+        }
+        return ListItem(ordinal: ordinal, indent: spaces / 2, checkbox: checkbox, text: text)
     }
 
     /// A line holding at least two pipes (or one leading pipe) — a
@@ -598,6 +710,72 @@ private func parseInlineMarkdown(_ source: String, size: CGFloat) -> AttributedS
         }
     }
     return parsed
+}
+
+// MARK: - Heading / list blocks
+
+/// Heading block: the WebUI flattens all levels to 15px/600
+/// (blocks.css .md h1–h6). Inline code chips inside the heading keep
+/// their mono font (explicit run attributes beat the view font).
+private struct HeadingText: View {
+    let level: Int
+    let text: String
+
+    var body: some View {
+        Text(renderInlineMarkdown(text))
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(Theme.fg)
+            .lineSpacing(5)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 4)
+            .accessibilityHeading(level <= 3 ? .h1 : .h3)
+    }
+}
+
+/// List block: one row per item — bullet / ordinal / task checkbox in
+/// a fixed-width marker column, inline-markdown text after it. Rows
+/// pack tighter than block spacing (a list reads as one unit).
+private struct MarkdownListView: View {
+    let items: [MarkdownText.ListItem]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    marker(item)
+                    Text(renderInlineMarkdown(item.text))
+                        .font(.system(size: Theme.textLg, weight: .light))
+                        .foregroundStyle(Theme.fg)
+                        .lineSpacing(7)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.leading, CGFloat(item.indent) * 16)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func marker(_ item: MarkdownText.ListItem) -> some View {
+        if let checked = item.checkbox {
+            Image(systemName: checked ? "checkmark.square.fill" : "square")
+                .font(.system(size: 12))
+                .foregroundStyle(checked ? Theme.success : Theme.muted)
+                .frame(width: 16, alignment: .center)
+        } else if let ordinal = item.ordinal {
+            Text("\(ordinal).")
+                .font(.system(size: Theme.textLg, weight: .light))
+                .foregroundStyle(Theme.muted)
+                .frame(minWidth: 16, alignment: .trailing)
+        } else {
+            Text("•")
+                .font(.system(size: Theme.textLg))
+                .foregroundStyle(Theme.muted)
+                .frame(width: 16, alignment: .center)
+        }
+    }
 }
 
 // MARK: - Table (.md table)

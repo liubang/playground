@@ -688,6 +688,11 @@ final class PerfBenchmarksTests: XCTestCase {
                 for block in MarkdownText.blocks(text) {
                     switch block {
                     case let .prose(prose): _ = renderInlineMarkdown(prose)
+                    case let .heading(_, text): _ = renderInlineMarkdown(text)
+                    case let .list(items):
+                        for item in items {
+                            _ = renderInlineMarkdown(item.text)
+                        }
                     case let .code(language, code): codeBlocks.append((language ?? "plaintext", code))
                     case .table: break
                     }

@@ -47,6 +47,72 @@ final class MarkdownBlocksTests: XCTestCase {
         ])
     }
 
+    // MARK: Block-level line structure (headings, lists, paragraphs)
+
+    func testHeadings() {
+        XCTAssertEqual(MarkdownText.splitBlocks("# Title\n\n## Sub\nbody"), [
+            .heading(level: 1, text: "Title"),
+            .heading(level: 2, text: "Sub"),
+            .prose("body"),
+        ])
+        // No space after #, or 4+ leading spaces: plain prose.
+        XCTAssertEqual(MarkdownText.splitBlocks("#hashtag"), [.prose("#hashtag")])
+        XCTAssertEqual(MarkdownText.splitBlocks("    # indented"), [.prose("# indented")])
+        // Up to 3 leading spaces still count; ####### is not a heading.
+        XCTAssertEqual(MarkdownText.splitBlocks("   ## ok"), [.heading(level: 2, text: "ok")])
+        XCTAssertEqual(MarkdownText.splitBlocks("####### too deep"), [.prose("####### too deep")])
+    }
+
+    func testLists() {
+        XCTAssertEqual(MarkdownText.splitBlocks("- a\n- b\n\n1. x\n2) y"), [
+            .list([
+                MarkdownText.ListItem(ordinal: nil, indent: 0, checkbox: nil, text: "a"),
+                MarkdownText.ListItem(ordinal: nil, indent: 0, checkbox: nil, text: "b"),
+            ]),
+            .list([
+                MarkdownText.ListItem(ordinal: 1, indent: 0, checkbox: nil, text: "x"),
+                MarkdownText.ListItem(ordinal: 2, indent: 0, checkbox: nil, text: "y"),
+            ]),
+        ])
+        // Task checkboxes and nesting indent.
+        XCTAssertEqual(MarkdownText.splitBlocks("- [ ] todo\n  - [x] done"), [
+            .list([
+                MarkdownText.ListItem(ordinal: nil, indent: 0, checkbox: false, text: "todo"),
+                MarkdownText.ListItem(ordinal: nil, indent: 1, checkbox: true, text: "done"),
+            ]),
+        ])
+        // A list ends at a non-list line without needing a blank line.
+        XCTAssertEqual(MarkdownText.splitBlocks("- a\ntail"), [
+            .list([MarkdownText.ListItem(ordinal: nil, indent: 0, checkbox: nil, text: "a")]),
+            .prose("tail"),
+        ])
+        // "-" alone is prose; an ordered marker needs a trailing space.
+        XCTAssertEqual(MarkdownText.splitBlocks("-"), [.prose("-")])
+        XCTAssertEqual(MarkdownText.splitBlocks("1.x"), [.prose("1.x")])
+    }
+
+    func testHeadingAndListInterleaveWithProse() {
+        let blocks = MarkdownText.splitBlocks("intro **bold**\n## h\n- one\n- two `code`\nafter")
+        XCTAssertEqual(blocks, [
+            .prose("intro **bold**"),
+            .heading(level: 2, text: "h"),
+            .list([
+                MarkdownText.ListItem(ordinal: nil, indent: 0, checkbox: nil, text: "one"),
+                MarkdownText.ListItem(ordinal: nil, indent: 0, checkbox: nil, text: "two `code`"),
+            ]),
+            .prose("after"),
+        ])
+    }
+
+    func testLiveHeadingAndListStream() {
+        assertIncrementalMatchesWhole([
+            "# Title", "\n\n- one", "\n- two\n\n", "tail",
+        ])
+        assertIncrementalMatchesWhole([
+            "intro\n", "\n", "1. a\n", "2. b\n", "\n", "## h\n", "body",
+        ])
+    }
+
     // MARK: Inline Markdown numeric ranges
 
     func testNumericRangesDoNotBecomeStrikethrough() {
@@ -119,11 +185,15 @@ final class MarkdownBlocksTests: XCTestCase {
         assertIncrementalMatchesWhole([
             "| a |\n", "\n", "\n", "| --- |",
         ])
+        // Blank lines are block boundaries now (SwiftUI Text ignores
+        // presentationIntent; structure is real view structure).
         XCTAssertEqual(MarkdownText.splitBlocks("| a |\n\n| --- |"), [
-            .prose("| a |\n\n| --- |"),
+            .prose("| a |"),
+            .prose("| --- |"),
         ])
         XCTAssertEqual(MarkdownText.splitBlocks("| a |\n\n\n| --- |"), [
-            .prose("| a |\n\n\n| --- |"),
+            .prose("| a |"),
+            .prose("| --- |"),
         ])
         assertIncrementalMatchesWhole([
             "| a |\n", "\n", "| --- |\n", "| 1 |\n", "\n",
