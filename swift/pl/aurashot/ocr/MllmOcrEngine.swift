@@ -56,9 +56,15 @@ final class MllmServerClient: @unchecked Sendable {
 
     private let lock = NSLock()
     private var process: Process?
-    /// A failed boot is not retried implicitly (booting is expensive);
-    /// the engine falls back to the CLI. restart() resets this.
-    private var bootAttempted = false
+    /// In-flight boot, joined by every concurrent start() caller: the
+    /// OCR pre-warm (fired the moment an ⌘⇧O session begins) and the
+    /// recognize() a few seconds later must share ONE boot — otherwise
+    /// the late caller would give up on booting and fall through to
+    /// the CLI, paying a SECOND cold model load next to the first.
+    /// Cleared when the boot settles, so a start() after a failure
+    /// retries fresh (transient causes like a briefly-occupied port
+    /// must not lock the app onto the slow CLI path).
+    private var bootTask: Task<Bool, Never>?
     private var _status = Status()
 
     var status: Status {
@@ -96,6 +102,8 @@ final class MllmServerClient: @unchecked Sendable {
         lock.lock()
         let proc = process
         process = nil
+        let boot = bootTask
+        bootTask = nil
         _status.phase = .stopped
         _status.detail = ""
         // The cached health answer must die with the child: trusting it
@@ -103,6 +111,9 @@ final class MllmServerClient: @unchecked Sendable {
         // port (and skip the boot/CLI fallback entirely).
         lastHealthyAt = nil
         lock.unlock()
+        // Cancel an in-flight boot so it doesn't resurrect the status
+        // or keep waiting on the process we're killing.
+        boot?.cancel()
         proc?.terminate()
     }
 
@@ -162,33 +173,44 @@ final class MllmServerClient: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// Boots mllm_server as a child and waits for /healthz. Returns false
-    /// when the boot failed or timed out — the caller then falls back to
-    /// the one-shot CLI. Cold model load can take tens of seconds, hence
-    /// the generous deadline.
+    /// Boots mllm_server as a child and waits for /healthz, JOINING any
+    /// boot already in flight (see bootTask). Returns false when the
+    /// boot failed or timed out — the caller then falls back to the
+    /// one-shot CLI.
     func start(binary: String, model: String, mmproj: String) async -> Bool {
         lock.lock()
-        if bootAttempted {
+        if let bootTask {
             lock.unlock()
-            return false
+            return await bootTask.value
         }
-        bootAttempted = true
         _status = Status(phase: .booting, binary: binary)
-        // The boot-wait loop below polls isHealthy(); a stale cached
-        // answer (restart() runs terminate()→start() back to back) would
+        // The boot-wait loop polls isHealthy(); a stale cached answer
+        // (restart() runs terminate()→start() back to back) would
         // declare the server ready before it ever opened the port.
         lastHealthyAt = nil
+        let task = Task { [weak self] in
+            // Cleanup must run on EVERY exit path: an early return with
+            // bootTask still set would make every future start() join
+            // a settled (and failed) boot forever.
+            defer {
+                if let self {
+                    self.lock.lock()
+                    self.bootTask = nil
+                    self.lock.unlock()
+                }
+            }
+            guard let self else { return false }
+            return await self.boot(binary: binary, model: model, mmproj: mmproj)
+        }
+        bootTask = task
         lock.unlock()
+        return await task.value
+    }
 
-        // A failed boot clears bootAttempted: transient causes (port
-        // briefly occupied, models just downloaded) must not lock the
-        // app onto the slow CLI fallback for its whole lifetime.
-        // The engine's busy flag serializes OCR calls, so at most one
-        // boot is ever in flight.
+    /// The actual spawn + readiness wait. Cold model load can take tens
+    /// of seconds, hence the generous deadline.
+    private func boot(binary: String, model: String, mmproj: String) async -> Bool {
         let fail: (String) -> Bool = { detail in
-            self.lock.lock()
-            self.bootAttempted = false
-            self.lock.unlock()
             self.setStatus { $0.phase = .failed; $0.detail = detail }
             return false
         }
@@ -231,6 +253,11 @@ final class MllmServerClient: @unchecked Sendable {
 
         let deadline = Date().addingTimeInterval(180)
         while Date() < deadline {
+            // terminate()/restart() cancels the boot task. Leave the
+            // status alone — the canceller owns it from here.
+            if Task.isCancelled {
+                return false
+            }
             if !proc.isRunning {
                 lock.lock()
                 if process === proc {
@@ -259,9 +286,6 @@ final class MllmServerClient: @unchecked Sendable {
     /// (and would make the boot fail on the bind).
     func restart(binary: String, model: String, mmproj: String) async -> Bool {
         terminate()
-        lock.lock()
-        bootAttempted = false
-        lock.unlock()
         return await start(binary: binary, model: model, mmproj: mmproj)
     }
 
@@ -314,6 +338,23 @@ final class MllmOcrEngine: OcrEngine, @unchecked Sendable {
     private let lock = NSLock()
     private var busy = false
     private let server = MllmServerClient.shared
+
+    /// Starts the server boot in the background the moment an OCR
+    /// capture session begins (design §5's cold-start problem: the
+    /// first recognition pays a tens-of-seconds model load). The user
+    /// spends the next several seconds dragging a selection — that
+    /// head start hides most of the load, and recognize() JOINS the
+    /// in-flight boot instead of booting twice (see bootTask). No-op
+    /// when a server is already healthy or the binary/models are
+    /// missing (recognize() will surface the same error it does today).
+    func prewarm() {
+        Task.detached { [server] in
+            guard await !server.isHealthy() else { return }
+            guard let binary = Self.resolveServer(),
+                  let (model, mmproj) = try? Self.resolveModels() else { return }
+            _ = await server.start(binary: binary, model: model, mmproj: mmproj)
+        }
+    }
 
     func recognize(_ image: CGImage) async throws -> [OcrBlock] {
         lock.lock()

@@ -43,6 +43,13 @@ final class CaptureSessionController {
         }
         isActive = true
         ocrSession = ocr
+        // Cold-start hiding: an OCR session's first recognition pays a
+        // tens-of-seconds model load. Start it NOW so the user's
+        // selection drag runs in parallel with the boot; recognize()
+        // joins the in-flight boot rather than booting twice.
+        if ocr {
+            ocrEngine.prewarm()
+        }
 
         // Remember who owned the keyboard so teardown can give it back —
         // AuraShot is an accessory app and would otherwise leave the
@@ -226,6 +233,13 @@ final class CaptureSessionController {
         OcrHud.show("正在识别文字…", spinner: true)
         let engine = ocrEngine
         Task { @MainActor in
+            // Tell the user WHICH wait they're in: no healthy server
+            // means recognize() is about to pay (or join) the model
+            // load — tens of seconds that look identical to a hung
+            // recognition behind a single "recognizing" message.
+            if await !MllmServerClient.shared.isHealthy() {
+                OcrHud.show("正在加载 OCR 模型（首次较慢）…", spinner: true)
+            }
             do {
                 let blocks = try await engine.recognize(image)
                 let text = blocks.map(\.text).joined(separator: "\n")
