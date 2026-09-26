@@ -418,6 +418,29 @@ private struct TranscriptView: View {
 
     private static let bottomId = "transcript-bottom"
 
+    /// Progressive history rendering: cold-open layout is linear in
+    /// materialized rows (~5.7ms/row on a 120-row production session —
+    /// 683ms materializing everything vs 164ms for the newest 30,
+    /// PerfBenchmarksTests.testBenchRealSnapshotFirstLayout). First paint
+    /// shows the newest rows (what the bottom anchor displays anyway),
+    /// older rows backfill upward in small batches so a long session's
+    /// open never blocks the main thread in one giant layout pass. Rows
+    /// appended during a turn land inside the tail window by
+    /// construction — streaming is never clipped.
+    private static let firstPaintRows = 30
+    private static let backfillBatch = 6
+    @State private var tailWindow = firstPaintRows
+    /// While true the transcript renders only the newest tailWindow
+    /// rows; the backfill task flips it once the window covers the
+    /// whole history. Without the flag a row appended after backfill
+    /// completion (count > tailWindow) would clip the OLDEST row off
+    /// the suffix window.
+    @State private var backfilling = true
+
+    private var visibleRows: ArraySlice<TranscriptModel.Row> {
+        backfilling ? store.transcript.rows.suffix(tailWindow) : store.transcript.rows[...]
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -430,7 +453,7 @@ private struct TranscriptView: View {
                 // the next content change). A plain VStack always reports
                 // exact heights, so the bottom anchor tracks reliably.
                 VStack(alignment: .leading, spacing: 20) {
-                    ForEach(store.transcript.rows) { row in
+                    ForEach(visibleRows) { row in
                         switch row {
                         case let .message(model):
                             MessageRow(
@@ -498,8 +521,32 @@ private struct TranscriptView: View {
             }
             // Pins the view to the latest content, including while a turn
             // streams — but releases as soon as the user scrolls up, unlike
-            // a scrollToBottom-on-every-change loop.
+            // a scrollToBottom-on-every-change loop. Backfilled history is
+            // inserted ABOVE the visible region, so the anchor's exact
+            // VStack heights keep the pinned end stable while it grows.
             .defaultScrollAnchor(.bottom)
+            .task(id: store.sessionId) {
+                // History backfill: materialize older rows in small
+                // batches (a batch costs a few ms of layout) until the
+                // window covers the whole transcript. Session switches
+                // recreate this view, restarting the window. The loop
+                // also waits out the initial snapshot: on a cold open
+                // the task starts before any rows exist, and exiting
+                // then would pin the window at its first-paint size
+                // forever. Completion flips `backfilling` so later
+                // appends render in full instead of clipping the
+                // oldest row off the suffix window.
+                while !Task.isCancelled {
+                    let count = store.transcript.rows.count
+                    let settled = store.hasLoaded || store.lastError != nil
+                    if tailWindow >= count, settled { break }
+                    try? await Task.sleep(for: .milliseconds(24))
+                    if tailWindow < count {
+                        tailWindow += Self.backfillBatch
+                    }
+                }
+                backfilling = false
+            }
             .overlay {
                 if !store.hasLoaded, store.transcript.rows.isEmpty, store.lastError == nil {
                     ProgressView("Loading conversation…")

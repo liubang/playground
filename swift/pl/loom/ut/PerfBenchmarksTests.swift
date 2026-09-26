@@ -15,6 +15,7 @@
 import AppKit
 import JavaScriptCore
 @testable import Loom
+import SwiftUI
 import XCTest
 
 /// Before/after benchmarks for the transcript performance work. Each
@@ -645,6 +646,122 @@ final class PerfBenchmarksTests: XCTestCase {
         {"stdout":"\(String(repeating: "ok \(index)\\n", count: 40))","stderr":"","exit_code":0,"timed_out":false,"cancelled":false}
         """
         return state
+    }
+
+    // MARK: 7. Real-session cold open (env-gated)
+
+    /// End-to-end cold-open cost over a REAL session snapshot: point
+    /// LOOM_SNAPSHOT_BENCH at a `GET /v1/sessions/{id}/snapshot` response
+    /// body and this measures each first-open stage over the real
+    /// content — JSON decode, transcript build (tool render models,
+    /// LCS diffs), cold markdown parse, cold hljs highlighting. Skipped
+    /// without the env var: no real session data is ever committed.
+    func testBenchRealSnapshotColdOpen() throws {
+        guard let path = ProcessInfo.processInfo.environment["LOOM_SNAPSHOT_BENCH"],
+              let data = FileManager.default.contents(atPath: path)
+        else { throw XCTSkip("LOOM_SNAPSHOT_BENCH not set") }
+
+        let decodeMs = timed {
+            Self.snapshotBox = try? LoomJSON.decoder.decode(Snapshot.self, from: data)
+        }
+        let snapshot = try XCTUnwrap(Self.snapshotBox, "snapshot decode failed")
+        let messages = snapshot.messages ?? []
+
+        var modelBox: TranscriptModel?
+        let buildMs = timed {
+            modelBox = TranscriptModel.build(
+                messages: messages, midTurn: false, turnSummaries: snapshot.turnSummaries ?? [],
+            )
+        }
+
+        // Cold markdown: every assistant text part, whole-block split +
+        // inline render per prose block (the first-open render path).
+        let texts = messages.flatMap { message in
+            message.parts.compactMap { part -> String? in
+                guard case let .text(text) = part, message.role == .assistant else { return nil }
+                return text
+            }
+        }
+        var codeBlocks: [(language: String, code: String)] = []
+        let markdownMs = timed {
+            for text in texts {
+                for block in MarkdownText.blocks(text) {
+                    switch block {
+                    case let .prose(prose): _ = renderInlineMarkdown(prose)
+                    case let .code(language, code): codeBlocks.append((language ?? "plaintext", code))
+                    case .table: break
+                    }
+                }
+            }
+        }
+
+        var hljsMs = 0.0
+        if let context = Self.makeHighlightContext() {
+            hljsMs = timed {
+                for (language, code) in codeBlocks {
+                    _ = Self.highlight(code, language: language, in: context)
+                }
+            }
+        }
+
+        print(
+            "LOOM-BENCH real-snapshot: \(messages.count) msgs, \(texts.count) prose parts, "
+                + "\(codeBlocks.count) code blocks, \(modelBox?.rows.count ?? 0) rows, json \(data.count) bytes",
+        )
+        print(String(
+            format: "LOOM-BENCH stages: decode=%.1fms build=%.1fms markdown=%.1fms hljs=%.1fms total=%.1fms",
+            decodeMs, buildMs, markdownMs, hljsMs, decodeMs + buildMs + markdownMs + hljsMs,
+        ))
+    }
+
+    /// Decode landing pad: keeps the try out of the timed closure.
+    private nonisolated(unsafe) static var snapshotBox: Snapshot?
+
+    // MARK: 8. Real-session first layout (env-gated)
+
+    /// The cold-open stages above are fast (~72ms for a 283-message
+    /// session); the remaining first-open cost is SwiftUI materializing
+    /// the non-lazy transcript VStack (exact heights are required for
+    /// bottom anchoring — see ChatView). This hosts the real rows
+    /// offscreen and times the first layout, alongside tail-window
+    /// variants that estimate a progressive-rendering first paint.
+    @MainActor
+    func testBenchRealSnapshotFirstLayout() throws {
+        guard let path = ProcessInfo.processInfo.environment["LOOM_SNAPSHOT_BENCH"],
+              let data = FileManager.default.contents(atPath: path),
+              let snapshot = try? LoomJSON.decoder.decode(Snapshot.self, from: data)
+        else { throw XCTSkip("LOOM_SNAPSHOT_BENCH not set") }
+        let model = TranscriptModel.build(
+            messages: snapshot.messages ?? [], midTurn: false,
+            turnSummaries: snapshot.turnSummaries ?? [],
+        )
+        // The app warms the highlight JSContext at launch (RootView.task),
+        // so layout timings should not include bundle evaluation.
+        _ = SyntaxHighlighter.attributed(" ", language: "swift")
+
+        func firstLayoutMs(_ rows: [TranscriptModel.Row]) -> Double {
+            timed {
+                let hosting = NSHostingView(rootView: VStack(alignment: .leading, spacing: 20) {
+                    ForEach(rows) { row in
+                        switch row {
+                        case let .message(rowModel): MessageRow(row: rowModel)
+                        case .turnSummary: EmptyView()
+                        }
+                    }
+                })
+                hosting.frame = NSRect(x: 0, y: 0, width: 800, height: 100_000)
+                hosting.layoutSubtreeIfNeeded()
+                _ = hosting.fittingSize
+            }
+        }
+
+        let all = firstLayoutMs(model.rows)
+        let tail60 = firstLayoutMs(Array(model.rows.suffix(60)))
+        let tail30 = firstLayoutMs(Array(model.rows.suffix(30)))
+        print(String(
+            format: "LOOM-BENCH first-layout: rows=%d all=%.0fms tail60=%.0fms tail30=%.0fms",
+            model.rows.count, all, tail60, tail30,
+        ))
     }
 
     // MARK: Reporting
