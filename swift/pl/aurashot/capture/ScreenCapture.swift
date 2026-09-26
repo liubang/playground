@@ -30,6 +30,14 @@ enum ScreenCaptureError: Error {
 /// CGWindowListCreateImage fallback is deliberately not implemented —
 /// on macOS 14+ both fail identically without the TCC grant, and the
 /// permission gate in CaptureSessionController runs before this.
+///
+/// @MainActor: backingScale(for:) touches NSScreen, which is
+/// main-thread-only state. A NONISOLATED async function would hop off
+/// the caller's actor (SE-0338) and read NSScreen from the cooperative
+/// pool — racing display reconfiguration. The captures themselves stay
+/// concurrent: SCScreenshotManager.captureImage suspends at the await,
+/// so the main actor is never blocked compositing.
+@MainActor
 enum ScreenCapture {
     /// Captures every connected display.
     ///
@@ -45,8 +53,8 @@ enum ScreenCapture {
             excludingWindowNumbers.contains(Int($0.windowID))
         }
 
-        // Resolve backing scales up front: NSScreen is main-thread
-        // state, and the capture tasks below run off it.
+        // Resolve backing scales on the main actor: NSScreen is
+        // main-thread state (see the type's @MainActor note).
         let jobs: [(display: SCDisplay, scale: CGFloat)] = content.displays.map {
             ($0, backingScale(for: $0.displayID))
         }

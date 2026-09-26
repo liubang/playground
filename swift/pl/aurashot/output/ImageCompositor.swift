@@ -1,5 +1,32 @@
 import AppKit
 
+/// Bitmap-context factory shared by the output stage (ImageCompositor,
+/// FrameDecorator).
+///
+/// The context inherits the SOURCE image's color space (Display P3 on
+/// wide-gamut screens) instead of flattening to device RGB: re-rendering
+/// a P3 screenshot into an sRGB-ish space visibly clips saturated
+/// colors. AppKit drawing still works — NSGraphicsContext wraps the
+/// CGContext with flipped: false, the same y-up semantics the old
+/// NSBitmapImageRep contexts had, so every draw call behaves as before.
+enum BitmapContext {
+    static func make(width: Int, height: Int, colorSpace: CGColorSpace?) -> CGContext? {
+        guard width > 0, height > 0 else { return nil }
+        let space = colorSpace
+            ?? CGColorSpace(name: CGColorSpace.sRGB)
+            ?? CGColorSpaceCreateDeviceRGB()
+        return CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: space,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue,
+        )
+    }
+}
+
 /// Renders the final output bitmap: the cropped snapshot plus all
 /// annotations (design doc §6.5 export path).
 ///
@@ -26,21 +53,14 @@ enum ImageCompositor {
         let pixelW = base.width
         let pixelH = base.height
         guard pixelW > 0, pixelH > 0, scale > 0 else { return nil }
-        guard let rep = NSBitmapImageRep(
-            bitmapDataPlanes: nil,
-            pixelsWide: pixelW,
-            pixelsHigh: pixelH,
-            bitsPerSample: 8,
-            samplesPerPixel: 4,
-            hasAlpha: true,
-            isPlanar: false,
-            colorSpaceName: .deviceRGB,
-            bytesPerRow: 0,
-            bitsPerPixel: 0,
+        guard let cgContext = BitmapContext.make(
+            width: pixelW,
+            height: pixelH,
+            colorSpace: base.colorSpace,
         ) else { return nil }
 
         NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: cgContext, flipped: false)
 
         // Base image 1:1 in pixel space.
         NSImage(cgImage: base, size: CGSize(width: pixelW, height: pixelH))
@@ -52,16 +72,16 @@ enum ImageCompositor {
         // y-down crop rect and the y-up bitmap/view space). Post-
         // multiplied CTM (scale first, then translate) implements
         // exactly that.
-        if !annotations.isEmpty, let context = NSGraphicsContext.current?.cgContext {
+        if !annotations.isEmpty {
             let y0 = CGFloat(imageHeight) - crop.maxY
-            context.scaleBy(x: scale, y: scale)
-            context.translateBy(x: -crop.minX / scale, y: -y0 / scale)
+            cgContext.scaleBy(x: scale, y: scale)
+            cgContext.translateBy(x: -crop.minX / scale, y: -y0 / scale)
             for annotation in annotations {
                 annotation.draw()
             }
         }
 
         NSGraphicsContext.restoreGraphicsState()
-        return rep.cgImage
+        return cgContext.makeImage()
     }
 }

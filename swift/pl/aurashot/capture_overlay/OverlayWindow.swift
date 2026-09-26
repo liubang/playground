@@ -87,13 +87,24 @@ final class OverlayWindow: NSPanel {
         false
     }
 
+    /// The same ≥3pt floor SelectionView.confirmSelection applies.
+    /// Without it, ⏎/⌘C on a degenerate selection reached the session
+    /// controller's finish(), which returned SILENTLY — the session
+    /// looked dead with only Esc left as a way out.
+    private var hasConfirmableSelection: Bool {
+        guard let selection = selectionView.currentSelection else { return false }
+        return selection.width >= 3 && selection.height >= 3
+    }
+
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
         case Carbon.KeyCode.escape:
             onCancel()
         case Carbon.KeyCode.ansiReturn, Carbon.KeyCode.keypadEnter:
-            if selectionView.currentSelection != nil {
+            if hasConfirmableSelection {
                 onConfirm?()
+            } else {
+                NSSound.beep()
             }
         default:
             guard event.modifierFlags.contains(.command),
@@ -104,16 +115,22 @@ final class OverlayWindow: NSPanel {
             }
             switch chars {
             case "c":
-                if selectionView.currentSelection != nil {
+                if hasConfirmableSelection {
                     onConfirm?()
+                } else {
+                    NSSound.beep()
                 }
             case "s":
-                if selectionView.currentSelection != nil {
+                if hasConfirmableSelection {
                     onSaveKey?()
+                } else {
+                    NSSound.beep()
                 }
             case "p":
-                if selectionView.currentSelection != nil {
+                if hasConfirmableSelection {
                     onPin?()
+                } else {
+                    NSSound.beep()
                 }
             case "z":
                 selectionView.undoAnnotation()

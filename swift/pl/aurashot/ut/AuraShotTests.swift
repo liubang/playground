@@ -125,6 +125,234 @@ final class KeyComboTests: XCTestCase {
     }
 }
 
+/// CG↔NS coordinate conversions (design doc §6.2: "单元测试覆盖（含
+/// 主屏在左/右/上、负坐标排列）"). The pure primaryHeight-taking
+/// overloads keep NSScreen out of the test process.
+final class CoordinateSpaceTests: XCTestCase {
+    private let primary: CGFloat = 1440
+
+    func testPointRoundTrip() {
+        let cg = CGPoint(x: 500, y: 300)
+        let ns = CoordinateSpace.pointToNS(cg, primaryHeight: primary)
+        XCTAssertEqual(ns, NSPoint(x: 500, y: 1140))
+        XCTAssertEqual(CoordinateSpace.pointToCG(ns, primaryHeight: primary), cg)
+    }
+
+    func testNegativeCoordinatesForLeftSecondaryDisplay() {
+        // A display left of the primary has negative x in BOTH spaces.
+        let cg = CGPoint(x: -1200, y: 100)
+        let ns = CoordinateSpace.pointToNS(cg, primaryHeight: primary)
+        XCTAssertEqual(ns, NSPoint(x: -1200, y: 1340))
+        XCTAssertEqual(CoordinateSpace.pointToCG(ns, primaryHeight: primary), cg)
+    }
+
+    func testRectFlipUsesMaxY() {
+        // CG rect (y-down) spans y 50...150 → NS (y-up) minY = 1440-150.
+        let cg = CGRect(x: 100, y: 50, width: 200, height: 100)
+        let ns = CoordinateSpace.rectToNS(cg, primaryHeight: primary)
+        XCTAssertEqual(ns, NSRect(x: 100, y: 1290, width: 200, height: 100))
+        XCTAssertEqual(CoordinateSpace.rectToCG(ns, primaryHeight: primary), cg)
+    }
+
+    func testRectAbovePrimary() {
+        // A display stacked ABOVE the primary has negative CG y and an
+        // NS minY starting at primaryHeight.
+        let cg = CGRect(x: 0, y: -1080, width: 1920, height: 1080)
+        let ns = CoordinateSpace.rectToNS(cg, primaryHeight: primary)
+        XCTAssertEqual(ns, NSRect(x: 0, y: 1440, width: 1920, height: 1080))
+        XCTAssertEqual(CoordinateSpace.rectToCG(ns, primaryHeight: primary), cg)
+    }
+}
+
+// MARK: - Bitmap helpers for the output-stage tests
+
+/// A solid-color CGImage in the given color space (Quartz y-up).
+private func makeSolidImage(
+    width: Int,
+    height: Int,
+    r: CGFloat,
+    g: CGFloat,
+    b: CGFloat,
+    space: CGColorSpace,
+) -> CGImage {
+    let context = CGContext(
+        data: nil, width: width, height: height,
+        bitsPerComponent: 8, bytesPerRow: 0, space: space,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue,
+    )!
+    // NB: setFillColor(_ components:) silently no-ops here (the fresh
+    // context's default fill color space isn't RGB); an explicit CGColor
+    // in the context's own space is the reliable form.
+    context.setFillColor(CGColor(colorSpace: space, components: [r, g, b, 1])!)
+    context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+    return context.makeImage()!
+}
+
+/// Reads a pixel at QUARTZ (y-up) coordinates, tolerating no layout
+/// surprises: bitmap memory is top-row-first, so memory row = h-1-y.
+private func pixel(of image: CGImage, x: Int, y: Int) -> (r: Int, g: Int, b: Int, a: Int) {
+    let space = image.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!
+    let context = CGContext(
+        data: nil, width: image.width, height: image.height,
+        bitsPerComponent: 8, bytesPerRow: 0, space: space,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue,
+    )!
+    context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+    let data = context.data!.assumingMemoryBound(to: UInt8.self)
+    let offset = ((image.height - 1 - y) * image.width + x) * 4
+    return (Int(data[offset]), Int(data[offset + 1]), Int(data[offset + 2]), Int(data[offset + 3]))
+}
+
+private let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
+
+private func isReddish(_ p: (r: Int, g: Int, b: Int, a: Int)) -> Bool {
+    p.r > 180 && p.g < 140 && p.b < 140
+}
+
+private func isBluish(_ p: (r: Int, g: Int, b: Int, a: Int)) -> Bool {
+    p.b > 200 && p.r < 80
+}
+
+/// Output-stage geometry: annotations must land where the user saw
+/// them (crop offset + y-flip), and the output must keep the source
+/// image's color space (Display P3 screenshots must not flatten to
+/// device RGB).
+final class ImageCompositorTests: XCTestCase {
+    private func blueBase(_ size: Int = 8) -> CGImage {
+        makeSolidImage(width: size, height: size, r: 0, g: 0, b: 1, space: sRGB)
+    }
+
+    func testStrokeLandsAtExpectedQuartzPosition() {
+        let base = blueBase()
+        let annotation = Annotation(
+            tool: .rectangle,
+            start: CGPoint(x: 1, y: 1),
+            end: CGPoint(x: 7, y: 7),
+        )
+        let output = ImageCompositor.composite(
+            base: base,
+            crop: CGRect(x: 0, y: 0, width: 8, height: 8),
+            imageHeight: 8,
+            scale: 1,
+            annotations: [annotation],
+        )
+        XCTAssertNotNil(output)
+        // Left-edge midpoint is on the stroke…
+        XCTAssertTrue(isReddish(pixel(of: output!, x: 1, y: 4)))
+        // …and the interior is untouched base. (The 2.5pt stroke
+        // legitimately spills onto the image's outermost pixels from
+        // the rect's corners, so no corner assertions here.)
+        XCTAssertTrue(isBluish(pixel(of: output!, x: 4, y: 4)))
+        XCTAssertTrue(isBluish(pixel(of: output!, x: 3, y: 3)))
+    }
+
+    func testHorizontalLineLocksYFlip() {
+        let base = blueBase()
+        // A horizontal line near the TOP of y-up space (y = 7): a
+        // y-flip bug would mirror it to y = 0/1.
+        let annotation = Annotation(
+            tool: .line,
+            start: CGPoint(x: 1, y: 7),
+            end: CGPoint(x: 7, y: 7),
+        )
+        let output = ImageCompositor.composite(
+            base: base,
+            crop: CGRect(x: 0, y: 0, width: 8, height: 8),
+            imageHeight: 8,
+            scale: 1,
+            annotations: [annotation],
+        )!
+        XCTAssertTrue(isReddish(pixel(of: output, x: 4, y: 7)))
+        XCTAssertTrue(isBluish(pixel(of: output, x: 4, y: 1)))
+    }
+
+    func testCropOffsetAndY0Translation() {
+        // Base is the 8×8 crop TAKEN FROM pixel rect (4,4,8,8) of a
+        // 16×16 source. An annotation at view (5,5)-(11,11) must land
+        // on output pixels (1,1)-(7,7): translate(-crop.minX, -y0)
+        // with y0 = imageHeight - crop.maxY = 16 - 12 = 4.
+        let base = blueBase()
+        let annotation = Annotation(
+            tool: .rectangle,
+            start: CGPoint(x: 5, y: 5),
+            end: CGPoint(x: 11, y: 11),
+        )
+        let output = ImageCompositor.composite(
+            base: base,
+            crop: CGRect(x: 4, y: 4, width: 8, height: 8),
+            imageHeight: 16,
+            scale: 1,
+            annotations: [annotation],
+        )!
+        XCTAssertTrue(isReddish(pixel(of: output, x: 1, y: 4)))
+        XCTAssertTrue(isBluish(pixel(of: output, x: 4, y: 4)))
+        XCTAssertTrue(isBluish(pixel(of: output, x: 3, y: 3)))
+    }
+
+    func testScaleMultipliesAnnotationCoordinates() {
+        // scale 2: view point (2,2)-(6,6) → pixels (4,4)-(12,12); the
+        // 2.5pt stroke scales to 5px with the CTM. (The rect must be
+        // big enough that a clear interior survives the scaled stroke.)
+        let base = makeSolidImage(width: 16, height: 16, r: 0, g: 0, b: 1, space: sRGB)
+        let annotation = Annotation(
+            tool: .rectangle,
+            start: CGPoint(x: 2, y: 2),
+            end: CGPoint(x: 6, y: 6),
+        )
+        let output = ImageCompositor.composite(
+            base: base,
+            crop: CGRect(x: 0, y: 0, width: 16, height: 16),
+            imageHeight: 16,
+            scale: 2,
+            annotations: [annotation],
+        )!
+        XCTAssertTrue(isReddish(pixel(of: output, x: 4, y: 8)))
+        XCTAssertTrue(isBluish(pixel(of: output, x: 8, y: 8)))
+    }
+
+    func testOutputPreservesSourceColorSpace() {
+        let p3 = CGColorSpace(name: CGColorSpace.displayP3)!
+        let base = makeSolidImage(width: 8, height: 8, r: 1, g: 0, b: 0, space: p3)
+        let output = ImageCompositor.composite(
+            base: base,
+            crop: CGRect(x: 0, y: 0, width: 8, height: 8),
+            imageHeight: 8,
+            scale: 1,
+            annotations: [],
+        )!
+        XCTAssertEqual(output.colorSpace, base.colorSpace)
+    }
+}
+
+final class FrameDecoratorTests: XCTestCase {
+    func testPaddingTransparencyAndCenterPixel() {
+        let base = makeSolidImage(width: 8, height: 8, r: 0, g: 0, b: 1, space: sRGB)
+        let output = FrameDecorator.apply(to: base, scale: 1)!
+        // pad = 40pt × scale 1 on each side.
+        XCTAssertEqual(output.width, 8 + 80)
+        XCTAssertEqual(output.height, 8 + 80)
+        // Far corner stays transparent (shadow must not reach it).
+        XCTAssertLessThan(pixel(of: output, x: 0, y: 0).a, 5)
+        // The capture sits centered, unmodified.
+        XCTAssertTrue(isBluish(pixel(of: output, x: 44, y: 44)))
+    }
+
+    func testScaleScalesPadding() {
+        let base = makeSolidImage(width: 8, height: 8, r: 0, g: 0, b: 1, space: sRGB)
+        let output = FrameDecorator.apply(to: base, scale: 2)!
+        XCTAssertEqual(output.width, 8 + 160)
+        XCTAssertEqual(output.height, 8 + 160)
+        XCTAssertTrue(isBluish(pixel(of: output, x: 84, y: 84)))
+    }
+
+    func testOutputPreservesSourceColorSpace() {
+        let p3 = CGColorSpace(name: CGColorSpace.displayP3)!
+        let base = makeSolidImage(width: 8, height: 8, r: 1, g: 0, b: 0, space: p3)
+        let output = FrameDecorator.apply(to: base, scale: 1)!
+        XCTAssertEqual(output.colorSpace, base.colorSpace)
+    }
+}
+
 final class FilenamePatternTests: XCTestCase {
     func testDefaultPatternRenders() {
         let name = Settings.renderFileName(

@@ -328,6 +328,14 @@ final class AnnotationPaletteView: NSView {
 
     // MARK: - Custom color
 
+    /// NSColorPanel is a shared singleton that does NOT retain its
+    /// target and exposes no target getter. The palette that opened the
+    /// panel records itself here so deinit can detach the panel ONLY
+    /// while it still owns it — after a session teardown the palette is
+    /// freed, and a dangling panel target is a use-after-free the next
+    /// time the user touches the color wheel.
+    private static weak var colorPanelOwner: AnnotationPaletteView?
+
     private func openColorPanel() {
         let panel = NSColorPanel.shared
         panel.color = customColor ?? style.color
@@ -335,8 +343,22 @@ final class AnnotationPaletteView: NSView {
         panel.showsAlpha = false
         panel.setTarget(self)
         panel.setAction(#selector(colorPanelChanged(_:)))
+        Self.colorPanelOwner = self
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    deinit {
+        if Self.colorPanelOwner === self {
+            Self.colorPanelOwner = nil
+            let panel = NSColorPanel.shared
+            panel.setTarget(nil)
+            panel.setAction(nil)
+            // The panel belonged to this capture session's annotation
+            // flow; with nobody left to receive color changes, take it
+            // off screen rather than leaving an inert window floating.
+            panel.close()
+        }
     }
 
     @objc private func colorPanelChanged(_ panel: NSColorPanel) {

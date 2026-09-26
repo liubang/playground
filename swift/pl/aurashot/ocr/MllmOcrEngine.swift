@@ -98,6 +98,10 @@ final class MllmServerClient: @unchecked Sendable {
         process = nil
         _status.phase = .stopped
         _status.detail = ""
+        // The cached health answer must die with the child: trusting it
+        // for its remaining 5s would send the next request to a dead
+        // port (and skip the boot/CLI fallback entirely).
+        lastHealthyAt = nil
         lock.unlock()
         proc?.terminate()
     }
@@ -150,6 +154,14 @@ final class MllmServerClient: @unchecked Sendable {
         setStatus { $0.healthyExternal = healthy && self.process == nil }
     }
 
+    /// Drops the cached health answer, e.g. after a transport-level
+    /// request failure — the server died between probe and request.
+    func noteTransportFailure() {
+        lock.lock()
+        lastHealthyAt = nil
+        lock.unlock()
+    }
+
     /// Boots mllm_server as a child and waits for /healthz. Returns false
     /// when the boot failed or timed out — the caller then falls back to
     /// the one-shot CLI. Cold model load can take tens of seconds, hence
@@ -162,6 +174,10 @@ final class MllmServerClient: @unchecked Sendable {
         }
         bootAttempted = true
         _status = Status(phase: .booting, binary: binary)
+        // The boot-wait loop below polls isHealthy(); a stale cached
+        // answer (restart() runs terminate()→start() back to back) would
+        // declare the server ready before it ever opened the port.
+        lastHealthyAt = nil
         lock.unlock()
 
         // A failed boot clears bootAttempted: transient causes (port
@@ -263,6 +279,12 @@ final class MllmServerClient: @unchecked Sendable {
         let response: URLResponse
         do {
             (data, response) = try await session.data(for: request)
+        } catch let error as URLError {
+            // Transport errors (connection refused, dropped, timed out)
+            // keep their type so recognizeText can tell "server died"
+            // apart from "model rejected the request" and fall back to
+            // boot/CLI for the former only.
+            throw error
         } catch {
             throw OcrError.processFailed("OCR server 请求失败：\(error.localizedDescription)")
         }
@@ -330,7 +352,19 @@ final class MllmOcrEngine: OcrEngine, @unchecked Sendable {
         // 1. A healthy server is already up (spawned by us earlier, or by
         //    the user by hand).
         if await server.isHealthy() {
-            return try await server.ocr(png: Self.encodePNG(image), maxTokens: 2048)
+            do {
+                return try await server.ocr(png: Self.encodePNG(image), maxTokens: 2048)
+            } catch let error as URLError {
+                // Transport-level failure: the server died between the
+                // health probe and the request (or the cached answer
+                // went stale). Drop the cache and fall through to
+                // boot/CLI instead of failing the user's OCR outright.
+                // APPLICATION errors (model rejected the image, bad
+                // request) rethrow — retrying those via the CLI would
+                // just pay a cold model load to fail again.
+                NSLog("AuraShot: OCR server unreachable mid-request (\(error.localizedDescription)) — falling back")
+                server.noteTransportFailure()
+            }
         }
         // 2. Boot our own server when the binary is available.
         if let serverBinary = Self.resolveServer() {

@@ -70,8 +70,14 @@ final class HotkeyRecorderView: NSView {
         )
         newCombo.display = newCombo.display.trimmingCharacters(in: .whitespaces)
         combo = newCombo
-        onChange?(newCombo)
+        // Resume BEFORE notifying: the change handler saves to Settings
+        // → onHotkeysChanged → applyHotkeys, and a still-suspended
+        // HotKeyManager would refuse those registrations — flashing a
+        // bogus "shortcut occupied" warning in the menu bar and logging
+        // a spurious failure. resume() re-registers the OLD combos;
+        // onChange then replaces them with the new one.
         cancelRecording()
+        onChange?(newCombo)
     }
 
     override func flagsChanged(with _: NSEvent) {

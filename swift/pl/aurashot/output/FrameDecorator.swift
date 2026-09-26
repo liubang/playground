@@ -22,19 +22,11 @@ enum FrameDecorator {
         let pad = (padding * scale).rounded()
         let outW = image.width + Int(pad) * 2
         let outH = image.height + Int(pad) * 2
-        guard outW > 0, outH > 0,
-              let rep = NSBitmapImageRep(
-                  bitmapDataPlanes: nil,
-                  pixelsWide: outW,
-                  pixelsHigh: outH,
-                  bitsPerSample: 8,
-                  samplesPerPixel: 4,
-                  hasAlpha: true,
-                  isPlanar: false,
-                  colorSpaceName: .deviceRGB,
-                  bytesPerRow: 0,
-                  bitsPerPixel: 0,
-              ) else { return nil }
+        guard let cgContext = BitmapContext.make(
+            width: outW,
+            height: outH,
+            colorSpace: image.colorSpace,
+        ) else { return nil }
 
         let contentRect = CGRect(
             x: pad, y: pad,
@@ -42,7 +34,7 @@ enum FrameDecorator {
         )
 
         NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: cgContext, flipped: false)
 
         // An opaque fill under an NSShadow paints the drop shadow into
         // the transparent margin. The save/restore keeps the shadow
@@ -68,6 +60,6 @@ enum FrameDecorator {
         border.stroke()
 
         NSGraphicsContext.restoreGraphicsState()
-        return rep.cgImage
+        return cgContext.makeImage()
     }
 }
