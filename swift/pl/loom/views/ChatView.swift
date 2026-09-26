@@ -436,11 +436,39 @@ private struct TranscriptView: View {
     @Binding var locateCallId: String?
 
     /// Tracks the bottom sentinel's visibility: scrolling up reveals
-    /// the jump-to-bottom button; returning hides it.
+    /// the jump-to-bottom button; returning hides it. Measured
+    /// GEOMETRICALLY via onGeometryChange in GLOBAL (window)
+    /// coordinates: the transcript is an eager VStack — see the
+    /// ScrollView comment — and eager children get no
+    /// viewport-tracked onAppear/onDisappear, while the
+    /// named-space/PreferenceKey variant depends on ScrollView
+    /// background sizing semantics that differ across macOS
+    /// releases. Global frames have no such ambiguity.
     @State private var awayFromBottom = false
+    @State private var scrollFrame: CGRect = .zero
+    @State private var sentinelMinY: CGFloat = 0
+    /// Global minY of the sentinel at the content's TOP edge: the
+    /// demand signal for growing the history window while the user
+    /// reads upward (see the backfill loop).
+    @State private var topSentinelMinY: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let bottomId = "transcript-bottom"
+
+    /// At rest the sentinel's top sits just inside the viewport's
+    /// bottom edge; requiring it to pass 8pt BEYOND means only a
+    /// deliberate scroll-up reveals the button (fractional pinning
+    /// and rubber-banding never flash it).
+    private func updateAwayFromBottom() {
+        awayFromBottom = sentinelMinY > scrollFrame.maxY + 8
+    }
+
+    /// The user is within ~240pt of the rendered content's top edge —
+    /// pressing against it means they want OLDER history, so the
+    /// backfill may grow the window even while away from the bottom.
+    private var nearRenderedTop: Bool {
+        topSentinelMinY > scrollFrame.minY - 240
+    }
 
     /// Progressive history rendering: cold-open layout is linear in
     /// materialized rows (~5.7ms/row on a 120-row production session —
@@ -477,6 +505,18 @@ private struct TranscriptView: View {
                 // the next content change). A plain VStack always reports
                 // exact heights, so the bottom anchor tracks reliably.
                 VStack(alignment: .leading, spacing: 20) {
+                    // Top sentinel: approaching the rendered top edge
+                    // is the demand signal that resumes the (paused)
+                    // history backfill. It stays the VStack's first
+                    // child as older rows insert BELOW it.
+                    Color.clear
+                        .frame(height: 1)
+                        .onGeometryChange(for: CGRect.self) { proxy in
+                            proxy.frame(in: .global)
+                        } action: { frame in
+                            topSentinelMinY = frame.minY
+                        }
+
                     ForEach(visibleRows) { row in
                         switch row {
                         case let .message(model):
@@ -530,12 +570,18 @@ private struct TranscriptView: View {
                         )
                     }
 
-                    // Bottom sentinel: drives the jump button's visibility.
+                    // Bottom sentinel: its global (window) frame
+                    // drives the jump button's visibility (see
+                    // awayFromBottom).
                     Color.clear
                         .frame(height: 1)
                         .id(Self.bottomId)
-                        .onAppear { awayFromBottom = false }
-                        .onDisappear { awayFromBottom = true }
+                        .onGeometryChange(for: CGRect.self) { proxy in
+                            proxy.frame(in: .global)
+                        } action: { frame in
+                            sentinelMinY = frame.minY
+                            updateAwayFromBottom()
+                        }
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 24)
@@ -549,6 +595,12 @@ private struct TranscriptView: View {
             // inserted ABOVE the visible region, so the anchor's exact
             // VStack heights keep the pinned end stable while it grows.
             .defaultScrollAnchor(.bottom)
+            .onGeometryChange(for: CGRect.self) { proxy in
+                proxy.frame(in: .global)
+            } action: { frame in
+                scrollFrame = frame
+                updateAwayFromBottom()
+            }
             .task(id: store.sessionId) {
                 // History backfill: materialize older rows in small
                 // batches (a batch costs a few ms of layout) until the
@@ -560,14 +612,30 @@ private struct TranscriptView: View {
                 // forever. Completion flips `backfilling` so later
                 // appends render in full instead of clipping the
                 // oldest row off the suffix window.
+                //
+                // Growth is GATED ON THE READER'S POSITION: pinned at
+                // the bottom the scroll anchor hides each insertion,
+                // but while the user reads history an inserted batch
+                // shifts the very rows under their eyes — so the
+                // backfill pauses until they either return to the
+                // bottom or press against the rendered top edge (the
+                // demand signal for older rows; insertion there is
+                // the expected "load more" behavior). A side benefit:
+                // history nobody scrolls through is never
+                // materialized at all (~5.7ms of layout per row).
                 while !Task.isCancelled {
                     let count = store.transcript.rows.count
                     let settled = store.hasLoaded || store.lastError != nil
                     if tailWindow >= count, settled {
                         break
                     }
-                    try? await Task.sleep(for: .milliseconds(24))
-                    if tailWindow < count {
+                    // While gated (reading history, not at the top
+                    // edge) poll slowly: resume latency doesn't
+                    // matter, and a long read shouldn't keep a 24ms
+                    // timer hot for the view's whole lifetime.
+                    let gated = awayFromBottom && !nearRenderedTop
+                    try? await Task.sleep(for: .milliseconds(gated ? 200 : 24))
+                    if tailWindow < count, !gated {
                         tailWindow += Self.backfillBatch
                     }
                 }
