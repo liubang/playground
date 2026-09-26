@@ -324,3 +324,36 @@ func TestWorkspaceFileRawImage(t *testing.T) {
 		t.Fatalf("escape raw status = %d, want 400", resp3.StatusCode)
 	}
 }
+
+// BenchmarkServeRawWorkspaceFile hammers the raw image handler in
+// parallel: each request opens its own file handle and streams via
+// ServeContent, with no shared state to contend on.
+func BenchmarkServeRawWorkspaceFile(b *testing.B) {
+	dir := b.TempDir()
+	png := make([]byte, 2<<20)
+	copy(png, []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A})
+	for i := 8; i < len(png); i++ {
+		png[i] = byte(i * 2654435761)
+	}
+	path := filepath.Join(dir, "big.png")
+	if err := os.WriteFile(path, png, 0o644); err != nil {
+		b.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		b.Fatal(err)
+	}
+	srv := &Server{}
+	b.ReportAllocs()
+	b.SetBytes(int64(len(png)))
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			req := httptest.NewRequest(http.MethodGet, "/v1/workspaces/ws/file?path=big.png&raw=1", nil)
+			rec := httptest.NewRecorder()
+			srv.serveRawWorkspaceFile(rec, req, path, "big.png", info)
+			if rec.Code != http.StatusOK {
+				b.Errorf("status = %d", rec.Code)
+			}
+		}
+	})
+}
