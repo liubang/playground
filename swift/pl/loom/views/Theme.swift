@@ -566,22 +566,29 @@ struct OutlineButtonStyle: ButtonStyle {
 // MARK: - Toasts (ui/Toast.tsx + modal.css #toasts)
 
 /// One toast (WebUI ToastItem): error style by default, `info` mutes
-/// the border; sticky toasts never auto-dismiss.
+/// the border; sticky toasts never auto-dismiss. `hostId` is the
+/// host that was active when the toast was posted — the toast is
+/// owned by that host's layer and dies with it (0 = posted before
+/// any host mounted; the active host renders those).
 struct ToastItem: Identifiable, Equatable, Sendable {
     let id: Int
     let msg: String
     let info: Bool
     let sticky: Bool
+    let hostId: Int
 }
 
 /// Global toast bus (WebUI toastStore): post from anywhere; a
 /// ToastHost overlay renders the stack. Over the 4-toast cap the
 /// oldest drop; non-sticky toasts auto-dismiss after 5s.
 ///
-/// Several hosts can be mounted (window root + a sheet on top of it),
-/// but only the LAST registered — i.e. topmost — host renders the
-/// stack; otherwise the same toast would show once per host (a sheet
-/// doesn't fully cover its window, so the window host peeks out).
+/// Several hosts can be mounted (window root + a sheet on top of it).
+/// A toast is OWNED by the host that was active when it was posted
+/// and only that host renders it; when the host unmounts its pending
+/// toasts go with it. Ownership is what keeps a settings-sheet toast
+/// from migrating into the main window when the sheet closes (the
+/// previous "last host wins" scheme handed the stack to whichever
+/// host remained).
 @MainActor
 @Observable
 final class ToastCenter {
@@ -591,11 +598,11 @@ final class ToastCenter {
     private var nextId = 1
     private static let maxToasts = 4
 
-    /// Mounted hosts in appearance order; the last one wins.
+    /// Mounted hosts in appearance order; the last one is active.
     private var hostIds: [Int] = []
     private var nextHostId = 1
 
-    /// The host that currently renders the stack (nil = none mounted).
+    /// The host that currently owns new toasts (nil = none mounted).
     var activeHostId: Int? {
         hostIds.last
     }
@@ -609,12 +616,18 @@ final class ToastCenter {
 
     func unregisterHost(_ id: Int) {
         hostIds.removeAll { $0 == id }
+        // The host's pending toasts die with it: a closed sheet's
+        // toasts must not fall through to the window underneath.
+        items.removeAll { $0.hostId == id }
     }
 
     func post(_ msg: String, info: Bool = false, sticky: Bool = false) {
         let id = nextId
         nextId += 1
-        items.append(ToastItem(id: id, msg: msg, info: info, sticky: sticky))
+        items.append(ToastItem(
+            id: id, msg: msg, info: info, sticky: sticky,
+            hostId: activeHostId ?? 0,
+        ))
         if items.count > Self.maxToasts {
             items = Array(items.suffix(Self.maxToasts))
         }
@@ -629,6 +642,14 @@ final class ToastCenter {
     func dismiss(_ id: Int) {
         items.removeAll { $0.id == id }
     }
+
+    /// The subset a host renders: its own toasts, plus ownerless ones
+    /// (posted before any host mounted) when it is the active host —
+    /// the active-host gate keeps ownerless toasts from rendering
+    /// once per mounted host.
+    func items(for hostId: Int) -> [ToastItem] {
+        items.filter { $0.hostId == hostId || ($0.hostId == 0 && activeHostId == hostId) }
+    }
 }
 
 /// #toasts: top-right overlay stack — bg1 card with an error (default)
@@ -642,51 +663,50 @@ struct ToastHost: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 8) {
-            // Only the topmost mounted host renders; the rest stay
-            // empty so one toast never shows twice (window + sheet).
-            if center.activeHostId == hostId {
-                ForEach(center.items) { item in
-                    HStack(alignment: .top, spacing: 9) {
-                        Image(systemName: item.info
-                            ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                            .font(.system(size: 13))
-                            .foregroundStyle(item.info ? Theme.success : Theme.error)
-                            .padding(.top, 1)
-                        Text(item.msg)
-                            .font(.system(size: Theme.textSm))
-                            .foregroundStyle(Theme.fg)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Button {
-                            center.dismiss(item.id)
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(Theme.muted)
-                                .frame(width: 20, height: 20)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("关闭提示")
+            // Each host renders only the toasts it owns (see
+            // ToastCenter): a sheet's toasts never leak into the
+            // window underneath, and vice versa.
+            ForEach(center.items(for: hostId)) { item in
+                HStack(alignment: .top, spacing: 9) {
+                    Image(systemName: item.info
+                        ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(item.info ? Theme.success : Theme.error)
+                        .padding(.top, 1)
+                    Text(item.msg)
+                        .font(.system(size: Theme.textSm))
+                        .foregroundStyle(Theme.fg)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button {
+                        center.dismiss(item.id)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Theme.muted)
+                            .frame(width: 20, height: 20)
+                            .contentShape(Rectangle())
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .frame(maxWidth: 380)
-                    // bg2, not the WebUI's bg1: the settings panel IS
-                    // bg1, so a bg1 toast melts into it — bg2 keeps the
-                    // elevation contrast the WebUI gets for free from
-                    // its bg0 backdrop.
-                    .background(Theme.bg2, in: RoundedRectangle(cornerRadius: Theme.radiusMd))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.radiusMd)
-                            .strokeBorder(
-                                item.info ? Theme.success.opacity(0.45) : Theme.error.opacity(0.6),
-                                lineWidth: 1,
-                            ),
-                    )
-                    .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
-                    .transition(.opacity)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("关闭提示")
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(maxWidth: 380)
+                // bg2, not the WebUI's bg1: the settings panel IS
+                // bg1, so a bg1 toast melts into it — bg2 keeps the
+                // elevation contrast the WebUI gets for free from
+                // its bg0 backdrop.
+                .background(Theme.bg2, in: RoundedRectangle(cornerRadius: Theme.radiusMd))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.radiusMd)
+                        .strokeBorder(
+                            item.info ? Theme.success.opacity(0.45) : Theme.error.opacity(0.6),
+                            lineWidth: 1,
+                        ),
+                )
+                .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
+                .transition(.opacity)
             }
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: center.items)
