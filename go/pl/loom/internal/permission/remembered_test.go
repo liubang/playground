@@ -19,10 +19,12 @@ package permission
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	_ "modernc.org/sqlite"
 )
 
 // openTestStore opens a remembered store in a temp dir.
@@ -160,6 +162,126 @@ func TestRememberedStoreRejectsNonAllow(t *testing.T) {
 		Decision: domain.DecisionDeny,
 	}); err == nil {
 		t.Fatal("remembering a deny package must fail")
+	}
+}
+
+func TestRememberedStoreWorkspaceScope(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t)
+
+	// The same binding remembered in two workspaces coexists; each
+	// row reloads with its workspace tag, and visibility follows it.
+	for _, ws := range []string{"/ws/a", "/ws/b"} {
+		if err := store.Remember(ctx, Package{
+			Bind:           Binding{Kind: BindArgv, Argv: []string{"git", "commit"}},
+			Decision:       domain.DecisionAllow,
+			MaxConsequence: ConsequenceConfined,
+			Workspace:      ws,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	loaded, err := store.Load(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 2 {
+		t.Fatalf("loaded %d packages, want 2 (one per workspace)", len(loaded))
+	}
+	seen := map[string]bool{}
+	for _, p := range loaded {
+		seen[p.Workspace] = true
+		if !p.visibleTo(p.Workspace) {
+			t.Errorf("package must be visible to its own workspace %q", p.Workspace)
+		}
+		if p.visibleTo("/ws/other") {
+			t.Errorf("package tagged %q must not be visible to /ws/other", p.Workspace)
+		}
+	}
+	if !seen["/ws/a"] || !seen["/ws/b"] {
+		t.Fatalf("workspace tags lost on reload: %v", seen)
+	}
+
+	// Upserting in one workspace must not clobber the other's row.
+	if err := store.Remember(ctx, Package{
+		Bind:           Binding{Kind: BindArgv, Argv: []string{"git", "commit"}},
+		Decision:       domain.DecisionAllow,
+		Grant:          PackageGrant{NetworkFull: true},
+		MaxConsequence: ConsequenceSharedState,
+		Workspace:      "/ws/a",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	loaded, _ = store.Load(ctx)
+	if len(loaded) != 2 {
+		t.Fatalf("per-workspace upsert must keep both rows: %d", len(loaded))
+	}
+
+	// An untagged (pre-v4 / rule-file-shaped) package stays global.
+	untagged := Package{Scope: ScopeUser}
+	if !untagged.visibleTo("/ws/anything") {
+		t.Fatal("untagged package must be global")
+	}
+
+	// Forget removes the binding across workspaces.
+	if ok, err := store.Forget(ctx, Binding{Kind: BindArgv, Argv: []string{"git", "commit"}}); err != nil || !ok {
+		t.Fatalf("forget = %v, %v", ok, err)
+	}
+	if loaded, _ := store.Load(ctx); len(loaded) != 0 {
+		t.Fatalf("forget must remove every workspace's row: %d left", len(loaded))
+	}
+}
+
+func TestRememberedStoreMigrateV3toV4(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "remembered.db")
+
+	// Hand-build a v3-shaped database (no workspace column).
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stmt := range []string{
+		`CREATE TABLE remembered_packages (
+		    bind_kind TEXT NOT NULL, bind_value TEXT NOT NULL,
+		    grant TEXT NOT NULL DEFAULT '', max_consequence TEXT NOT NULL DEFAULT '',
+		    justification TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+		    PRIMARY KEY (bind_kind, bind_value))`,
+		`INSERT INTO remembered_packages VALUES ('argv', '["go","test"]', '', 'confined', 'old approval', 'now', 'now')`,
+	} {
+		if _, err := raw.ExecContext(ctx, stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw.Close()
+
+	// Reopening migrates to v4; the pre-v4 row survives as GLOBAL.
+	store, err := OpenRememberedStore(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	loaded, err := store.Load(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 1 || loaded[0].Workspace != "" {
+		t.Fatalf("migrated rows must stay global (workspace=''): %+v", loaded)
+	}
+	if !loaded[0].visibleTo("/any/workspace") {
+		t.Fatal("pre-v4 rows must remain visible everywhere")
+	}
+	// And new remembers coexist with the migrated row.
+	if err := store.Remember(ctx, Package{
+		Bind:           Binding{Kind: BindArgv, Argv: []string{"go", "test"}},
+		Decision:       domain.DecisionAllow,
+		MaxConsequence: ConsequenceConfined,
+		Workspace:      "/ws/a",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if loaded, _ := store.Load(ctx); len(loaded) != 2 {
+		t.Fatalf("global row + workspace row must coexist: %d", len(loaded))
 	}
 }
 

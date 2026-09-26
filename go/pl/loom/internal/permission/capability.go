@@ -314,13 +314,15 @@ func (s *PackageSet) Packages() []Package {
 }
 
 // visibleTo reports whether the package participates in decisions for
-// the given workspace: workspace-scoped layers (project rules, session
-// memory) only see their own workspace; global layers see all.
+// the given workspace: a package TAGGED with a workspace — project
+// rules, session memory, and remembered "allow always" approvals (v4)
+// — only sees that workspace; untagged packages (user rule files,
+// pre-v4 remembered rows) are global.
 func (p Package) visibleTo(workspace string) bool {
-	if p.Scope != ScopeProject && p.Scope != ScopeSession {
-		return true
+	if p.Workspace != "" {
+		return p.Workspace == workspace
 	}
-	return p.Workspace == "" || p.Workspace == workspace
+	return true
 }
 
 // packageBinds reports whether p's binding applies to the call. The

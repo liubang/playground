@@ -16,11 +16,14 @@
 // Created: 2026/08/23
 
 // The remembered store: interactive "allow always" approvals persisted
-// as user-scope capability packages in SQLite (schema v3 — one table,
-// one row per binding). A single connection serializes writes; WAL +
-// busy_timeout handle cross-process concurrency. Migration from the v2
-// multi-table schema is a ONE-TIME operation performed by
-// `loom rules migrate` — the store itself never auto-migrates.
+// as user-scope capability packages in SQLite (schema v4 — one table,
+// one row per binding AND WORKSPACE). A single connection serializes
+// writes; WAL + busy_timeout handle cross-process concurrency.
+// Migration from the v2 multi-table schema is a ONE-TIME operation
+// performed by `loom rules migrate`; the v3→v4 step (adding the
+// workspace column) is applied automatically on open — existing rows
+// keep an empty workspace tag and stay global, exactly their v3
+// behavior.
 package permission
 
 import (
@@ -192,22 +195,23 @@ func (s *RememberedStore) Remember(ctx context.Context, pkg Package) error {
 	}
 	now := formatNowUTC()
 	_, err = s.db.ExecContext(ctx, `
-INSERT INTO remembered_packages(bind_kind, bind_value, grant, max_consequence, justification, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(bind_kind, bind_value) DO UPDATE SET
+INSERT INTO remembered_packages(bind_kind, bind_value, workspace, grant, max_consequence, justification, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(bind_kind, bind_value, workspace) DO UPDATE SET
     grant = excluded.grant,
     max_consequence = excluded.max_consequence,
     justification = excluded.justification,
     updated_at = excluded.updated_at`,
-		kind, value, grantJSON, pkg.MaxConsequence.String(), justif, now, now)
+		kind, value, pkg.Workspace, grantJSON, pkg.MaxConsequence.String(), justif, now, now)
 	if err != nil {
 		return fmt.Errorf("remember package: %w", err)
 	}
 	return nil
 }
 
-// Forget removes a remembered package. ok=false means the binding was
-// not in the store.
+// Forget removes a remembered package — in EVERY workspace, matching
+// the workspace-agnostic ForgetPackage API and the global rules
+// listing. ok=false means the binding was not in the store.
 func (s *RememberedStore) Forget(ctx context.Context, bind Binding) (bool, error) {
 	kind, value, err := encodeBinding(bind)
 	if err != nil {
@@ -263,35 +267,101 @@ func (s *RememberedStore) init(ctx context.Context) error {
 	if err := s.db.PingContext(ctx); err != nil {
 		return fmt.Errorf("ping remembered store: %w", err)
 	}
+	// v4 scopes remembered approvals to the workspace they were granted
+	// in: the approval card has always promised "for this workspace",
+	// but v3 dropped the tag on persist, making every remembered rule
+	// global after a restart. The primary key gains the workspace so
+	// the same binding may be remembered per workspace.
 	const schema = `
 CREATE TABLE IF NOT EXISTS remembered_packages (
     bind_kind TEXT NOT NULL,
     bind_value TEXT NOT NULL,
+    workspace TEXT NOT NULL DEFAULT '',
     grant TEXT NOT NULL DEFAULT '',
     max_consequence TEXT NOT NULL DEFAULT '',
     justification TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    PRIMARY KEY (bind_kind, bind_value)
+    PRIMARY KEY (bind_kind, bind_value, workspace)
 );`
 	if _, err := s.db.ExecContext(ctx, schema); err != nil {
 		return fmt.Errorf("apply remembered store schema: %w", err)
 	}
+	return s.migrateV4(ctx)
+}
+
+// migrateV4 adds the workspace column to a v3 table. Pre-v4 rows keep
+// an empty workspace tag (global), preserving their historical behavior.
+func (s *RememberedStore) migrateV4(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, "PRAGMA table_info(remembered_packages)")
+	if err != nil {
+		return fmt.Errorf("inspect remembered store schema: %w", err)
+	}
+	defer rows.Close()
+	hasWorkspace := false
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return fmt.Errorf("scan remembered store schema: %w", err)
+		}
+		if name == "workspace" {
+			hasWorkspace = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if hasWorkspace {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin v4 migration: %w", err)
+	}
+	defer tx.Rollback()
+	for _, stmt := range []string{
+		`ALTER TABLE remembered_packages RENAME TO remembered_packages_v3`,
+		`CREATE TABLE remembered_packages (
+    bind_kind TEXT NOT NULL,
+    bind_value TEXT NOT NULL,
+    workspace TEXT NOT NULL DEFAULT '',
+    grant TEXT NOT NULL DEFAULT '',
+    max_consequence TEXT NOT NULL DEFAULT '',
+    justification TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (bind_kind, bind_value, workspace)
+)`,
+		`INSERT INTO remembered_packages
+SELECT bind_kind, bind_value, '', grant, max_consequence, justification, created_at, updated_at
+FROM remembered_packages_v3`,
+		`DROP TABLE remembered_packages_v3`,
+	} {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("v4 migration: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit v4 migration: %w", err)
+	}
 	return nil
 }
 
-// queryRememberedPackages reads every row of the v3 table.
+// queryRememberedPackages reads every row of the v4 table.
 func queryRememberedPackages(ctx context.Context, db *sql.DB) ([]Package, error) {
 	rows, err := db.QueryContext(ctx,
-		"SELECT bind_kind, bind_value, grant, max_consequence, justification FROM remembered_packages")
+		"SELECT bind_kind, bind_value, workspace, grant, max_consequence, justification FROM remembered_packages")
 	if err != nil {
 		return nil, fmt.Errorf("query remembered packages: %w", err)
 	}
 	defer rows.Close()
 	var out []Package
 	for rows.Next() {
-		var kind, value, grantJSON, consequence, justif string
-		if err := rows.Scan(&kind, &value, &grantJSON, &consequence, &justif); err != nil {
+		var kind, value, workspace, grantJSON, consequence, justif string
+		if err := rows.Scan(&kind, &value, &workspace, &grantJSON, &consequence, &justif); err != nil {
 			return nil, fmt.Errorf("scan remembered package: %w", err)
 		}
 		bind, err := decodeBinding(kind, value)
@@ -304,6 +374,7 @@ func queryRememberedPackages(ctx context.Context, db *sql.DB) ([]Package, error)
 			Justification: justif,
 			Scope:         ScopeUser,
 			Source:        RememberedSource,
+			Workspace:     workspace,
 		}
 		if grantJSON != "" {
 			if err := json.Unmarshal([]byte(grantJSON), &p.Grant); err != nil {

@@ -251,9 +251,15 @@ type ApprovalRequestedPayload struct {
 	Source      domain.ToolSource `json:"source,omitempty"`
 	Risk        domain.RiskLevel  `json:"risk"`
 	Description string            `json:"description"`
-	ArgsHash    string            `json:"args_hash"`
-	ReadPaths   []string          `json:"read_paths,omitempty"`
-	WritePaths  []string          `json:"write_paths,omitempty"`
+	// AskReason is the policy verdict's provenance — why this call needs
+	// a human decision (an indicator hit, an explicit ask rule, a
+	// boundary crossing the active mode does not auto-grant). Frontends
+	// show it so the card answers "why are you asking me", not only
+	// "what is wanted".
+	AskReason  string   `json:"ask_reason,omitempty"`
+	ArgsHash   string   `json:"args_hash"`
+	ReadPaths  []string `json:"read_paths,omitempty"`
+	WritePaths []string `json:"write_paths,omitempty"`
 	// Target is the primary subject of the call (the raw command line
 	// for run_cmd, else the first write/read path) — the same derivation
 	// as ToolPreparedPayload.Target. Frontends render it in a mono block

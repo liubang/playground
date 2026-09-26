@@ -839,6 +839,13 @@ type toolCallAuditPayload struct {
 	WritePaths   []string             `json:"write_paths,omitempty"`
 	ApprovalDesc string               `json:"approval_desc,omitempty"`
 	Recovery     *domain.RecoverySpec `json:"recovery,omitempty"`
+	// AskReason, set only on permission.requested, carries the policy
+	// verdict's provenance — why THIS call needs a human decision (an
+	// indicator hit, an explicit ask rule, a boundary crossing the
+	// active mode does not auto-grant). It lets the approval card
+	// answer "why are you asking me", and the denial feedback say what
+	// made the call approval-worthy in the first place.
+	AskReason string `json:"ask_reason,omitempty"`
 	// PrepareFailed marks the degraded payload emitted when a call fails
 	// during preparation; ArgsRawHash then carries the raw-arguments
 	// fingerprint in place of ArgsHash.
@@ -2204,12 +2211,18 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 	policy := l.policy()
 	for _, tc := range lastToolCalls(l.Run.Messages) {
 		prepared, ok := l.prepared[tc.ID]
-		if !ok || policy.Evaluate(prepared).Decision != domain.DecisionAsk {
+		if !ok {
+			continue
+		}
+		verdict := policy.Evaluate(prepared)
+		if verdict.Decision != domain.DecisionAsk {
 			continue
 		}
 		// The durable permission event ID is the approval ID. Reusing it for
 		// the live request binds the UI decision to the persisted audit fact.
-		approvalEvent := l.Run.appendEvent(domain.EventPermissionRequested, makeToolCallAuditPayload(prepared))
+		payload := makeToolCallAuditPayload(prepared)
+		payload.AskReason = verdict.Reason
+		approvalEvent := l.Run.appendEvent(domain.EventPermissionRequested, payload)
 		if l.traceRun != nil {
 			l.traceRun.RecordEvent(ctx, "approval.requested", map[string]string{
 				"tool": prepared.Call.Name, "risk": fmt.Sprintf("R%d", int(prepared.Risk)),
@@ -2248,7 +2261,7 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 		}
 		if decision != domain.DecisionAllow {
 			delete(l.prepared, tc.ID)
-			l.recordToolError(ctx, tc, "permission_denied", "tool call denied by the user")
+			l.recordToolError(ctx, tc, "permission_denied", userDeniedMessage(verdict.Reason))
 		}
 	}
 	if len(l.prepared) == 0 {
@@ -2257,6 +2270,19 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 	}
 	_, err := l.Run.TransitionTo(domain.PhaseExecutingTools)
 	return err
+}
+
+// userDeniedMessage tells the model WHY the approval it just lost was
+// required and how to recover. A bare "denied" invites a blind retry
+// of the identical shape (which re-asks or trips runaway termination);
+// the verdict's ask reason plus an explicit reroute hint lets the
+// model adapt the command or ask the user instead.
+func userDeniedMessage(askReason string) string {
+	msg := "tool call denied by the user"
+	if askReason != "" {
+		msg += " (approval was required because: " + askReason + ")"
+	}
+	return msg + "; do not retry the same command shape — adapt the command or ask the user how to proceed"
 }
 
 // maxConcurrentToolExecs bounds parallel executions within one

@@ -27,6 +27,7 @@ go_test(
         "mcp_http_e2e_test.go",
         "memory_pipeline_e2e_test.go",
         "permission_e2e_test.go",
+        "permission_real_model_e2e_test.go",
         "serve_real_model_e2e_test.go",
         "skills_e2e_test.go",
         "snapshot_e2e_test.go",
@@ -59,5 +60,36 @@ go_test(
         "//go/pl/loom/internal/tool/subagent:subagent_lib",
         "//go/pl/loom/internal/workspace:workspace_lib",
         "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)
+
+# The real-model acceptance suites (LOOM_E2E_LLM=1, the user's own
+# ~/.loom/config.yaml). "local": they need the host network, the real
+# HOME, and nested sandbox-exec — none of which the bazel darwin-sandbox
+# provides. "manual": //... wildcards (CI) must never pay for or depend
+# on a live model; run explicitly, e.g.
+#   bazel test //go/pl/loom/e2e:e2e_real_model_test \
+#     --test_env=LOOM_E2E_LLM=1 --test_env=HOME="$HOME" \
+#     --test_arg=-test.v --test_output=all --cache_test_results=no
+go_test(
+    name = "e2e_real_model_test",
+    srcs = [
+        "permission_real_model_e2e_test.go",
+        "serve_real_model_e2e_test.go",
+        "user_intent_e2e_test.go",
+    ],
+    tags = [
+        "local",
+        "manual",
+    ],
+    deps = [
+        "//go/pl/loom/e2e/harness",
+        "//go/pl/loom/internal/app",
+        "//go/pl/loom/internal/client",
+        "//go/pl/loom/internal/config:config_lib",
+        "//go/pl/loom/internal/domain:domain_lib",
+        "//go/pl/loom/internal/permission:permission_lib",
+        "//go/pl/loom/internal/runtimeevent",
+        "//go/pl/loom/internal/session:session_lib",
     ],
 )

@@ -87,14 +87,29 @@ func TestDeriveHeredocShellRecursive(t *testing.T) {
 }
 
 func TestDeriveHeredocInterpreter(t *testing.T) {
-	// A heredoc feeding a non-shell interpreter is unanalyzable code:
-	// unprovable, with a standing indicator.
+	// A STATIC heredoc feeding a non-shell interpreter is unanalyzable
+	// code, but its body is inline in the command text — exactly as
+	// reviewable as -c inline code, so it is unprovable WITHOUT the
+	// stdin-execution indicator (which would force an approval).
 	d := deriveExec([]string{"bash", "-c", "python3 <<'EOF'\nimport os\nEOF"})
 	if d.Effect.Proven {
 		t.Fatal("heredoc-fed python3 must be unprovable")
 	}
+	if len(d.Effect.Indicators) != 0 {
+		t.Fatalf("static-heredoc python3 must not carry an indicator: %v", d.Effect.Indicators)
+	}
+	if !d.Effect.OpaquePayload {
+		t.Fatal("heredoc-fed python3 must stay opaque (never categorically remembered)")
+	}
+}
+
+func TestDeriveDynamicPipeIntoInterpreterKeepsIndicator(t *testing.T) {
+	// A PIPE's program text arrives at runtime — genuinely out-of-band
+	// even when the producer is not a network command — so the
+	// stdin-execution indicator stands.
+	d := deriveExec([]string{"bash", "-c", "echo 'import os' | python3"})
 	if len(d.Effect.Indicators) == 0 {
-		t.Fatal("heredoc-fed python3 must carry a stdin-execution indicator")
+		t.Fatal("pipe-fed python3 must carry a stdin-execution indicator")
 	}
 }
 

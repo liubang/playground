@@ -110,6 +110,23 @@ struct ApprovalCard: View {
                     .padding(.top, 6)
             }
 
+            // Why row: the policy verdict's provenance — why THIS call
+            // needs a human decision (indicator hit, ask rule, boundary
+            // crossing the mode does not auto-grant). This is what makes
+            // every prompt answerable instead of a blind interruption.
+            if let askReason = approval.askReason, !askReason.isEmpty {
+                Label {
+                    Text(askReason)
+                } icon: {
+                    Image(systemName: "questionmark.circle")
+                }
+                .font(.system(size: Theme.textSm))
+                .foregroundStyle(Theme.warning.opacity(0.9))
+                .textSelection(.enabled)
+                .padding(.top, 6)
+                .help("Why this call requires approval")
+            }
+
             if let target {
                 Text(target)
                     .font(Theme.monoSm)

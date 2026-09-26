@@ -2526,6 +2526,7 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				Source:      payload.Source,
 				Risk:        payload.Risk,
 				Description: payload.ApprovalDesc,
+				AskReason:   payload.AskReason,
 				ArgsHash:    payload.ArgsHash,
 				ReadPaths:   payload.ReadPaths,
 				WritePaths:  payload.WritePaths,
@@ -2820,6 +2821,7 @@ type toolCallAuditDTO struct {
 	ReadPaths    []string          `json:"read_paths,omitempty"`
 	WritePaths   []string          `json:"write_paths,omitempty"`
 	ApprovalDesc string            `json:"approval_desc,omitempty"`
+	AskReason    string            `json:"ask_reason,omitempty"`
 }
 
 type permissionResolvedDTO struct {

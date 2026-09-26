@@ -186,6 +186,10 @@ struct ApprovalRequestedPayload: Decodable, Sendable {
     let target: String?
     /// Human-readable consequence of the operation ("will do" row).
     let consequence: String?
+    /// The policy verdict's provenance — WHY this call needs a human
+    /// decision (indicator hit, explicit ask rule, boundary crossing
+    /// the mode does not auto-grant). Shown as the card's "why" row.
+    let askReason: String?
     /// Rule preview for "Always allow"; empty means the call cannot be
     /// remembered, so the button must be hidden (WebUI cards.tsx).
     let rulePreview: String?
@@ -202,6 +206,7 @@ struct ApprovalRequestedPayload: Decodable, Sendable {
         case writePaths = "write_paths"
         case arguments
         case target, consequence
+        case askReason = "ask_reason"
         case rulePreview = "rule_preview"
         case trustPreview = "trust_preview"
     }

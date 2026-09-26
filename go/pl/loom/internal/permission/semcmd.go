@@ -166,6 +166,21 @@ func deriveStdinProgram(base string, step ExecStep) (Effect, bool) {
 	case process.StdinWord:
 		reason = base + " executes a here-string program whose content is not statically analyzable"
 	}
+	if step.Stdin == process.StdinHeredoc && step.HeredocStatic {
+		// A STATIC heredoc's body is inline in the command text —
+		// exactly as reviewable as -c inline code, which carries no
+		// indicator (semDeriveInterpreter). Flagging it anyway made
+		// the model's natural multi-line script form the one shape
+		// that always asks and can never be remembered, while pipe
+		// and -c forms of the same code slipped through differently.
+		// Only genuinely out-of-band program text (a pipe's runtime
+		// output, an EXPANDED heredoc) is unscreenable in principle.
+		return Effect{
+			Proven:        false,
+			Reason:        reason,
+			OpaquePayload: true,
+		}, true
+	}
 	return Effect{
 		Proven:        false,
 		Reason:        reason,
