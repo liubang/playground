@@ -104,6 +104,10 @@ export interface ApprovalRequestedPayload {
   rule_preview?: string
   trust_preview?: string
   consequence?: string
+  // Why this call needs a human decision (the policy verdict's
+  // provenance). Distinct from consequence: that one says what the
+  // operation DOES, this one says why you're being ASKED.
+  ask_reason?: string
 }
 
 export interface ApprovalResolvedPayload {

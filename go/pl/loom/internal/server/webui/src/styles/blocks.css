@@ -661,6 +661,19 @@ body.lightbox-open {
   margin-top: 6px;
   font-size: var(--text-md);
 }
+.card-approval .consequence {
+  color: var(--muted);
+  margin-top: 6px;
+  font-size: var(--text-sm);
+}
+.card-approval .why {
+  color: var(--warning);
+  margin-top: 6px;
+  font-size: var(--text-sm);
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
 .card-approval .cmd {
   margin: 10px 0;
 }

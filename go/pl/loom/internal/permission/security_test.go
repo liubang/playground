@@ -196,6 +196,25 @@ func TestAttackIndicatedWriteMemory(t *testing.T) {
 	}
 }
 
+// TestLoomMetadataSegmentMatch: the protected-metadata guard matches the
+// exact ".loom" path segment only — sibling names (".loom-backup",
+// ".loom-rm-e2e-...") are ordinary paths. Regression: the guard used a
+// substring match, so any "/.loom*" path was flagged as loom metadata.
+func TestLoomMetadataSegmentMatch(t *testing.T) {
+	for path, want := range map[string]bool{
+		"/home/u/.loom":                 true,
+		"/home/u/.loom/skills/x.md":     true,
+		".loom":                         true,
+		"/home/u/.loom-rm-e2e-1/victim": false,
+		"/home/u/.loom-backup":          false,
+		"/home/u/.loomfoo":              false,
+	} {
+		if got := sensitiveRedirectTarget(path) != ""; got != want {
+			t.Errorf("sensitiveRedirectTarget(%q) hit = %v, want %v", path, got, want)
+		}
+	}
+}
+
 // TestAttackGitConfigInjection: -c core.hooksPath must carry an
 // indicator regardless of subcommand (M8).
 func TestAttackGitConfigInjection(t *testing.T) {

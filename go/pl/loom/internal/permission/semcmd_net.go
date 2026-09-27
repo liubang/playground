@@ -128,7 +128,7 @@ var curlOpts = OptTable{
 // Options that redirect or widen the real egress (proxy, config file,
 // DNS overrides) degrade the requirement to Any: the URL in argv is
 // then not the whole story.
-func semDeriveCurl(argv []string) (Effect, bool) {
+func semDeriveCurl(argv []string, _ DeriveEnv) (Effect, bool) {
 	opts, ok := ParseOpts(argv[1:], curlOpts)
 	if !ok {
 		return Effect{}, false
@@ -206,7 +206,7 @@ var wgetOpts = OptTable{
 }
 
 // semDeriveWget derives a wget invocation (same shape as curl).
-func semDeriveWget(argv []string) (Effect, bool) {
+func semDeriveWget(argv []string, _ DeriveEnv) (Effect, bool) {
 	opts, ok := ParseOpts(argv[1:], wgetOpts)
 	if !ok {
 		return Effect{}, false
@@ -234,7 +234,7 @@ func semDeriveWget(argv []string) (Effect, bool) {
 
 // semDeriveNetcat classifies nc/ncat: arbitrary TCP egress, plus a
 // standing indicator for the -e/--exec reverse-shell form.
-func semDeriveNetcat(argv []string) (Effect, bool) {
+func semDeriveNetcat(argv []string, _ DeriveEnv) (Effect, bool) {
 	e := Effect{
 		Proven:      true,
 		Consequence: ConsequenceConfined,
@@ -252,7 +252,7 @@ func semDeriveNetcat(argv []string) (Effect, bool) {
 
 // semDeriveScp classifies scp: any remote endpoint makes it network-Any;
 // identity-file and credential-path arguments keep the indicator.
-func semDeriveScp(argv []string) (Effect, bool) {
+func semDeriveScp(argv []string, _ DeriveEnv) (Effect, bool) {
 	e := Effect{Proven: true, Consequence: ConsequenceConfined, Reason: "scp"}
 	for _, arg := range argv[1:] {
 		if strings.Contains(arg, ":") && !strings.HasPrefix(arg, "-") {
@@ -268,7 +268,7 @@ func semDeriveScp(argv []string) (Effect, bool) {
 
 // semDeriveRsync classifies rsync: remote endpoints make it network-Any;
 // --delete on a remote target destroys remote data (shared-destructive).
-func semDeriveRsync(argv []string) (Effect, bool) {
+func semDeriveRsync(argv []string, _ DeriveEnv) (Effect, bool) {
 	e := Effect{Proven: true, Consequence: ConsequenceConfined, Reason: "rsync"}
 	remote := false
 	for _, arg := range argv[1:] {
@@ -296,7 +296,7 @@ func semDeriveRsync(argv []string) (Effect, bool) {
 // semDeriveSSH classifies ssh: remote execution over an arbitrary host.
 // The remote command runs OUTSIDE loom's sandbox, so ssh carries a
 // standing indicator.
-func semDeriveSSH(argv []string) (Effect, bool) {
+func semDeriveSSH(argv []string, _ DeriveEnv) (Effect, bool) {
 	return Effect{
 		Proven:      true,
 		Consequence: ConsequenceConfined,

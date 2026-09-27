@@ -36,6 +36,14 @@ export const ApprovalCard = memo(function ApprovalCard({
       {payload.description && <div className="desc">{payload.description}</div>}
       {/* Consequence row: what this operation "will do" (the derived effect), not the command text itself */}
       {payload.consequence && <div className="consequence">{payload.consequence}</div>}
+      {/* Why row: the policy verdict's provenance — why THIS call needs a human decision. Hidden when the
+          consequence row already carries the same text (a danger-only destructive ask's reason IS the
+          effect description) — the card never says the same thing twice. */}
+      {payload.ask_reason && !(payload.consequence || '').includes(payload.ask_reason) && (
+        <div className="why">
+          <Icon name="circle-question" /> {payload.ask_reason}
+        </div>
+      )}
       {/* Show cmd only when target differs from description, avoiding rendering the same text twice */}
       {payload.target && payload.target !== payload.description && (
         <div className="cmd">

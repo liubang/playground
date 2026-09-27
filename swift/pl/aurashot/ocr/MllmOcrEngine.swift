@@ -200,7 +200,7 @@ final class MllmServerClient: @unchecked Sendable {
                 }
             }
             guard let self else { return false }
-            return await self.boot(binary: binary, model: model, mmproj: mmproj)
+            return await boot(binary: binary, model: model, mmproj: mmproj)
         }
         bootTask = task
         lock.unlock()

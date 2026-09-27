@@ -147,7 +147,7 @@ func gitConfigInjection(argv []string) string {
 }
 
 // semDeriveGit derives the effect of a git invocation.
-func semDeriveGit(argv []string) (Effect, bool) {
+func semDeriveGit(argv []string, _ DeriveEnv) (Effect, bool) {
 	sub, rest, ok := splitGitGlobalOpts(argv[1:])
 	if !ok {
 		return Effect{}, false

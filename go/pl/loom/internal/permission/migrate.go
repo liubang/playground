@@ -402,7 +402,7 @@ func queryV2Table(ctx context.Context, db *sql.DB, table, columns string, consum
 // asks); anything the deriver cannot prove (unknown programs, dynamic
 // forms) gets confined — the conservative direction.
 func migratedConsequence(prefix []string) Consequence {
-	e := deriveStep(ExecStep{Argv: prefix})
+	e := deriveStep(ExecStep{Argv: prefix}, DeriveEnv{})
 	if !e.Proven {
 		return ConsequenceConfined
 	}

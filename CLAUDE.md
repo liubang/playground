@@ -14,7 +14,7 @@ bazel test //...
 # Per-language
 bazel build //cpp/...       # C++ (default: C++20 + ASan, debug mode)
 bazel build //java/...      # Java 21 / Spring Boot
-bazel build //go/...        # Go 1.26
+bazel build //go/...        # Go 1.27
 bazel build //python/...    # Python 3.13
 
 # C++ configs

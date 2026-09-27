@@ -222,7 +222,7 @@ final class ImageCompositorTests: XCTestCase {
         makeSolidImage(width: size, height: size, r: 0, g: 0, b: 1, space: sRGB)
     }
 
-    func testStrokeLandsAtExpectedQuartzPosition() {
+    func testStrokeLandsAtExpectedQuartzPosition() throws {
         let base = blueBase()
         let annotation = Annotation(
             tool: .rectangle,
@@ -238,15 +238,15 @@ final class ImageCompositorTests: XCTestCase {
         )
         XCTAssertNotNil(output)
         // Left-edge midpoint is on the stroke…
-        XCTAssertTrue(isReddish(pixel(of: output!, x: 1, y: 4)))
+        XCTAssertTrue(try isReddish(pixel(of: XCTUnwrap(output), x: 1, y: 4)))
         // …and the interior is untouched base. (The 2.5pt stroke
         // legitimately spills onto the image's outermost pixels from
         // the rect's corners, so no corner assertions here.)
-        XCTAssertTrue(isBluish(pixel(of: output!, x: 4, y: 4)))
-        XCTAssertTrue(isBluish(pixel(of: output!, x: 3, y: 3)))
+        XCTAssertTrue(try isBluish(pixel(of: XCTUnwrap(output), x: 4, y: 4)))
+        XCTAssertTrue(try isBluish(pixel(of: XCTUnwrap(output), x: 3, y: 3)))
     }
 
-    func testHorizontalLineLocksYFlip() {
+    func testHorizontalLineLocksYFlip() throws {
         let base = blueBase()
         // A horizontal line near the TOP of y-up space (y = 7): a
         // y-flip bug would mirror it to y = 0/1.
@@ -255,18 +255,18 @@ final class ImageCompositorTests: XCTestCase {
             start: CGPoint(x: 1, y: 7),
             end: CGPoint(x: 7, y: 7),
         )
-        let output = ImageCompositor.composite(
+        let output = try XCTUnwrap(ImageCompositor.composite(
             base: base,
             crop: CGRect(x: 0, y: 0, width: 8, height: 8),
             imageHeight: 8,
             scale: 1,
             annotations: [annotation],
-        )!
+        ))
         XCTAssertTrue(isReddish(pixel(of: output, x: 4, y: 7)))
         XCTAssertTrue(isBluish(pixel(of: output, x: 4, y: 1)))
     }
 
-    func testCropOffsetAndY0Translation() {
+    func testCropOffsetAndY0Translation() throws {
         // Base is the 8×8 crop TAKEN FROM pixel rect (4,4,8,8) of a
         // 16×16 source. An annotation at view (5,5)-(11,11) must land
         // on output pixels (1,1)-(7,7): translate(-crop.minX, -y0)
@@ -277,19 +277,19 @@ final class ImageCompositorTests: XCTestCase {
             start: CGPoint(x: 5, y: 5),
             end: CGPoint(x: 11, y: 11),
         )
-        let output = ImageCompositor.composite(
+        let output = try XCTUnwrap(ImageCompositor.composite(
             base: base,
             crop: CGRect(x: 4, y: 4, width: 8, height: 8),
             imageHeight: 16,
             scale: 1,
             annotations: [annotation],
-        )!
+        ))
         XCTAssertTrue(isReddish(pixel(of: output, x: 1, y: 4)))
         XCTAssertTrue(isBluish(pixel(of: output, x: 4, y: 4)))
         XCTAssertTrue(isBluish(pixel(of: output, x: 3, y: 3)))
     }
 
-    func testScaleMultipliesAnnotationCoordinates() {
+    func testScaleMultipliesAnnotationCoordinates() throws {
         // scale 2: view point (2,2)-(6,6) → pixels (4,4)-(12,12); the
         // 2.5pt stroke scales to 5px with the CTM. (The rect must be
         // big enough that a clear interior survives the scaled stroke.)
@@ -299,35 +299,35 @@ final class ImageCompositorTests: XCTestCase {
             start: CGPoint(x: 2, y: 2),
             end: CGPoint(x: 6, y: 6),
         )
-        let output = ImageCompositor.composite(
+        let output = try XCTUnwrap(ImageCompositor.composite(
             base: base,
             crop: CGRect(x: 0, y: 0, width: 16, height: 16),
             imageHeight: 16,
             scale: 2,
             annotations: [annotation],
-        )!
+        ))
         XCTAssertTrue(isReddish(pixel(of: output, x: 4, y: 8)))
         XCTAssertTrue(isBluish(pixel(of: output, x: 8, y: 8)))
     }
 
-    func testOutputPreservesSourceColorSpace() {
-        let p3 = CGColorSpace(name: CGColorSpace.displayP3)!
+    func testOutputPreservesSourceColorSpace() throws {
+        let p3 = try XCTUnwrap(CGColorSpace(name: CGColorSpace.displayP3))
         let base = makeSolidImage(width: 8, height: 8, r: 1, g: 0, b: 0, space: p3)
-        let output = ImageCompositor.composite(
+        let output = try XCTUnwrap(ImageCompositor.composite(
             base: base,
             crop: CGRect(x: 0, y: 0, width: 8, height: 8),
             imageHeight: 8,
             scale: 1,
             annotations: [],
-        )!
+        ))
         XCTAssertEqual(output.colorSpace, base.colorSpace)
     }
 }
 
 final class FrameDecoratorTests: XCTestCase {
-    func testPaddingTransparencyAndCenterPixel() {
+    func testPaddingTransparencyAndCenterPixel() throws {
         let base = makeSolidImage(width: 8, height: 8, r: 0, g: 0, b: 1, space: sRGB)
-        let output = FrameDecorator.apply(to: base, scale: 1)!
+        let output = try XCTUnwrap(FrameDecorator.apply(to: base, scale: 1))
         // pad = 40pt × scale 1 on each side.
         XCTAssertEqual(output.width, 8 + 80)
         XCTAssertEqual(output.height, 8 + 80)
@@ -337,18 +337,18 @@ final class FrameDecoratorTests: XCTestCase {
         XCTAssertTrue(isBluish(pixel(of: output, x: 44, y: 44)))
     }
 
-    func testScaleScalesPadding() {
+    func testScaleScalesPadding() throws {
         let base = makeSolidImage(width: 8, height: 8, r: 0, g: 0, b: 1, space: sRGB)
-        let output = FrameDecorator.apply(to: base, scale: 2)!
+        let output = try XCTUnwrap(FrameDecorator.apply(to: base, scale: 2))
         XCTAssertEqual(output.width, 8 + 160)
         XCTAssertEqual(output.height, 8 + 160)
         XCTAssertTrue(isBluish(pixel(of: output, x: 84, y: 84)))
     }
 
-    func testOutputPreservesSourceColorSpace() {
-        let p3 = CGColorSpace(name: CGColorSpace.displayP3)!
+    func testOutputPreservesSourceColorSpace() throws {
+        let p3 = try XCTUnwrap(CGColorSpace(name: CGColorSpace.displayP3))
         let base = makeSolidImage(width: 8, height: 8, r: 1, g: 0, b: 0, space: p3)
-        let output = FrameDecorator.apply(to: base, scale: 1)!
+        let output = try XCTUnwrap(FrameDecorator.apply(to: base, scale: 1))
         XCTAssertEqual(output.colorSpace, base.colorSpace)
     }
 }

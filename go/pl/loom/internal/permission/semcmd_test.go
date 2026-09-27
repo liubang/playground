@@ -18,13 +18,25 @@
 package permission
 
 import (
+	"os"
+	"slices"
 	"strings"
 	"testing"
+
+	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
-// deriveArgv is the test shorthand: derive one static argv's effect.
+// deriveArgv is the test shorthand: derive one static argv's effect
+// under an empty environment (no sandbox roots: only critical-root and
+// home-prefix boundary judgments apply).
 func deriveArgv(argv ...string) Effect {
-	return deriveStep(ExecStep{Argv: argv})
+	return deriveStep(ExecStep{Argv: argv}, DeriveEnv{})
+}
+
+// deriveArgvEnv derives under explicit sandbox roots — boundary
+// judgments (rm's outside-the-roots targets) consult them.
+func deriveArgvEnv(env DeriveEnv, argv ...string) Effect {
+	return deriveStep(ExecStep{Argv: argv}, env)
 }
 
 func TestSemGitPush(t *testing.T) {
@@ -138,6 +150,85 @@ func TestSemRm(t *testing.T) {
 				t.Errorf("%v: consequence = %s, want %s", tt.argv, e.Consequence, tt.want)
 			}
 		})
+	}
+}
+
+func TestSemRmGlobPrefix(t *testing.T) {
+	// Glob targets are judged by their static prefix: the analysis
+	// never sees the shell's runtime expansion, so "~/*" must be
+	// judged as "~".
+	tests := []struct {
+		name string
+		argv []string
+		want Consequence
+	}{
+		{"home glob", []string{"rm", "-rf", "~/*"}, ConsequenceLocalDestructive},
+		{"users glob", []string{"rm", "-rf", "/Users/*"}, ConsequenceLocalDestructive},
+		{"etc glob", []string{"rm", "-rf", "/etc/*"}, ConsequenceLocalDestructive},
+		{"escape glob", []string{"rm", "-rf", "../*"}, ConsequenceLocalDestructive},
+		{"workspace glob", []string{"rm", "-rf", "./build/*"}, ConsequenceConfined},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if e := deriveArgv(tt.argv...); e.Consequence != tt.want {
+				t.Errorf("%v: consequence = %s, want %s", tt.argv, e.Consequence, tt.want)
+			}
+		})
+	}
+}
+
+func TestSemRmBoundary(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		t.Skip("no home directory")
+	}
+	env := DeriveEnv{Roots: []string{"/ws"}}
+
+	// A single-file deletion outside the roots is a boundary crossing,
+	// exactly like a write redirect: confined, carrying a Writes ref
+	// the approval can widen to.
+	target := home + "/notes/a.txt"
+	e := deriveArgvEnv(env, "rm", target)
+	if e.Consequence != ConsequenceConfined {
+		t.Errorf("rm %s: consequence = %s, want confined", target, e.Consequence)
+	}
+	if want := workspacepkg.Canonicalize(target); !slices.Contains(e.Writes.Paths, want) {
+		t.Errorf("rm %s: writes = %v, want %s", target, e.Writes.Paths, want)
+	}
+
+	// Recursive deletion outside the roots destroys user data:
+	// local-destructive, still carrying the ref.
+	e = deriveArgvEnv(env, "rm", "-rf", home+"/Documents")
+	if e.Consequence != ConsequenceLocalDestructive {
+		t.Errorf("rm -rf ~/Documents: consequence = %s, want local-destructive", e.Consequence)
+	}
+	if e.Writes.IsZero() {
+		t.Error("rm -rf ~/Documents: must carry a Writes ref for the gap grant")
+	}
+
+	// Recursive deletion under the roots stays confined and ref-free.
+	e = deriveArgvEnv(env, "rm", "-rf", "/ws/build")
+	if e.Consequence != ConsequenceConfined || !e.Writes.IsZero() {
+		t.Errorf("rm -rf /ws/build = %s writes %v, want confined with no refs",
+			e.Consequence, e.Writes.Paths)
+	}
+
+	// Deleting a credential file carries the sensitive-target
+	// indicator — the attempt is surfaced in every mode.
+	if e = deriveArgvEnv(env, "rm", home+"/.ssh/config"); len(e.Indicators) == 0 {
+		t.Error("rm ~/.ssh/config must carry the credential-path indicator")
+	}
+
+	// Without roots the home-prefix reading is the conservative
+	// fallback: recursive deletion under home is destructive, other
+	// absolute targets keep the legacy confined judgment.
+	if e := deriveArgv("rm", "-rf", home+"/Documents"); e.Consequence != ConsequenceLocalDestructive {
+		t.Errorf("no-roots rm -rf ~/Documents = %s, want local-destructive", e.Consequence)
+	}
+	if e := deriveArgv("rm", "-rf", "/var/tmp/loom-scratch"); e.Consequence != ConsequenceConfined ||
+		!e.Writes.IsZero() {
+		t.Errorf("no-roots rm -rf /var/tmp/loom-scratch = %s writes %v, want legacy confined",
+			e.Consequence, e.Writes.Paths)
 	}
 }
 

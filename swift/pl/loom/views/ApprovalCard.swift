@@ -114,7 +114,12 @@ struct ApprovalCard: View {
             // needs a human decision (indicator hit, ask rule, boundary
             // crossing the mode does not auto-grant). This is what makes
             // every prompt answerable instead of a blind interruption.
-            if let askReason = approval.askReason, !askReason.isEmpty {
+            // Hidden when the consequence row already carries the same
+            // text (a danger-only destructive ask's reason IS the effect
+            // description) — the card never says the same thing twice.
+            if let askReason = approval.askReason, !askReason.isEmpty,
+               !(approval.consequence ?? "").contains(askReason)
+            {
                 Label {
                     Text(askReason)
                 } icon: {

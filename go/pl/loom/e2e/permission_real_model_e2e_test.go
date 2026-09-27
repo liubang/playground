@@ -20,6 +20,8 @@ package e2e
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -53,7 +55,13 @@ import (
 //     explicit "do not retry the same shape" reroute hint;
 //  5. "always allow" persists workspace-scoped (remembered store v4):
 //     the stored package carries the workspace tag, and after a full
-//     stack restart the same command runs without asking.
+//     stack restart the same command runs without asking;
+//  6. the rm boundary rules hold end to end: recursive deletion INSIDE
+//     the workspace runs approval-free, recursive deletion OUTSIDE the
+//     sandbox roots asks even in dev mode (denied here — nothing
+//     executes), and a single-file deletion outside the roots widens
+//     the sandbox to exactly the target and actually deletes it,
+//     approval-free.
 //
 // The cross-workspace half of act 5 (the same binding must ask again in
 // a DIFFERENT workspace) is covered at the unit level
@@ -226,6 +234,97 @@ func TestPermissionRealModelE2E(t *testing.T) {
 			got, recorder2.askSummary())
 	}
 	t.Log("act5c ok: remembered command ran approval-free after a full stack restart")
+
+	// --- Act 6: the rm boundary rules end to end ---
+
+	// 6a: recursive deletion INSIDE the workspace is confined — zero
+	// approvals, and the directory is really gone.
+	wsBuild := filepath.Join(env.Workspace, ".e2e-rm-build")
+	if err := os.MkdirAll(wsBuild, 0o755); err != nil {
+		t.Fatalf("act6: create workspace fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(wsBuild, "a.o"), []byte("x"), 0o644); err != nil {
+		t.Fatalf("act6: seed workspace fixture: %v", err)
+	}
+	asksBefore = recorder2.askCount()
+	submitVerbatimCmd(t, ctx, c2, "rm -rf .e2e-rm-build")
+	waitTurnOrDump(t, recorder2, 2, 5*time.Minute, c2)
+	if got := recorder2.askCount(); got != asksBefore {
+		t.Fatalf("act6a: %d approval(s) for a workspace-confined rm -rf, want 0 — %s",
+			got-asksBefore, recorder2.askSummary())
+	}
+	if _, err := os.Stat(wsBuild); !os.IsNotExist(err) {
+		t.Fatalf("act6a: %s still exists — the confined rm -rf did not actually run", wsBuild)
+	}
+	t.Log("act6a ok: workspace rm -rf ran approval-free and really deleted")
+
+	// 6b: recursive deletion OUTSIDE the sandbox roots destroys user
+	// data — it must ask even in dev mode, with the consequence reason
+	// naming the blast radius. Denied here: the command never runs, so
+	// the (nonexistent) target is a pure probe.
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		t.Fatalf("act6: resolve home: %v", err)
+	}
+	// NB: the fixture name must not contain a ".loom" path segment —
+	// the loom-metadata guard (sensitiveRedirectTarget) would fire
+	// first and the ask would come from the indicator gate instead of
+	// the consequence gate this act asserts.
+	probeDir := filepath.Join(home, fmt.Sprintf("loom-rme2e-probe-%d", time.Now().UnixNano()))
+	recorder2.setPolicy(askDeny)
+	asksBefore = recorder2.askCount()
+	submitVerbatimCmd(t, ctx, c2, "rm -rf "+probeDir)
+	waitTurnOrDump(t, recorder2, 3, 5*time.Minute, c2)
+
+	ask, ok = recorder2.lastAsk(asksBefore)
+	if !ok {
+		dumpTranscript(t, mustSnapshot(t, ctx, c2))
+		t.Fatalf("act6b: rm -rf outside the roots did not ask in dev mode — " +
+			"user-data destruction must always surface")
+	}
+	if !strings.Contains(ask.AskReason, "破坏本地数据") {
+		t.Fatalf("act6b: ask_reason = %q, want the local-destructive consequence named", ask.AskReason)
+	}
+	if !strings.Contains(ask.AskReason, filepath.Base(probeDir)) {
+		t.Fatalf("act6b: ask_reason = %q, want it to name the deletion target %s", ask.AskReason, probeDir)
+	}
+	snap, err = c2.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot(act6b): %v", err)
+	}
+	if !toolResultContains(snap.Messages, "denied by the user") {
+		t.Fatalf("act6b: transcript lacks the denial — the refused rm must report back")
+	}
+	t.Logf("act6b ok: rm -rf outside the roots asked with reason %q, denial fed back", ask.AskReason)
+
+	// 6c: a single-file deletion outside the roots is a boundary
+	// crossing, exactly like a write redirect: dev mode widens the
+	// sandbox to exactly the target (the statically-derived Writes ref)
+	// and the delete ACTUALLY happens — zero approvals. Previously this
+	// shape died sandbox-blocked: confined without a ref.
+	victimDir := filepath.Join(home, fmt.Sprintf("loom-rme2e-victim-%d", time.Now().UnixNano()))
+	victim := filepath.Join(victimDir, "victim.txt")
+	if err := os.MkdirAll(victimDir, 0o755); err != nil {
+		t.Fatalf("act6: create victim dir: %v", err)
+	}
+	if err := os.WriteFile(victim, []byte("delete me"), 0o644); err != nil {
+		t.Fatalf("act6: seed victim file: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(victimDir) })
+	recorder2.setPolicy(askAllow)
+	asksBefore = recorder2.askCount()
+	submitVerbatimCmd(t, ctx, c2, "rm "+victim)
+	waitTurnOrDump(t, recorder2, 4, 5*time.Minute, c2)
+
+	if got := recorder2.askCount(); got != asksBefore {
+		t.Fatalf("act6c: %d approval(s) for a single-file rm outside the roots in dev mode, want 0 — %s",
+			got-asksBefore, recorder2.askSummary())
+	}
+	if _, err := os.Stat(victim); !os.IsNotExist(err) {
+		dumpTranscript(t, mustSnapshot(t, ctx, c2))
+		t.Fatalf("act6c: %s still exists — the gap-grant widening did not let the delete through", victim)
+	}
+	t.Log("act6c ok: single-file rm outside the roots deleted approval-free via the derived gap grant")
 
 	t.Log("ACCEPTANCE PASS: dev-mode approvals are necessary (heredoc free / pipe+sudo asked) and every ask is valuable (reason shown, denial teaches, memory persists workspace-scoped)")
 }

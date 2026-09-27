@@ -39,7 +39,7 @@ var informationalInterpreterFlags = map[string]struct{}{
 // content is not in the argv's statically provable shape... it IS in
 // argv for -c, but it is a different LANGUAGE the analyzer does not
 // parse), or stdin/REPL (unprovable).
-func semDeriveInterpreter(argv []string) (Effect, bool) {
+func semDeriveInterpreter(argv []string, _ DeriveEnv) (Effect, bool) {
 	base := programBase(argv[0])
 	if len(argv) < 2 {
 		return Effect{
@@ -76,7 +76,7 @@ func semDeriveInterpreter(argv []string) (Effect, bool) {
 // local-destructive; -exec/-execdir/-ok payloads are derived RECURSIVELY
 // (the payload argv is statically present, so its effect is provable),
 // and a dynamic payload degrades the whole invocation to unprovable.
-func semDeriveFind(argv []string) (Effect, bool) {
+func semDeriveFind(argv []string, env DeriveEnv) (Effect, bool) {
 	e := Effect{Proven: true, Consequence: ConsequenceConfined, Reason: "find"}
 	args := argv[1:]
 	for i := 0; i < len(args); i++ {
@@ -101,7 +101,7 @@ func semDeriveFind(argv []string) (Effect, bool) {
 			// dynamic even when the payload program is known. A
 			// deletion-capable payload (rm/shred/dd) is destructive at
 			// dynamic targets by construction.
-			sub := deriveStepRec(ExecStep{Argv: payload}, 1)
+			sub := deriveStepRec(ExecStep{Argv: payload}, 1, env)
 			sub.Proven = false
 			if sub.Reason == "" {
 				sub.Reason = "find " + a + " runs " + payload[0] + " on paths matched at runtime"
@@ -120,7 +120,7 @@ func semDeriveFind(argv []string) (Effect, bool) {
 // semDeriveXargs classifies xargs: the command template is in argv
 // (provable, derived recursively) but the ARGUMENTS arrive via stdin —
 // the invocation is unprovable as a whole.
-func semDeriveXargs(argv []string) (Effect, bool) {
+func semDeriveXargs(argv []string, env DeriveEnv) (Effect, bool) {
 	// xargs' own options end at the first non-option token — everything
 	// after it is the command template VERBATIM (its flags are not
 	// xargs' flags), so a generic getopt pass cannot parse this.
@@ -156,7 +156,7 @@ func semDeriveXargs(argv []string) (Effect, bool) {
 		}, true
 	}
 	command := args[i:]
-	sub := deriveStepRec(ExecStep{Argv: command}, 1)
+	sub := deriveStepRec(ExecStep{Argv: command}, 1, env)
 	sub.Proven = false
 	if sub.Reason == "" {
 		sub.Reason = "xargs feeds runtime stdin data to " + command[0]
@@ -172,7 +172,7 @@ func semDeriveXargs(argv []string) (Effect, bool) {
 // semDeriveOsascript classifies osascript: it drives other applications
 // via Apple Events under loom's TCC identity — a standing indicator,
 // content unprovable.
-func semDeriveOsascript(argv []string) (Effect, bool) {
+func semDeriveOsascript(argv []string, _ DeriveEnv) (Effect, bool) {
 	return Effect{
 		Proven:     false,
 		Reason:     "osascript executes AppleScript that drives other applications",
@@ -183,7 +183,7 @@ func semDeriveOsascript(argv []string) (Effect, bool) {
 
 // semDeriveLaunchctl classifies launchctl: it manages launch
 // agents/daemons — the macOS persistence mechanism.
-func semDeriveLaunchctl(argv []string) (Effect, bool) {
+func semDeriveLaunchctl(argv []string, _ DeriveEnv) (Effect, bool) {
 	return Effect{
 		Proven:      true,
 		Consequence: ConsequenceLocalDestructive,
@@ -194,7 +194,7 @@ func semDeriveLaunchctl(argv []string) (Effect, bool) {
 
 // semDeriveCrontab classifies crontab: editing cron jobs is a
 // persistence mechanism.
-func semDeriveCrontab(argv []string) (Effect, bool) {
+func semDeriveCrontab(argv []string, _ DeriveEnv) (Effect, bool) {
 	for _, arg := range argv[1:] {
 		if arg == "-l" || arg == "--list" {
 			return Effect{
@@ -224,7 +224,7 @@ var npmSubcommands = map[string]Effect{
 }
 
 // semDeriveNpm classifies npm/pnpm/yarn invocations by subcommand.
-func semDeriveNpm(argv []string) (Effect, bool) {
+func semDeriveNpm(argv []string, _ DeriveEnv) (Effect, bool) {
 	if len(argv) < 2 {
 		return Effect{Proven: true, Consequence: ConsequenceConfined, Reason: argv[0]}, true
 	}
@@ -248,7 +248,7 @@ func semDeriveNpm(argv []string) (Effect, bool) {
 
 // semDeriveGo classifies go tool invocations: module-fetching forms need
 // network; build/test/run are workspace code under the sandbox.
-func semDeriveGo(argv []string) (Effect, bool) {
+func semDeriveGo(argv []string, _ DeriveEnv) (Effect, bool) {
 	if len(argv) < 2 {
 		return Effect{Proven: true, Consequence: ConsequenceConfined, Reason: "go"}, true
 	}
@@ -269,7 +269,7 @@ func semDeriveGo(argv []string) (Effect, bool) {
 // semDeriveDocker classifies docker invocations: push mutates shared
 // registry state; pull needs network; run/exec execute container code
 // (unprovable content, but the container boundary applies).
-func semDeriveDocker(argv []string) (Effect, bool) {
+func semDeriveDocker(argv []string, _ DeriveEnv) (Effect, bool) {
 	if len(argv) < 2 {
 		return Effect{Proven: true, Consequence: ConsequenceConfined, Reason: "docker"}, true
 	}
@@ -313,7 +313,7 @@ func semDeriveDocker(argv []string) (Effect, bool) {
 
 // semDeriveKubectl classifies kubectl invocations: reads are network
 // confined; apply mutates cluster state; delete destroys it.
-func semDeriveKubectl(argv []string) (Effect, bool) {
+func semDeriveKubectl(argv []string, _ DeriveEnv) (Effect, bool) {
 	if len(argv) < 2 {
 		return Effect{Proven: true, Consequence: ConsequenceConfined, Reason: "kubectl"}, true
 	}

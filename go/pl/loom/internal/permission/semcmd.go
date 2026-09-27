@@ -33,7 +33,9 @@ import (
 
 // semDeriveFunc derives one statically-resolved step's effect. ok=false
 // means the invocation uses a form the table cannot fully explain.
-type semDeriveFunc func(argv []string) (Effect, bool)
+// env carries the sandbox roots for boundary judgments (rm's
+// outside-the-roots targets); most derivers ignore it.
+type semDeriveFunc func(argv []string, env DeriveEnv) (Effect, bool)
 
 // semTable maps program basenames to their semantic deriver. Programs
 // NOT listed here derive to the generic unprovable-confined effect:
@@ -83,11 +85,11 @@ func init() {
 const maxDeriveDepth = 8
 
 // deriveStep computes one plan step's effect.
-func deriveStep(step ExecStep) Effect {
-	return deriveStepRec(step, 0)
+func deriveStep(step ExecStep, env DeriveEnv) Effect {
+	return deriveStepRec(step, 0, env)
 }
 
-func deriveStepRec(step ExecStep, depth int) Effect {
+func deriveStepRec(step ExecStep, depth int, env DeriveEnv) Effect {
 	if depth > maxDeriveDepth {
 		return Effect{Proven: false, Reason: "command nesting too deep to analyze"}
 	}
@@ -111,7 +113,7 @@ func deriveStepRec(step ExecStep, depth int) Effect {
 	if process.IsShellProgram(argv[0]) {
 		if script, ok := process.ShellScriptForm(argv); ok {
 			sub := normalizeShellScript(script, argv, depth)
-			return derivePlan(sub, depth+1)
+			return derivePlan(sub, depth+1, env)
 		}
 		return Effect{
 			Proven: false,
@@ -128,11 +130,11 @@ func deriveStepRec(step ExecStep, depth int) Effect {
 			Stdin:         step.Stdin,
 			Heredoc:       step.Heredoc,
 			HeredocStatic: step.HeredocStatic,
-		}, depth+1)
+		}, depth+1, env)
 	}
 
 	if derive, ok := semTable[base]; ok {
-		e, explained := derive(argv)
+		e, explained := derive(argv, env)
 		if !explained {
 			return Effect{
 				Proven: false,

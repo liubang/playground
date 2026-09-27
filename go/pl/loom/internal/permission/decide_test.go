@@ -18,6 +18,7 @@
 package permission
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -305,6 +306,40 @@ func TestDecideWriteOutside(t *testing.T) {
 	})
 	if v := set.Decide(d, ModeOnRequest, nil, ""); v.Decision != domain.DecisionAllow {
 		t.Fatal("path package must cover the outside write")
+	}
+}
+
+func TestDecideRmOutsideRoots(t *testing.T) {
+	set := NewPackageSet()
+
+	// Single-file deletion outside the roots: a boundary crossing —
+	// asks on request, runs silently in danger-only with the sandbox
+	// widened to exactly the target, denied unattended.
+	if v := decide(set, ModeOnRequest, "rm", "/outside/notes/x.md"); v.Decision != domain.DecisionAsk {
+		t.Fatalf("on-request rm outside = %s, want ask", v.Decision)
+	}
+	v := decide(set, ModeDangerOnly, "rm", "/outside/notes/x.md")
+	if v.Decision != domain.DecisionAllow {
+		t.Fatalf("danger-only rm outside = %s, want allow", v.Decision)
+	}
+	if !slices.Contains(v.Grant.WritablePaths, "/outside/notes/x.md") {
+		t.Fatalf("danger-only rm outside grant = %+v, want writable path /outside/notes/x.md", v.Grant)
+	}
+	if v := decide(set, ModeNever, "rm", "/outside/notes/x.md"); v.Decision != domain.DecisionDeny {
+		t.Fatalf("never rm outside = %s, want deny", v.Decision)
+	}
+
+	// Recursive deletion outside the roots destroys user data: asks
+	// even in danger-only.
+	if v := decide(set, ModeDangerOnly, "rm", "-rf", "/outside/notes"); v.Decision != domain.DecisionAsk {
+		t.Fatalf("danger-only rm -rf outside = %s, want ask", v.Decision)
+	}
+
+	// Deletion inside the workspace stays silent in every mode.
+	for _, mode := range []ApprovalMode{ModeOnRequest, ModeDangerOnly, ModeNever} {
+		if v := decide(set, mode, "rm", "-rf", "/ws/build"); v.Decision != domain.DecisionAllow {
+			t.Errorf("%s rm -rf /ws/build = %s, want allow", mode, v.Decision)
+		}
 	}
 }
 

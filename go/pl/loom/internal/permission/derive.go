@@ -159,7 +159,7 @@ func (d *Derivation) deriveExec(req *domain.ExecRequest, env DeriveEnv) {
 
 	steps := make([]Effect, 0, len(d.Plan.Steps)+1)
 	for _, step := range d.Plan.Steps {
-		steps = append(steps, deriveStep(step))
+		steps = append(steps, deriveStep(step, env))
 	}
 	d.StepEffects = steps
 	e := joinEffects(steps)
@@ -332,13 +332,13 @@ func (d *Derivation) derivePlainBuiltin(call domain.PreparedCall) {
 }
 
 // derivePlan computes a nested plan's effect (recursive sh -c analysis).
-func derivePlan(plan ExecPlan, depth int) Effect {
+func derivePlan(plan ExecPlan, depth int, env DeriveEnv) Effect {
 	if depth > maxDeriveDepth {
 		return Effect{Proven: false, Reason: "command nesting too deep to analyze"}
 	}
 	steps := make([]Effect, 0, len(plan.Steps))
 	for _, step := range plan.Steps {
-		steps = append(steps, deriveStepRec(step, depth))
+		steps = append(steps, deriveStepRec(step, depth, env))
 	}
 	e := joinEffects(steps)
 	if plan.Unanalyzable != "" {

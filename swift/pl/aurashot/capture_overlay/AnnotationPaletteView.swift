@@ -334,7 +334,7 @@ final class AnnotationPaletteView: NSView {
     /// while it still owns it — after a session teardown the palette is
     /// freed, and a dangling panel target is a use-after-free the next
     /// time the user touches the color wheel.
-    private static weak var colorPanelOwner: AnnotationPaletteView?
+    private weak static var colorPanelOwner: AnnotationPaletteView?
 
     private func openColorPanel() {
         let panel = NSColorPanel.shared

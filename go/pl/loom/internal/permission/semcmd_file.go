@@ -18,13 +18,20 @@
 // Semantic derivation for filesystem-destructive and privilege-escalating
 // programs. The consequence follows the TARGET SHAPE, not the program
 // name: rm -rf of a build directory is confined (rebuildable); rm -rf of
-// a critical root, the home directory, or an upward escape is
-// local-destructive.
+// a critical root, the home directory, an upward escape, or RECURSIVELY
+// of anything outside the sandbox roots is local-destructive. Absolute
+// targets outside the roots also carry Writes refs — deleting across
+// the boundary is a boundary crossing, exactly like a write redirect,
+// so an approval can widen the sandbox to the target instead of the
+// command dying sandbox-blocked.
 package permission
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
+
+	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
 // rmOpts is the shared option grammar of rm/rmdir/unlink (union; the
@@ -42,7 +49,7 @@ var rmOpts = OptTable{
 }
 
 // semDeriveRm classifies deletion commands by their targets.
-func semDeriveRm(argv []string) (Effect, bool) {
+func semDeriveRm(argv []string, env DeriveEnv) (Effect, bool) {
 	opts, ok := ParseOpts(argv[1:], rmOpts)
 	if !ok {
 		return Effect{}, false
@@ -50,18 +57,87 @@ func semDeriveRm(argv []string) (Effect, bool) {
 	e := Effect{Proven: true, Consequence: ConsequenceConfined, Reason: argv[0]}
 	recursive := opts.Has("-r", "-R", "--recursive")
 	for _, target := range opts.Positional {
-		if isCriticalRoot(target) {
+		// Glob targets are judged by their STATIC PREFIX: the shell
+		// expands them at runtime, so the analysis only ever sees the
+		// literal — "~/*" must be judged as "~", not waved through as
+		// an unclassifiable string.
+		judge := target
+		if prefix := staticGlobPrefix(target); prefix != "" {
+			judge = prefix
+		}
+		critical := isCriticalRoot(judge)
+		switch {
+		case critical:
 			e.Consequence = ConsequenceLocalDestructive
 			e.Reason = argv[0] + " targets a critical root (" + target + ")"
-			return e, true
-		}
-		if recursive && escapesWorkingDir(target) {
+		case recursive && escapesWorkingDir(judge):
 			e.Consequence = ConsequenceLocalDestructive
 			e.Reason = argv[0] + " -r escapes the working directory (" + target + ")"
-			return e, true
+		}
+		abs, isAbs := absoluteRmTarget(judge)
+		if !isAbs {
+			continue // relative target: the sandboxed cwd confines it
+		}
+		clean := workspacepkg.Canonicalize(abs)
+		// Deleting a credential/persistence file is as sensitive as
+		// writing one. Skipped for a critical root — the destructive
+		// reason says more than the write-oriented indicator would.
+		if !critical {
+			if reason := sensitiveRedirectTarget(clean); reason != "" {
+				e.Indicators = unionStrings(e.Indicators, []string{reason})
+			}
+		}
+		rootsKnown := len(env.Roots) > 0
+		if rootsKnown && pathUnderRoots(env.Roots, clean) {
+			continue // inside the sandbox's writable domain: confined
+		}
+		// Beyond the roots the deletion is a boundary crossing, exactly
+		// like a write redirect. With unknown roots the conservative
+		// reading treats only home-prefixed targets as crossings; other
+		// absolute paths keep the legacy confined judgment.
+		if !rootsKnown && !isHomePath(clean) {
+			continue
+		}
+		e.Writes.Paths = unionStrings(e.Writes.Paths, []string{clean})
+		if recursive && e.Consequence < ConsequenceLocalDestructive {
+			e.Consequence = ConsequenceLocalDestructive
+			e.Reason = argv[0] + " -r deletes user data outside the workspace (" + target + ")"
 		}
 	}
 	return e, true
+}
+
+// staticGlobPrefix returns the literal directory prefix of a target
+// before its first glob metacharacter ("" when the target is glob-free).
+func staticGlobPrefix(arg string) string {
+	i := strings.IndexAny(arg, "*?[")
+	if i < 0 {
+		return ""
+	}
+	return arg[:i]
+}
+
+// absoluteRmTarget expands a ~-prefixed or absolute target for boundary
+// judgment. ok=false for relative targets — the sandboxed cwd confines
+// them (upward escapes are checked separately).
+func absoluteRmTarget(arg string) (string, bool) {
+	if arg == "~" || strings.HasPrefix(arg, "~/") {
+		return expandTilde(arg), true
+	}
+	if filepath.IsAbs(arg) {
+		return arg, true
+	}
+	return "", false
+}
+
+// isHomePath reports whether clean is the user's home directory or
+// under it.
+func isHomePath(clean string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return false
+	}
+	return pathUnderRoots([]string{home}, clean)
 }
 
 // chmodOpts is the shared option grammar of chmod/chown/chgrp.
@@ -80,7 +156,7 @@ var chmodOpts = OptTable{
 
 // semDeriveChmod classifies permission/ownership changes by their
 // targets (a recursive change at a critical root is destructive).
-func semDeriveChmod(argv []string) (Effect, bool) {
+func semDeriveChmod(argv []string, _ DeriveEnv) (Effect, bool) {
 	opts, ok := ParseOpts(argv[1:], chmodOpts)
 	if !ok {
 		return Effect{}, false
@@ -98,7 +174,7 @@ func semDeriveChmod(argv []string) (Effect, bool) {
 
 // semDeriveAlwaysDestructive classifies programs that are destructive at
 // any target: dd, mkfs, shred, fdisk, diskutil, newfs_*, hdiutil.
-func semDeriveAlwaysDestructive(argv []string) (Effect, bool) {
+func semDeriveAlwaysDestructive(argv []string, _ DeriveEnv) (Effect, bool) {
 	return Effect{
 		Proven:      true,
 		Consequence: ConsequenceLocalDestructive,
@@ -109,7 +185,7 @@ func semDeriveAlwaysDestructive(argv []string) (Effect, bool) {
 // semDerivePrivilegeEscalation classifies sudo/su/doas: they escape every
 // user-level boundary, so they carry a standing indicator — an approval
 // may only ever cover the exact argv, never a categorical prefix.
-func semDerivePrivilegeEscalation(argv []string) (Effect, bool) {
+func semDerivePrivilegeEscalation(argv []string, _ DeriveEnv) (Effect, bool) {
 	return Effect{
 		Proven:      true,
 		Consequence: ConsequenceLocalDestructive,
@@ -145,7 +221,7 @@ func isCriticalRoot(arg string) bool {
 // mid-path traversals like a/../../b).
 func escapesWorkingDir(arg string) bool {
 	if strings.HasPrefix(arg, "/") || strings.HasPrefix(arg, "~") {
-		return false // absolute targets are judged by isCriticalRoot
+		return false // absolute targets are judged by isCriticalRoot / the roots boundary
 	}
 	depth := 0
 	for _, seg := range strings.Split(arg, "/") {

@@ -100,14 +100,28 @@ func sensitiveRedirectTarget(cleanAbsTarget string) string {
 	if gitMetaWrite(lower) {
 		return "writes into protected git metadata (" + cleanAbsTarget + "): hooks/config can escalate beyond the sandbox"
 	}
-	sep := string(filepath.Separator)
-	if strings.Contains(lower, sep+".loom") || strings.HasPrefix(lower, ".loom"+sep) || lower == ".loom" {
+	// Loom's own state directory, segment-exact: sibling names like
+	// ".loom-backup" or ".loom-rm-e2e-..." are ordinary paths, not
+	// metadata.
+	if pathHasSegment(lower, ".loom") {
 		return "writes into protected loom metadata (" + cleanAbsTarget + ")"
 	}
 	if isCriticalRoot(cleanAbsTarget) {
 		return "writes to a critical root (" + cleanAbsTarget + ")"
 	}
 	return ""
+}
+
+// pathHasSegment reports whether a (lowercased, cleaned) path contains
+// the exact segment: "/x/.loom/y" matches ".loom", "/x/.loomfoo" does
+// not.
+func pathHasSegment(path, segment string) bool {
+	for _, seg := range strings.Split(filepath.ToSlash(path), "/") {
+		if seg == segment {
+			return true
+		}
+	}
+	return false
 }
 
 // gitMetaWrite reports whether a (lowercased, cleaned) path writes into a
