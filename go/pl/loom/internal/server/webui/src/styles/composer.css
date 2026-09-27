@@ -197,7 +197,12 @@ standard mode) stay level with the text capsules beside them */
 .composer-box.is-dragover {
   border-color: var(--primary);
 }
+/* Disabled = neutral surface, not faded accent: --primary at 40% over
+   the dark composer read as a murky smudge and swallowed the dark
+   on-accent glyph; a bg3/muted button reads clearly as "inactive" and
+   lets the enabled teal pop. */
 .send-btn:disabled {
-  opacity: 0.4;
+  background: var(--bg3);
+  color: var(--muted);
   cursor: not-allowed;
 }

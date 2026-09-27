@@ -18,8 +18,11 @@ import SwiftUI
 /// Message composer, after the WebUI's composer.css: the plan panel
 /// pinned above, then a bg1 capsule box (radius 16) holding the
 /// textarea, and a bottom bar — separated by a top hairline — with the
-/// model/reasoning/approval picker capsules on the left and the
-/// ctx-gauge ring + send/stop circle as twin 32px buttons on the right.
+/// model/reasoning/approval picker capsules on the left, and on the
+/// right a quiet 28px ctx-gauge ring next to the 32px send/stop button
+/// — deliberately NOT a twin pair: the gauge is ambient information,
+/// send is the bar's only primary action, and equals-in-shape would
+/// read as equals-in-rank.
 /// Return sends, ⇧Return inserts a newline (⌘Return also sends). While
 /// a turn is busy the prompt is steered into the session queue by the
 /// server. The input text lives in SessionStore.composerDraft so an
@@ -37,6 +40,8 @@ struct ComposerView: View {
     @State private var gaugeCardShown = false
     @State private var gaugeHoverTask: Task<Void, Never>?
     @State private var steerQueueExpanded = false
+    @State private var sendHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 8) {
@@ -372,7 +377,7 @@ struct ComposerView: View {
         .frame(maxWidth: Theme.contentWidth)
     }
 
-    // MARK: Send / stop (twin-circle with the ctx gauge)
+    // MARK: Send / stop (the bar's sole primary action)
 
     @ViewBuilder private var sendStopButton: some View {
         if store.isBusy {
@@ -390,15 +395,27 @@ struct ComposerView: View {
             .help("Stop the current turn (⎋)")
             .accessibilityLabel("Stop the current turn")
         } else {
+            // Quiet-but-present: the disabled button keeps its button
+            // SHAPE — a bg2 disc one notch above the composer's bg1,
+            // muted glyph — so the primary action stays discoverable
+            // without competing with the gauge. Typing ARMS it:
+            // primary fill with a 0.96→1 spring pop (slight overshoot),
+            // the clearest "you can send now" signal.
             Button(action: send) {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Theme.onAccent)
+                    .foregroundStyle(canSend ? Theme.onAccent : Theme.muted)
                     .frame(width: 32, height: 32)
-                    .background(Theme.primary, in: Circle())
+                    .background(
+                        canSend ? (sendHovered ? Theme.primaryHover : Theme.primary) : Theme.bg2,
+                        in: Circle(),
+                    )
+                    .scaleEffect(canSend || reduceMotion ? 1 : 0.96)
             }
             .buttonStyle(.plain)
-            .opacity(canSend ? 1 : 0.4)
+            .onHover { sendHovered = $0 }
+            .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.65), value: canSend)
+            .animation(.easeInOut(duration: 0.12), value: sendHovered)
             .disabled(!canSend)
             .keyboardShortcut(.return, modifiers: .command)
             .help("Send (Return — ⇧Return for a newline)")
@@ -1157,9 +1174,12 @@ private struct GaugeDetailCard: View {
     }
 }
 
-/// The WebUI's ctx-gauge: a quiet 32px ring that starts showing the
-/// percentage inside at 40%, warms to amber at 60% and to red at the
-/// compact-trigger ratio (≈80%).
+/// A quiet 28px ring (in a 32px layout frame, so hit/hover area and
+/// bar geometry don't move) that starts showing the percentage inside
+/// at 40%, warms to amber at 60% and to red at the compact-trigger
+/// ratio (≈80%). The ring is deliberately smaller than the 32px send
+/// button: it is ambient information, not a peer action, and a
+/// twin-sized circle would claim equal visual rank.
 struct CtxGauge: View {
     let fraction: Double
     var hotThreshold = 0.8
@@ -1170,27 +1190,50 @@ struct CtxGauge: View {
     /// the ring — earlier than the amber level, so the exact figure
     /// is on screen before compaction looms.
     private static let showPercent = 0.4
+    /// Ring geometry: 28px outer diameter, 2.5px stroke. SwiftUI
+    /// strokes CENTER on the shape's path, so the circle itself is
+    /// drawn at (outer - lineWidth) to land the stroke's outer edge
+    /// exactly on 28px instead of spilling 1.25px past it.
+    private static let ringOuter: CGFloat = 28
+    private static let ringLine: CGFloat = 2.5
+    /// Below this the arc would be sub-pixel noise; the bare track
+    /// already says "gauge, idle".
+    private static let arcFloor = 0.005
+    /// Below this the arc draws with a BUTT cap — a short tick flush
+    /// with the track, a deliberate "dial just started" mark. A round
+    /// cap at these trims renders as a stray floating DOT instead
+    /// (a loading-artifact look, not information).
+    private static let tickCeiling = 0.06
 
     var body: some View {
         ZStack {
+            // bg3, not bg2: the track must read as "a dial, currently
+            // empty" even with no arc — bg2 on the composer's bg1 is
+            // nearly invisible and the gauge reads as missing.
             Circle()
-                .stroke(Theme.bg2, lineWidth: 3)
-            // Near-zero occupancy: hide the arc outright — with a round
-            // cap a 1-2% trim renders as a stray dot on the ring, while
-            // the WebUI's dashoffset collapses to invisibility there.
-            if fraction > 0.005 {
+                .stroke(Theme.bg3, lineWidth: Self.ringLine)
+            // Near-zero occupancy: hide the arc outright (see arcFloor);
+            // tiny occupancy draws as a tick (see tickCeiling).
+            if fraction >= Self.arcFloor {
                 Circle()
                     .trim(from: 0, to: min(max(fraction, 0), 1))
-                    .stroke(ringColor, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .stroke(ringColor, style: StrokeStyle(
+                        lineWidth: Self.ringLine,
+                        lineCap: fraction < Self.tickCeiling ? .butt : .round,
+                    ))
                     .rotationEffect(.degrees(-90))
                     .animation(.easeOut(duration: 0.35), value: fraction)
             }
             if fraction >= Self.showPercent {
                 Text("\(Int(fraction * 100))%")
-                    .font(.system(size: 9.5, weight: .semibold))
+                    .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(ringColor)
+                    // Ø21 inner: "100%" only fits scaled down a notch.
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
             }
         }
+        .frame(width: Self.ringOuter - Self.ringLine, height: Self.ringOuter - Self.ringLine)
         .frame(width: 32, height: 32)
     }
 

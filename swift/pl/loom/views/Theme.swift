@@ -50,6 +50,12 @@ enum Theme {
     /// question card / pickers) — primary at 35%.
     static let ring = primary.opacity(0.35)
 
+    /// composer.css .send-btn:hover — color-mix(primary 88%, on-accent).
+    static let primaryHover = adaptive(
+        dark: mixHex(0x7FBBB3, 0x1E2326, by: 0.12),
+        light: mixHex(0x2273A8, 0xFDF6E3, by: 0.12),
+    )
+
     /// tokens.css color-mix(--muted 80%, --fg): one notch brighter than
     /// muted — 11px hint text (menu descriptions, footnotes) needs the
     /// extra contrast to stay readable.
