@@ -1002,7 +1002,7 @@ final class SelectionView: NSView {
         Self.selectionBlue.setStroke()
         edge.stroke()
 
-        let arm: CGFloat = 11
+        let arm: CGFloat = 28
         let corners: [(origin: CGPoint, dx: CGFloat, dy: CGFloat)] = [
             (CGPoint(x: sel.minX, y: sel.maxY), 1, -1), // top-left
             (CGPoint(x: sel.maxX, y: sel.maxY), -1, -1), // top-right
