@@ -13,6 +13,14 @@
 .statusbar .spacer {
   flex: 1;
 }
+/* Version string (build-date based) can outgrow narrow windows: truncate with
+   ellipsis instead of bleeding off-screen; full value in the title tooltip */
+#sb-version {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40vw;
+}
 
 /* Context usage ring (right of the composer; progressive disclosure: quiet by default, color shifts with the level).
 Same 32px footprint as the send button — the pair closes the bar as twin circles. */
@@ -50,7 +58,9 @@ Same 32px footprint as the send button — the pair closes the bar as twin circl
   stroke: var(--bg2);
 }
 .ctx-ring-fg {
-  stroke: var(--muted);
+  /* Slightly brighter than --muted: the default ring must read as an active
+     gauge, not as a disabled placeholder next to the send button */
+  stroke: color-mix(in srgb, var(--muted) 70%, var(--fg));
   stroke-linecap: round;
   transition:
     stroke-dashoffset 0.35s ease,

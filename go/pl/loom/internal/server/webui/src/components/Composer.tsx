@@ -505,6 +505,7 @@ export function Composer({ controller }: { controller: AppController }) {
               disabled={locked}
               onClick={() => setPicker(picker === 'model' ? '' : 'model')}
             >
+              <Icon name="layer-group" />
               <span className="picker-label">{controller.modelLabel(curModelRef)}</span>
               <span className="picker-caret">
                 <Icon name="caret-down" />
@@ -521,6 +522,7 @@ export function Composer({ controller }: { controller: AppController }) {
               disabled={locked}
               onClick={() => setPicker(picker === 'reasoning' ? '' : 'reasoning')}
             >
+              <Icon name="lightbulb" />
               <span className="picker-label">{reasoningLabel}</span>
               <span className="picker-caret">
                 <Icon name="caret-down" />
@@ -791,6 +793,9 @@ function ReasoningMenu({ current, onPick }: { current: string; onPick: (effort: 
 }
 
 function ApprovalMenu({ current, onPick }: { current: string; onPick: (mode: string) => void }) {
+  // One name per mode in the UI: the friendly short name (standard/dev/auto).
+  // The config value (on-request/danger-only/never) stays in the tooltip —
+  // showing both invited "which one do I call it?" ambiguity.
   return (
     <>
       {APPROVAL_OPTIONS.map((opt) => (
@@ -798,9 +803,11 @@ function ApprovalMenu({ current, onPick }: { current: string; onPick: (mode: str
           key={opt.value}
           type="button"
           className={'menu-item menu-item-hint' + (opt.value === current ? ' is-active' : '')}
+          title={`config value: ${opt.value}`}
+          aria-label={`${opt.short} (config value ${opt.value}): ${opt.hint}`}
           onClick={() => onPick(opt.value)}
         >
-          {opt.short} · {opt.value}
+          {opt.short}
           <span className="check">{opt.value === current && <Icon name="check" />}</span>
           <span className="menu-item-desc">{opt.hint}</span>
         </button>

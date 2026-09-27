@@ -1556,10 +1556,12 @@ struct TurnSummaryView: View {
                     revertButton
                 }
                 if revertNote == nil {
-                    // .tsm-footnote
+                    // .tsm-footnote — one notch brighter than muted: this
+                    // note carries a real limitation (run_cmd edits aren't
+                    // revertable), it must stay readable at 11px.
                     Text(footnote)
                         .font(.system(size: 11))
-                        .foregroundStyle(Theme.muted)
+                        .foregroundStyle(Theme.hint)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }

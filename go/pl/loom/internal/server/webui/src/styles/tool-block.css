@@ -27,6 +27,7 @@ highest-contrast element (that rank belongs to the send button). */
 .menu .menu-item .menu-item-desc {
   flex-basis: 100%;
   font-size: 11px;
-  color: var(--muted);
+  /* One notch brighter than --muted: 11px text needs the extra contrast */
+  color: color-mix(in srgb, var(--muted) 80%, var(--fg));
   line-height: 1.4;
 }

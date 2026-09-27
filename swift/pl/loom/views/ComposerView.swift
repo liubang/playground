@@ -422,6 +422,7 @@ struct ComposerView: View {
         if !models.isEmpty {
             let nameCounts = Dictionary(models.map { ($0.name, 1) }, uniquingKeysWith: +)
             PickerCapsule(
+                icon: "square.3.layers.3d",
                 label: store.modelName.isEmpty ? "model" : store.modelName,
                 isActive: false,
                 help: "Switch model",
@@ -444,6 +445,7 @@ struct ComposerView: View {
 
     private var reasoningPicker: some View {
         PickerCapsule(
+            icon: "lightbulb",
             label: store.reasoningEffort == "default" ? "reasoning" : store.reasoningEffort,
             isOn: store.reasoningEffort != "default",
             help: "Set reasoning (current: \(store.reasoningEffort))",
@@ -472,10 +474,16 @@ struct ComposerView: View {
             help: "Switch approval baseline (workspace-level; takes effect next turn)",
         ) { close in
             ForEach(ApprovalOption.all, id: \.rawValue) { option in
+                // One name per mode in the UI: the friendly short name
+                // (standard/dev/auto); the config value stays in the
+                // tooltip. The hint rides a second line (the WebUI's
+                // .menu-item-hint) — as a trailing detail it ragged
+                // against the varying title widths.
                 PickerMenuItem(
-                    title: "\(option.short) · \(option.rawValue)",
-                    detail: option.hint,
+                    title: option.short,
+                    desc: option.hint,
                     isCurrent: store.approvalMode == option.rawValue,
+                    help: "config value: \(option.rawValue)",
                 ) {
                     close()
                     Task { await store.pickApprovalMode(option.rawValue) }
@@ -662,31 +670,44 @@ private struct PickerCapsule<Content: View>: View {
 }
 
 /// One row in a picker popover (.menu-item): title, optional detail on
-/// the right, ✓ for the current value.
+/// the right, ✓ for the current value. A long description belongs on a
+/// second line (`desc`, the WebUI's .menu-item-hint) — as trailing
+/// `detail` it rags against the title column.
 private struct PickerMenuItem: View {
     let title: String
     var detail: String?
+    var desc: String?
     let isCurrent: Bool
+    var help: String?
     let action: () -> Void
 
     @State private var hovered = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                Text(title)
-                    .font(.system(size: Theme.textMd))
-                    .foregroundStyle(isCurrent ? Theme.primary : Theme.fg)
-                Spacer()
-                if let detail {
-                    Text(detail)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.muted)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                    Text(title)
+                        .font(.system(size: Theme.textMd))
+                        .foregroundStyle(isCurrent ? Theme.primary : Theme.fg)
+                    Spacer()
+                    if let detail {
+                        Text(detail)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.hint)
+                    }
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Theme.primary)
+                        .opacity(isCurrent ? 1 : 0)
                 }
-                Image(systemName: "checkmark")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(Theme.primary)
-                    .opacity(isCurrent ? 1 : 0)
+                if let desc {
+                    Text(desc)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.hint)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
@@ -698,6 +719,7 @@ private struct PickerMenuItem: View {
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
+        .help(help ?? "")
     }
 }
 
@@ -1179,6 +1201,6 @@ struct CtxGauge: View {
         if fraction >= Self.warm {
             return Theme.warning
         }
-        return Theme.muted
+        return Theme.gaugeIdle
     }
 }

@@ -33,8 +33,8 @@ enum Theme {
     static let bubbleUser = adaptive(dark: 0x3A4148, light: 0xE6E2CC)
 
     // Text
-    static let fg = adaptive(dark: 0xD3C6AA, light: 0x5C6A72)
-    static let muted = adaptive(dark: 0x9DA9A0, light: 0x5C6E5E)
+    static let fg = adaptive(dark: fgHex.dark, light: fgHex.light)
+    static let muted = adaptive(dark: mutedHex.dark, light: mutedHex.light)
 
     // Accents
     static let primary = adaptive(dark: 0x7FBBB3, light: 0x2273A8)
@@ -49,6 +49,22 @@ enum Theme {
     /// tokens.css --ring-color: the uniform focus halo (gate input /
     /// question card / pickers) — primary at 35%.
     static let ring = primary.opacity(0.35)
+
+    /// tokens.css color-mix(--muted 80%, --fg): one notch brighter than
+    /// muted — 11px hint text (menu descriptions, footnotes) needs the
+    /// extra contrast to stay readable.
+    static let hint = adaptive(
+        dark: mixHex(mutedHex.dark, fgHex.dark, by: 0.2),
+        light: mixHex(mutedHex.light, fgHex.light, by: 0.2),
+    )
+
+    /// tokens.css color-mix(--muted 70%, --fg): the ctx-gauge's idle
+    /// ring — brighter than muted so the gauge reads as active, not as
+    /// a disabled placeholder next to the send button.
+    static let gaugeIdle = adaptive(
+        dark: mixHex(mutedHex.dark, fgHex.dark, by: 0.3),
+        light: mixHex(mutedHex.light, fgHex.light, by: 0.3),
+    )
 
     // Typography (tokens.css --text-* scale)
     static let textXs: CGFloat = 11.5
@@ -78,6 +94,22 @@ enum Theme {
     static let explorerWidth: CGFloat = 300
     static let explorerMinWidth: CGFloat = 240
     static let explorerMaxWidth: CGFloat = 480
+}
+
+/// Raw hex pairs for the tokens that participate in blends (fg/muted).
+private let fgHex = (dark: UInt32(0xD3C6AA), light: UInt32(0x5C6A72))
+private let mutedHex = (dark: UInt32(0x9DA9A0), light: UInt32(0x5C6E5E))
+
+/// sRGB channel blend of two hex colors (the WebUI's color-mix) so
+/// derived tokens stay compile-time constants — Color.mix would need
+/// macOS 15 and a resolved (non-adaptive) source color.
+private func mixHex(_ a: UInt32, _ b: UInt32, by t: Double) -> UInt32 {
+    func channel(_ shift: UInt32) -> UInt32 {
+        let av = Double((a >> shift) & 0xFF)
+        let bv = Double((b >> shift) & 0xFF)
+        return UInt32((av * (1 - t) + bv * t).rounded())
+    }
+    return (channel(16) << 16) | (channel(8) << 8) | channel(0)
 }
 
 /// A token color resolved from the hosting view's effective appearance,

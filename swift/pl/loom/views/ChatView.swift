@@ -831,12 +831,14 @@ private struct StatusBarView: View {
                 Text("turn \(store.turnCount)")
             }
             Spacer()
-            if let occupancy = store.occupancy, let window = store.contextWindow, window > 0 {
-                Text("\(formatTokenCount(occupancy)) / \(formatTokenCount(Int64(window))) context")
-                    .help("Context occupancy")
-            }
+            // No "x / y context" figure here: it duplicated the composer
+            // gauge, whose hover card already carries the exact numbers
+            // (matching the WebUI's statusbar).
             if !version.isEmpty {
                 Text(version)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(version)
             }
         }
         .font(.system(size: Theme.textXs))

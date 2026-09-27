@@ -356,21 +356,25 @@ export const TABS: TabSpec[] = [
             key: 'approval.mode',
             label: '审批模式',
             type: 'select',
+            // Option labels lead with the composer's friendly names
+            // (standard/dev/auto) so the settings page and the session
+            // page call the same mode by the same name; the config value
+            // stays visible in parentheses only for the default entry.
             options: [
-              ['', '默认（on-request）'],
-              ['on-request', 'on-request · 沙箱内/工作区内免审批'],
-              ['danger-only', 'danger-only · 仅危险操作弹审批'],
-              ['never', 'never · 无人值守'],
+              ['', '默认（standard）'],
+              ['on-request', 'standard · 沙箱内/工作区内免审批'],
+              ['danger-only', 'dev · 仅危险操作弹审批'],
+              ['never', 'auto · 无人值守'],
             ],
             hint: '无规则/记忆命中时的决策策略',
             optionHints: {
-              '': 'on-request（默认）：沙箱内命令、工作区内读写免审批；出沙箱提权/越界写入/外网/危险信号弹审批',
+              '': 'standard（默认，配置值 on-request）：沙箱内命令、工作区内读写免审批；出沙箱提权/越界写入/外网/危险信号弹审批',
               'on-request':
-                '沙箱内命令、工作区内读写免审批；出沙箱提权/越界写入/外网/危险信号弹审批',
+                'standard：沙箱内命令、工作区内读写免审批；出沙箱提权/越界写入/外网/危险信号弹审批',
               'danger-only':
-                '仅明确危险的操作弹审批：危险站点黑名单、危险模式（curl|sh、凭证/启动文件写入等）、破坏性与共享状态后果（rm 关键目标、git push 等）；开发命令、正常站点与接口调用、出沙箱提权均自动放行',
+                'dev：仅明确危险的操作弹审批：危险站点黑名单、危险模式（curl|sh、凭证/启动文件写入等）、破坏性与共享状态后果（rm 关键目标、git push 等）；开发命令、正常站点与接口调用、出沙箱提权均自动放行',
               never:
-                '无人值守：沙箱内放行，提权、越界写入与破坏性/共享状态操作直接拒绝，永不阻塞等待审批',
+                'auto（无人值守）：沙箱内放行，提权、越界写入与破坏性/共享状态操作直接拒绝，永不阻塞等待审批',
             },
           },
         ],

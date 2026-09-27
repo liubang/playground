@@ -33,7 +33,9 @@ export const StatusBar = memo(function StatusBar({ controller }: { controller: A
       </span>
       <span id="sb-turn">{turnCount ? `turn ${turnCount}` : ''}</span>
       <span className="spacer" />
-      <span id="sb-version">{version}</span>
+      <span id="sb-version" title={version}>
+        {version}
+      </span>
     </footer>
   )
 })

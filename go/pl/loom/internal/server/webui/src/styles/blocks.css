@@ -1078,7 +1078,9 @@ body.lightbox-open {
   border-top: 1px solid color-mix(in srgb, var(--fg) 9%, transparent);
 }
 .block-turn-summary .tsm-footnote {
-  color: var(--muted);
+  /* One notch brighter than --muted: this note carries a real limitation
+     (run_cmd edits aren't revertable), it must stay readable */
+  color: color-mix(in srgb, var(--muted) 80%, var(--fg));
   font-size: 11px;
   flex: 1;
   min-width: 200px;

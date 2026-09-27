@@ -290,17 +290,22 @@ let settingsTabs: [TabSpec] = [
                 "approval.mode", label: "审批模式",
                 hint: "没有规则或记忆匹配时的决策策略",
                 type: .select,
+                // Option labels lead with the composer's friendly names
+                // (standard/dev/auto) so the settings page and the
+                // session page call the same mode by the same name; the
+                // config value stays visible in parentheses only for
+                // the default entry.
                 options: [
-                    ("", "默认（on-request）"),
-                    ("on-request", "on-request · 沙盒/工作区内自由执行"),
-                    ("danger-only", "danger-only · 仅危险操作弹窗"),
-                    ("never", "never · 无人值守"),
+                    ("", "默认（standard）"),
+                    ("on-request", "standard · 沙盒/工作区内自由执行"),
+                    ("danger-only", "dev · 仅危险操作弹窗"),
+                    ("never", "auto · 无人值守"),
                 ],
                 optionHints: [
-                    "": "on-request（默认）：沙盒内的命令和工作区内的读写自动允许；沙盒提权、工作区外写入、外部网络访问以及危险信号会弹窗确认",
-                    "on-request": "沙盒内的命令和工作区内的读写自动允许；沙盒提权、工作区外写入、外部网络访问以及危险信号会弹窗确认",
-                    "danger-only": "仅明确危险的操作弹窗：危险站点拒绝列表、危险模式（curl|sh、凭证/启动文件写入等）、破坏性或有共享状态后果的操作（删除关键目标、git push 等）；开发命令、普通站点/API 以及沙盒提权自动允许",
-                    "never": "无人值守：沙盒内允许；提权、工作区外写入、破坏性/共享状态操作直接拒绝——永远不会阻塞等待审批",
+                    "": "standard（默认，配置值 on-request）：沙盒内的命令和工作区内的读写自动允许；沙盒提权、工作区外写入、外部网络访问以及危险信号会弹窗确认",
+                    "on-request": "standard：沙盒内的命令和工作区内的读写自动允许；沙盒提权、工作区外写入、外部网络访问以及危险信号会弹窗确认",
+                    "danger-only": "dev：仅明确危险的操作弹窗：危险站点拒绝列表、危险模式（curl|sh、凭证/启动文件写入等）、破坏性或有共享状态后果的操作（删除关键目标、git push 等）；开发命令、普通站点/API 以及沙盒提权自动允许",
+                    "never": "auto（无人值守）：沙盒内允许；提权、工作区外写入、破坏性/共享状态操作直接拒绝——永远不会阻塞等待审批",
                 ],
             ),
         ]),
