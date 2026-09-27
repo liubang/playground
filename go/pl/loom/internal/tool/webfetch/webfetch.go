@@ -147,7 +147,7 @@ func (t *WebFetchTool) Definition() domain.ToolDefinition {
 func (t *WebFetchTool) ConcurrentSafe() bool { return true }
 
 func (t *WebFetchTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := toolkit.DecodeStrict[fetchArgs](call.Arguments)
+	args, err := toolkit.DecodeLenient[fetchArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}

@@ -21,7 +21,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
@@ -134,10 +133,8 @@ func (t *AskUserTool) Execute(ctx context.Context, prepared domain.PreparedCall)
 // into a domain question; unknown fields are rejected. The question ID is
 // assigned by the caller at ask time.
 func decodeAskUserArgs(raw json.RawMessage) (domain.Question, json.RawMessage, error) {
-	var args askUserArgs
-	dec := json.NewDecoder(strings.NewReader(string(raw)))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&args); err != nil {
+	args, err := toolkit.DecodeLenient[askUserArgs](raw)
+	if err != nil {
 		return domain.Question{}, nil, domain.NewError(domain.ErrInvalidInput, "invalid ask_user arguments", domain.WithCause(err))
 	}
 	question := domain.Question{

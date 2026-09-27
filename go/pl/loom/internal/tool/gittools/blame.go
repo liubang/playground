@@ -98,7 +98,7 @@ func (t *GitBlameTool) Definition() domain.ToolDefinition {
 func (t *GitBlameTool) ConcurrentSafe() bool { return true }
 
 func (t *GitBlameTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := toolkit.DecodeStrict[gitBlameArgs](call.Arguments)
+	args, err := toolkit.DecodeLenient[gitBlameArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}

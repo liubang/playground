@@ -18,7 +18,6 @@
 package memory
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -48,8 +47,12 @@ const (
 const (
 	DefaultListMaxResults   = 200
 	DefaultSearchMaxResults = 200
-	DefaultReadMaxTokens    = 20000
-	SummaryTokenLimit       = 2500
+	// DefaultReadMaxLines bounds a read that passes no max_lines: memory
+	// files only grow, and an uncapped full read injects the whole store
+	// into context in one shot (observed: a 34KB MEMORY.md single read).
+	// The truncated hint tells the model how to page for the rest.
+	DefaultReadMaxLines = 200
+	SummaryTokenLimit   = 2500
 )
 
 // noteFilePattern validates ad-hoc note filenames.
@@ -102,7 +105,7 @@ func NewMemoryTool(store *Store) (*MemoryTool, error) {
 			"use it before answering questions about prior work, user preferences, or project conventions; " +
 			"'add_note' appends a timestamped markdown note (note required) after the user explicitly " +
 			"asks to remember, forget, or update something — it is consolidated into the main memory later.",
-		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"action":{"type":"string","enum":["list","read","search","add_note"],"description":"The memory operation."},"path":{"type":"string","description":"Relative path within the memory store (list: default root; read: required)."},"query":{"type":"string","minLength":1,"maxLength":512,"description":"Search substring (search; required)."},"filename":{"type":"string","maxLength":128,"description":"Note filename slug, e.g. 'data-prefs.md' (add_note; optional, default 'note.md'). The current UTC timestamp YYYY-MM-DDTHH-MM-SS- is prepended automatically — no date lookup needed. A fully timestamped name is also accepted."},"note":{"type":"string","minLength":1,"maxLength":4096,"description":"The memory note content (add_note; required)."},"line_offset":{"type":"integer","minimum":1,"description":"1-indexed line offset to start reading from (read)."},"max_lines":{"type":"integer","minimum":1,"maximum":2000,"description":"Maximum lines to return (read; default: all)."},"max_results":{"type":"integer","minimum":1,"maximum":2000,"description":"Maximum entries/matches to return (list/search; default 200)."}},"required":["action"]}`),
+		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"action":{"type":"string","enum":["list","read","search","add_note"],"description":"The memory operation."},"path":{"type":"string","description":"Relative path within the memory store (list: default root; read: required)."},"query":{"type":"string","minLength":1,"maxLength":512,"description":"Search substring (search; required)."},"filename":{"type":"string","maxLength":128,"description":"Note filename slug, e.g. 'data-prefs.md' (add_note; optional, default 'note.md'). The current UTC timestamp YYYY-MM-DDTHH-MM-SS- is prepended automatically — no date lookup needed. A fully timestamped name is also accepted."},"note":{"type":"string","minLength":1,"maxLength":4096,"description":"The memory note content (add_note; required)."},"line_offset":{"type":"integer","minimum":1,"description":"1-indexed line offset to start reading from (read)."},"max_lines":{"type":"integer","minimum":1,"maximum":2000,"description":"Maximum lines to return (read; default 200 — paginate with line_offset for more)."},"max_results":{"type":"integer","minimum":1,"maximum":2000,"description":"Maximum entries/matches to return (list/search; default 200)."}},"required":["action"]}`),
 		Source:      domain.ToolSourceBuiltin,
 	}
 	if err := def.Validate(); err != nil {
@@ -173,10 +176,8 @@ func (args memoryArgs) approvalDesc() string {
 }
 
 func (t *MemoryTool) Prepare(_ context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	var args memoryArgs
-	dec := json.NewDecoder(bytes.NewReader(call.Arguments))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&args); err != nil {
+	args, err := toolkit.DecodeLenient[memoryArgs](call.Arguments)
+	if err != nil {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "invalid memory arguments", domain.WithCause(err))
 	}
 	risk, err := args.validate()
@@ -216,16 +217,31 @@ func (t *MemoryTool) Execute(_ context.Context, prepared domain.PreparedCall) do
 		entries, err = t.store.List(args.Path, maxResults)
 		payload = map[string]any{"entries": entries}
 	case ActionRead:
+		maxLines := args.MaxLines
+		if maxLines <= 0 {
+			maxLines = DefaultReadMaxLines
+		}
 		var content string
 		var total int
-		content, total, err = t.store.ReadFile(args.Path, args.LineOffset, args.MaxLines)
+		content, total, err = t.store.ReadFile(args.Path, args.LineOffset, maxLines)
 		if errors.Is(err, fs.ErrNotExist) {
 			// Replace the raw os.PathError (which leaks the store's
 			// absolute root) with actionable guidance.
 			err = domain.NewError(domain.ErrInvalidInput,
 				fmt.Sprintf("memory file not found: %q — nothing is stored there; use action=list to browse what exists", args.Path))
 		}
+		start := args.LineOffset
+		if start < 1 {
+			start = 1
+		}
 		payload = map[string]any{"content": content, "total_lines": total}
+		if end := start - 1 + countLines(content); content != "" && end < total {
+			payload["truncated"] = true
+			payload["hint"] = fmt.Sprintf(
+				"showing lines %d-%d of %d; continue with line_offset=%d (or pass a larger max_lines, up to 2000)",
+				start, end, total, end+1,
+			)
+		}
 	case ActionSearch:
 		var matches any
 		maxResults := args.MaxResults
@@ -255,6 +271,14 @@ func (t *MemoryTool) Execute(_ context.Context, prepared domain.PreparedCall) do
 		StartedAt:  startedAt,
 		FinishedAt: time.Now(),
 	}
+}
+
+// countLines returns the number of lines in a non-empty read chunk.
+func countLines(content string) int {
+	if content == "" {
+		return 0
+	}
+	return strings.Count(content, "\n") + 1
 }
 
 func memoryToolError(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {

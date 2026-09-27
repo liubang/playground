@@ -20,6 +20,7 @@ package memory
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -245,6 +246,95 @@ func TestMemoryToolReadWithOffset(t *testing.T) {
 	json.Unmarshal([]byte(result.Content[0].Text), &output)
 	if output.Content != "line2" {
 		t.Errorf("Content = %q, want 'line2'", output.Content)
+	}
+}
+
+// writeBigMain stores a 250-line MEMORY.md and returns the store.
+func writeBigMain(t *testing.T) *Store {
+	t.Helper()
+	s := newTestStore(t)
+	var b strings.Builder
+	for i := 1; i <= 250; i++ {
+		fmt.Fprintf(&b, "line%d\n", i)
+	}
+	if err := s.WriteMain(strings.TrimSuffix(b.String(), "\n")); err != nil {
+		t.Fatalf("WriteMain: %v", err)
+	}
+	return s
+}
+
+func TestMemoryToolReadDefaultsToPagedWindow(t *testing.T) {
+	tool, _ := NewMemoryTool(writeBigMain(t))
+
+	prepared := prepareMemory(t, tool, `{"action":"read","path":"MEMORY.md"}`)
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Status = %s", result.Status)
+	}
+	var output struct {
+		Content    string `json:"content"`
+		TotalLines int    `json:"total_lines"`
+		Truncated  bool   `json:"truncated"`
+		Hint       string `json:"hint"`
+	}
+	if err := json.Unmarshal([]byte(result.Content[0].Text), &output); err != nil {
+		t.Fatalf("parse output: %v", err)
+	}
+	if output.TotalLines != 250 {
+		t.Fatalf("total_lines = %d, want 250", output.TotalLines)
+	}
+	if got := countLines(output.Content); got != DefaultReadMaxLines {
+		t.Fatalf("uncapped read returned %d lines, want the %d-line default window", got, DefaultReadMaxLines)
+	}
+	if !output.Truncated || !strings.Contains(output.Hint, "line_offset=201") {
+		t.Fatalf("truncated=%v hint=%q, want a paging hint continuing at line 201", output.Truncated, output.Hint)
+	}
+}
+
+func TestMemoryToolReadLastPageHasNoTruncationHint(t *testing.T) {
+	tool, _ := NewMemoryTool(writeBigMain(t))
+
+	prepared := prepareMemory(t, tool, `{"action":"read","path":"MEMORY.md","line_offset":201}`)
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Status = %s", result.Status)
+	}
+	var output struct {
+		Content   string `json:"content"`
+		Truncated bool   `json:"truncated"`
+		Hint      string `json:"hint"`
+	}
+	if err := json.Unmarshal([]byte(result.Content[0].Text), &output); err != nil {
+		t.Fatalf("parse output: %v", err)
+	}
+	if !strings.HasPrefix(output.Content, "line201\n") || !strings.HasSuffix(output.Content, "line250") {
+		t.Fatalf("second page content wrong: %.40q...%.40q", output.Content, output.Content[len(output.Content)-40:])
+	}
+	if output.Truncated || output.Hint != "" {
+		t.Fatalf("last page must not carry a truncation hint: truncated=%v hint=%q", output.Truncated, output.Hint)
+	}
+}
+
+func TestMemoryToolReadExplicitMaxLines(t *testing.T) {
+	tool, _ := NewMemoryTool(writeBigMain(t))
+
+	prepared := prepareMemory(t, tool, `{"action":"read","path":"MEMORY.md","max_lines":10}`)
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Status = %s", result.Status)
+	}
+	var output struct {
+		Content string `json:"content"`
+		Hint    string `json:"hint"`
+	}
+	if err := json.Unmarshal([]byte(result.Content[0].Text), &output); err != nil {
+		t.Fatalf("parse output: %v", err)
+	}
+	if got := countLines(output.Content); got != 10 {
+		t.Fatalf("read returned %d lines, want 10", got)
+	}
+	if !strings.Contains(output.Hint, "line_offset=11") {
+		t.Fatalf("hint = %q, want continuation at line 11", output.Hint)
 	}
 }
 

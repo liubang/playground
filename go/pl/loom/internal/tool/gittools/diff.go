@@ -73,7 +73,8 @@ func NewGitDiffTool(validator *workspacepkg.PathValidator, runner *process.Runne
 			"merge-base is used and reported in base_ref); or to 'upstream' to diff against the branch's upstream " +
 			"(falling back to the merge-base with the default branch) — the right base for reviewing everything " +
 			"unpushed. Set include_untracked=true to fold untracked files into the diff as new-file entries " +
-			"(binary/oversized files are skipped and reported in untracked_skipped). base cannot be combined with staged.",
+			"(binary/oversized files are skipped and reported in untracked_skipped). base cannot be combined with staged, " +
+			"and include_untracked cannot be combined with staged either.",
 		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"repo_root":{"type":"string","minLength":1},"staged":{"type":"boolean"},"base":{"type":"string","minLength":1,"maxLength":256},"path":{"type":"string","minLength":1},"unified":{"type":"integer","minimum":0,"maximum":20},"include_untracked":{"type":"boolean"}},"required":[]}`),
 		Capabilities: []domain.Capability{domain.CapGitRead},
 		Source:       domain.ToolSourceBuiltin,
@@ -93,7 +94,7 @@ func (t *GitDiffTool) Definition() domain.ToolDefinition {
 func (t *GitDiffTool) ConcurrentSafe() bool { return true }
 
 func (t *GitDiffTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := toolkit.DecodeStrict[gitDiffArgs](call.Arguments)
+	args, err := toolkit.DecodeLenient[gitDiffArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}

@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -192,9 +193,27 @@ func isJSONNullRaw(raw json.RawMessage) bool {
 	return strings.TrimSpace(string(raw)) == "null"
 }
 
+// updateTaskNormalizeShape mirrors the flat update_task schema so the
+// lenient normalizer can repair shape deviations (null-mirrored fields, a
+// stringified token_budget) before action inference and dispatch. Dropping
+// nulls ahead of inference keeps a null "plan" from masquerading as a
+// plan-action payload; the strip step still reports real cross-action
+// fields, preserving the "loud on real values, silent on nulls" contract.
+type updateTaskNormalizeShape struct {
+	Action      string                  `json:"action"`
+	Objective   string                  `json:"objective"`
+	TokenBudget int64                   `json:"token_budget"`
+	Status      string                  `json:"status"`
+	Title       string                  `json:"title"`
+	Plan        []updatePlanArgsRawItem `json:"plan"`
+}
+
+var updateTaskNormalizeShapeType = reflect.TypeOf(updateTaskNormalizeShape{})
+
 // Prepare validates and canonicalizes the call; it is side-effect-free.
 func (t *UpdateTaskTool) Prepare(_ context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	action, err := decodeUpdateTaskAction(call.Arguments)
+	normalized := toolkit.NormalizeArgsJSON(call.Arguments, updateTaskNormalizeShapeType)
+	action, err := decodeUpdateTaskAction(normalized)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -202,7 +221,7 @@ func (t *UpdateTaskTool) Prepare(_ context.Context, call domain.ToolCall) (domai
 	var desc string
 	switch action {
 	case taskActionGoal:
-		args, err := decodeUpdateGoalArgs(call.Arguments)
+		args, err := decodeUpdateGoalArgs(normalized)
 		if err != nil {
 			return domain.PreparedCall{}, err
 		}
@@ -212,7 +231,7 @@ func (t *UpdateTaskTool) Prepare(_ context.Context, call domain.ToolCall) (domai
 		}
 		desc = goalApprovalDesc(args)
 	case taskActionPlan:
-		plan, planCanonical, _, err := decodeUpdatePlanArgs(call.Arguments)
+		plan, planCanonical, _, err := decodeUpdatePlanArgs(normalized)
 		if err != nil {
 			return domain.PreparedCall{}, err
 		}

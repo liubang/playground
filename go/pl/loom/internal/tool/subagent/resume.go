@@ -18,7 +18,6 @@
 package subagent
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -85,10 +84,8 @@ func (t *ResumeSubagentTool) Prepare(ctx context.Context, call domain.ToolCall) 
 	if call.Name != t.def.Name {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("tool call name must be %q", t.def.Name))
 	}
-	var args resumeArgs
-	dec := json.NewDecoder(bytes.NewReader(call.Arguments))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&args); err != nil {
+	args, err := toolkit.DecodeLenient[resumeArgs](call.Arguments)
+	if err != nil {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "invalid resume_subagent arguments", domain.WithCause(err))
 	}
 	sessionID, err := domain.ParseSessionID(args.ChildSessionID)

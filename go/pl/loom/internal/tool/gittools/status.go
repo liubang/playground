@@ -86,7 +86,7 @@ func (t *GitStatusTool) Definition() domain.ToolDefinition {
 func (t *GitStatusTool) ConcurrentSafe() bool { return true }
 
 func (t *GitStatusTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := toolkit.DecodeStrict[gitStatusArgs](call.Arguments)
+	args, err := toolkit.DecodeLenient[gitStatusArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}

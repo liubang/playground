@@ -641,6 +641,13 @@ func (r *Run) addAssistantMessage(msg domain.Message, usage *domain.RequestUsage
 // so outsized results cannot swamp the transcript between the tools'
 // own entry-level limits and compaction.
 func (r *Run) RecordToolResult(result domain.ToolResult) domain.Event {
+	// Normalize timestamps to UTC: tools stamp results with time.Now()
+	// (local zone) while loop-level rejections use Clock.Now() (UTC);
+	// both paths converge here, so persist one canonical form — consumers
+	// that sort or align the event stream by string must not mix
+	// "...Z" with "...+08:00" (both valid RFC3339, different collation).
+	result.StartedAt = result.StartedAt.UTC()
+	result.FinishedAt = result.FinishedAt.UTC()
 	truncateToolResultContent(&result, r.Limits.MaxToolOutputBytes)
 	r.Usage.ToolCalls++
 	r.Version++
@@ -1131,6 +1138,10 @@ type Loop struct {
 	ParentToolCallID domain.ToolCallID
 
 	prepared map[domain.ToolCallID]domain.PreparedCall
+	// execStarted records which calls already emitted
+	// tool.execution_started, so the early-rejection pairing never
+	// double-emits a start for a call that reached executeOne.
+	execStarted map[domain.ToolCallID]struct{}
 	// traceRun is the active trace handle for the executing run.
 	traceRun trace.RunHandle
 	// lastCallContext is the provider-metered context-window footprint of
@@ -1952,6 +1963,7 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 	// instead of hanging on an approval prompt.
 	if l.inRunBudgetWrapUp() {
 		for _, tc := range calls {
+			l.appendEarlyRejectionEvents(tc, rawArgsHash(tc.Arguments))
 			l.recordToolError(ctx, tc, "permission_denied", "run is in budget wrap-up; tool calls are disabled")
 		}
 		l.terminate(ctx, wrapUpOutcome(l.Run.WrapUpPending))
@@ -1965,6 +1977,7 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 	for _, tc := range calls {
 		tool, ok := l.Registry.Lookup(tc.Name)
 		if !ok {
+			l.appendEarlyRejectionEvents(tc, rawArgsHash(tc.Arguments))
 			l.recordToolError(ctx, tc, "unknown_tool", fmt.Sprintf("tool %q not found", tc.Name))
 			if reason := l.runaway.trackToolCall(l.runawayConfig(), tc.Name, tc.Arguments, &l.notices, l.Run.Clock); reason != "" {
 				return l.terminateRunaway(ctx, reason)
@@ -1979,6 +1992,7 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 		// consume — StripImages would turn it into a text gap at the
 		// egress. Fail fast with an actionable error instead.
 		if tc.Name == viewImageToolName && !l.SupportsImages {
+			l.appendEarlyRejectionEvents(tc, rawArgsHash(tc.Arguments))
 			l.recordToolError(ctx, tc, "unsupported_modality",
 				"view_image is unavailable: the active model does not support image input; use present_image to show an image to the user")
 			if reason := l.runaway.trackToolCall(l.runawayConfig(), tc.Name, tc.Arguments, &l.notices, l.Run.Clock); reason != "" {
@@ -1994,7 +2008,7 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 		// (docs/CONTEXT_DESIGN.md §4.6).
 		if hint, malformed := malformedArgumentsHint(tc.Arguments); malformed {
 			rawHash := rawArgsHash(tc.Arguments)
-			l.appendPrepareFailureEvents(tc, rawHash)
+			l.appendEarlyRejectionEvents(tc, rawHash)
 			l.recordToolError(ctx, tc, "prepare_failed", hint)
 			if reason := l.runaway.trackToolCall(l.runawayConfig(), tc.Name, tc.Arguments, &l.notices, l.Run.Clock); reason != "" {
 				return l.terminateRunaway(ctx, reason)
@@ -2004,7 +2018,7 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 		prepared, err := tool.Prepare(ctx, tc)
 		if err != nil {
 			rawHash := rawArgsHash(tc.Arguments)
-			l.appendPrepareFailureEvents(tc, rawHash)
+			l.appendEarlyRejectionEvents(tc, rawHash)
 			l.recordToolError(ctx, tc, "prepare_failed", prepareErrorMessage(tc, err))
 			if reason := l.runaway.trackToolCall(l.runawayConfig(), tc.Name, tc.Arguments, &l.notices, l.Run.Clock); reason != "" {
 				return l.terminateRunaway(ctx, reason)
@@ -2031,8 +2045,10 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 			// The denial reason reaches the model verbatim: in unattended
 			// (never) runs it is the ONLY signal the model gets, so it must
 			// say why the call was refused and how to reroute.
+			l.markExecutionStarted(prepared)
 			l.recordToolError(ctx, tc, "permission_denied", "tool call denied by policy: "+verdict.Reason)
 		default:
+			l.markExecutionStarted(prepared)
 			l.recordToolError(ctx, tc, "permission_denied", "tool call denied by invalid policy decision")
 		}
 	}
@@ -2049,14 +2065,16 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 	return err
 }
 
-// appendPrepareFailureEvents keeps the event stream paired for calls that
-// fail during preparation: without them consumers see an execution
-// completion with no matching prepared/started events
-// (docs/CONTEXT_DESIGN.md §4.6). The degraded payload carries the raw
-// args hash so runaway repeat detection and audits can still correlate,
-// plus a sanitized args summary so the failing input (e.g. a nonexistent
-// path) is visible without re-deriving it from the model response.
-func (l *Loop) appendPrepareFailureEvents(tc domain.ToolCall, argsRawHash string) {
+// appendEarlyRejectionEvents keeps the event stream paired for calls
+// rejected before a proper prepare completes — prepare failures, unknown
+// tools, the text-only view_image gate, and budget wrap-up denials:
+// without them consumers see an execution completion with no matching
+// prepared/started events (docs/CONTEXT_DESIGN.md §4.6). The degraded
+// payload carries the raw args hash so runaway repeat detection and
+// audits can still correlate, plus a sanitized args summary so the
+// failing input (e.g. a nonexistent path) is visible without re-deriving
+// it from the model response.
+func (l *Loop) appendEarlyRejectionEvents(tc domain.ToolCall, argsRawHash string) {
 	payload := toolCallAuditPayload{
 		CallID:        tc.ID,
 		Tool:          tc.Name,
@@ -2067,6 +2085,23 @@ func (l *Loop) appendPrepareFailureEvents(tc domain.ToolCall, argsRawHash string
 	}
 	l.Run.appendEvent(domain.EventToolCallPrepared, payload)
 	l.Run.appendEvent(domain.EventToolExecutionStarted, payload)
+}
+
+// markExecutionStarted appends the tool.execution_started audit event for
+// prepared, deduplicated per call: every execution completion must pair
+// with a start, and the early-rejection paths (policy denial, user
+// denial, pre-execution drift checks) emit it for calls that never reach
+// executeOne — which would otherwise emit its own.
+func (l *Loop) markExecutionStarted(prepared domain.PreparedCall) {
+	if l.execStarted == nil {
+		l.execStarted = make(map[domain.ToolCallID]struct{})
+	}
+	id := prepared.Call.ID
+	if _, ok := l.execStarted[id]; ok {
+		return
+	}
+	l.execStarted[id] = struct{}{}
+	l.Run.appendEvent(domain.EventToolExecutionStarted, makeToolCallAuditPayload(prepared))
 }
 
 // prepareFailureArgsWhitelist lists the argument keys considered safe to
@@ -2261,6 +2296,7 @@ func (l *Loop) awaitApproval(ctx context.Context) error {
 		}
 		if decision != domain.DecisionAllow {
 			delete(l.prepared, tc.ID)
+			l.markExecutionStarted(prepared)
 			l.recordToolError(ctx, tc, "permission_denied", userDeniedMessage(verdict.Reason))
 		}
 	}
@@ -2321,14 +2357,17 @@ func (l *Loop) executeTools(ctx context.Context) error {
 
 		tool, ok := l.Registry.Lookup(prepared.Call.Name)
 		if !ok {
+			l.markExecutionStarted(prepared)
 			l.recordToolError(ctx, tc, string(domain.ErrSecurity), "tool registry drift detected before execution")
 			continue
 		}
 		if err := validatePreparedExecution(tc, prepared, tool.Definition()); err != nil {
+			l.markExecutionStarted(prepared)
 			l.recordToolExecutionError(ctx, tc, err)
 			continue
 		}
 		if err := verifyPreparedFreshness(ctx, tool, tc, prepared); err != nil {
+			l.markExecutionStarted(prepared)
 			l.recordToolExecutionError(ctx, tc, err)
 			continue
 		}
@@ -2381,7 +2420,7 @@ func segmentBatch(batch []preparedExec) [][]preparedExec {
 // executeOne runs a single call with the classic per-call durability:
 // the started event is persisted right before execution.
 func (l *Loop) executeOne(ctx context.Context, item preparedExec) error {
-	l.Run.appendEvent(domain.EventToolExecutionStarted, makeToolCallAuditPayload(item.prepared))
+	l.markExecutionStarted(item.prepared)
 	if l.Store != nil {
 		if err := l.flushEvents(ctx); err != nil {
 			// Same dangling-call guarantee as the approval path: close the
@@ -2432,7 +2471,7 @@ func (l *Loop) executeTool(ctx context.Context, item preparedExec) domain.ToolRe
 // and the runaway counters deterministic.
 func (l *Loop) executeSegmentParallel(ctx context.Context, segment []preparedExec) error {
 	for _, item := range segment {
-		l.Run.appendEvent(domain.EventToolExecutionStarted, makeToolCallAuditPayload(item.prepared))
+		l.markExecutionStarted(item.prepared)
 	}
 	if l.Store != nil {
 		if err := l.flushEvents(ctx); err != nil {
@@ -2805,6 +2844,15 @@ func (l *Loop) closeUnresolvedCalls(ctx context.Context, message string) {
 	for _, tc := range lastToolCalls(l.Run.Messages) {
 		if l.isToolResultRecorded(tc.ID) {
 			continue
+		}
+		// The completion recorded below must not be an orphan: emit the
+		// prepared/started pair for calls rejected before routing finished,
+		// or just the start for calls that were properly prepared — unless
+		// executeOne already started them (docs/CONTEXT_DESIGN.md §4.6).
+		if prepared, ok := l.prepared[tc.ID]; ok {
+			l.markExecutionStarted(prepared)
+		} else if _, started := l.execStarted[tc.ID]; !started {
+			l.appendEarlyRejectionEvents(tc, rawArgsHash(tc.Arguments))
 		}
 		l.recordToolError(ctx, tc, "interrupted", message)
 	}

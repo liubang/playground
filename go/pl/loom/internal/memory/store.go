@@ -182,6 +182,9 @@ func (s *Store) ListRolloutSummaries() ([]string, error) {
 
 // AddNote writes an ad-hoc note to the extensions/ad_hoc/notes/ directory.
 // The filename must be a timestamped slug: YYYY-MM-DDTHH-MM-SS-slug.md
+// The write is exclusive (O_EXCL): the tool auto-timestamps filenames to
+// second precision, so two notes sharing a slug within the same second
+// would otherwise silently overwrite each other.
 func (s *Store) AddNote(filename, content string) error {
 	path := filepath.Join(s.root, NotesDir, filename)
 	if !isWithinRoot(path, filepath.Join(s.root, NotesDir)) {
@@ -190,7 +193,16 @@ func (s *Store) AddNote(filename, content string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(content), 0o600)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("note %q already exists; pick a different slug or read the existing note first", filename)
+		}
+		return err
+	}
+	defer f.Close()
+	_, err = f.WriteString(content)
+	return err
 }
 
 // ListNotes lists all ad-hoc notes.

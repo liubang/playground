@@ -158,80 +158,11 @@ func (t *SearchTool) Definition() domain.ToolDefinition {
 // an independent rg process and shares no state across calls.
 func (t *SearchTool) ConcurrentSafe() bool { return true }
 
-// isJSONNull reports whether raw is the JSON null literal.
-func isJSONNull(raw json.RawMessage) bool {
-	return strings.TrimSpace(string(raw)) == "null"
-}
-
-// normalizeSearchJSON repairs the argument-shape deviations models make
-// in the wild before the strict decode, mirroring the tolerance the
-// type filter already applies: a lone glob string becomes the array the
-// schema names (some models inherit a string-typed glob from other
-// toolkits), and boolean fields arrive stringified. Everything the
-// patcher does not recognize passes through untouched, so the strict
-// decoder still rejects genuinely unknown shapes.
-func normalizeSearchJSON(raw json.RawMessage) json.RawMessage {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return raw
-	}
-	patched := false
-	// Models mirror the schema with explicit nulls for optional properties
-	// they have no value for; null means absent, so drop those keys before
-	// the shape repairs — otherwise a null glob would decode as a
-	// one-element empty slice below and fail validation.
-	for key, value := range fields {
-		if isJSONNull(value) {
-			delete(fields, key)
-			patched = true
-		}
-	}
-	fix := func(key string, rewrite func(json.RawMessage) (json.RawMessage, bool)) {
-		value, ok := fields[key]
-		if !ok {
-			return
-		}
-		if next, changed := rewrite(value); changed {
-			fields[key] = next
-			patched = true
-		}
-	}
-	fix("glob", func(value json.RawMessage) (json.RawMessage, bool) {
-		var single string
-		if err := json.Unmarshal(value, &single); err != nil {
-			return nil, false
-		}
-		out, err := json.Marshal([]string{single})
-		if err != nil {
-			return nil, false
-		}
-		return out, true
-	})
-	for _, key := range []string{"case_sensitive", "fixed_strings", "no_ignore"} {
-		fix(key, func(value json.RawMessage) (json.RawMessage, bool) {
-			var text string
-			if err := json.Unmarshal(value, &text); err != nil {
-				return nil, false
-			}
-			out, err := json.Marshal(strings.EqualFold(strings.TrimSpace(text), "true"))
-			if err != nil {
-				return nil, false
-			}
-			return out, true
-		})
-	}
-	if !patched {
-		return raw
-	}
-	out, err := json.Marshal(fields)
-	if err != nil {
-		return raw
-	}
-	return out
-}
+// Argument-shape tolerance (null-mirrored fields, stringified booleans,
+// a lone glob string) lives in the shared toolkit.DecodeLenient layer.
 
 func (t *SearchTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[searchArgs](normalizeSearchJSON(call.Arguments))
+	args, err := decodeLenient[searchArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}

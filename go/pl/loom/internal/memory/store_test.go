@@ -170,6 +170,31 @@ func TestAddNoteAndList(t *testing.T) {
 	}
 }
 
+// AddNote is exclusive: a same-slug collision (the tool auto-timestamps
+// to second precision, so two notes within one second can collide) must
+// fail loudly instead of silently overwriting the first note.
+func TestAddNoteConflictRejected(t *testing.T) {
+	s := newTestStore(t)
+	filename := "2026-08-02T12-00-00-prefer-go.md"
+	if err := s.AddNote(filename, "first"); err != nil {
+		t.Fatalf("AddNote: %v", err)
+	}
+	err := s.AddNote(filename, "second")
+	if err == nil {
+		t.Fatal("duplicate AddNote succeeded, want an already-exists error")
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("conflict error = %v, want an actionable already-exists message", err)
+	}
+	got, err := s.ReadNote(filename)
+	if err != nil {
+		t.Fatalf("ReadNote: %v", err)
+	}
+	if got != "first" {
+		t.Fatalf("note content = %q, want the original %q", got, "first")
+	}
+}
+
 func TestListDirectory(t *testing.T) {
 	s := newTestStore(t)
 	// Write some files to populate the directory.

@@ -152,6 +152,11 @@ func resolveRepoRoot(validator *workspacepkg.PathValidator, input string) (repoR
 	return repoRootResolution{Absolute: resolved, Display: workspacepkg.DisplayPath(rel)}, nil
 }
 
+// resolveRepoPath confines the path filter to the resolved repository
+// root. Absolute paths are accepted when they land under the repo root —
+// models naturally pass the absolute path of a file they just saw in a
+// listing (observed in live transcripts); anything outside still fails
+// the isUnderRoot check below.
 func resolveRepoPath(
 	validator *workspacepkg.PathValidator,
 	repoRoot repoRootResolution,
@@ -159,9 +164,6 @@ func resolveRepoPath(
 ) (repoPathResolution, error) {
 	if strings.TrimSpace(input) == "" {
 		return repoPathResolution{}, domain.NewError(domain.ErrInvalidInput, "path is required")
-	}
-	if filepath.IsAbs(input) {
-		return repoPathResolution{}, domain.NewError(domain.ErrInvalidInput, "path must be workspace-relative")
 	}
 	if len(input) > maxGitPathBytes {
 		return repoPathResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("path exceeds %d bytes", maxGitPathBytes))

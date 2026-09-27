@@ -5022,7 +5022,7 @@ func TestPrepareFailureArgsSummary(t *testing.T) {
 	})
 }
 
-func TestAppendPrepareFailureEventsIncludesArgsSummary(t *testing.T) {
+func TestAppendEarlyRejectionEventsIncludesArgsSummary(t *testing.T) {
 	run := NewRun(domain.NewSessionID(), domain.Limits{}, domain.RealClock{})
 	loop := &Loop{Run: run}
 	tc := domain.ToolCall{
@@ -5032,7 +5032,7 @@ func TestAppendPrepareFailureEventsIncludesArgsSummary(t *testing.T) {
 			`{"path":"go/pl/loom/internal/config/example.go","pattern":"storage","content":"secret-body"}`,
 		),
 	}
-	loop.appendPrepareFailureEvents(tc, "deadbeef")
+	loop.appendEarlyRejectionEvents(tc, "deadbeef")
 
 	if len(run.pendingEvents) != 2 {
 		t.Fatalf("pending events = %d, want prepared+started pair", len(run.pendingEvents))

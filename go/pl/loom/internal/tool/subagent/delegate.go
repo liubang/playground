@@ -563,10 +563,8 @@ type delegateArgs struct {
 }
 
 func decodeDelegateArgs(raw json.RawMessage) (delegateArgs, error) {
-	var args delegateArgs
-	dec := json.NewDecoder(strings.NewReader(string(raw)))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&args); err != nil {
+	args, err := toolkit.DecodeLenient[delegateArgs](raw)
+	if err != nil {
 		return delegateArgs{}, domain.NewError(domain.ErrInvalidInput, "invalid delegate_task arguments", domain.WithCause(err))
 	}
 	args.Task = strings.TrimSpace(args.Task)

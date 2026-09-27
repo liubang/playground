@@ -31,6 +31,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"sort"
 	"time"
 
@@ -165,13 +166,19 @@ func ValidateCallName(call domain.ToolCall, def domain.ToolDefinition) error {
 
 // DecodeStrict decodes a JSON raw message into the target type, rejecting
 // unknown fields and multiple JSON values. This is the strict form used by
-// all tool argument parsing.
+// all tool argument parsing. An unknown-field rejection names the valid
+// fields (and a did-you-mean candidate when one is close) so the model
+// can correct course in one retry instead of guessing.
 func DecodeStrict[T any](raw json.RawMessage) (T, error) {
 	var out T
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&out); err != nil {
-		return out, domain.NewError(domain.ErrInvalidInput, "arguments must be valid JSON matching the tool schema", domain.WithCause(err))
+		msg := "arguments must be valid JSON matching the tool schema"
+		if name, ok := unknownFieldName(err); ok {
+			msg += unknownFieldGuidance(name, reflect.TypeOf(&out).Elem())
+		}
+		return out, domain.NewError(domain.ErrInvalidInput, msg, domain.WithCause(err))
 	}
 	var trailing struct{}
 	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {

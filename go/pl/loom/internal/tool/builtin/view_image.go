@@ -40,7 +40,7 @@ type imagePathArgs struct {
 // path tools: decode args, resolve the path inside the workspace validator,
 // and bind the canonical path into the prepared call.
 func prepareImagePathCall(base baseTool, ctx context.Context, call domain.ToolCall, approvalVerb string) (domain.PreparedCall, error) {
-	args, err := decodeStrict[imagePathArgs](call.Arguments)
+	args, err := decodeLenient[imagePathArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}

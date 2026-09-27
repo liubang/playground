@@ -29,6 +29,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
 // --- soft landing: auto-deny during the wrap-up turn (CONTEXT_DESIGN §4.4.2) ---
@@ -176,7 +177,257 @@ func TestPrepareFailedKeepsEventStreamPaired(t *testing.T) {
 	}
 }
 
+// --- unknown-field guidance surfacing (§4.6) ---
+
+func TestUnknownFieldGuidanceReachesModel(t *testing.T) {
+	// The chronic cross-toolkit inheritance case from live transcripts:
+	// the model invents max_output_tokens for run_cmd. The rejection must
+	// name the closest valid field so the next attempt self-corrects.
+	type runCmdArgs struct {
+		Command        string `json:"command"`
+		MaxOutputBytes int    `json:"max_output_bytes"`
+	}
+	tool := fakes.NewFakeTool(domain.ToolDefinition{
+		Name:         "run_cmd",
+		Description:  "Run a shell command",
+		InputSchema:  json.RawMessage(`{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]}`),
+		Capabilities: []domain.Capability{domain.CapProcessExec},
+		Source:       domain.ToolSourceBuiltin,
+	}, domain.ToolResult{Status: domain.ToolStatusSuccess}).WithPrepareFn(
+		func(_ context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
+			if _, err := toolkit.DecodeLenient[runCmdArgs](call.Arguments); err != nil {
+				return domain.PreparedCall{}, err
+			}
+			return domain.PreparedCall{}, errors.New("unreachable in this test")
+		},
+	)
+	registry := NewToolRegistry()
+	if err := registry.Register(tool); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	loop, run := newPairingTestLoop(t, domain.ToolCall{
+		ID: domain.NewToolCallID(), Name: "run_cmd",
+		Arguments: json.RawMessage(`{"command":"seq 1 100000","max_output_tokens":4000}`),
+	}, registry, DefaultPolicy{}, fakes.NewFakeApprover(domain.DecisionAllow))
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error = %v", err)
+	}
+	var errText string
+	for _, msg := range run.Messages {
+		for _, part := range msg.Parts {
+			if part.Kind == domain.PartToolResult && part.ToolResult != nil && part.ToolResult.Error != nil {
+				errText = part.ToolResult.Error.Message
+			}
+		}
+	}
+	if !strings.Contains(errText, `did you mean "max_output_bytes"?`) {
+		t.Fatalf("model-facing error lacks the did-you-mean hint: %q", errText)
+	}
+	if !strings.Contains(errText, "Valid fields: command, max_output_bytes") {
+		t.Fatalf("model-facing error lacks the valid field list: %q", errText)
+	}
+}
+
+// --- early-rejection event pairing beyond prepare_failed (§4.6) ---
+
+// countToolEventTriple tallies the prepared/started/completed audit events
+// in the run's pending events.
+func countToolEventTriple(run *Run) (prepared, started, completed int) {
+	for _, evt := range run.pendingEvents {
+		switch evt.Type {
+		case domain.EventToolCallPrepared:
+			prepared++
+		case domain.EventToolExecutionStarted:
+			started++
+		case domain.EventToolExecutionCompleted:
+			completed++
+		}
+	}
+	return prepared, started, completed
+}
+
+// toolResultErrorCode extracts the first tool error code from the
+// transcript, if any.
+func toolResultErrorCode(run *Run) string {
+	for _, msg := range run.Messages {
+		for _, part := range msg.Parts {
+			if part.Kind == domain.PartToolResult && part.ToolResult != nil && part.ToolResult.Error != nil {
+				return part.ToolResult.Error.Code
+			}
+		}
+	}
+	return ""
+}
+
+// newPairingTestLoop builds a one-call loop: the model issues tc, then
+// ends the turn. registry and policy are caller-controlled.
+func newPairingTestLoop(t *testing.T, tc domain.ToolCall, registry *ToolRegistry, policy Policy, approver domain.Approver) (*Loop, *Run) {
+	t.Helper()
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{tc}, StopReason: domain.StopToolUse},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn},
+	)
+	run := NewRun(domain.NewSessionID(), domain.Limits{}, domain.RealClock{})
+	run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "work"}},
+		CreatedAt: time.Now(),
+	})
+	return &Loop{
+		Run: run, Model: model, Policy: policy,
+		Approver: approver, Registry: registry, Logger: slog.Default(),
+	}, run
+}
+
+func TestUnknownToolKeepsEventStreamPaired(t *testing.T) {
+	registry := NewToolRegistry()
+	if err := registry.Register(fakes.ReadFileTool()); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	loop, run := newPairingTestLoop(t, domain.ToolCall{
+		ID: domain.NewToolCallID(), Name: "totally_unknown_tool",
+		Arguments: json.RawMessage(`{"path":"x"}`),
+	}, registry, DefaultPolicy{}, fakes.NewFakeApprover(domain.DecisionAllow))
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error = %v", err)
+	}
+	if prepared, started, completed := countToolEventTriple(run); prepared != 1 || started != 1 || completed != 1 {
+		t.Fatalf("event pairing = %d/%d/%d, want 1/1/1", prepared, started, completed)
+	}
+	if code := toolResultErrorCode(run); code != "unknown_tool" {
+		t.Fatalf("error code = %q, want unknown_tool", code)
+	}
+}
+
+func TestViewImageGateKeepsEventStreamPaired(t *testing.T) {
+	viewImage := fakes.NewFakeTool(domain.ToolDefinition{
+		Name:         "view_image",
+		Description:  "Attach an image",
+		InputSchema:  json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}}}`),
+		Capabilities: []domain.Capability{domain.CapFSRead},
+		Source:       domain.ToolSourceBuiltin,
+	}, domain.ToolResult{Status: domain.ToolStatusSuccess})
+	registry := NewToolRegistry()
+	if err := registry.Register(viewImage); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	loop, run := newPairingTestLoop(t, domain.ToolCall{
+		ID: domain.NewToolCallID(), Name: "view_image",
+		Arguments: json.RawMessage(`{"path":"assets/diagram.png"}`),
+	}, registry, DefaultPolicy{}, fakes.NewFakeApprover(domain.DecisionAllow))
+	loop.SupportsImages = false // text-only model: the vision gate fires
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error = %v", err)
+	}
+	if prepared, started, completed := countToolEventTriple(run); prepared != 1 || started != 1 || completed != 1 {
+		t.Fatalf("event pairing = %d/%d/%d, want 1/1/1", prepared, started, completed)
+	}
+	if code := toolResultErrorCode(run); code != "unsupported_modality" {
+		t.Fatalf("error code = %q, want unsupported_modality", code)
+	}
+	if executed := len(viewImage.ExecutedCalls()); executed != 0 {
+		t.Fatalf("gated tool executed %d times, want 0", executed)
+	}
+}
+
+type denyAllPolicy struct{}
+
+func (denyAllPolicy) Evaluate(domain.PreparedCall) domain.Verdict {
+	return domain.Verdict{Source: "test", Decision: domain.DecisionDeny, Reason: "denied by test policy"}
+}
+
+func TestPolicyDenyKeepsEventStreamPaired(t *testing.T) {
+	tool := fakes.ReadFileTool()
+	registry := NewToolRegistry()
+	if err := registry.Register(tool); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	loop, run := newPairingTestLoop(t, domain.ToolCall{
+		ID: domain.NewToolCallID(), Name: "read_file",
+		Arguments: json.RawMessage(`{"path":"a.txt"}`),
+	}, registry, denyAllPolicy{}, fakes.NewFakeApprover(domain.DecisionAllow))
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error = %v", err)
+	}
+	// The deny happens after a proper prepare: prepared carries the real
+	// audit payload (not the degraded one), started pairs the completion.
+	if prepared, started, completed := countToolEventTriple(run); prepared != 1 || started != 1 || completed != 1 {
+		t.Fatalf("event pairing = %d/%d/%d, want 1/1/1", prepared, started, completed)
+	}
+	if code := toolResultErrorCode(run); code != "permission_denied" {
+		t.Fatalf("error code = %q, want permission_denied", code)
+	}
+	if executed := len(tool.ExecutedCalls()); executed != 0 {
+		t.Fatalf("denied tool executed %d times, want 0", executed)
+	}
+}
+
+func TestUserDenyKeepsEventStreamPaired(t *testing.T) {
+	writeTool := fakes.NewFakeTool(domain.ToolDefinition{
+		Name:         "write",
+		Description:  "Write a file",
+		InputSchema:  json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}`),
+		Capabilities: []domain.Capability{domain.CapFSWrite}, // R2 → DefaultPolicy asks
+		Source:       domain.ToolSourceBuiltin,
+	}, domain.ToolResult{Status: domain.ToolStatusSuccess})
+	registry := NewToolRegistry()
+	if err := registry.Register(writeTool); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	loop, run := newPairingTestLoop(t, domain.ToolCall{
+		ID: domain.NewToolCallID(), Name: "write",
+		Arguments: json.RawMessage(`{"path":"a.txt","content":"x"}`),
+	}, registry, DefaultPolicy{}, fakes.NewFakeApprover(domain.DecisionDeny))
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error = %v", err)
+	}
+	if prepared, started, completed := countToolEventTriple(run); prepared != 1 || started != 1 || completed != 1 {
+		t.Fatalf("event pairing = %d/%d/%d, want 1/1/1", prepared, started, completed)
+	}
+	if code := toolResultErrorCode(run); code != "permission_denied" {
+		t.Fatalf("error code = %q, want permission_denied", code)
+	}
+	if executed := len(writeTool.ExecutedCalls()); executed != 0 {
+		t.Fatalf("user-denied tool executed %d times, want 0", executed)
+	}
+}
+
 // --- unified ingestion truncation (§4.5) ---
+
+func TestRecordToolResultNormalizesTimestampsToUTC(t *testing.T) {
+	run := NewRun(domain.NewSessionID(), domain.Limits{}, domain.RealClock{})
+	// Tools stamp results with time.Now() (local zone); the loop stamps
+	// rejections with Clock.Now() (UTC). Persistence must carry one
+	// canonical form or string-sorting consumers misalign the streams.
+	local := time.Date(2026, 9, 27, 21, 17, 8, 0, time.FixedZone("CST", 8*3600))
+	run.RecordToolResult(domain.ToolResult{
+		CallID: domain.NewToolCallID(), Status: domain.ToolStatusSuccess,
+		Content:    []domain.ContentPart{{Kind: domain.PartText, Text: "ok"}},
+		StartedAt:  local,
+		FinishedAt: local,
+	})
+	got := run.Messages[len(run.Messages)-1].Parts[0].ToolResult
+	if got.StartedAt.Location() != time.UTC || got.FinishedAt.Location() != time.UTC {
+		t.Fatalf("message timestamps not normalized to UTC: %v / %v", got.StartedAt, got.FinishedAt)
+	}
+	found := false
+	for _, evt := range run.pendingEvents {
+		if evt.Type != domain.EventToolExecutionCompleted {
+			continue
+		}
+		found = true
+		var payload toolExecutionCompletedPayload
+		if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+			t.Fatalf("unmarshal completed payload: %v", err)
+		}
+		if payload.StartedAt.Location() != time.UTC || payload.FinishedAt.Location() != time.UTC {
+			t.Fatalf("event timestamps not normalized to UTC: %v / %v", payload.StartedAt, payload.FinishedAt)
+		}
+	}
+	if !found {
+		t.Fatal("no tool.execution_completed event recorded")
+	}
+}
 
 func TestRecordToolResultTruncatesOversizedOutput(t *testing.T) {
 	run := NewRun(domain.NewSessionID(), domain.Limits{MaxToolOutputBytes: 1024}, domain.RealClock{})

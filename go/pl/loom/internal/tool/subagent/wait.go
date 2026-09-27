@@ -18,7 +18,6 @@
 package subagent
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -79,10 +78,8 @@ func (t *WaitSubagentTool) Prepare(_ context.Context, call domain.ToolCall) (dom
 	if call.Name != t.def.Name {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("tool call name must be %q", t.def.Name))
 	}
-	var args waitArgs
-	dec := json.NewDecoder(bytes.NewReader(call.Arguments))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&args); err != nil {
+	args, err := toolkit.DecodeLenient[waitArgs](call.Arguments)
+	if err != nil {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "invalid wait_subagent arguments", domain.WithCause(err))
 	}
 	sessionID, err := domain.ParseSessionID(args.ChildSessionID)

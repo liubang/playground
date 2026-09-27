@@ -526,6 +526,82 @@ func TestRunCmdToolValidateArguments(t *testing.T) {
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 }
 
+// The Codex-style max_output_tokens alias (the field models keep emitting
+// from OpenAI training priors — observed repeatedly in live transcripts)
+// folds into the byte budget instead of failing schema validation; the
+// canonical max_output_bytes always wins when both are present.
+func TestRunCmdToolMaxOutputTokensAlias(t *testing.T) {
+	validator, root := newValidator(t)
+
+	args, _, err := validateArgs(validator, rawRunCmdArgs{
+		Command:         stringPtr("echo hi"),
+		WorkingDir:      stringPtr(root),
+		MaxOutputTokens: int64Ptr(1024),
+	})
+	if err != nil {
+		t.Fatalf("validateArgs(alias only) error = %v", err)
+	}
+	if args.MaxOutputBytes != 4096 {
+		t.Fatalf("MaxOutputBytes = %d, want 4096 (1024 tokens x 4)", args.MaxOutputBytes)
+	}
+
+	args, _, err = validateArgs(validator, rawRunCmdArgs{
+		Command:         stringPtr("echo hi"),
+		WorkingDir:      stringPtr(root),
+		MaxOutputBytes:  int64Ptr(1024),
+		MaxOutputTokens: int64Ptr(4096),
+	})
+	if err != nil {
+		t.Fatalf("validateArgs(both) error = %v", err)
+	}
+	if args.MaxOutputBytes != 1024 {
+		t.Fatalf("MaxOutputBytes = %d, want the canonical 1024 to win over the alias", args.MaxOutputBytes)
+	}
+
+	args, _, err = validateArgs(validator, rawRunCmdArgs{
+		Command:         stringPtr("echo hi"),
+		WorkingDir:      stringPtr(root),
+		MaxOutputTokens: int64Ptr(1 << 62),
+	})
+	if err != nil {
+		t.Fatalf("validateArgs(huge alias) error = %v", err)
+	}
+	if args.MaxOutputBytes != maxOutputBytes {
+		t.Fatalf("MaxOutputBytes = %d, want saturation at %d", args.MaxOutputBytes, maxOutputBytes)
+	}
+}
+
+// The wire-level contract: a call whose only output cap is the alias must
+// pass Prepare, and the signed canonical arguments must carry
+// max_output_bytes only — never the alias.
+func TestRunCmdToolPrepareAcceptsMaxOutputTokens(t *testing.T) {
+	validator, _ := newValidator(t)
+	runner := newRunner(t, validator, process.RunnerOptions{
+		Sandbox:  process.ExplicitTestSandbox{},
+		LookPath: exec.LookPath,
+	})
+	tool := newTool(t, validator, runner)
+
+	prepared, err := tool.Prepare(context.Background(), domain.ToolCall{
+		ID:        domain.NewToolCallID(),
+		Name:      "run_cmd",
+		Arguments: json.RawMessage(`{"command":"echo hi","max_output_tokens":256}`),
+	})
+	if err != nil {
+		t.Fatalf("Prepare(alias) error = %v", err)
+	}
+	if strings.Contains(string(prepared.Call.Arguments), "max_output_tokens") {
+		t.Fatalf("canonical arguments still carry the alias: %s", prepared.Call.Arguments)
+	}
+	var canonical runCmdArgs
+	if err := json.Unmarshal(prepared.Call.Arguments, &canonical); err != nil {
+		t.Fatalf("decode canonical arguments: %v", err)
+	}
+	if canonical.MaxOutputBytes != 1024 {
+		t.Fatalf("canonical max_output_bytes = %d, want 1024 (256 tokens x 4)", canonical.MaxOutputBytes)
+	}
+}
+
 // The missing-command error is the model's only signal when it sends the
 // wrong shape: it must state the fix, not just the missing field (a bare
 // "program is required" once cost a model two blind retries).

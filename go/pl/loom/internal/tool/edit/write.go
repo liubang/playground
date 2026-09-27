@@ -91,7 +91,7 @@ func (t *WriteTool) Definition() domain.ToolDefinition {
 }
 
 func (t *WriteTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := toolkit.DecodeStrict[writeArgs](call.Arguments)
+	args, err := toolkit.DecodeLenient[writeArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}

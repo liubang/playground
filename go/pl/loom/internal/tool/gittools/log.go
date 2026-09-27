@@ -99,7 +99,7 @@ func (t *GitLogTool) Definition() domain.ToolDefinition {
 func (t *GitLogTool) ConcurrentSafe() bool { return true }
 
 func (t *GitLogTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := toolkit.DecodeStrict[gitLogArgs](call.Arguments)
+	args, err := toolkit.DecodeLenient[gitLogArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}

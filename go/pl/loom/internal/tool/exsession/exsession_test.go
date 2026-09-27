@@ -378,6 +378,45 @@ func TestValidateCommandArgsMissingCommandError(t *testing.T) {
 	}
 }
 
+// The Codex-style max_output_tokens alias (the field models keep emitting
+// from OpenAI training priors) folds into the byte budget at Prepare time;
+// the signed canonical arguments carry max_output_bytes only, and the
+// canonical field wins when both are present.
+func TestExecSessionMaxOutputTokensAlias(t *testing.T) {
+	validator, root := newValidator(t)
+	manager := newManager(t, validator)
+	execTool := newExecSessionTool(t, validator, manager)
+
+	prepared := prepareCall(t, execTool, "exec_session", map[string]any{
+		"command":           "echo hi",
+		"working_dir":       root,
+		"max_output_tokens": 1000,
+	})
+	var canonical sessionArgs
+	if err := json.Unmarshal(prepared.Call.Arguments, &canonical); err != nil {
+		t.Fatalf("decode canonical arguments: %v", err)
+	}
+	if canonical.MaxOutputBytes != 4000 {
+		t.Fatalf("MaxOutputBytes = %d, want 4000 (1000 tokens x 4)", canonical.MaxOutputBytes)
+	}
+	if strings.Contains(string(prepared.Call.Arguments), "max_output_tokens") {
+		t.Fatalf("canonical arguments still carry the alias: %s", prepared.Call.Arguments)
+	}
+
+	prepared = prepareCall(t, execTool, "exec_session", map[string]any{
+		"command":           "echo hi",
+		"working_dir":       root,
+		"max_output_bytes":  2048,
+		"max_output_tokens": 1000,
+	})
+	if err := json.Unmarshal(prepared.Call.Arguments, &canonical); err != nil {
+		t.Fatalf("decode canonical arguments: %v", err)
+	}
+	if canonical.MaxOutputBytes != 2048 {
+		t.Fatalf("MaxOutputBytes = %d, want the canonical 2048 to win over the alias", canonical.MaxOutputBytes)
+	}
+}
+
 func newValidator(t *testing.T) (*workspacepkg.PathValidator, string) {
 	t.Helper()
 	root := t.TempDir()

@@ -187,7 +187,7 @@ type searchOutput struct {
 }
 
 func (t *SearchTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := toolkit.DecodeStrict[searchArgs](call.Arguments)
+	args, err := toolkit.DecodeLenient[searchArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -302,7 +302,7 @@ type readOutput struct {
 }
 
 func (t *ReadTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := toolkit.DecodeStrict[readArgs](call.Arguments)
+	args, err := toolkit.DecodeLenient[readArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}

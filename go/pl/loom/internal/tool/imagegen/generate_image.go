@@ -128,7 +128,7 @@ func (t *GenerateImageTool) Definition() domain.ToolDefinition {
 func (t *GenerateImageTool) ConcurrentSafe() bool { return true }
 
 func (t *GenerateImageTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := toolkit.DecodeStrict[generateImageArgs](call.Arguments)
+	args, err := toolkit.DecodeLenient[generateImageArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}

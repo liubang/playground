@@ -179,7 +179,7 @@ func (t *BrowserTool) pageFor(ctx context.Context, timeout time.Duration) (*rod.
 }
 
 func (t *BrowserTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := toolkit.DecodeStrict[browserArgs](call.Arguments)
+	args, err := toolkit.DecodeLenient[browserArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -493,6 +493,14 @@ func validateBrowserArgs(args browserArgs) (browserArgs, error) {
 		}
 	}
 
+	// Models mirror optional enum properties they have no value for with
+	// the literal STRING "null" (observed in live transcripts; the same
+	// quirk normalizeNullStringArg handles for the git tools and
+	// NormalizeJustification for run_cmd). Treat it as absent so the
+	// default (png) applies.
+	if strings.EqualFold(strings.TrimSpace(args.Format), "null") {
+		args.Format = ""
+	}
 	if args.Format != "" && args.Format != "png" && args.Format != "jpeg" {
 		return browserArgs{}, domain.NewError(domain.ErrInvalidInput,
 			fmt.Sprintf("format must be png or jpeg; got %q", args.Format))

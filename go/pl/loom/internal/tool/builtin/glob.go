@@ -89,7 +89,7 @@ func (t *GlobTool) Definition() domain.ToolDefinition {
 func (t *GlobTool) ConcurrentSafe() bool { return true }
 
 func (t *GlobTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[globArgs](call.Arguments)
+	args, err := decodeLenient[globArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}

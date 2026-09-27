@@ -74,7 +74,7 @@ func (t *ReadFileTool) Definition() domain.ToolDefinition {
 func (t *ReadFileTool) ConcurrentSafe() bool { return true }
 
 func (t *ReadFileTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[readFileArgs](call.Arguments)
+	args, err := decodeLenient[readFileArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}

@@ -129,6 +129,18 @@ func decodeStrict[T any](raw json.RawMessage) (T, error) {
 	return toolkit.DecodeStrict[T](raw)
 }
 
+// decodeLenient is decodeStrict with toolkit.DecodeLenient underneath: the
+// model-boundary (Prepare) decode that first repairs the argument-shape
+// deviations models make in the wild (null-mirrored fields, stringified
+// scalars, lone values for slices).
+func decodeLenient[T any](raw json.RawMessage) (T, error) {
+	if hint, ok := malformedArgumentsHint(raw); ok {
+		var zero T
+		return zero, domain.NewError(domain.ErrInvalidInput, hint)
+	}
+	return toolkit.DecodeLenient[T](raw)
+}
+
 // resolveExistingPath resolves an existing filesystem path for the builtin
 // READ tools. Paths inside the workspace keep their workspace-relative
 // display form; absolute paths outside the workspace are readable too

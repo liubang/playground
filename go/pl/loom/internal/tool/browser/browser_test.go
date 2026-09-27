@@ -114,6 +114,13 @@ func TestValidateBrowserArgs_Navigate(t *testing.T) {
 			args:    browserArgs{Action: "navigate", URL: "http://localhost:8080"},
 			wantErr: false,
 		},
+		{
+			// Observed in live transcripts: models mirror the optional
+			// enum with the literal string "null"; it must read as absent.
+			name:    "navigate literal null format reads as absent",
+			args:    browserArgs{Action: "navigate", URL: "http://localhost:8080", Format: "null"},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

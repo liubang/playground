@@ -413,6 +413,10 @@
                       "minimum": 0,
                       "type": "integer"
                     },
+                    "max_output_tokens": {
+                      "description": "Alias of max_output_bytes (1 token ~ 4 bytes); ignored when max_output_bytes is present.",
+                      "type": "integer"
+                    },
                     "needs_gui_open": {
                       "description": "Allow the session to open URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval (start only).",
                       "type": "boolean"
@@ -534,7 +538,7 @@
                 "capabilities": [
                   "git.read"
                 ],
-                "description": "Read repository diff with bounded output. Default mode: working tree vs index (or the index vs HEAD with staged=true). Set base to a commit SHA, branch, or tag — optionally with ~N/^N ancestry suffixes (e.g. HEAD~3, abc123^) — to diff that revision against the working tree; to 'merge-base:\u003cbranch\u003e' to diff from the merge-base of HEAD and the branch — the right base for reviewing everything a feature branch changed (when the branch's upstream is ahead, the upstream's fresher merge-base is used and reported in base_ref); or to 'upstream' to diff against the branch's upstream (falling back to the merge-base with the default branch) — the right base for reviewing everything unpushed. Set include_untracked=true to fold untracked files into the diff as new-file entries (binary/oversized files are skipped and reported in untracked_skipped). base cannot be combined with staged.",
+                "description": "Read repository diff with bounded output. Default mode: working tree vs index (or the index vs HEAD with staged=true). Set base to a commit SHA, branch, or tag — optionally with ~N/^N ancestry suffixes (e.g. HEAD~3, abc123^) — to diff that revision against the working tree; to 'merge-base:\u003cbranch\u003e' to diff from the merge-base of HEAD and the branch — the right base for reviewing everything a feature branch changed (when the branch's upstream is ahead, the upstream's fresher merge-base is used and reported in base_ref); or to 'upstream' to diff against the branch's upstream (falling back to the merge-base with the default branch) — the right base for reviewing everything unpushed. Set include_untracked=true to fold untracked files into the diff as new-file entries (binary/oversized files are skipped and reported in untracked_skipped). base cannot be combined with staged, and include_untracked cannot be combined with staged either.",
                 "input_schema": {
                   "additionalProperties": false,
                   "properties": {
@@ -801,7 +805,7 @@
                       "type": "integer"
                     },
                     "max_lines": {
-                      "description": "Maximum lines to return (read; default: all).",
+                      "description": "Maximum lines to return (read; default 200 — paginate with line_offset for more).",
                       "maximum": 2000,
                       "minimum": 1,
                       "type": "integer"
@@ -1001,6 +1005,10 @@
                       "description": "Maximum stdout/stderr bytes returned inline.",
                       "maximum": 1048576,
                       "minimum": 1,
+                      "type": "integer"
+                    },
+                    "max_output_tokens": {
+                      "description": "Alias of max_output_bytes (1 token ~ 4 bytes); ignored when max_output_bytes is present.",
                       "type": "integer"
                     },
                     "needs_gui_open": {

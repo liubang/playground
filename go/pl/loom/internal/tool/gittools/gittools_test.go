@@ -536,6 +536,50 @@ func TestGitLogToolPathFilterWithSubdirRepoRoot(t *testing.T) {
 	}
 }
 
+// Models naturally pass the absolute path of a file they just saw in a
+// listing (observed in live transcripts): an absolute path filter inside
+// the repo root is accepted and normalized; one outside the repo root is
+// still rejected.
+func TestGitLogToolToleratesAbsolutePathInsideRepoRoot(t *testing.T) {
+	ensureGitAvailable(t)
+	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
+	configureGitRepo(t, repoRoot)
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("one\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "touch a")
+	mustWriteFile(t, filepath.Join(repoRoot, "b.txt"), []byte("two\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "touch b")
+
+	tool, err := NewGitLogTool(validator, runner)
+	if err != nil {
+		t.Fatalf("NewGitLogTool() error = %v", err)
+	}
+	absPath := filepath.Join(repoRoot, "a.txt")
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "git_log",
+		gitLogArgs{RepoRoot: "repo", Limit: 10, Path: absPath}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output gitLogOutput
+	decodeToolResult(t, result, &output)
+	if output.Count != 1 || output.Commits[0].Subject != "touch a" {
+		t.Fatalf("absolute path filter = %+v, want only the 'touch a' commit", output)
+	}
+
+	// An absolute path inside the workspace but outside the repository
+	// root must still be rejected.
+	outside := filepath.Join(workspaceRoot, "a.txt")
+	if _, err := tool.Prepare(context.Background(), newToolCall(t, "git_log",
+		gitLogArgs{RepoRoot: "repo", Limit: 10, Path: outside})); err == nil {
+		t.Fatal("Prepare() with an out-of-repo absolute path succeeded, want rejection")
+	}
+}
+
 // repo_root and limit are optional: empty values default to "." (workspace
 // root) and 20 respectively.
 func TestGitToolsDefaultRepoRootAndLimit(t *testing.T) {

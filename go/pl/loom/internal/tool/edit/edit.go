@@ -95,7 +95,7 @@ func (t *EditTool) Definition() domain.ToolDefinition {
 }
 
 func (t *EditTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := toolkit.DecodeStrict[editArgs](call.Arguments)
+	args, err := toolkit.DecodeLenient[editArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}

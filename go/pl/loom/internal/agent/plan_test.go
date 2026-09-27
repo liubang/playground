@@ -285,6 +285,61 @@ func TestUpdateTaskPrepareInfersMissingAction(t *testing.T) {
 	}
 }
 
+// Inference runs AFTER null-normalization: a null plan field must not
+// masquerade as a plan payload — the real objective field picks the goal
+// action instead (Prepare drops null mirrors before inferring).
+func TestUpdateTaskInferSkipsNullMirroredFields(t *testing.T) {
+	tool, _ := newPlanTool(t)
+	prepared, err := tool.Prepare(context.Background(), planCall(t,
+		`{"objective":"ship the refactor","plan":null,"title":null}`))
+	if err != nil {
+		t.Fatalf("Prepare error: %v", err)
+	}
+	if !strings.Contains(string(prepared.Call.Arguments), `"action":"goal"`) {
+		t.Fatalf("null plan field must not trigger plan inference: %s", prepared.Call.Arguments)
+	}
+}
+
+// When goal-owned and plan-owned fields both carry real values and the
+// discriminator is missing, the plan payload wins: plan-owned fields are
+// checked first, and the stray objective is stripped with in-band
+// disclosure rather than silently dropped or hard-rejected.
+func TestUpdateTaskInferPrefersPlanOnAmbiguousPayload(t *testing.T) {
+	tool, cell := newPlanTool(t)
+	prepared, err := tool.Prepare(context.Background(), planCall(t,
+		`{"objective":"ship it","plan":[{"goal":"a","status":"in_progress"},{"goal":"b","status":"todo"}]}`))
+	if err != nil {
+		t.Fatalf("Prepare error: %v", err)
+	}
+	canonical := string(prepared.Call.Arguments)
+	if !strings.Contains(canonical, `"action":"plan"`) {
+		t.Fatalf("ambiguous payload must infer the plan action: %s", canonical)
+	}
+	if !strings.Contains(canonical, `"ignored_fields":["objective"]`) {
+		t.Fatalf("stray objective must be disclosed via ignored_fields: %s", canonical)
+	}
+	if result := tool.Execute(context.Background(), prepared); result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute status = %s, want success: %+v", result.Status, result.Error)
+	}
+	if plan, ok := cell.Take(); !ok || len(plan.Items) != 2 {
+		t.Fatalf("plan cell = %+v (ok=%v), want 2-item snapshot", plan, ok)
+	}
+}
+
+// A stringified token_budget is coerced by the lenient decode layer
+// (observed shape deviation in live transcripts).
+func TestUpdateTaskGoalToleratesStringifiedTokenBudget(t *testing.T) {
+	tool, _ := newPlanTool(t)
+	prepared, err := tool.Prepare(context.Background(), planCall(t,
+		`{"action":"goal","objective":"ship it","token_budget":"5000"}`))
+	if err != nil {
+		t.Fatalf("Prepare error: %v", err)
+	}
+	if !strings.Contains(string(prepared.Call.Arguments), `"token_budget":5000`) {
+		t.Fatalf("stringified budget must decode as a number: %s", prepared.Call.Arguments)
+	}
+}
+
 func TestUpdatePlanExecuteQueuesSnapshot(t *testing.T) {
 	tool, cell := newPlanTool(t)
 	call := planCall(t, validPlanArgs)

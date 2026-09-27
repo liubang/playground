@@ -106,7 +106,7 @@ func (t *ReadSkillTool) ConcurrentSafe() bool { return true }
 // Prepare locates and resolves the target file without reading its contents
 // (side-effect free and deterministic across the freshness re-Prepare).
 func (t *ReadSkillTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	raw, err := toolkit.DecodeStrict[readSkillArgs](call.Arguments)
+	raw, err := toolkit.DecodeLenient[readSkillArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
