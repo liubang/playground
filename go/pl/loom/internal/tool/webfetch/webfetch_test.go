@@ -18,6 +18,7 @@
 package webfetch
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -27,6 +28,8 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -35,6 +38,7 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/artifact"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
 // --- helpers ---
@@ -60,11 +64,22 @@ func decodeToolResult(t *testing.T, result domain.ToolResult, out any) {
 
 func newTestTool(t *testing.T, artifacts domain.ArtifactStore) *WebFetchTool {
 	t.Helper()
-	tool, err := NewWebFetchTool(artifacts)
+	tool, _ := newTestToolWithRoot(t, artifacts)
+	return tool
+}
+
+func newTestToolWithRoot(t *testing.T, artifacts domain.ArtifactStore) (*WebFetchTool, string) {
+	t.Helper()
+	root := t.TempDir()
+	validator, err := workspacepkg.NewPathValidator(root)
+	if err != nil {
+		t.Fatalf("NewPathValidator() error = %v", err)
+	}
+	tool, err := NewWebFetchTool(validator, artifacts)
 	if err != nil {
 		t.Fatalf("NewWebFetchTool() error = %v", err)
 	}
-	return tool
+	return tool, root
 }
 
 func execute(t *testing.T, tool *WebFetchTool, args fetchArgs) domain.ToolResult {
@@ -485,6 +500,147 @@ func TestExecuteSSRFGuard(t *testing.T) {
 	result = execute(t, newTestTool(t, nil), fetchArgs{URL: "http://localhost" + port, AllowPrivate: true})
 	if result.Status != domain.ToolStatusSuccess {
 		t.Fatalf("allow_private fetch failed: %+v", result.Error)
+	}
+}
+
+// --- save_to download ---
+
+func TestExecuteSaveToDownloadsRawBody(t *testing.T) {
+	// Binary payload (invalid UTF-8) proves the download path is
+	// binary-safe where the content path would reject it.
+	payload := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0xFF, 0xFE}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	tool, root := newTestToolWithRoot(t, nil)
+	args := privateArgs(server)
+	args.SaveTo = "downloads/file.bin"
+	result := execute(t, tool, args)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() failed: %+v", result.Error)
+	}
+	var out fetchOutput
+	decodeToolResult(t, result, &out)
+
+	if out.Format != "download" || out.Cache != "bypass" {
+		t.Fatalf("unexpected download metadata: %+v", out)
+	}
+	if out.Bytes != len(payload) {
+		t.Fatalf("bytes = %d, want %d", out.Bytes, len(payload))
+	}
+	if out.Content != "" {
+		t.Fatalf("download must not return content, got %d bytes", len(out.Content))
+	}
+	if out.SavedPath == "" {
+		t.Fatal("saved_path is empty")
+	}
+	written, err := os.ReadFile(filepath.Join(root, "downloads", "file.bin"))
+	if err != nil {
+		t.Fatalf("read downloaded file: %v", err)
+	}
+	if !bytes.Equal(written, payload) {
+		t.Fatalf("downloaded bytes mismatch: got %x want %x", written, payload)
+	}
+}
+
+func TestExecuteSaveToOverwriteBypassesCache(t *testing.T) {
+	var hits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprintf(w, "body-%d", hits.Add(1))
+	}))
+	defer server.Close()
+
+	tool, root := newTestToolWithRoot(t, nil)
+	args := privateArgs(server)
+	args.SaveTo = "out.txt"
+
+	for i, want := range []string{"body-1", "body-2"} {
+		result := execute(t, tool, args)
+		if result.Status != domain.ToolStatusSuccess {
+			t.Fatalf("download %d failed: %+v", i+1, result.Error)
+		}
+		written, err := os.ReadFile(filepath.Join(root, "out.txt"))
+		if err != nil {
+			t.Fatalf("read downloaded file: %v", err)
+		}
+		if string(written) != want {
+			t.Fatalf("download %d content = %q, want %q (cache must be bypassed)", i+1, written, want)
+		}
+	}
+	if hits.Load() != 2 {
+		t.Fatalf("server hits = %d, want 2 (save_to must never serve from cache)", hits.Load())
+	}
+}
+
+func TestPrepareSaveToEscapingPathRequiresApproval(t *testing.T) {
+	// External writes are not rejected outright: ResolveWrite marks them
+	// outside-roots and the policy layer gates them behind approval — the
+	// same contract edit/write use.
+	tool, _ := newTestToolWithRoot(t, nil)
+	args := fetchArgs{URL: "https://example.com/f.bin", SaveTo: "../outside.bin"}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "web_fetch", args))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if prepared.WriteRequest == nil || !prepared.WriteRequest.OutsideRoots {
+		t.Fatalf("escaping save_to must be flagged as an outside-roots write: %+v", prepared.WriteRequest)
+	}
+	if len(prepared.WritePaths) != 1 {
+		t.Fatalf("WritePaths = %v, want exactly one target", prepared.WritePaths)
+	}
+}
+
+func TestPrepareSaveToRejectsSensitivePath(t *testing.T) {
+	tool, _ := newTestToolWithRoot(t, nil)
+	args := fetchArgs{URL: "https://example.com/f.bin", SaveTo: ".git/hooks/post-checkout"}
+	_, err := tool.Prepare(context.Background(), newToolCall(t, "web_fetch", args))
+	if err == nil {
+		t.Fatal("expected error for save_to targeting a sensitive path")
+	}
+	var ae *domain.AgentError
+	if !errors.As(err, &ae) || ae.Code != domain.ErrSecurity {
+		t.Fatalf("error code = %v, want %s", err, domain.ErrSecurity)
+	}
+}
+
+func TestExecuteSaveToHTTPErrorWritesNothing(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	tool, root := newTestToolWithRoot(t, nil)
+	args := privateArgs(server)
+	args.SaveTo = "missing.bin"
+	result := execute(t, tool, args)
+	if result.Status != domain.ToolStatusError {
+		t.Fatalf("expected error, got %+v", result)
+	}
+	if _, err := os.Stat(filepath.Join(root, "missing.bin")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("failed download must not create the target file, stat err = %v", err)
+	}
+}
+
+func TestExecuteSaveToRefusesOversizedBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(make([]byte, hardFetchByteCap+1))
+	}))
+	defer server.Close()
+
+	tool, root := newTestToolWithRoot(t, nil)
+	args := privateArgs(server)
+	args.SaveTo = "huge.bin"
+	result := execute(t, tool, args)
+	if result.Status != domain.ToolStatusError {
+		t.Fatalf("oversized download must fail, got %+v", result)
+	}
+	if _, err := os.Stat(filepath.Join(root, "huge.bin")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("oversized download must not leave a truncated file, stat err = %v", err)
 	}
 }
 

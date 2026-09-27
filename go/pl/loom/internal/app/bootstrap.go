@@ -121,11 +121,11 @@ type Bootstrap struct {
 	// read_file and edit for drift detection; rewind restoration updates
 	// it so a post-rewind edit measures drift from the restored content.
 	FileStateBook *workspace.FileStateBook
-	// GoalCell ferries update_goal mutations from the tool to each turn's
-	// agent loop.
+	// GoalCell ferries update_task goal mutations from the tool to each
+	// turn's agent loop.
 	GoalCell *agent.GoalCell
-	// PlanCell ferries update_plan snapshots from the tool to each turn's
-	// agent loop.
+	// PlanCell ferries update_task plan snapshots from the tool to each
+	// turn's agent loop.
 	PlanCell *agent.PlanCell
 	// SteerCell ferries user messages submitted while a turn is busy to the
 	// loop's next model call (docs/STEER_DESIGN.md). Shared across turns so
@@ -144,8 +144,8 @@ type Bootstrap struct {
 	// drains its in-flight children before the store shuts down. Nil
 	// when the sub-agent is disabled.
 	SubagentManager *subagent.Manager
-	// SessionManager owns every exec_session/write_stdin background
-	// process; Close reclaims surviving process groups before the store
+	// SessionManager owns every exec_session background process;
+	// Close reclaims surviving process groups before the store
 	// shuts down.
 	SessionManager *exsession.Manager
 	// Skills exposes the skills loader/catalog shared by the prompt
@@ -452,7 +452,8 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 			return nil, fmt.Errorf("register delegate_task: %w", err)
 		}
 
-		// V2 companion tools: wait_subagent and resume_subagent.
+		// V2 companion tools: wait_subagent, resume_subagent and
+		// cancel_subagent.
 		waitTool, err := subagent.NewWaitSubagentTool(manager)
 		if err != nil {
 			return nil, fmt.Errorf("wait_subagent: %w", err)
@@ -466,6 +467,13 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		}
 		if err := registry.Register(resumeTool); err != nil {
 			return nil, fmt.Errorf("register resume_subagent: %w", err)
+		}
+		cancelTool, err := subagent.NewCancelSubagentTool(manager)
+		if err != nil {
+			return nil, fmt.Errorf("cancel_subagent: %w", err)
+		}
+		if err := registry.Register(cancelTool); err != nil {
+			return nil, fmt.Errorf("register cancel_subagent: %w", err)
 		}
 
 		subagentFactory = factory
@@ -775,21 +783,17 @@ func readOnlyToolFactories(validator *workspace.PathValidator, runner *process.R
 		{"git_status", func() (domain.Tool, error) { return gittools.NewGitStatusTool(validator, runner) }},
 		{"git_diff", func() (domain.Tool, error) { return gittools.NewGitDiffTool(validator, runner) }},
 		{"git_log", func() (domain.Tool, error) { return gittools.NewGitLogTool(validator, runner) }},
-		{"git_merge_base", func() (domain.Tool, error) { return gittools.NewGitMergeBaseTool(validator, runner) }},
 		{"git_blame", func() (domain.Tool, error) { return gittools.NewGitBlameTool(validator, runner) }},
-		{"web_fetch", func() (domain.Tool, error) { return webfetch.NewWebFetchTool(artStore) }},
+		{"web_fetch", func() (domain.Tool, error) { return webfetch.NewWebFetchTool(validator, artStore) }},
 		{"web_search", func() (domain.Tool, error) { return websearch.NewWebSearchTool() }},
 	}
 }
 
-// registerMemoryTools registers the memory tools (list, read, search,
-// add_note) with the tool registry.
+// registerMemoryTools registers the unified memory tool (list, read,
+// search, add_note actions) with the tool registry.
 func registerMemoryTools(registry *agent.ToolRegistry, store *memory.Store) error {
 	return registerToolFactories(registry, []toolFactory{
-		{"memory_list", func() (domain.Tool, error) { return memory.NewListTool(store) }},
-		{"memory_read", func() (domain.Tool, error) { return memory.NewReadTool(store) }},
-		{"memory_search", func() (domain.Tool, error) { return memory.NewSearchTool(store) }},
-		{"memory_add_note", func() (domain.Tool, error) { return memory.NewAddNoteTool(store) }},
+		{memory.ToolMemory, func() (domain.Tool, error) { return memory.NewMemoryTool(store) }},
 	})
 }
 
@@ -867,9 +871,9 @@ func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.Pat
 			return fmt.Errorf("register generate_image: %w", err)
 		}
 	}
-	// exec_session/write_stdin share the process-level session manager:
-	// interactive background processes (dev servers, REPLs) that the model
-	// drives across multiple tool calls.
+	// exec_session shares the process-level session manager: interactive
+	// background processes (dev servers, REPLs) that the model drives
+	// across multiple tool calls (start/write/poll/kill actions).
 	execSession, err := exsession.NewExecSessionTool(validator, sessionManager)
 	if err != nil {
 		return fmt.Errorf("exec_session: %w", err)
@@ -877,26 +881,12 @@ func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.Pat
 	if err := registry.Register(execSession); err != nil {
 		return fmt.Errorf("register exec_session: %w", err)
 	}
-	writeStdin, err := exsession.NewWriteStdinTool(sessionManager)
+	updateTask, err := agent.NewUpdateTaskTool(goalCell, planCell)
 	if err != nil {
-		return fmt.Errorf("write_stdin: %w", err)
+		return fmt.Errorf("update_task: %w", err)
 	}
-	if err := registry.Register(writeStdin); err != nil {
-		return fmt.Errorf("register write_stdin: %w", err)
-	}
-	updateGoal, err := agent.NewUpdateGoalTool(goalCell)
-	if err != nil {
-		return fmt.Errorf("update_goal: %w", err)
-	}
-	if err := registry.Register(updateGoal); err != nil {
-		return fmt.Errorf("register update_goal: %w", err)
-	}
-	updatePlan, err := agent.NewUpdatePlanTool(planCell)
-	if err != nil {
-		return fmt.Errorf("update_plan: %w", err)
-	}
-	if err := registry.Register(updatePlan); err != nil {
-		return fmt.Errorf("register update_plan: %w", err)
+	if err := registry.Register(updateTask); err != nil {
+		return fmt.Errorf("register update_task: %w", err)
 	}
 	askUser, err := agent.NewAskUserTool(questioner)
 	if err != nil {
@@ -911,7 +901,7 @@ func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.Pat
 // buildSubagentRegistry assembles the read-only tool set for
 // delegate_task child runs (docs/SUBAGENT_DESIGN.md §4.2). Excluded by
 // design: edit/write (writes), run_cmd/lint (process execution),
-// update_goal/update_plan (parent-run state), ask_user (no one to
+// update_task (parent-run state), ask_user (no one to
 // answer), and delegate_task itself — recursion depth stays 1 by
 // construction.
 func buildSubagentRegistry(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook) (*agent.ToolRegistry, error) {
@@ -925,8 +915,8 @@ func buildSubagentRegistry(validator *workspace.PathValidator, runner *process.R
 // buildCoderRegistry assembles the read-write tool set for the coder
 // sub-agent role. It carries every researcher tool plus edit, write,
 // run_cmd, and lint — the tools that make code changes. Excluded by
-// design: update_goal/update_plan (parent-run state), ask_user (no one
-// to answer), exec_session/write_stdin (interactive sessions), and
+// design: update_task (parent-run state), ask_user (no one
+// to answer), exec_session (interactive sessions), and
 // delegate_task itself (no recursion).
 func buildCoderRegistry(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook, maxOutputBytes int) (*agent.ToolRegistry, error) {
 	// Start from the researcher (read-only) set and add the writable tools.

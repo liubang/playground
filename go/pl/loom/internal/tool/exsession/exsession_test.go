@@ -37,7 +37,6 @@ func TestExecSessionLifecycle(t *testing.T) {
 	validator, root := newValidator(t)
 	manager := newManager(t, validator)
 	execTool := newExecSessionTool(t, validator, manager)
-	stdinTool := newWriteStdinTool(t, manager)
 
 	script := writeScript(t, root, "tick.py", []string{
 		"import time",
@@ -45,7 +44,7 @@ func TestExecSessionLifecycle(t *testing.T) {
 		"time.sleep(2)",
 		"print('done', flush=True)",
 	})
-	prepared := prepareCall(t, execTool, "exec_session", commandArgs{
+	prepared := prepareCall(t, execTool, "exec_session", sessionArgs{
 		Command:    python + " " + script,
 		WorkingDir: root,
 	})
@@ -64,11 +63,12 @@ func TestExecSessionLifecycle(t *testing.T) {
 		t.Fatalf("initial output = %q, want it to contain 'boot'", started.Output)
 	}
 
-	pollPrepared := prepareCall(t, stdinTool, "write_stdin", writeStdinArgs{
+	pollPrepared := prepareCall(t, execTool, "exec_session", sessionArgs{
+		Action:      actionPoll,
 		SessionID:   started.SessionID,
 		YieldTimeMs: 5000,
 	})
-	poll := decodeSuccess(t, stdinTool.Execute(context.Background(), pollPrepared))
+	poll := decodeSuccess(t, execTool.Execute(context.Background(), pollPrepared))
 	if poll.Status != "exited" {
 		t.Fatalf("poll status = %q, want exited", poll.Status)
 	}
@@ -80,35 +80,34 @@ func TestExecSessionLifecycle(t *testing.T) {
 	}
 }
 
-// TestWriteStdinFeedsInteractiveProcess drives a stdin-reading program
+// TestWriteFeedsInteractiveProcess drives a stdin-reading program
 // through the session.
-func TestWriteStdinFeedsInteractiveProcess(t *testing.T) {
+func TestWriteFeedsInteractiveProcess(t *testing.T) {
 	python := ensurePython3(t)
 	validator, root := newValidator(t)
 	manager := newManager(t, validator)
 	execTool := newExecSessionTool(t, validator, manager)
-	stdinTool := newWriteStdinTool(t, manager)
 
 	script := writeScript(t, root, "echo.py", []string{
 		"import sys",
 		"for line in sys.stdin:",
 		"    print('got:' + line.strip(), flush=True)",
 	})
-	prepared := prepareCall(t, execTool, "exec_session", commandArgs{
+	prepared := prepareCall(t, execTool, "exec_session", sessionArgs{
 		Command:    python + " " + script,
 		WorkingDir: root,
 	})
 	started := decodeSuccess(t, execTool.Execute(context.Background(), prepared))
 
-	writePrepared := prepareCall(t, stdinTool, "write_stdin", writeStdinArgs{
+	writePrepared := prepareCall(t, execTool, "exec_session", sessionArgs{
 		SessionID:   started.SessionID,
 		Chars:       "ping\n",
 		YieldTimeMs: 5000,
 	})
 	if writePrepared.Risk != domain.R1 {
-		t.Fatalf("write_stdin Risk = %v, want R1", writePrepared.Risk)
+		t.Fatalf("write Risk = %v, want R1", writePrepared.Risk)
 	}
-	out := decodeSuccess(t, stdinTool.Execute(context.Background(), writePrepared))
+	out := decodeSuccess(t, execTool.Execute(context.Background(), writePrepared))
 	if !strings.Contains(out.Output, "got:ping") {
 		t.Fatalf("output = %q, want it to contain 'got:ping'", out.Output)
 	}
@@ -117,23 +116,66 @@ func TestWriteStdinFeedsInteractiveProcess(t *testing.T) {
 	}
 }
 
-// TestWriteStdinRiskNeverBelowDefinitionDefault pins the contract the
-// agent loop's prepared-call drift check enforces
+// TestExecSessionKill stops a long-running session through the kill
+// action and reports the final status.
+func TestExecSessionKill(t *testing.T) {
+	python := ensurePython3(t)
+	validator, root := newValidator(t)
+	manager := newManager(t, validator)
+	execTool := newExecSessionTool(t, validator, manager)
+
+	script := writeScript(t, root, "sleep.py", []string{
+		"import time",
+		"print('ready', flush=True)",
+		"time.sleep(3600)",
+	})
+	prepared := prepareCall(t, execTool, "exec_session", sessionArgs{
+		Command:    python + " " + script,
+		WorkingDir: root,
+	})
+	started := decodeSuccess(t, execTool.Execute(context.Background(), prepared))
+	if started.Status != "running" {
+		t.Fatalf("status = %q, want running", started.Status)
+	}
+
+	killPrepared := prepareCall(t, execTool, "exec_session", sessionArgs{
+		Action:    actionKill,
+		SessionID: started.SessionID,
+	})
+	if killPrepared.Risk != domain.R1 {
+		t.Fatalf("kill Risk = %v, want R1", killPrepared.Risk)
+	}
+	killed := decodeSuccess(t, execTool.Execute(context.Background(), killPrepared))
+	if killed.Status != "killed" && killed.Status != "exited" {
+		t.Fatalf("status after kill = %q, want killed or exited", killed.Status)
+	}
+
+	entry, ok := manager.Get(started.SessionID)
+	if !ok {
+		t.Fatal("session missing from manager after kill")
+	}
+	if entry.session.Running() {
+		t.Fatal("session process still running after kill")
+	}
+}
+
+// TestDriveRiskNeverBelowDefinitionDefault pins the contract the agent
+// loop's prepared-call drift check enforces
 // (agent.validatePreparedExecution): a per-call tier below the
 // definition's static default fails closed with a security error.
-// write_stdin pins R1 per call (the process was approved at exec_session
-// time), so its definition must stay capability-free (static R0) —
+// write/poll/kill pin R1 per call (the process was approved at start
+// time), so the definition must stay capability-free (static R0) —
 // declaring CapProcessExec would grade the definition R2 and reject
-// every write_stdin call before execution.
-func TestWriteStdinRiskNeverBelowDefinitionDefault(t *testing.T) {
+// every drive call before execution.
+func TestDriveRiskNeverBelowDefinitionDefault(t *testing.T) {
 	validator, _ := newValidator(t)
 	manager := newManager(t, validator)
-	stdinTool := newWriteStdinTool(t, manager)
+	execTool := newExecSessionTool(t, validator, manager)
 
-	if got := stdinTool.Definition().Risk(); got != domain.R0 {
+	if got := execTool.Definition().Risk(); got != domain.R0 {
 		t.Fatalf("definition Risk() = %v, want R0 (capability-free)", got)
 	}
-	prepared := prepareCall(t, stdinTool, "write_stdin", writeStdinArgs{SessionID: "sess_probe"})
+	prepared := prepareCall(t, execTool, "exec_session", sessionArgs{SessionID: "sess_probe"})
 	if prepared.Risk != domain.R1 {
 		t.Fatalf("prepared Risk = %v, want R1", prepared.Risk)
 	}
@@ -142,18 +184,55 @@ func TestWriteStdinRiskNeverBelowDefinitionDefault(t *testing.T) {
 	}
 }
 
-func TestWriteStdinUnknownSession(t *testing.T) {
+func TestExecSessionUnknownSession(t *testing.T) {
 	validator, _ := newValidator(t)
 	manager := newManager(t, validator)
-	stdinTool := newWriteStdinTool(t, manager)
+	execTool := newExecSessionTool(t, validator, manager)
 
-	prepared := prepareCall(t, stdinTool, "write_stdin", writeStdinArgs{SessionID: "sess_missing"})
-	result := stdinTool.Execute(context.Background(), prepared)
-	if result.Status != domain.ToolStatusError {
-		t.Fatalf("status = %s, want error", result.Status)
+	for _, action := range []string{actionWrite, actionPoll, actionKill} {
+		prepared := prepareCall(t, execTool, "exec_session", sessionArgs{Action: action, SessionID: "sess_missing"})
+		result := execTool.Execute(context.Background(), prepared)
+		if result.Status != domain.ToolStatusError {
+			t.Fatalf("action=%s status = %s, want error", action, result.Status)
+		}
+		if result.Error == nil || result.Error.Code != string(domain.ErrInvalidInput) {
+			t.Fatalf("action=%s error = %+v, want invalid_input", action, result.Error)
+		}
 	}
-	if result.Error == nil || result.Error.Code != string(domain.ErrInvalidInput) {
-		t.Fatalf("error = %+v, want invalid_input", result.Error)
+}
+
+// TestResolveAction pins the inference and per-action validation rules.
+func TestResolveAction(t *testing.T) {
+	infer := func(args sessionArgs) string {
+		t.Helper()
+		if err := resolveAction(&args); err != nil {
+			t.Fatalf("resolveAction(%+v) error = %v", args, err)
+		}
+		return args.Action
+	}
+	if got := infer(sessionArgs{Command: "ls"}); got != actionStart {
+		t.Fatalf("command-only inferred %q, want start", got)
+	}
+	if got := infer(sessionArgs{SessionID: "s", Chars: "x"}); got != actionWrite {
+		t.Fatalf("session+chars inferred %q, want write", got)
+	}
+	if got := infer(sessionArgs{SessionID: "s"}); got != actionPoll {
+		t.Fatalf("session-only inferred %q, want poll", got)
+	}
+
+	for name, args := range map[string]sessionArgs{
+		"empty":              {},
+		"unknown action":     {Action: "restart", SessionID: "s"},
+		"start no command":   {Action: actionStart},
+		"write no session":   {Action: actionWrite, Chars: "x"},
+		"kill no session":    {Action: actionKill},
+		"poll with chars":    {Action: actionPoll, SessionID: "s", Chars: "x"},
+		"chars too long":     {Action: actionWrite, SessionID: "s", Chars: strings.Repeat("x", maxCharsBytes+1)},
+		"yield out of range": {Action: actionPoll, SessionID: "s", YieldTimeMs: maxYieldMs + 1},
+	} {
+		if err := resolveAction(&args); err == nil {
+			t.Fatalf("%s: expected validation error", name)
+		}
 	}
 }
 
@@ -164,7 +243,7 @@ func TestExecSessionRiskTiers(t *testing.T) {
 
 	// Shell commands keep the base risk: the sandbox confines them and
 	// the permission layer's AST danger screen handles composition.
-	shellPrepared := prepareCall(t, execTool, "exec_session", commandArgs{
+	shellPrepared := prepareCall(t, execTool, "exec_session", sessionArgs{
 		Command:    "echo hi | cat",
 		WorkingDir: root,
 	})
@@ -173,7 +252,7 @@ func TestExecSessionRiskTiers(t *testing.T) {
 	}
 
 	// require_escalated without justification is rejected at prepare time.
-	_, err := execTool.Prepare(context.Background(), newCall(t, "exec_session", commandArgs{
+	_, err := execTool.Prepare(context.Background(), newCall(t, "exec_session", sessionArgs{
 		Command:            "python3 -V",
 		WorkingDir:         root,
 		SandboxPermissions: "require_escalated",
@@ -183,7 +262,7 @@ func TestExecSessionRiskTiers(t *testing.T) {
 	}
 
 	// require_escalated with justification is R3.
-	escalated := prepareCall(t, execTool, "exec_session", commandArgs{
+	escalated := prepareCall(t, execTool, "exec_session", sessionArgs{
 		Command:            "python3 -V",
 		WorkingDir:         root,
 		SandboxPermissions: "require_escalated",
@@ -202,7 +281,7 @@ func TestExecSessionRejectsTamperedArgsHash(t *testing.T) {
 	manager := newManager(t, validator)
 	execTool := newExecSessionTool(t, validator, manager)
 
-	prepared := prepareCall(t, execTool, "exec_session", commandArgs{
+	prepared := prepareCall(t, execTool, "exec_session", sessionArgs{
 		Command:    "python3 -V",
 		WorkingDir: root,
 	})
@@ -229,7 +308,7 @@ func TestManagerCloseKillsSessions(t *testing.T) {
 		"print('ready', flush=True)",
 		"time.sleep(3600)",
 	})
-	prepared := prepareCall(t, execTool, "exec_session", commandArgs{
+	prepared := prepareCall(t, execTool, "exec_session", sessionArgs{
 		Command:    python + " " + script,
 		WorkingDir: root,
 	})
@@ -332,15 +411,6 @@ func newExecSessionTool(t *testing.T, validator *workspacepkg.PathValidator, man
 	tool, err := NewExecSessionTool(validator, manager)
 	if err != nil {
 		t.Fatalf("NewExecSessionTool() error = %v", err)
-	}
-	return tool
-}
-
-func newWriteStdinTool(t *testing.T, manager *Manager) *WriteStdinTool {
-	t.Helper()
-	tool, err := NewWriteStdinTool(manager)
-	if err != nil {
-		t.Fatalf("NewWriteStdinTool() error = %v", err)
 	}
 	return tool
 }

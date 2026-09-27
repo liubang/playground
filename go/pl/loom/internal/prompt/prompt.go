@@ -287,7 +287,7 @@ func (b *Builder) BuildSections(ctx context.Context) (Sections, error) {
 // builder's first successful collection. The overview is orientation-only,
 // so session-scoped staleness is acceptable — files the agent itself
 // creates or deletes inside a run already surface through file.changed
-// events in the transcript, and glob/search reflects the current tree.
+// events in the transcript, and glob/grep reflects the current tree.
 // Freezing it keeps the per-request environment section byte-stable across
 // the run-internal writes that would otherwise churn the dynamic prompt
 // part and repeatedly invalidate provider prompt caches (sessions keep one
@@ -355,10 +355,10 @@ func builtinSections() []promptSection {
 		{
 			source: "loom://builtin/plan",
 			title:  "Task Planning",
-			body: `- Do not use update_plan for simple, straightforward tasks (roughly the easiest 25%); for multi-step tasks, plan first, then execute.
+			body: `- Do not use update_task (action "plan") for simple, straightforward tasks (roughly the easiest 25%); for multi-step tasks, plan first, then execute.
 - No single-step plans; a plan decomposes into independently verifiable steps. Give the plan a short title at creation (a few words capturing the goal, e.g. "loom architecture review").
-- Call update_plan immediately when a sub-task completes — first mark the current step done (ideally with a one-line evidence note citing the verification), then mark the next step in_progress; at most one in_progress at any time. Never batch updates at the end of the task.
-- Produce before marking: only mark a step done after its artifact (code change, command verification, conclusion text) actually exists; for steps about outputting/summarizing/delivering, the visible content must appear in the same reply BEFORE calling update_plan — never mark early.
+- Call update_task (action "plan") immediately when a sub-task completes — first mark the current step done (ideally with a one-line evidence note citing the verification), then mark the next step in_progress; at most one in_progress at any time. Never batch updates at the end of the task.
+- Produce before marking: only mark a step done after its artifact (code change, command verification, conclusion text) actually exists; for steps about outputting/summarizing/delivering, the visible content must appear in the same reply BEFORE calling update_task — never mark early.
 - The plan persists across session turns, context compaction, and interruption recovery; its latest state is automatically injected into your context before every model request — do not restate the plan in your replies.`,
 		},
 		{
@@ -387,7 +387,7 @@ func builtinSections() []promptSection {
 			// the single home for when/how to use each sandbox permission.
 			// Keep in sync with internal/process/sandbox_*.go; these facts
 			// must never be discoverable only through trial and error.
-			body: `- Use web_fetch for network information: it accesses the internet directly (bypassing the sandbox) and can fetch web pages, documents, and public data (including public information like weather and exchange rates); it is not an exception to "the sandbox has no network".
+			body: `- Use web_fetch for network information: it accesses the internet directly (bypassing the sandbox) and can fetch web pages, documents, and public data (including public information like weather and exchange rates); it is not an exception to "the sandbox has no network". To download a file (PDF, archive, image, dataset), pass save_to so the raw body lands on disk instead of flooding the context.
 - web_search locates web sources by keyword: use it for current or temporally unstable information (news, prices, library versions, current docs), then web_fetch the most relevant URLs to read them.
 - run_cmd and exec_session execute 'sh -c' command strings inside an isolated sandbox: outbound network and DNS are unreachable, but loopback networking works — you may listen on localhost ports and access them locally (e.g. start a dev server to verify); writes are limited to the workspace and the system temp dir (credential paths are unreadable).
 - When a task-critical command fails (or hangs until the timeout) because the sandbox denied OUTBOUND NETWORK or DNS (SSO/OAuth, HTTP APIs, package downloads), PREFER retrying the same command with needs_network=true: after a lightweight approval it runs INSIDE the sandbox with outbound network granted (credentials stay unreadable), and the user can remember it as a scoped rule.
@@ -442,7 +442,7 @@ func renderEnvironment(env Environment, collectErr error) string {
 	// negligible value (codex likewise injects current_date, not a clock).
 	fmt.Fprintf(&sb, "- Current date: %s\n", env.Now.Format("2006-01-02 MST"))
 	sb.WriteString("- Keep file operations inside the workspace; the system temp dirs ($TMPDIR and /tmp) are also writable for scratch files. Prefer absolute paths.")
-	sb.WriteString("\n- Assume the code or project the user mentions lives in the current workspace: locate it with glob/search first, and only consider paths outside the workspace after confirming it is absent (built-in file tools are scoped to the workspace plus the system temp dirs; use run_cmd for other external paths).")
+	sb.WriteString("\n- Assume the code or project the user mentions lives in the current workspace: locate it with glob/grep first, and only consider paths outside the workspace after confirming it is absent (built-in file tools are scoped to the workspace plus the system temp dirs; use run_cmd for other external paths).")
 	if collectErr != nil {
 		fmt.Fprintf(&sb, "\n- Note: environment collection incomplete: %v", collectErr)
 	}
@@ -588,7 +588,7 @@ var overviewSkipDirs = map[string]bool{
 // overviewMaxDepth bounds the walk: level 1-2 list files and directories,
 // level 3 lists directories only. Three levels reach layouts like
 // go/pl/loom that a two-level listing cannot reveal; deeper files are for
-// targeted tools (glob/search), not orientation.
+// targeted tools (glob/grep), not orientation.
 const overviewMaxDepth = 3
 
 // workspaceOverview renders a bounded listing of root (see overviewMaxDepth).

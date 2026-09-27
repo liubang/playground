@@ -29,10 +29,10 @@ import (
 // process gives each session its own SessionRuntime so concurrent sessions
 // never share goal/plan/steer queues or ask_user answer channels.
 //
-// Registry is an overlay on the bootstrap's base registry: the three
-// session-state tools (update_goal/update_plan/ask_user) are shadowed with
-// instances bound to this runtime's cells/questioner, while all stateless
-// tools fall through to the shared base registry.
+// Registry is an overlay on the bootstrap's base registry: the
+// session-state tools (update_task/ask_user) are shadowed with instances
+// bound to this runtime's cells/questioner, while all stateless tools fall
+// through to the shared base registry.
 type SessionRuntime struct {
 	GoalCell  *agent.GoalCell
 	PlanCell  *agent.PlanCell
@@ -100,19 +100,12 @@ func newSessionRuntime(b *Bootstrap, questioner *ChannelQuestioner, reuseCells b
 	}
 
 	overlay := agent.NewOverlayRegistry(base)
-	updateGoal, err := agent.NewUpdateGoalTool(rt.GoalCell)
+	updateTask, err := agent.NewUpdateTaskTool(rt.GoalCell, rt.PlanCell)
 	if err != nil {
-		return nil, fmt.Errorf("session runtime update_goal: %w", err)
+		return nil, fmt.Errorf("session runtime update_task: %w", err)
 	}
-	if err := overlay.Register(updateGoal); err != nil {
-		return nil, fmt.Errorf("session runtime register update_goal: %w", err)
-	}
-	updatePlan, err := agent.NewUpdatePlanTool(rt.PlanCell)
-	if err != nil {
-		return nil, fmt.Errorf("session runtime update_plan: %w", err)
-	}
-	if err := overlay.Register(updatePlan); err != nil {
-		return nil, fmt.Errorf("session runtime register update_plan: %w", err)
+	if err := overlay.Register(updateTask); err != nil {
+		return nil, fmt.Errorf("session runtime register update_task: %w", err)
 	}
 	askUser, err := agent.NewAskUserTool(askSource)
 	if err != nil {

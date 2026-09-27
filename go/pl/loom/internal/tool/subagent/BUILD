@@ -20,6 +20,7 @@ load("@rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "subagent_lib",
     srcs = [
+        "cancel.go",
         "delegate.go",
         "manager.go",
         "resume.go",
@@ -40,6 +41,7 @@ go_library(
 go_test(
     name = "subagent_test",
     srcs = [
+        "cancel_test.go",
         "delegate_test.go",
         "manager_test.go",
         "resume_test.go",

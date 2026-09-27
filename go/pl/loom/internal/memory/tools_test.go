@@ -25,55 +25,106 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
-func TestListToolDefinition(t *testing.T) {
+func TestMemoryToolDefinition(t *testing.T) {
 	s := newTestStore(t)
-	tool, err := NewListTool(s)
+	tool, err := NewMemoryTool(s)
 	if err != nil {
-		t.Fatalf("NewListTool: %v", err)
+		t.Fatalf("NewMemoryTool: %v", err)
 	}
 	def := tool.Definition()
-	if def.Name != ToolList {
-		t.Errorf("Name = %q, want %q", def.Name, ToolList)
+	if def.Name != ToolMemory {
+		t.Errorf("Name = %q, want %q", def.Name, ToolMemory)
+	}
+	if got := def.Risk(); got != domain.R0 {
+		t.Errorf("definition Risk() = %v, want R0 (capability-free; per-action grading)", got)
 	}
 	if !tool.ConcurrentSafe() {
-		t.Error("ListTool should be concurrent-safe")
+		t.Error("MemoryTool should be concurrent-safe")
 	}
 }
 
-func TestListToolExecute(t *testing.T) {
-	s := newTestStore(t)
-	s.WriteSummary("test summary")
-	s.WriteMain("test main")
-	tool, _ := NewListTool(s)
+func TestNewMemoryToolNilStore(t *testing.T) {
+	if _, err := NewMemoryTool(nil); err == nil {
+		t.Error("expected error for nil store")
+	}
+}
 
-	call := domain.ToolCall{
+func prepareMemory(t *testing.T, tool *MemoryTool, args string) domain.PreparedCall {
+	t.Helper()
+	prepared, err := tool.Prepare(context.Background(), domain.ToolCall{
 		ID:        domain.NewToolCallID(),
-		Name:      ToolList,
-		Arguments: json.RawMessage(`{}`),
-	}
-	prepared, err := tool.Prepare(context.Background(), call)
+		Name:      ToolMemory,
+		Arguments: json.RawMessage(args),
+	})
 	if err != nil {
-		t.Fatalf("Prepare: %v", err)
+		t.Fatalf("Prepare(%s): %v", args, err)
 	}
-	result := tool.Execute(context.Background(), prepared)
-	if result.Status != domain.ToolStatusSuccess {
-		t.Errorf("Status = %s, want %s", result.Status, domain.ToolStatusSuccess)
-		if result.Error != nil {
-			t.Logf("Error: %s: %s", result.Error.Code, result.Error.Message)
+	return prepared
+}
+
+func TestMemoryToolRiskPerAction(t *testing.T) {
+	s := newTestStore(t)
+	tool, _ := NewMemoryTool(s)
+
+	for action, args := range map[string]string{
+		"list":   `{"action":"list"}`,
+		"read":   `{"action":"read","path":"MEMORY.md"}`,
+		"search": `{"action":"search","query":"x"}`,
+	} {
+		if prepared := prepareMemory(t, tool, args); prepared.Risk != domain.R1 {
+			t.Errorf("%s: Risk = %v, want R1", action, prepared.Risk)
+		}
+	}
+	addNote := prepareMemory(t, tool,
+		`{"action":"add_note","filename":"2026-08-02T12-00-00-x.md","note":"n"}`)
+	if addNote.Risk != domain.R2 {
+		t.Errorf("add_note: Risk = %v, want R2", addNote.Risk)
+	}
+}
+
+func TestMemoryToolPrepareValidation(t *testing.T) {
+	s := newTestStore(t)
+	tool, _ := NewMemoryTool(s)
+
+	for name, args := range map[string]string{
+		"invalid json":          `{invalid}`,
+		"missing action":        `{}`,
+		"unknown action":        `{"action":"delete"}`,
+		"read missing path":     `{"action":"read"}`,
+		"search empty query":    `{"action":"search","query":"  "}`,
+		"add_note bad filename": `{"action":"add_note","filename":"prefer-go.md","note":"User prefers Go"}`,
+		"add_note empty note":   `{"action":"add_note","filename":"2026-08-02T12-00-00-test.md","note":"  "}`,
+		"unknown field":         `{"action":"list","extra":true}`,
+	} {
+		call := domain.ToolCall{
+			ID:        domain.NewToolCallID(),
+			Name:      ToolMemory,
+			Arguments: json.RawMessage(args),
+		}
+		if _, err := tool.Prepare(context.Background(), call); err == nil {
+			t.Errorf("%s: expected prepare error", name)
 		}
 	}
 }
 
-func TestListToolWithMaxResults(t *testing.T) {
+func TestMemoryToolListExecute(t *testing.T) {
 	s := newTestStore(t)
-	tool, _ := NewListTool(s)
+	s.WriteSummary("test summary")
+	s.WriteMain("test main")
+	tool, _ := NewMemoryTool(s)
 
-	call := domain.ToolCall{
-		ID:        domain.NewToolCallID(),
-		Name:      ToolList,
-		Arguments: json.RawMessage(`{"max_results":1}`),
+	prepared := prepareMemory(t, tool, `{"action":"list"}`)
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Status = %s, error = %+v", result.Status, result.Error)
 	}
-	prepared, _ := tool.Prepare(context.Background(), call)
+}
+
+func TestMemoryToolListWithMaxResults(t *testing.T) {
+	s := newTestStore(t)
+	tool, _ := NewMemoryTool(s)
+
+	prepared := prepareMemory(t, tool, `{"action":"list","max_results":1}`)
 	result := tool.Execute(context.Background(), prepared)
 	if result.Status != domain.ToolStatusSuccess {
 		t.Fatalf("Status = %s", result.Status)
@@ -89,45 +140,12 @@ func TestListToolWithMaxResults(t *testing.T) {
 	}
 }
 
-func TestListToolInvalidArgs(t *testing.T) {
-	s := newTestStore(t)
-	tool, _ := NewListTool(s)
-	call := domain.ToolCall{
-		ID:        domain.NewToolCallID(),
-		Name:      ToolList,
-		Arguments: json.RawMessage(`{invalid}`),
-	}
-	_, err := tool.Prepare(context.Background(), call)
-	if err == nil {
-		t.Error("expected error for invalid JSON")
-	}
-}
-
-func TestReadToolDefinition(t *testing.T) {
-	s := newTestStore(t)
-	tool, err := NewReadTool(s)
-	if err != nil {
-		t.Fatalf("NewReadTool: %v", err)
-	}
-	if tool.Definition().Name != ToolRead {
-		t.Errorf("Name = %q, want %q", tool.Definition().Name, ToolRead)
-	}
-}
-
-func TestReadToolExecute(t *testing.T) {
+func TestMemoryToolReadExecute(t *testing.T) {
 	s := newTestStore(t)
 	s.WriteMain("line1\nline2\nline3")
-	tool, _ := NewReadTool(s)
+	tool, _ := NewMemoryTool(s)
 
-	call := domain.ToolCall{
-		ID:        domain.NewToolCallID(),
-		Name:      ToolRead,
-		Arguments: json.RawMessage(`{"path":"MEMORY.md"}`),
-	}
-	prepared, err := tool.Prepare(context.Background(), call)
-	if err != nil {
-		t.Fatalf("Prepare: %v", err)
-	}
+	prepared := prepareMemory(t, tool, `{"action":"read","path":"MEMORY.md"}`)
 	result := tool.Execute(context.Background(), prepared)
 	if result.Status != domain.ToolStatusSuccess {
 		t.Fatalf("Status = %s", result.Status)
@@ -144,31 +162,12 @@ func TestReadToolExecute(t *testing.T) {
 	}
 }
 
-func TestReadToolMissingPath(t *testing.T) {
-	s := newTestStore(t)
-	tool, _ := NewReadTool(s)
-	call := domain.ToolCall{
-		ID:        domain.NewToolCallID(),
-		Name:      ToolRead,
-		Arguments: json.RawMessage(`{}`),
-	}
-	_, err := tool.Prepare(context.Background(), call)
-	if err == nil {
-		t.Error("expected error for missing path")
-	}
-}
-
-func TestReadToolWithOffset(t *testing.T) {
+func TestMemoryToolReadWithOffset(t *testing.T) {
 	s := newTestStore(t)
 	s.WriteMain("line1\nline2\nline3")
-	tool, _ := NewReadTool(s)
+	tool, _ := NewMemoryTool(s)
 
-	call := domain.ToolCall{
-		ID:        domain.NewToolCallID(),
-		Name:      ToolRead,
-		Arguments: json.RawMessage(`{"path":"MEMORY.md","line_offset":2,"max_lines":1}`),
-	}
-	prepared, _ := tool.Prepare(context.Background(), call)
+	prepared := prepareMemory(t, tool, `{"action":"read","path":"MEMORY.md","line_offset":2,"max_lines":1}`)
 	result := tool.Execute(context.Background(), prepared)
 	if result.Status != domain.ToolStatusSuccess {
 		t.Fatalf("Status = %s", result.Status)
@@ -183,31 +182,15 @@ func TestReadToolWithOffset(t *testing.T) {
 	}
 }
 
-func TestSearchToolDefinition(t *testing.T) {
-	s := newTestStore(t)
-	tool, err := NewSearchTool(s)
-	if err != nil {
-		t.Fatalf("NewSearchTool: %v", err)
-	}
-	if tool.Definition().Name != ToolSearch {
-		t.Errorf("Name = %q", tool.Definition().Name)
-	}
-}
-
-func TestSearchToolExecute(t *testing.T) {
+func TestMemoryToolSearchExecute(t *testing.T) {
 	s := newTestStore(t)
 	content := "# Preferences\n\nUser prefers Go over Python"
 	if err := s.WriteMain(content); err != nil {
 		t.Fatalf("WriteMain: %v", err)
 	}
 
-	tool, _ := NewSearchTool(s)
-	call := domain.ToolCall{
-		ID:        domain.NewToolCallID(),
-		Name:      ToolSearch,
-		Arguments: json.RawMessage(`{"query":"prefers Go"}`),
-	}
-	prepared, _ := tool.Prepare(context.Background(), call)
+	tool, _ := NewMemoryTool(s)
+	prepared := prepareMemory(t, tool, `{"action":"search","query":"prefers Go"}`)
 	result := tool.Execute(context.Background(), prepared)
 	if result.Status != domain.ToolStatusSuccess {
 		t.Fatalf("Status = %s", result.Status)
@@ -223,44 +206,12 @@ func TestSearchToolExecute(t *testing.T) {
 	}
 }
 
-func TestSearchToolEmptyQuery(t *testing.T) {
+func TestMemoryToolAddNoteExecute(t *testing.T) {
 	s := newTestStore(t)
-	tool, _ := NewSearchTool(s)
-	call := domain.ToolCall{
-		ID:        domain.NewToolCallID(),
-		Name:      ToolSearch,
-		Arguments: json.RawMessage(`{"query":"  "}`),
-	}
-	_, err := tool.Prepare(context.Background(), call)
-	if err == nil {
-		t.Error("expected error for empty query")
-	}
-}
+	tool, _ := NewMemoryTool(s)
 
-func TestAddNoteToolDefinition(t *testing.T) {
-	s := newTestStore(t)
-	tool, err := NewAddNoteTool(s)
-	if err != nil {
-		t.Fatalf("NewAddNoteTool: %v", err)
-	}
-	if tool.Definition().Name != ToolAddNote {
-		t.Errorf("Name = %q", tool.Definition().Name)
-	}
-}
-
-func TestAddNoteToolExecute(t *testing.T) {
-	s := newTestStore(t)
-	tool, _ := NewAddNoteTool(s)
-
-	call := domain.ToolCall{
-		ID:        domain.NewToolCallID(),
-		Name:      ToolAddNote,
-		Arguments: json.RawMessage(`{"filename":"2026-08-02T12-00-00-prefer-go.md","note":"User prefers Go"}`),
-	}
-	prepared, err := tool.Prepare(context.Background(), call)
-	if err != nil {
-		t.Fatalf("Prepare: %v", err)
-	}
+	prepared := prepareMemory(t, tool,
+		`{"action":"add_note","filename":"2026-08-02T12-00-00-prefer-go.md","note":"User prefers Go"}`)
 	result := tool.Execute(context.Background(), prepared)
 	if result.Status != domain.ToolStatusSuccess {
 		t.Fatalf("Status = %s", result.Status)
@@ -269,64 +220,5 @@ func TestAddNoteToolExecute(t *testing.T) {
 	notes, _ := s.ListNotes()
 	if len(notes) != 1 {
 		t.Errorf("expected 1 note, got %d", len(notes))
-	}
-}
-
-func TestAddNoteToolInvalidFilename(t *testing.T) {
-	s := newTestStore(t)
-	tool, _ := NewAddNoteTool(s)
-
-	// Missing timestamp prefix.
-	call := domain.ToolCall{
-		ID:        domain.NewToolCallID(),
-		Name:      ToolAddNote,
-		Arguments: json.RawMessage(`{"filename":"prefer-go.md","note":"User prefers Go"}`),
-	}
-	_, err := tool.Prepare(context.Background(), call)
-	if err == nil {
-		t.Error("expected error for invalid filename")
-	}
-}
-
-func TestAddNoteToolEmptyNote(t *testing.T) {
-	s := newTestStore(t)
-	tool, _ := NewAddNoteTool(s)
-
-	call := domain.ToolCall{
-		ID:        domain.NewToolCallID(),
-		Name:      ToolAddNote,
-		Arguments: json.RawMessage(`{"filename":"2026-08-02T12-00-00-test.md","note":"  "}`),
-	}
-	_, err := tool.Prepare(context.Background(), call)
-	if err == nil {
-		t.Error("expected error for empty note")
-	}
-}
-
-func TestNewListToolNilStore(t *testing.T) {
-	_, err := NewListTool(nil)
-	if err == nil {
-		t.Error("expected error for nil store")
-	}
-}
-
-func TestNewReadToolNilStore(t *testing.T) {
-	_, err := NewReadTool(nil)
-	if err == nil {
-		t.Error("expected error for nil store")
-	}
-}
-
-func TestNewSearchToolNilStore(t *testing.T) {
-	_, err := NewSearchTool(nil)
-	if err == nil {
-		t.Error("expected error for nil store")
-	}
-}
-
-func TestNewAddNoteToolNilStore(t *testing.T) {
-	_, err := NewAddNoteTool(nil)
-	if err == nil {
-		t.Error("expected error for nil store")
 	}
 }

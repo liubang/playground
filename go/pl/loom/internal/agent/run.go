@@ -67,7 +67,7 @@ type Run struct {
 	Messages  []domain.Message
 	Version   int64
 	Clock     domain.Clock
-	// Goal is the cross-turn objective set via the update_goal tool; nil
+	// Goal is the cross-turn objective set via the update_task tool; nil
 	// when none is active. It persists through checkpoints like Plan.
 	Goal *domain.Goal
 
@@ -149,7 +149,7 @@ func RestoreRun(id domain.RunID, sessionID domain.SessionID, state domain.RunSta
 // ContinueRun starts a new active run in an existing session from a complete
 // terminal checkpoint. The continuation preserves the transcript and an
 // unfinished plan (the loop keeps re-injecting it into model context and the
-// next update_plan revision continues it), while a completed plan is inert —
+// next update_task revision continues it), while a completed plan is inert —
 // never re-injected, archived by frontends at the turn boundary — so the
 // continuation starts without it. Dropping it also keeps drainPlanUpdates'
 // title fallback from leaking the finished plan's title onto the next plan.
@@ -1107,10 +1107,10 @@ type Loop struct {
 	// are replaced by explicit text gaps instead of inline images —
 	// providers reject image parts outright.
 	SupportsImages bool
-	// GoalCell receives update_goal tool mutations; the loop drains it
+	// GoalCell receives update_task goal mutations; the loop drains it
 	// after each tool batch. Nil disables goal tracking.
 	GoalCell *GoalCell
-	// PlanCell receives update_plan snapshots; the loop drains it after each
+	// PlanCell receives update_task plan snapshots; the loop drains it after each
 	// tool batch and replaces the run's plan. Nil disables plan tracking.
 	PlanCell *PlanCell
 	// SteerCell receives user messages submitted while the turn is busy; the
@@ -1877,7 +1877,7 @@ func planReconcilePrompt(plan domain.Plan) string {
 
 %s
 
-Before ending your turn, reconcile the plan: if the remaining work is in fact complete (its deliverable is already produced in this conversation), call update_plan to mark those steps done with a brief evidence note — that is closing bookkeeping, not pre-marking. Otherwise keep executing the remaining steps instead of ending.`, strings.TrimRight(remaining.String(), "\n"))
+Before ending your turn, reconcile the plan: if the remaining work is in fact complete (its deliverable is already produced in this conversation), call update_task (action "plan") to mark those steps done with a brief evidence note — that is closing bookkeeping, not pre-marking. Otherwise keep executing the remaining steps instead of ending.`, strings.TrimRight(remaining.String(), "\n"))
 }
 
 func (l *Loop) determineCompletion(ctx context.Context, stop domain.StopReason) error {
@@ -3139,7 +3139,7 @@ func cutAtRuneBoundary(s string, maxBytes int) string {
 }
 
 // toolErrorResult builds an error ToolResult for the agent-integrated tools
-// (ask_user, update_plan, update_goal), unwrapping AgentError codes.
+// (ask_user, update_task), unwrapping AgentError codes.
 func toolErrorResult(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
 	var agentErr *domain.AgentError
 	code, message := string(domain.ErrInternal), err.Error()

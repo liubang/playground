@@ -145,7 +145,7 @@ var mazeSearchTools = map[string]bool{
 	"read_file": true, "grep": true, "glob": true, "list_dir": true,
 	"web_search": true, "web_fetch": true, "kb_search": true, "kb_read": true,
 	"git_log": true, "git_blame": true, "git_diff": true, "git_status": true,
-	"git_merge_base": true, "view_image": true, "lint": true, "read_skill": true,
+	"view_image": true, "lint": true, "read_skill": true,
 }
 
 // Empty/no-hit markers (head window only): a genuine empty-result notice is

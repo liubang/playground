@@ -29,14 +29,36 @@ import (
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
-type editArgs struct {
-	Path       string `json:"path"`
+// maxEditSpecs bounds the edits array of a single edit call.
+const maxEditSpecs = 32
+
+// editSpec is one exact-text replacement. In the edits array form each spec
+// is applied in order against the result of the previous one.
+type editSpec struct {
 	OldString  string `json:"old_string"`
 	NewString  string `json:"new_string"`
 	ReplaceAll bool   `json:"replace_all,omitempty"`
+}
+
+type editArgs struct {
+	Path       string `json:"path"`
+	OldString  string `json:"old_string,omitempty"`
+	NewString  string `json:"new_string,omitempty"`
+	ReplaceAll bool   `json:"replace_all,omitempty"`
+	// Edits applies several replacements in one atomic call; mutually
+	// exclusive with the top-level old_string/new_string/replace_all form.
+	Edits []editSpec `json:"edits,omitempty"`
 	// ExpectedHash is an optional advanced guard; drift detection works
 	// without it via the shared file-state book.
 	ExpectedHash string `json:"expected_hash,omitempty"`
+}
+
+// specs normalizes the two argument forms into an ordered replacement list.
+func (a editArgs) specs() []editSpec {
+	if len(a.Edits) > 0 {
+		return a.Edits
+	}
+	return []editSpec{{OldString: a.OldString, NewString: a.NewString, ReplaceAll: a.ReplaceAll}}
 }
 
 // EditTool implements exact old_string replacement with internalized drift
@@ -51,12 +73,14 @@ type EditTool struct {
 func NewEditTool(validator *workspacepkg.PathValidator, book *workspacepkg.FileStateBook) (*EditTool, error) {
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "edit",
-		Description: "Replace exact text in a single file. old_string must match exactly one location " +
-			"(or use replace_all=true). Paths inside the workspace run directly; absolute paths outside the " +
+		Description: "Replace exact text in a single file. Pass old_string/new_string for one replacement " +
+			"(old_string must match exactly one location, or use replace_all=true), or 'edits' for several " +
+			"replacements applied in order in one atomic call — each must match exactly once at its step " +
+			"and if any fails nothing is written. Paths inside the workspace run directly; absolute paths outside the " +
 			"workspace require user approval (credential locations are always denied). " +
 			"You MUST read_file the target first: edits are rejected if the file " +
 			"changed since your last read. expected_hash is optional and rarely needed.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1},"old_string":{"type":"string"},"new_string":{"type":"string"},"replace_all":{"type":"boolean"},"expected_hash":{"type":"string","minLength":64,"maxLength":64}},"required":["path","old_string","new_string"]}`),
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string","minLength":1},"old_string":{"type":"string"},"new_string":{"type":"string"},"replace_all":{"type":"boolean"},"edits":{"type":"array","maxItems":32,"items":{"type":"object","additionalProperties":false,"properties":{"old_string":{"type":"string","minLength":1},"new_string":{"type":"string"},"replace_all":{"type":"boolean"}},"required":["old_string","new_string"]}},"expected_hash":{"type":"string","minLength":64,"maxLength":64}},"required":["path"]}`),
 		Capabilities: []domain.Capability{domain.CapFSWrite},
 		Source:       domain.ToolSourceBuiltin,
 	}, validator)
@@ -80,7 +104,7 @@ func (t *EditTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.Pr
 		return domain.PreparedCall{}, err
 	}
 
-	newContent, recoveryErr := applyEditReplacement(string(data), args)
+	newContent, recoveryErr := applyEditSpecs(string(data), args.specs())
 	canonical, err := json.Marshal(args)
 	if err != nil {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
@@ -141,7 +165,7 @@ func (t *EditTool) Execute(ctx context.Context, prepared domain.PreparedCall) do
 		}
 	}
 
-	newContent, err := applyEditReplacement(string(data), args)
+	newContent, err := applyEditSpecs(string(data), args.specs())
 	if err != nil {
 		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
 	}
@@ -154,19 +178,34 @@ func (t *EditTool) Execute(ctx context.Context, prepared domain.PreparedCall) do
 	}
 	t.book.Record(pathInfo.Absolute, resultSnapshot.SHA256)
 	return toolkit.SuccessResult(prepared.Call.ID, startedAt, editOutput{
-		Path:    resultSnapshot.Path,
-		OldHash: oldSnapshot.SHA256,
-		NewHash: resultSnapshot.SHA256,
-		Size:    resultSnapshot.Size,
+		Path:         resultSnapshot.Path,
+		OldHash:      oldSnapshot.SHA256,
+		NewHash:      resultSnapshot.SHA256,
+		Size:         resultSnapshot.Size,
+		AppliedEdits: len(args.specs()),
 	})
 }
 
 func validateEditArgs(validator *workspacepkg.PathValidator, args editArgs) (editArgs, workspacepkg.ResolvedPath, bool, []byte, error) {
-	if len(args.NewString) > maxReplacementBytes {
-		return editArgs{}, workspacepkg.ResolvedPath{}, false, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("new_string exceeds %d bytes", maxReplacementBytes))
+	if len(args.Edits) > 0 {
+		if args.OldString != "" || args.NewString != "" || args.ReplaceAll {
+			return editArgs{}, workspacepkg.ResolvedPath{}, false, nil, domain.NewError(domain.ErrInvalidInput, "edits cannot be combined with top-level old_string/new_string/replace_all")
+		}
+		if len(args.Edits) > maxEditSpecs {
+			return editArgs{}, workspacepkg.ResolvedPath{}, false, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("edits exceeds %d entries", maxEditSpecs))
+		}
 	}
-	if len(args.OldString) == 0 {
-		return editArgs{}, workspacepkg.ResolvedPath{}, false, nil, domain.NewError(domain.ErrInvalidInput, "old_string must not be empty")
+	specs := args.specs()
+	for i, spec := range specs {
+		if len(spec.NewString) > maxReplacementBytes {
+			return editArgs{}, workspacepkg.ResolvedPath{}, false, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("new_string exceeds %d bytes", maxReplacementBytes))
+		}
+		if len(spec.OldString) == 0 {
+			if len(specs) > 1 {
+				return editArgs{}, workspacepkg.ResolvedPath{}, false, nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("edits[%d]: old_string must not be empty", i))
+			}
+			return editArgs{}, workspacepkg.ResolvedPath{}, false, nil, domain.NewError(domain.ErrInvalidInput, "old_string must not be empty")
+		}
 	}
 	if args.ExpectedHash != "" {
 		expectedHash, err := canonicalizeHash(args.ExpectedHash)
@@ -183,16 +222,33 @@ func validateEditArgs(validator *workspacepkg.PathValidator, args editArgs) (edi
 	return args, pathInfo, external, data, nil
 }
 
-func applyEditReplacement(content string, args editArgs) (string, error) {
-	count := strings.Count(content, args.OldString)
+// applyEditSpecs applies each replacement in order against the running
+// content. The single-replacement form keeps its original error wording;
+// the multi-edit form prefixes the failing edit's index.
+func applyEditSpecs(content string, specs []editSpec) (string, error) {
+	var err error
+	for i, spec := range specs {
+		content, err = applyEditReplacement(content, spec)
+		if err != nil {
+			if len(specs) > 1 {
+				return "", domain.NewError(domain.ErrConflict, fmt.Sprintf("edits[%d]: %s", i, err.Error()))
+			}
+			return "", err
+		}
+	}
+	return content, nil
+}
+
+func applyEditReplacement(content string, spec editSpec) (string, error) {
+	count := strings.Count(content, spec.OldString)
 	if count == 0 {
 		return "", domain.NewError(domain.ErrConflict, "old_string was not found in the file")
 	}
-	if !args.ReplaceAll && count > 1 {
+	if !spec.ReplaceAll && count > 1 {
 		return "", domain.NewError(domain.ErrConflict, "old_string matched multiple locations; set replace_all=true to replace all matches")
 	}
-	if args.ReplaceAll {
-		return strings.ReplaceAll(content, args.OldString, args.NewString), nil
+	if spec.ReplaceAll {
+		return strings.ReplaceAll(content, spec.OldString, spec.NewString), nil
 	}
-	return strings.Replace(content, args.OldString, args.NewString, 1), nil
+	return strings.Replace(content, spec.OldString, spec.NewString, 1), nil
 }

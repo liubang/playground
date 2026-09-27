@@ -145,7 +145,7 @@ func (s *Signer) VerifyWithRisk(prepared domain.PreparedCall, def domain.ToolDef
 
 // ArgsFingerprint returns a short unkeyed change fingerprint of a prepared
 // call's canonical arguments. It is used by low-risk cell tools (memory,
-// update_goal, update_plan, ask_user) where ArgsHash feeds repeated-call
+// update_task, ask_user) where ArgsHash feeds repeated-call
 // detection and audit correlation only: these tools are never gated by an
 // approval UI binding, so a keyed HMAC (Signer) would buy nothing. Keep the
 // split deliberate — tools whose ArgsHash binds an approval use Signer.Sign.

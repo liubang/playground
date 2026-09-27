@@ -43,6 +43,7 @@ const (
 	maxReadFileBytes      = 1 << 20
 
 	maxDirectoryEntries = 200
+	maxDirectoryDepth   = 5
 
 	maxSearchContextLines = 5
 	maxSearchMatches      = 200

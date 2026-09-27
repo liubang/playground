@@ -59,7 +59,7 @@ loom 当前只有一个真实前端：TUI（`internal/ui`，Bubble Tea），外�
 | # | 差距 | 根因（代码位置） | 后果（若不改） |
 |---|------|------|------|
 | G1 | 无会话注册表 | `cmd/loom/main.go` 每进程只建 1 个 Controller | server 无法承载多会话 |
-| G2 | 会话态工具绑定进程级单例（v2 扩围） | `Bootstrap.GoalCell/PlanCell/SteerCell/Questioner`（`bootstrap.go:221-224`），`update_goal/update_plan/ask_user` 注册时各自绑定；`handleSteer` 亦直读 `bootstrap.SteerCell` | 多会话并发互相覆盖 goal/plan/steer 队列，ask_user 问题路由错会话 |
+| G2 | 会话态工具绑定进程级单例（v2 扩围） | `Bootstrap.GoalCell/PlanCell/SteerCell/Questioner`（`bootstrap.go:221-224`），`update_task`（原 `update_goal`/`update_plan`）/`ask_user` 注册时各自绑定；`handleSteer` 亦直读 `bootstrap.SteerCell` | 多会话并发互相覆盖 goal/plan/steer 队列，ask_user 问题路由错会话 |
 | G3 | SessionEnv 是进程级单值 | `process.AtomicSessionEnv` + `RunnerOptions.SessionEnv func() map[string]string`（无 ctx 参数）；v2 核对：v1 所述 `controller.publishSessionEnv` 已不存在，现仅 headless `runAgent` 写该原子值（`main.go:443`），chat 路径根本未设置归因 | server 引入归因必须走 ctx 注入，不能复活全局写入 |
 | G4 | 事件无回放层 | Broker 只做在线扇出，不存历史 | SSE 断线重连丢 durable 事件 |
 | G5 | Snapshot 无事件水位 | `app.Snapshot` 不含 broker sequence | 客户端无法无缝衔接"快照 + 增量" |
@@ -229,7 +229,7 @@ type SessionHandle struct {
 
 ### 4.2 per-session 会话态与注册表 overlay（G2）
 
-**问题**（v2 扩围：从两处 cells 扩大到全部四处进程级会话态）：`update_goal`/`update_plan`/`ask_user` 在 `Bootstrap.registerBuiltinTools` 里分别绑定进程级 `GoalCell`/`PlanCell`/`Questioner`；`Controller.runTurn` 把 cells 传给每个 `agent.Loop`，`handleSteer` 直读 `bootstrap.SteerCell`。四处单例在多会话下全部串台。
+**问题**（v2 扩围：从两处 cells 扩大到全部四处进程级会话态）：`update_task`（原 `update_goal`/`update_plan`）/`ask_user` 在 `Bootstrap.registerBuiltinTools` 里分别绑定进程级 `GoalCell`/`PlanCell`/`Questioner`；`Controller.runTurn` 把 cells 传给每个 `agent.Loop`，`handleSteer` 直读 `bootstrap.SteerCell`。四处单例在多会话下全部串台。
 
 **方案**：
 

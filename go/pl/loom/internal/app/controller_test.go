@@ -303,7 +303,7 @@ func TestControllerArchivesCompletedPlanOnNewTurn(t *testing.T) {
 
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{
-			{ID: domain.NewToolCallID(), Name: "update_plan", Arguments: json.RawMessage(`{"plan":[{"goal":"step one","status":"done"},{"goal":"step two","status":"done"}]}`)},
+			{ID: domain.NewToolCallID(), Name: "update_task", Arguments: json.RawMessage(`{"action":"plan","plan":[{"goal":"step one","status":"done"},{"goal":"step two","status":"done"}]}`)},
 		}, StopReason: domain.StopToolUse},
 		fakes.ScriptEntry{Text: "task done", StopReason: domain.StopEndTurn},
 		fakes.ScriptEntry{Text: "follow-up answer", StopReason: domain.StopEndTurn},
@@ -387,7 +387,7 @@ func TestControllerArchivesCompletedPlanOnNewTurn(t *testing.T) {
 
 // TestControllerKeepsUnfinishedPlanOnNewTurn: an unfinished plan is still
 // live state (re-injected into model context), so a new turn must NOT
-// archive the projection — the panel stays until the next update_plan.
+// archive the projection — the panel stays until the next plan update.
 func TestControllerKeepsUnfinishedPlanOnNewTurn(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -400,7 +400,7 @@ func TestControllerKeepsUnfinishedPlanOnNewTurn(t *testing.T) {
 
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{
-			{ID: domain.NewToolCallID(), Name: "update_plan", Arguments: json.RawMessage(`{"plan":[{"goal":"step one","status":"done"},{"goal":"step two","status":"in_progress"}]}`)},
+			{ID: domain.NewToolCallID(), Name: "update_task", Arguments: json.RawMessage(`{"action":"plan","plan":[{"goal":"step one","status":"done"},{"goal":"step two","status":"in_progress"}]}`)},
 		}, StopReason: domain.StopToolUse},
 		fakes.ScriptEntry{Text: "answer", StopReason: domain.StopEndTurn},
 		// The one-shot reconcile nudge burns one extra scripted call.

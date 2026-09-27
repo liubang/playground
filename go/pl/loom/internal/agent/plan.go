@@ -18,7 +18,6 @@
 package agent
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -28,10 +27,10 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
-// PlanCell is the mailbox between the update_plan tool (which cannot see the
-// Run) and the loop (which owns it). One pending snapshot is kept; a second
-// update in the same batch replaces it — the tool submits a full snapshot
-// each call, so the last one wins by construction.
+// PlanCell is the mailbox between the update_task tool (which cannot see
+// the Run) and the loop (which owns it). One pending snapshot is kept; a
+// second update in the same batch replaces it — the tool submits a full
+// snapshot each call, so the last one wins by construction.
 type PlanCell struct {
 	mu   sync.Mutex
 	plan domain.Plan
@@ -57,10 +56,10 @@ func (c *PlanCell) Take() (domain.Plan, bool) {
 	return p, ok
 }
 
-// drainPlanUpdates applies a pending update_plan snapshot to the run and
-// records the audit event. Called after every tool batch, next to
-// drainGoalUpdates. A snapshot that somehow fails validation here (the tool
-// already validated it) is dropped with a warning instead of killing the run.
+// drainPlanUpdates applies a pending plan snapshot to the run and records
+// the audit event. Called after every tool batch, next to drainGoalUpdates.
+// A snapshot that somehow fails validation here (the tool already validated
+// it) is dropped with a warning instead of killing the run.
 func (l *Loop) drainPlanUpdates() {
 	if l.PlanCell == nil {
 		return
@@ -139,7 +138,7 @@ func planStatusNote(plan domain.Plan) string {
 	return sb.String()
 }
 
-// --- update_plan tool ---
+// --- update_task plan-action arguments ---
 
 // updatePlanArgsItem is the wire form of one plan step: the model submits
 // goals without indexes; the tool assigns them in order.
@@ -149,9 +148,13 @@ type updatePlanArgsItem struct {
 	Evidence []string `json:"evidence"`
 }
 
+// updatePlanArgs is the canonical wire form of an update_task call with
+// action "plan". The Action field pins the canonical arguments to the plan
+// action.
 type updatePlanArgs struct {
-	Title string               `json:"title"`
-	Plan  []updatePlanArgsItem `json:"plan"`
+	Action string               `json:"action"`
+	Title  string               `json:"title"`
+	Plan   []updatePlanArgsItem `json:"plan"`
 }
 
 // updatePlanArgsRawItem is the decoding form of a plan step: Evidence stays
@@ -165,9 +168,13 @@ type updatePlanArgsRawItem struct {
 	Evidence json.RawMessage `json:"evidence"`
 }
 
+// updatePlanArgsRaw is the decoding form of a plan-action call: the Action
+// field is decoded so the strict decoder rejects the goal action's fields
+// as unknown; it is validated against taskActionPlan.
 type updatePlanArgsRaw struct {
-	Title string                  `json:"title"`
-	Plan  []updatePlanArgsRawItem `json:"plan"`
+	Action string                  `json:"action"`
+	Title  string                  `json:"title"`
+	Plan   []updatePlanArgsRawItem `json:"plan"`
 }
 
 // decodePlanItemEvidence normalizes the evidence field: absent/null → nil,
@@ -191,88 +198,6 @@ func decodePlanItemEvidence(raw json.RawMessage) ([]string, error) {
 	return list, nil
 }
 
-// UpdatePlanTool lets the model maintain the run's task plan. Mutations go
-// through the PlanCell; the loop applies them after the tool batch, so the
-// tool itself is side-effect-free w.r.t. the run state.
-type UpdatePlanTool struct {
-	def  domain.ToolDefinition
-	cell *PlanCell
-}
-
-// NewUpdatePlanTool creates the tool bound to the given cell.
-func NewUpdatePlanTool(cell *PlanCell) (*UpdatePlanTool, error) {
-	if cell == nil {
-		return nil, domain.NewError(domain.ErrInvalidInput, "plan cell is required")
-	}
-	def := domain.ToolDefinition{
-		Name: "update_plan",
-		Description: "Update the task plan: the checklist you maintain for the current multi-step task. " +
-			"Submit the COMPLETE plan snapshot on every call — each call fully replaces the previous plan (not a diff). " +
-			"'plan' lists the steps (at least 2); each step carries a goal, a status ('todo' | 'in_progress' | 'done'), " +
-			"and optional evidence notes (one-line verifications, a list of strings) for a completed step. " +
-			"'title' is a few words naming the overall objective — required when you first create the plan, omittable on later revisions. " +
-			"The plan's latest state is automatically shown to you before every model call and persists across turns and compaction; " +
-			"when to plan, step granularity, and in_progress discipline follow the Task Planning guidance.",
-		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"title":{"type":"string","maxLength":120},"plan":{"type":"array","minItems":2,"items":{"type":"object","additionalProperties":false,"properties":{"goal":{"type":"string","minLength":1,"maxLength":1024},"status":{"type":"string","enum":["todo","in_progress","done"]},"evidence":{"type":"array","items":{"type":"string","maxLength":1024}}},"required":["goal","status"]}}},"required":["plan"]}`),
-		Source:      domain.ToolSourceBuiltin,
-	}
-	if err := def.Validate(); err != nil {
-		return nil, domain.NewError(domain.ErrInternal, "invalid tool definition", domain.WithCause(err))
-	}
-	return &UpdatePlanTool{def: def, cell: cell}, nil
-}
-
-// Definition returns the tool definition.
-func (t *UpdatePlanTool) Definition() domain.ToolDefinition { return t.def }
-
-// Prepare validates and canonicalizes the call; it is side-effect-free.
-func (t *UpdatePlanTool) Prepare(_ context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	plan, canonical, err := decodeUpdatePlanArgs(call.Arguments)
-	if err != nil {
-		return domain.PreparedCall{}, err
-	}
-	call.Arguments = canonical
-	desc := fmt.Sprintf("Update plan (%d steps)", len(plan.Items))
-	if current := plan.CurrentInProgress(); current != nil {
-		desc = fmt.Sprintf("Update plan (%d steps): %s", len(plan.Items), current.Goal)
-	}
-	return domain.PreparedCall{
-		Call:         call,
-		Definition:   t.def,
-		Risk:         domain.R1,
-		ApprovalDesc: desc,
-		ArgsHash:     toolkit.ArgsFingerprint(canonical),
-	}, nil
-}
-
-// Execute queues the snapshot for the loop. The tool result confirms
-// acceptance; the resulting plan state is reported back through the
-// plan.revised audit event and the plan status note of the next request.
-func (t *UpdatePlanTool) Execute(_ context.Context, prepared domain.PreparedCall) domain.ToolResult {
-	startedAt := domain.RealClock{}.Now()
-	plan, _, err := decodeUpdatePlanArgs(prepared.Call.Arguments)
-	if err != nil {
-		return toolErrorResult(prepared.Call.ID, startedAt, err)
-	}
-	t.cell.Put(plan)
-	payload := map[string]any{
-		"applied": true,
-		"items":   len(plan.Items),
-		"note":    "plan update accepted; it takes effect after this tool batch",
-	}
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		return toolErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode result", domain.WithCause(err)))
-	}
-	return domain.ToolResult{
-		CallID:     prepared.Call.ID,
-		Status:     domain.ToolStatusSuccess,
-		Content:    []domain.ContentPart{{Kind: domain.PartText, Text: string(raw)}},
-		StartedAt:  startedAt,
-		FinishedAt: domain.RealClock{}.Now(),
-	}
-}
-
 // decodeUpdatePlanArgs parses, normalizes, and validates a plan snapshot:
 // unknown fields are rejected, indexes are assigned in array order, and the
 // result must satisfy Plan.Validate (at most one in_progress).
@@ -281,7 +206,11 @@ func decodeUpdatePlanArgs(raw json.RawMessage) (domain.Plan, json.RawMessage, er
 	dec := json.NewDecoder(strings.NewReader(string(raw)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&args); err != nil {
-		return domain.Plan{}, nil, domain.NewError(domain.ErrInvalidInput, "invalid update_plan arguments", domain.WithCause(err))
+		return domain.Plan{}, nil, domain.NewError(domain.ErrInvalidInput, "invalid update_task plan arguments", domain.WithCause(err))
+	}
+	if args.Action != taskActionPlan {
+		return domain.Plan{}, nil, domain.NewError(domain.ErrInvalidInput,
+			fmt.Sprintf("plan arguments require action %q, got %q", taskActionPlan, args.Action))
 	}
 	if len(args.Plan) < 2 {
 		return domain.Plan{}, nil, domain.NewError(domain.ErrInvalidInput,
@@ -292,7 +221,7 @@ func decodeUpdatePlanArgs(raw json.RawMessage) (domain.Plan, json.RawMessage, er
 		title = string(titleRunes[:120])
 	}
 	items := make([]domain.PlanItem, 0, len(args.Plan))
-	canonicalArgs := updatePlanArgs{Title: args.Title, Plan: make([]updatePlanArgsItem, 0, len(args.Plan))}
+	canonicalArgs := updatePlanArgs{Action: args.Action, Title: args.Title, Plan: make([]updatePlanArgsItem, 0, len(args.Plan))}
 	for i, raw := range args.Plan {
 		goal := strings.TrimSpace(raw.Goal)
 		if goal == "" {

@@ -32,6 +32,8 @@ const (
 
 	defaultMaxOutputBytes int64 = 16384
 	maxMaxOutputBytes     int64 = 65536
+
+	maxCharsBytes = 8192
 )
 
 // commandArgs is the shared command-line shape of exec_session.
@@ -103,7 +105,7 @@ func riskForCommand(args commandArgs, base domain.RiskLevel) domain.RiskLevel {
 	return base
 }
 
-// sessionOutput is the shared result payload of exec_session/write_stdin.
+// sessionOutput is the shared result payload of every exec_session action.
 type sessionOutput struct {
 	SessionID          string `json:"session_id"`
 	Command            string `json:"command"`

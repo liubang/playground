@@ -94,9 +94,9 @@ func TestPromptProviderRuleRef(t *testing.T) {
 }
 
 func TestMemoryInstructionsContainsToolNames(t *testing.T) {
-	for _, name := range []string{"memory_search", "memory_read", "memory_add_note"} {
+	for _, name := range []string{"memory", "action=search", "action=read", "action=add_note"} {
 		if !strings.Contains(MemoryInstructions, name) {
-			t.Errorf("MemoryInstructions missing tool name %q", name)
+			t.Errorf("MemoryInstructions missing %q", name)
 		}
 	}
 }

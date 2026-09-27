@@ -24,7 +24,6 @@ go_library(
         "common.go",
         "diff.go",
         "log.go",
-        "merge_base.go",
         "status.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/gittools",

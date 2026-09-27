@@ -51,6 +51,9 @@ type editOutput struct {
 	OldHash string `json:"old_hash"`
 	NewHash string `json:"new_hash"`
 	Size    int64  `json:"size"`
+	// AppliedEdits reports how many replacements were applied (1 for the
+	// single old_string/new_string form, len(edits) otherwise).
+	AppliedEdits int `json:"applied_edits"`
 }
 
 func newBaseTool(def domain.ToolDefinition, validator *workspacepkg.PathValidator) (baseTool, error) {

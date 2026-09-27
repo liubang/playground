@@ -18,7 +18,6 @@
 package agent
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -26,11 +25,10 @@ import (
 	"sync"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
-	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
-// GoalUpdate is one update_goal tool mutation, drained by the loop after a
-// tool batch.
+// GoalUpdate is one update_task (action "goal") tool mutation, drained by
+// the loop after a tool batch.
 type GoalUpdate struct {
 	Objective   string
 	TokenBudget int64
@@ -39,7 +37,7 @@ type GoalUpdate struct {
 	Close domain.GoalStatus
 }
 
-// GoalCell is the mailbox between the update_goal tool (which cannot see
+// GoalCell is the mailbox between the update_task tool (which cannot see
 // the Run) and the loop (which owns it). One pending update is kept; a
 // second update in the same batch replaces it.
 type GoalCell struct {
@@ -74,8 +72,8 @@ func cloneGoal(goal *domain.Goal) *domain.Goal {
 	return &cloned
 }
 
-// drainGoalUpdates applies a pending update_goal mutation to the run's goal
-// and records the audit event. Called after every tool batch.
+// drainGoalUpdates applies a pending goal mutation to the run's goal and
+// records the audit event. Called after every tool batch.
 func (l *Loop) drainGoalUpdates() {
 	if l.GoalCell == nil {
 		return
@@ -88,11 +86,11 @@ func (l *Loop) drainGoalUpdates() {
 	switch {
 	case update.Close == domain.GoalStatusComplete || update.Close == domain.GoalStatusBlocked:
 		// A budget_limited goal must also be closable: the wrap-up prompt
-		// explicitly invites update_goal "complete" when the work is done.
+		// explicitly invites a goal "complete" update when the work is done.
 		if l.Run.Goal != nil && (l.Run.Goal.Status == domain.GoalStatusActive || l.Run.Goal.Status == domain.GoalStatusBudgetLimited) {
 			l.Run.Goal.Status = update.Close
-			// A closing call may carry a final summary (update_goal
-			// accepts objective together with status); record it.
+			// A closing call may carry a final summary (the tool accepts
+			// objective together with status); record it.
 			if update.Objective != "" {
 				l.Run.Goal.Objective = update.Objective
 			}
@@ -185,7 +183,7 @@ Budget:
 - Token budget: %s
 - Tokens remaining: %s
 
-Completion audit: before calling update_goal with status "complete", treat completion as unproven and verify every explicit requirement against current-state evidence (files, command output, test results). Treat uncertain or indirect evidence as not achieved. Only call update_goal with status "blocked" when truly at an impasse without user input — never merely because the work is hard, slow, or incomplete.`,
+Completion audit: before calling update_task (action "goal") with status "complete", treat completion as unproven and verify every explicit requirement against current-state evidence (files, command output, test results). Treat uncertain or indirect evidence as not achieved. Only use status "blocked" when truly at an impasse without user input — never merely because the work is hard, slow, or incomplete.`,
 		goal.Objective, goal.TokensUsed, budget, remaining)
 }
 
@@ -202,114 +200,20 @@ Budget:
 - Tokens used: %d
 - Token budget: %d
 
-The goal is now marked budget_limited, so do not start new substantive work for this goal. Wrap up this turn soon: summarize useful progress, identify remaining work or blockers, and leave the user with a clear next step. Do not call update_goal unless the goal is actually complete.`,
+The goal is now marked budget_limited, so do not start new substantive work for this goal. Wrap up this turn soon: summarize useful progress, identify remaining work or blockers, and leave the user with a clear next step. Do not call update_task unless the goal is actually complete.`,
 		goal.Objective, goal.TokensUsed, goal.TokenBudget)
 }
 
-// --- update_goal tool ---
+// --- update_task goal-action arguments ---
 
+// updateGoalArgs is the wire form of an update_task call with action
+// "goal". The Action field is decoded so the strict decoder rejects the
+// plan action's fields as unknown; it is validated against taskActionGoal.
 type updateGoalArgs struct {
+	Action      string `json:"action"`
 	Objective   string `json:"objective"`
 	TokenBudget int64  `json:"token_budget"`
 	Status      string `json:"status"`
-}
-
-// UpdateGoalTool lets the model set, update, or close the run's cross-turn
-// goal. Mutations go through the GoalCell; the loop applies them after the
-// tool batch, so the tool itself is side-effect-free w.r.t. the run state.
-type UpdateGoalTool struct {
-	def  domain.ToolDefinition
-	cell *GoalCell
-}
-
-// NewUpdateGoalTool creates the tool bound to the given cell.
-func NewUpdateGoalTool(cell *GoalCell) (*UpdateGoalTool, error) {
-	if cell == nil {
-		return nil, domain.NewError(domain.ErrInvalidInput, "goal cell is required")
-	}
-	def := domain.ToolDefinition{
-		Name: "update_goal",
-		Description: "Set, redirect, or close a cross-turn goal for long-running work. While a goal is active the run " +
-			"automatically continues with a reminder of the objective after each pause (the goal persists across turns " +
-			"and compactions), so use it only for multi-step tasks that must reach a verified end state — never for " +
-			"trivial single-step work. Set 'objective' to activate or redirect; optional 'token_budget' counts cumulative " +
-			"input+output tokens and, when exhausted, marks the goal budget_limited and gives you one final turn to " +
-			"summarize — it never hard-stops you mid-work. Call status='complete' only with requirement-by-requirement " +
-			"evidence from the current state, or status='blocked' only when truly stuck without user input; when closing " +
-			"with a status, 'objective' may carry the final summary recorded on the goal.",
-		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"objective":{"type":"string","minLength":1,"maxLength":8192},"token_budget":{"type":"integer","minimum":1},"status":{"type":"string","enum":["complete","blocked"]}}}`),
-		Source:      domain.ToolSourceBuiltin,
-	}
-	if err := def.Validate(); err != nil {
-		return nil, domain.NewError(domain.ErrInternal, "invalid tool definition", domain.WithCause(err))
-	}
-	return &UpdateGoalTool{def: def, cell: cell}, nil
-}
-
-// Definition returns the tool definition.
-func (t *UpdateGoalTool) Definition() domain.ToolDefinition { return t.def }
-
-// Prepare validates and canonicalizes the call; it is side-effect-free.
-func (t *UpdateGoalTool) Prepare(_ context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeUpdateGoalArgs(call.Arguments)
-	if err != nil {
-		return domain.PreparedCall{}, err
-	}
-	canonical, err := json.Marshal(args)
-	if err != nil {
-		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
-	}
-	call.Arguments = canonical
-	desc := "Set goal"
-	if args.Status != "" {
-		desc = fmt.Sprintf("Mark goal %s", args.Status)
-	} else if objective := args.Objective; len([]rune(objective)) > 60 {
-		// Rune-aware truncation: a byte cut can split a multi-byte rune.
-		desc = fmt.Sprintf("Set goal: %s", toolkit.Ellipsize(objective, 60))
-	} else {
-		desc = fmt.Sprintf("Set goal: %s", objective)
-	}
-	return domain.PreparedCall{
-		Call:         call,
-		Definition:   t.def,
-		Risk:         domain.R1,
-		ApprovalDesc: desc,
-		ArgsHash:     toolkit.ArgsFingerprint(canonical),
-	}, nil
-}
-
-// Execute queues the mutation for the loop. The tool result confirms
-// acceptance; the resulting goal state is reported back through the
-// goal.updated audit event and the next continuation prompt.
-func (t *UpdateGoalTool) Execute(_ context.Context, prepared domain.PreparedCall) domain.ToolResult {
-	startedAt := domain.RealClock{}.Now()
-	args, err := decodeUpdateGoalArgs(prepared.Call.Arguments)
-	if err != nil {
-		return toolErrorResult(prepared.Call.ID, startedAt, err)
-	}
-	update := GoalUpdate{Objective: args.Objective, TokenBudget: args.TokenBudget}
-	if args.Status != "" {
-		update.Close = domain.GoalStatus(args.Status)
-	}
-	t.cell.Put(update)
-	payload := map[string]any{
-		"applied":      true,
-		"objective":    args.Objective,
-		"token_budget": args.TokenBudget,
-		"close":        args.Status,
-		"note":         "goal update accepted; it takes effect after this tool batch",
-	}
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		return toolErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInternal, "failed to encode result", domain.WithCause(err)))
-	}
-	return domain.ToolResult{
-		CallID:     prepared.Call.ID,
-		Status:     domain.ToolStatusSuccess,
-		Content:    []domain.ContentPart{{Kind: domain.PartText, Text: string(raw)}},
-		StartedAt:  startedAt,
-		FinishedAt: domain.RealClock{}.Now(),
-	}
 }
 
 func decodeUpdateGoalArgs(raw json.RawMessage) (updateGoalArgs, error) {
@@ -317,7 +221,11 @@ func decodeUpdateGoalArgs(raw json.RawMessage) (updateGoalArgs, error) {
 	dec := json.NewDecoder(strings.NewReader(string(raw)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&args); err != nil {
-		return updateGoalArgs{}, domain.NewError(domain.ErrInvalidInput, "invalid update_goal arguments", domain.WithCause(err))
+		return updateGoalArgs{}, domain.NewError(domain.ErrInvalidInput, "invalid update_task goal arguments", domain.WithCause(err))
+	}
+	if args.Action != taskActionGoal {
+		return updateGoalArgs{}, domain.NewError(domain.ErrInvalidInput,
+			fmt.Sprintf("goal arguments require action %q, got %q", taskActionGoal, args.Action))
 	}
 	args.Objective = strings.TrimSpace(args.Objective)
 	switch {

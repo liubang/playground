@@ -3,6 +3,8 @@
 > 状态：**已实现**（`update_plan` 工具、checkpoint 计划持久化、`plan.revised` 事件、`loom inspect` 计划输出均已落地）
 > 参考：OpenAI Codex CLI 的 `update_plan` 工具
 > 关联文档：DESIGN.md（事件溯源/预算语义）、TUI_DESIGN.md
+>
+> **更名说明（2026/09）**：`update_goal` 与 `update_plan` 已合并为统一的 `update_task` 工具（`action: "goal" | "plan"`，落盘于 `internal/agent/task.go`）；本文中的 `update_plan` 即 `update_task` 的 plan action，`GoalCell`/`PlanCell` mailbox 与 drain 语义不变。
 
 ## 1. 背景与目标
 
@@ -137,7 +139,7 @@ Codex（`gpt_5_codex_prompt.md`，原文照录）：
 
 ### 4.7 与 Goal 的分工
 
-| | update_goal | update_plan |
+| | goal（原 update_goal） | plan（原 update_plan） |
 |---|---|---|
 | 语义 | 跨 turn 的目标 + token 预算 | 步骤清单 + 进度 |
 | 驱动行为 | 驱动自动续跑/wrap-up | 纯 advisory，不改变控制流 |

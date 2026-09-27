@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package exsession implements the exec_session / write_stdin tool pair:
-// long-running interactive process sessions that the model can start, poll,
-// and feed input to across multiple tool calls (dev servers, REPLs,
-// watch-mode runners) — the asynchronous counterpart of run_cmd.
+// Package exsession implements the exec_session tool: long-running
+// interactive process sessions that the model can start, poll, feed input
+// to, and kill across multiple tool calls (dev servers, REPLs, watch-mode
+// runners) — the asynchronous counterpart of run_cmd.
 package exsession
 
 import (
@@ -97,8 +97,8 @@ func (e *sessionEntry) commitArtifacts(ctx context.Context) error {
 	return nil
 }
 
-// Manager owns every exec session in the process. It is shared by the
-// exec_session and write_stdin tools and must be Closed on shutdown to
+// Manager owns every exec session in the process. It backs the
+// exec_session tool's actions and must be Closed on shutdown to
 // reclaim surviving process groups.
 type Manager struct {
 	runner    *process.Runner
@@ -187,6 +187,26 @@ func (m *Manager) Get(id string) (*sessionEntry, bool) {
 		entry.lastTouch = time.Now()
 	}
 	return entry, ok
+}
+
+// Kill terminates the named session's process group and returns its
+// entry so the caller can drain the final output. The entry stays
+// registered (its output remains drainable) until the idle reaper
+// collects it. Killing an already-exited session is a no-op.
+func (m *Manager) Kill(id string) (*sessionEntry, bool) {
+	m.mu.Lock()
+	entry, ok := m.sessions[id]
+	if ok {
+		entry.lastTouch = time.Now()
+	}
+	m.mu.Unlock()
+	if !ok {
+		return nil, false
+	}
+	if entry.session.Running() {
+		entry.session.Kill()
+	}
+	return entry, true
 }
 
 // Close kills every remaining session and stops the reaper. Idempotent.

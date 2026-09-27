@@ -84,19 +84,13 @@ func TestExecSessionE2E(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stdinTool, err := exsession.NewWriteStdinTool(manager)
-	if err != nil {
-		t.Fatal(err)
-	}
 	registry := agent.NewToolRegistry()
 	if err := registry.Register(execTool); err != nil {
 		t.Fatal(err)
 	}
-	if err := registry.Register(stdinTool); err != nil {
-		t.Fatal(err)
-	}
 
 	callArgs, err := json.Marshal(map[string]any{
+		"action":        "start",
 		"command":       python + " " + script,
 		"working_dir":   ws,
 		"yield_time_ms": 10000,
@@ -160,15 +154,16 @@ func TestExecSessionE2E(t *testing.T) {
 	}
 }
 
-// TestWriteStdinE2E drives the full start → feed → observe arc through the
-// REAL loop: exec_session starts an interactive process (R2, approved via
-// the approver), then write_stdin feeds it input (R1, auto-approved by the
-// baseline). Every write_stdin call used to die before execution with
-// "prepared call risk drift detected": its per-call R1 sat below the
-// definition's static R2 (CapProcessExec), which validatePreparedExecution
-// rejects. This test routes the call through the loop — the only level
-// where the drift check runs.
-func TestWriteStdinE2E(t *testing.T) {
+// TestSessionDriveE2E drives the full start → feed → observe arc through the
+// REAL loop: exec_session starts an interactive process (start is R2,
+// approved via the approver), then the write action feeds it input (R1,
+// auto-approved by the baseline). Every drive call used to die before
+// execution with "prepared call risk drift detected": its per-call R1 sat
+// below the definition's static R2 (CapProcessExec), which
+// validatePreparedExecution rejects — the unified tool's definition is
+// therefore capability-free and grades risk per action. This test routes
+// the call through the loop — the only level where the drift check runs.
+func TestSessionDriveE2E(t *testing.T) {
 	python, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skip("python3 not available")
@@ -210,15 +205,8 @@ func TestWriteStdinE2E(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stdinTool, err := exsession.NewWriteStdinTool(manager)
-	if err != nil {
-		t.Fatal(err)
-	}
 	registry := agent.NewToolRegistry()
 	if err := registry.Register(execTool); err != nil {
-		t.Fatal(err)
-	}
-	if err := registry.Register(stdinTool); err != nil {
 		t.Fatal(err)
 	}
 
@@ -238,7 +226,7 @@ func TestWriteStdinE2E(t *testing.T) {
 		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
 	}
 
-	// The write_stdin result must be a success carrying the process echo;
+	// The write result must be a success carrying the process echo;
 	// a risk-drift rejection would surface as a tool error instead.
 	var echoResult *domain.ToolResult
 	for _, msg := range run.Messages {
@@ -247,7 +235,7 @@ func TestWriteStdinE2E(t *testing.T) {
 				continue
 			}
 			if part.ToolResult.Error != nil && strings.Contains(part.ToolResult.Error.Message, "risk drift") {
-				t.Fatalf("write_stdin rejected by risk drift: %+v", part.ToolResult.Error)
+				t.Fatalf("session write rejected by risk drift: %+v", part.ToolResult.Error)
 			}
 			for _, content := range part.ToolResult.Content {
 				if content.Kind == domain.PartText && strings.Contains(content.Text, "got:ping") {
@@ -257,15 +245,15 @@ func TestWriteStdinE2E(t *testing.T) {
 		}
 	}
 	if echoResult == nil {
-		t.Fatal("no write_stdin result containing 'got:ping' recorded in transcript")
+		t.Fatal("no session write result containing 'got:ping' recorded in transcript")
 	}
 	if echoResult.Status != domain.ToolStatusSuccess {
-		t.Fatalf("write_stdin result status = %s, want success (error=%+v)", echoResult.Status, echoResult.Error)
+		t.Fatalf("session write result status = %s, want success (error=%+v)", echoResult.Status, echoResult.Error)
 	}
 }
 
 // sessionDrivenModel scripts the flow a real model follows: start the
-// session, then derive the write_stdin call from the session_id recorded
+// session, then derive the write call from the session_id recorded
 // in the transcript, then wrap up.
 type sessionDrivenModel struct {
 	mu         sync.Mutex
@@ -293,12 +281,12 @@ func (m *sessionDrivenModel) Stream(_ context.Context, req domain.ModelRequest) 
 			return nil, fmt.Errorf("sessionDrivenModel: no session_id in transcript")
 		}
 		args, err := json.Marshal(map[string]any{
-			"session_id": sessionID, "chars": "ping\n", "yield_time_ms": 2000,
+			"action": "write", "session_id": sessionID, "chars": "ping\n", "yield_time_ms": 2000,
 		})
 		if err != nil {
 			return nil, err
 		}
-		return toolCallStream("write_stdin", args), nil
+		return toolCallStream("exec_session", args), nil
 	default:
 		return textStream("done"), nil
 	}

@@ -54,7 +54,7 @@ func (p *PromptProvider) MemoryPrompt(ctx context.Context) (string, error) {
 	// Truncate to ~SummaryTokenLimit tokens (rough approximation: 4 chars/token).
 	maxChars := SummaryTokenLimit * 4
 	if len(summary) > maxChars {
-		summary = summary[:maxChars] + "\n(Memory summary truncated; use memory_search and memory_read for full content)"
+		summary = summary[:maxChars] + "\n(Memory summary truncated; use the memory tool (search/read actions) for full content)"
 	}
 	return summary, nil
 }
@@ -85,8 +85,8 @@ const MemoryInstructions = `You have access to a persistent memory system that s
 ## When to use memory
 
 - **Always check** when the user references past work, preferences, or project conventions
-- **Search first** with ` + "`memory_search`" + ` before answering questions about prior context
-- **Read details** with ` + "`memory_read`" + ` when search results are relevant
+- **Search first** with ` + "`memory`" + ` (action=search) before answering questions about prior context
+- **Read details** with ` + "`memory`" + ` (action=read) when search results are relevant
 - **Quick pass**: skim the summary above, search MEMORY.md with keywords, open 1-2 relevant files
 
 ## When to skip memory
@@ -101,4 +101,4 @@ Memory can be stale: files move or get deleted, commands and state drift between
 ## Updating memory
 
 Only update memory when the user **explicitly asks** to remember, forget, or update something.
-Use ` + "`memory_add_note`" + ` to create a timestamped note. Do NOT update memory files directly.`
+Use ` + "`memory`" + ` (action=add_note) to create a timestamped note. Do NOT update memory files directly.`

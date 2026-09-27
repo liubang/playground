@@ -901,22 +901,22 @@ func TestLoopReconcilesUnfinishedPlanOnce(t *testing.T) {
 	if err := registry.Register(planTool); err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
-	openSnapshot := `{"plan":[` +
+	openSnapshot := `{"action":"plan","plan":[` +
 		`{"goal":"step one","status":"done","evidence":["done earlier"]},` +
 		`{"goal":"step two","status":"in_progress"}]}`
-	closeSnapshot := `{"plan":[` +
+	closeSnapshot := `{"action":"plan","plan":[` +
 		`{"goal":"step one","status":"done","evidence":["done earlier"]},` +
 		`{"goal":"step two","status":"done","evidence":["produced"]}]}`
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{
-			ToolCalls:  []domain.ToolCall{{ID: domain.NewToolCallID(), Name: "update_plan", Arguments: json.RawMessage(openSnapshot)}},
+			ToolCalls:  []domain.ToolCall{{ID: domain.NewToolCallID(), Name: "update_task", Arguments: json.RawMessage(openSnapshot)}},
 			StopReason: domain.StopToolUse,
 			UsageIn:    100,
 			UsageOut:   20,
 		},
 		fakes.ScriptEntry{Text: "final answer", StopReason: domain.StopEndTurn, UsageIn: 100, UsageOut: 30},
 		fakes.ScriptEntry{
-			ToolCalls:  []domain.ToolCall{{ID: domain.NewToolCallID(), Name: "update_plan", Arguments: json.RawMessage(closeSnapshot)}},
+			ToolCalls:  []domain.ToolCall{{ID: domain.NewToolCallID(), Name: "update_task", Arguments: json.RawMessage(closeSnapshot)}},
 			StopReason: domain.StopToolUse,
 			UsageIn:    100,
 			UsageOut:   20,
@@ -942,7 +942,7 @@ func TestLoopReconcilesUnfinishedPlanOnce(t *testing.T) {
 		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
 	}
 	// The nudge produced exactly one extra turn: open plan → answer →
-	// reconcile prompt → closing update_plan → closing text.
+	// reconcile prompt → closing plan update → closing text.
 	if calls := len(model.Calls()); calls != 4 {
 		t.Fatalf("model calls = %d, want 4 (plan, answer, closing call, closing text)", calls)
 	}
@@ -968,12 +968,12 @@ func TestLoopReconcileNudgeIsOneShot(t *testing.T) {
 	if err := registry.Register(planTool); err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
-	openSnapshot := `{"plan":[` +
+	openSnapshot := `{"action":"plan","plan":[` +
 		`{"goal":"step one","status":"done"},` +
 		`{"goal":"step two","status":"in_progress"}]}`
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{
-			ToolCalls:  []domain.ToolCall{{ID: domain.NewToolCallID(), Name: "update_plan", Arguments: json.RawMessage(openSnapshot)}},
+			ToolCalls:  []domain.ToolCall{{ID: domain.NewToolCallID(), Name: "update_task", Arguments: json.RawMessage(openSnapshot)}},
 			StopReason: domain.StopToolUse,
 			UsageIn:    100,
 			UsageOut:   20,
@@ -4052,9 +4052,9 @@ func TestContextOverflowTwiceTerminates(t *testing.T) {
 
 func TestGoalContinuationAndCompletion(t *testing.T) {
 	cell := NewGoalCell()
-	tool, err := NewUpdateGoalTool(cell)
+	tool, err := NewUpdateTaskTool(cell, NewPlanCell())
 	if err != nil {
-		t.Fatalf("NewUpdateGoalTool: %v", err)
+		t.Fatalf("NewUpdateTaskTool: %v", err)
 	}
 	registry := NewToolRegistry()
 	if err := registry.Register(tool); err != nil {
@@ -4062,13 +4062,13 @@ func TestGoalContinuationAndCompletion(t *testing.T) {
 	}
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{{
-			ID: domain.NewToolCallID(), Name: "update_goal",
-			Arguments: json.RawMessage(`{"objective":"fix all tests"}`),
+			ID: domain.NewToolCallID(), Name: "update_task",
+			Arguments: json.RawMessage(`{"action":"goal","objective":"fix all tests"}`),
 		}}, StopReason: domain.StopToolUse},
 		fakes.ScriptEntry{Text: "progress", StopReason: domain.StopEndTurn},
 		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{{
-			ID: domain.NewToolCallID(), Name: "update_goal",
-			Arguments: json.RawMessage(`{"status":"complete"}`),
+			ID: domain.NewToolCallID(), Name: "update_task",
+			Arguments: json.RawMessage(`{"action":"goal","status":"complete"}`),
 		}}, StopReason: domain.StopToolUse},
 		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn},
 	)
@@ -4105,14 +4105,14 @@ func TestGoalContinuationAndCompletion(t *testing.T) {
 }
 
 // TestGoalCompleteCarriesFinalSummary locks the "close with summary"
-// contract: update_goal accepts objective together with status (the model's
+// contract: update_task accepts objective together with status (the model's
 // natural way to say "done, here is what was achieved"), and the summary is
 // recorded on the goal — previously rejected as mutually exclusive.
 func TestGoalCompleteCarriesFinalSummary(t *testing.T) {
 	cell := NewGoalCell()
-	tool, err := NewUpdateGoalTool(cell)
+	tool, err := NewUpdateTaskTool(cell, NewPlanCell())
 	if err != nil {
-		t.Fatalf("NewUpdateGoalTool: %v", err)
+		t.Fatalf("NewUpdateTaskTool: %v", err)
 	}
 	registry := NewToolRegistry()
 	if err := registry.Register(tool); err != nil {
@@ -4120,13 +4120,13 @@ func TestGoalCompleteCarriesFinalSummary(t *testing.T) {
 	}
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{{
-			ID: domain.NewToolCallID(), Name: "update_goal",
-			Arguments: json.RawMessage(`{"objective":"initial goal"}`),
+			ID: domain.NewToolCallID(), Name: "update_task",
+			Arguments: json.RawMessage(`{"action":"goal","objective":"initial goal"}`),
 		}}, StopReason: domain.StopToolUse},
 		fakes.ScriptEntry{Text: "progress", StopReason: domain.StopEndTurn},
 		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{{
-			ID: domain.NewToolCallID(), Name: "update_goal",
-			Arguments: json.RawMessage(`{"objective":"achieved: all packs shipped","status":"complete"}`),
+			ID: domain.NewToolCallID(), Name: "update_task",
+			Arguments: json.RawMessage(`{"action":"goal","objective":"achieved: all packs shipped","status":"complete"}`),
 		}}, StopReason: domain.StopToolUse},
 		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn},
 	)
@@ -4146,9 +4146,9 @@ func TestGoalCompleteCarriesFinalSummary(t *testing.T) {
 
 func TestGoalBudgetSoftLanding(t *testing.T) {
 	cell := NewGoalCell()
-	tool, err := NewUpdateGoalTool(cell)
+	tool, err := NewUpdateTaskTool(cell, NewPlanCell())
 	if err != nil {
-		t.Fatalf("NewUpdateGoalTool: %v", err)
+		t.Fatalf("NewUpdateTaskTool: %v", err)
 	}
 	registry := NewToolRegistry()
 	if err := registry.Register(tool); err != nil {
@@ -4156,8 +4156,8 @@ func TestGoalBudgetSoftLanding(t *testing.T) {
 	}
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{{
-			ID: domain.NewToolCallID(), Name: "update_goal",
-			Arguments: json.RawMessage(`{"objective":"big refactor","token_budget":10}`),
+			ID: domain.NewToolCallID(), Name: "update_task",
+			Arguments: json.RawMessage(`{"action":"goal","objective":"big refactor","token_budget":10}`),
 		}}, StopReason: domain.StopToolUse},
 		fakes.ScriptEntry{Text: "working", StopReason: domain.StopEndTurn, UsageIn: 8, UsageOut: 4},
 		fakes.ScriptEntry{Text: "wrapping up", StopReason: domain.StopEndTurn, UsageIn: 2, UsageOut: 2},
@@ -4188,16 +4188,16 @@ func TestGoalBudgetSoftLanding(t *testing.T) {
 	}
 }
 
-// Regression (REVIEW M1): the wrap-up prompt tells the model it may call
-// update_goal with status "complete" when the goal is actually done, but
+// Regression (REVIEW M1): the wrap-up prompt tells the model it may close
+// the goal with status "complete" when the goal is actually done, but
 // drainGoalUpdates only applied Close while the goal was Active — against a
 // budget_limited goal the close was silently dropped even though the tool
 // result reported success.
 func TestGoalBudgetLimitedCanBeCompleted(t *testing.T) {
 	cell := NewGoalCell()
-	tool, err := NewUpdateGoalTool(cell)
+	tool, err := NewUpdateTaskTool(cell, NewPlanCell())
 	if err != nil {
-		t.Fatalf("NewUpdateGoalTool: %v", err)
+		t.Fatalf("NewUpdateTaskTool: %v", err)
 	}
 	registry := NewToolRegistry()
 	if err := registry.Register(tool); err != nil {
@@ -4205,15 +4205,15 @@ func TestGoalBudgetLimitedCanBeCompleted(t *testing.T) {
 	}
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{{
-			ID: domain.NewToolCallID(), Name: "update_goal",
-			Arguments: json.RawMessage(`{"objective":"big refactor","token_budget":10}`),
+			ID: domain.NewToolCallID(), Name: "update_task",
+			Arguments: json.RawMessage(`{"action":"goal","objective":"big refactor","token_budget":10}`),
 		}}, StopReason: domain.StopToolUse},
 		fakes.ScriptEntry{Text: "working", StopReason: domain.StopEndTurn, UsageIn: 8, UsageOut: 4},
 		// The wrap-up turn: the model notices the work is actually done and
 		// closes the goal, as the budget-limit prompt invites it to.
 		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{{
-			ID: domain.NewToolCallID(), Name: "update_goal",
-			Arguments: json.RawMessage(`{"status":"complete"}`),
+			ID: domain.NewToolCallID(), Name: "update_task",
+			Arguments: json.RawMessage(`{"action":"goal","status":"complete"}`),
 		}}, StopReason: domain.StopToolUse},
 		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn},
 	)
@@ -4231,20 +4231,19 @@ func TestGoalBudgetLimitedCanBeCompleted(t *testing.T) {
 	}
 }
 
-// Regression (REVIEW R10): the update_goal approval description truncated
-// the objective at byte 60, which could split a multi-byte rune.
+// Regression (REVIEW R10): the goal approval description truncated the
+// objective at byte 60, which could split a multi-byte rune.
 func TestUpdateGoalApprovalDescTruncatesAtRuneBoundary(t *testing.T) {
-	cell := NewGoalCell()
-	tool, err := NewUpdateGoalTool(cell)
+	tool, err := NewUpdateTaskTool(NewGoalCell(), NewPlanCell())
 	if err != nil {
-		t.Fatalf("NewUpdateGoalTool: %v", err)
+		t.Fatalf("NewUpdateTaskTool: %v", err)
 	}
 	// 61 runes / 65 bytes: the old byte cut at 60 splits the first 中.
 	objective := strings.Repeat("a", 59) + "中中"
 	prepared, err := tool.Prepare(context.Background(), domain.ToolCall{
 		ID:        domain.NewToolCallID(),
-		Name:      "update_goal",
-		Arguments: json.RawMessage(`{"objective":"` + objective + `"}`),
+		Name:      "update_task",
+		Arguments: json.RawMessage(`{"action":"goal","objective":"` + objective + `"}`),
 	})
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
@@ -4260,15 +4259,18 @@ func TestUpdateGoalApprovalDescTruncatesAtRuneBoundary(t *testing.T) {
 func TestUpdateGoalToolValidation(t *testing.T) {
 	for _, raw := range []string{
 		`{}`,
-		`{"status":"active"}`,
-		`{"objective":"x","token_budget":-5}`,
-		`{"status":"complete","token_budget":1000}`,
+		`{"action":"goal"}`,
+		`{"action":"goal","status":"active"}`,
+		`{"action":"goal","objective":"x","token_budget":-5}`,
+		`{"action":"goal","status":"complete","token_budget":1000}`,
+		`{"action":"plan","objective":"wrong action"}`,
+		`{"action":"goal","objective":"x","plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}]}`,
 	} {
 		if _, err := decodeUpdateGoalArgs(json.RawMessage(raw)); err == nil {
 			t.Fatalf("decodeUpdateGoalArgs(%s) must fail", raw)
 		}
 	}
-	args, err := decodeUpdateGoalArgs(json.RawMessage(`{"objective":" ship it ","token_budget":1000}`))
+	args, err := decodeUpdateGoalArgs(json.RawMessage(`{"action":"goal","objective":" ship it ","token_budget":1000}`))
 	if err != nil {
 		t.Fatalf("decodeUpdateGoalArgs(valid) error = %v", err)
 	}
@@ -4279,7 +4281,7 @@ func TestUpdateGoalToolValidation(t *testing.T) {
 	// Closing may carry a final objective summary (the model's natural
 	// "done, here is what was achieved" — previously rejected as
 	// mutually exclusive).
-	args, err = decodeUpdateGoalArgs(json.RawMessage(`{"objective":"finished the pack work","status":"complete"}`))
+	args, err = decodeUpdateGoalArgs(json.RawMessage(`{"action":"goal","objective":"finished the pack work","status":"complete"}`))
 	if err != nil {
 		t.Fatalf("decodeUpdateGoalArgs(complete+objective) error = %v", err)
 	}
@@ -4288,13 +4290,13 @@ func TestUpdateGoalToolValidation(t *testing.T) {
 	}
 
 	cell := NewGoalCell()
-	tool, err := NewUpdateGoalTool(cell)
+	tool, err := NewUpdateTaskTool(cell, NewPlanCell())
 	if err != nil {
-		t.Fatalf("NewUpdateGoalTool: %v", err)
+		t.Fatalf("NewUpdateTaskTool: %v", err)
 	}
 	prepared, err := tool.Prepare(context.Background(), domain.ToolCall{
-		ID: domain.NewToolCallID(), Name: "update_goal",
-		Arguments: json.RawMessage(`{"objective":"ship it"}`),
+		ID: domain.NewToolCallID(), Name: "update_task",
+		Arguments: json.RawMessage(`{"action":"goal","objective":"ship it"}`),
 	})
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)

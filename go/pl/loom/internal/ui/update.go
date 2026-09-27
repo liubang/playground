@@ -2566,7 +2566,7 @@ func (m Model) handleRuntimeEvent(evt runtimeevent.RuntimeEvent) (Model, tea.Cmd
 		// The panel shows the current turn's plan only: a new prompt starts
 		// the display fresh (Claude Code clears tasks between turns). The
 		// runtime plan itself is untouched — an unfinished plan is still
-		// re-injected into the model's context, and the next update_plan
+		// re-injected into the model's context, and the next update_task
 		// revision brings the panel right back.
 		m.plan = domain.Plan{}
 	case runtimeevent.KindSteerQueued:

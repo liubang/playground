@@ -29,6 +29,7 @@ go_library(
         "runaway.go",
         "steer.go",
         "stream_hooks.go",
+        "task.go",
         "window.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/agent",

@@ -27,24 +27,24 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
-func newPlanTool(t *testing.T) (*UpdatePlanTool, *PlanCell) {
+func newPlanTool(t *testing.T) (*UpdateTaskTool, *PlanCell) {
 	t.Helper()
 	cell := NewPlanCell()
-	tool, err := NewUpdatePlanTool(cell)
+	tool, err := NewUpdateTaskTool(NewGoalCell(), cell)
 	if err != nil {
-		t.Fatalf("NewUpdatePlanTool error: %v", err)
+		t.Fatalf("NewUpdateTaskTool error: %v", err)
 	}
 	return tool, cell
 }
 
 func planCall(t *testing.T, args string) domain.ToolCall {
 	t.Helper()
-	return domain.ToolCall{ID: domain.NewToolCallID(), Name: "update_plan", Arguments: json.RawMessage(args)}
+	return domain.ToolCall{ID: domain.NewToolCallID(), Name: "update_task", Arguments: json.RawMessage(args)}
 }
 
-const validPlanArgs = `{"plan":[` +
+const validPlanArgs = `{"action":"plan","plan":[` +
 	`{"goal":"read existing code","status":"done","evidence":["read goal.go"]},` +
-	`{"goal":"implement update_plan","status":"in_progress"},` +
+	`{"goal":"implement update_task","status":"in_progress"},` +
 	`{"goal":"add tests","status":"todo"}]}`
 
 func TestUpdatePlanPrepareValidSnapshot(t *testing.T) {
@@ -56,7 +56,7 @@ func TestUpdatePlanPrepareValidSnapshot(t *testing.T) {
 	if prepared.Risk != domain.R1 {
 		t.Fatalf("risk = %v, want R1 (bookkeeping, no approval)", prepared.Risk)
 	}
-	if !strings.Contains(prepared.ApprovalDesc, "implement update_plan") {
+	if !strings.Contains(prepared.ApprovalDesc, "implement update_task") {
 		t.Fatalf("approval desc should name the in-progress step: %q", prepared.ApprovalDesc)
 	}
 	// Canonical arguments round-trip to the same plan.
@@ -82,9 +82,9 @@ func TestUpdatePlanPrepareValidSnapshot(t *testing.T) {
 // burning a tool round-trip on a strict decode error.
 func TestUpdatePlanPrepareToleratesStringEvidence(t *testing.T) {
 	tool, _ := newPlanTool(t)
-	args := `{"plan":[` +
+	args := `{"action":"plan","plan":[` +
 		`{"goal":"read existing code","status":"done","evidence":"read goal.go"},` +
-		`{"goal":"implement update_plan","status":"done","evidence":null},` +
+		`{"goal":"implement update_task","status":"done","evidence":null},` +
 		`{"goal":"add tests","status":"in_progress"}]}`
 	prepared, err := tool.Prepare(context.Background(), planCall(t, args))
 	if err != nil {
@@ -109,15 +109,18 @@ func TestUpdatePlanPrepareToleratesStringEvidence(t *testing.T) {
 func TestUpdatePlanPrepareRejectsInvalidSnapshots(t *testing.T) {
 	tool, _ := newPlanTool(t)
 	cases := map[string]string{
-		"single step":        `{"plan":[{"goal":"only one","status":"in_progress"}]}`,
-		"empty plan":         `{"plan":[]}`,
-		"missing plan":       `{}`,
-		"unknown field":      `{"plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}],"extra":1}`,
-		"empty goal":         `{"plan":[{"goal":"  ","status":"todo"},{"goal":"b","status":"todo"}]}`,
-		"bad status":         `{"plan":[{"goal":"a","status":"doing"},{"goal":"b","status":"todo"}]}`,
-		"two in_progress":    `{"plan":[{"goal":"a","status":"in_progress"},{"goal":"b","status":"in_progress"}]}`,
-		"unknown item field": `{"plan":[{"goal":"a","status":"todo","step":"a"},{"goal":"b","status":"todo"}]}`,
-		"numeric evidence":   `{"plan":[{"goal":"a","status":"done","evidence":5},{"goal":"b","status":"todo"}]}`,
+		"single step":        `{"action":"plan","plan":[{"goal":"only one","status":"in_progress"}]}`,
+		"empty plan":         `{"action":"plan","plan":[]}`,
+		"missing plan":       `{"action":"plan"}`,
+		"missing action":     `{"plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}]}`,
+		"unknown action":     `{"action":"task","plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}]}`,
+		"goal field on plan": `{"action":"plan","objective":"x","plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}]}`,
+		"unknown field":      `{"action":"plan","plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}],"extra":1}`,
+		"empty goal":         `{"action":"plan","plan":[{"goal":"  ","status":"todo"},{"goal":"b","status":"todo"}]}`,
+		"bad status":         `{"action":"plan","plan":[{"goal":"a","status":"doing"},{"goal":"b","status":"todo"}]}`,
+		"two in_progress":    `{"action":"plan","plan":[{"goal":"a","status":"in_progress"},{"goal":"b","status":"in_progress"}]}`,
+		"unknown item field": `{"action":"plan","plan":[{"goal":"a","status":"todo","step":"a"},{"goal":"b","status":"todo"}]}`,
+		"numeric evidence":   `{"action":"plan","plan":[{"goal":"a","status":"done","evidence":5},{"goal":"b","status":"todo"}]}`,
 	}
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -132,7 +135,7 @@ func TestUpdatePlanTitleHandling(t *testing.T) {
 	tool, cell := newPlanTool(t)
 
 	// Title set at creation.
-	withTitle := `{"title":"loom 架构梳理","plan":[` +
+	withTitle := `{"action":"plan","title":"loom 架构梳理","plan":[` +
 		`{"goal":"a","status":"in_progress"},{"goal":"b","status":"todo"}]}`
 	prepared, err := tool.Prepare(context.Background(), planCall(t, withTitle))
 	if err != nil {
@@ -146,7 +149,7 @@ func TestUpdatePlanTitleHandling(t *testing.T) {
 
 	// Title capped at 120 runes.
 	long := strings.Repeat("长", 130)
-	longArgs := `{"title":"` + long + `","plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}]}`
+	longArgs := `{"action":"plan","title":"` + long + `","plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}]}`
 	prepared, err = tool.Prepare(context.Background(), planCall(t, longArgs))
 	if err != nil {
 		t.Fatalf("Prepare long title error: %v", err)
@@ -251,7 +254,7 @@ func TestDrainPlanUpdatesAppliesSnapshotAndAudits(t *testing.T) {
 	// A second snapshot in a later batch replaces the first.
 	cell.Put(domain.Plan{Items: []domain.PlanItem{
 		{Index: 0, Goal: "read existing code", Status: domain.PlanItemDone},
-		{Index: 1, Goal: "implement update_plan", Status: domain.PlanItemDone},
+		{Index: 1, Goal: "implement update_task", Status: domain.PlanItemDone},
 		{Index: 2, Goal: "add tests", Status: domain.PlanItemInProgress},
 	}})
 	loop.drainPlanUpdates()

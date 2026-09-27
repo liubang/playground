@@ -1,6 +1,8 @@
 # Loom 记忆系统设计
 
-> 状态：**已实现**（两阶段提取/整合、分层存储、`memory_list`/`memory_read`/`memory_search`/`memory_add_note` 工具、MEMORY.md/summary/raw 产物与后台 pipeline 均已落地；架构设计依据见下）
+> 状态：**已实现**（两阶段提取/整合、分层存储、统一的 `memory` 工具（`list`/`read`/`search`/`add_note` action）、MEMORY.md/summary/raw 产物与后台 pipeline 均已落地；架构设计依据见下）
+>
+> **更名说明（2026/09）**：原 `memory_list`/`memory_read`/`memory_search`/`memory_add_note` 四个工具已合并为统一的 `memory` 工具（`action: "list" | "read" | "search" | "add_note"`，落盘于 `internal/memory/tools.go`）；本文中的 `memory_*` 即 `memory` 工具的对应 action，存储与路径安全语义不变。
 
 > Codex 长期记忆架构的 1:1 复刻（两阶段提取/整合、分层存储、
 > 基于 git 的增量 diff 追踪、通过记忆工具实现渐进式披露）。
@@ -65,8 +67,8 @@
 | 层级 | 文件 | 加载时机 | token 预算 |
 |------|---------|-------------|--------------|
 | 热层 | `memory_summary.md` | 每轮（注入系统提示词） | ~2500 token |
-| 温层 | `MEMORY.md` | 按需，通过 `memory_read` 工具 | ~8000 token |
-| 冷层 | `raw_memories.md`、rollout 摘要、笔记 | 按需，通过 `memory_read` / `memory_search` | 无限制 |
+| 温层 | `MEMORY.md` | 按需，通过 `memory` 工具（read action） | ~8000 token |
+| 冷层 | `raw_memories.md`、rollout 摘要、笔记 | 按需，通过 `memory` 工具（read / search action） | 无限制 |
 
 ---
 
@@ -152,7 +154,7 @@ type memoryPromptWrapper struct {
 摘要被截断至 `SummaryTokenLimit × 4` 字符（约 10,000 字符）。发生截断时会附加提示：
 
 ```
-(Memory summary truncated; use memory_search and memory_read for full content)
+(Memory summary truncated; use the memory tool (search/read actions) for full content)
 ```
 
 所有面向用户的提示词均为英文，以与系统提示词保持一致。
@@ -161,14 +163,14 @@ type memoryPromptWrapper struct {
 
 ## 5. 记忆工具
 
-四个读写工具将记忆存储暴露给 agent：
+统一的 `memory` 工具将记忆存储暴露给 agent，四个 action 各自定级：
 
-| 工具 | 风险等级 | 描述 |
+| action | 风险等级 | 描述 |
 |------|------|-------------|
-| `memory_list` | R1 | 列出存储中某相对路径下的文件/目录 |
-| `memory_read` | R1 | 读取记忆文件（支持可选的行偏移/行数限制） |
-| `memory_search` | R1 | 在所有 `.md` 文件中进行子串搜索 |
-| `memory_add_note` | R2 | 创建带时间戳的临时笔记（仅追加） |
+| `list` | R1 | 列出存储中某相对路径下的文件/目录 |
+| `read` | R1 | 读取记忆文件（支持可选的行偏移/行数限制） |
+| `search` | R1 | 在所有 `.md` 文件中进行子串搜索 |
+| `add_note` | R2 | 创建带时间戳的临时笔记（仅追加） |
 
 ### 路径安全
 
@@ -318,7 +320,7 @@ type ResolvedMemory struct {
 |------|---------------|
 | `internal/memory/store.go` | 基于文件的存储、git 集成、搜索、路径安全 |
 | `internal/memory/store_test.go` | Store 单元测试（路径逃逸、偏移、.git 拒绝、搜索默认值） |
-| `internal/memory/tools.go` | `memory_list/read/search/add_note` 工具实现 |
+| `internal/memory/tools.go` | 统一 `memory` 工具（list/read/search/add_note action）实现 |
 | `internal/memory/tools_test.go` | 工具单元测试 |
 | `internal/memory/prompt.go` | 摘要注入、`MemoryInstructions`、`RuleRef` |
 | `internal/memory/prompt_test.go` | Prompt provider 单元测试 |
@@ -345,7 +347,7 @@ type ResolvedMemory struct {
 | 提取提示词 | `stage_one_system.md` | `stageOneSystemPrompt`（1:1 改写） |
 | 整合提示词 | `stage_two_system.md` | `stageTwoSystemPrompt`（1:1 改写） |
 | 摘要模型 | 独立的低成本模型 | 同一模型（未来可配置） |
-| 工具面 | `memory_search`、`memory_read` | + `memory_list`、`memory_add_note` |
+| 工具面 | `memory_search`、`memory_read` | 统一 `memory` 工具（4 action：list/read/search/add_note） |
 | 配置开关 | — | `memory.enabled`（默认 true） |
 | 空输出保护 | — | 有：空模型输出时退回追加策略 |
 | 路径安全 | 基础 | 多层：isWithinRoot + .git 拒绝 + 笔记根目录检查 |

@@ -289,7 +289,7 @@ func truncateToSummary(mainContent string) string {
 	var summaryLines []string
 	for _, line := range lines {
 		if len(summaryLines) >= 100 {
-			summaryLines = append(summaryLines, "\n(Memory truncated; use memory_read MEMORY.md for full content)")
+			summaryLines = append(summaryLines, "\n(Memory truncated; use the memory tool (action=read, path=MEMORY.md) for full content)")
 			break
 		}
 		summaryLines = append(summaryLines, line)

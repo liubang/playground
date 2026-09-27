@@ -217,7 +217,7 @@ const (
 )
 
 // Goal is a cross-turn objective the model sets and updates through the
-// update_goal tool. It survives prompt boundaries via the session
+// update_task tool. It survives prompt boundaries via the session
 // checkpoint: ending one turn does not require shrinking the objective to
 // what fits in a single prompt.
 type Goal struct {

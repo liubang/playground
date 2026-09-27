@@ -76,7 +76,11 @@ type managedRun struct {
 	role          Role
 	startedAt     time.Time
 	done          chan struct{}
-	result        WaitResult
+	// cancel terminates the child loop's context (nil for registry
+	// entries hand-built by tests). Idempotent: drive defers the same
+	// cancel, and context.CancelFunc is safe to call twice.
+	cancel context.CancelFunc
+	result WaitResult
 }
 
 // Manager runs delegated sub-agent loops asynchronously (the V2 model):
@@ -237,6 +241,7 @@ func (m *Manager) Spawn(spec SpawnSpec) (domain.SessionID, error) {
 	})
 
 	childCtx, cancel := context.WithCancel(m.rootCtx)
+	mr.cancel = cancel
 	go m.drive(childCtx, cancel, mr, run, snap, roleSpec, spec.ParentCall)
 	return childSessionID, nil
 }
@@ -333,6 +338,44 @@ func (m *Manager) Wait(ctx context.Context, sessionID domain.SessionID, timeout 
 	// Not in memory: resolve from the persisted session (finished before
 	// this process started, or the manager was recreated).
 	return m.loadPersistedResult(ctx, sessionID)
+}
+
+// Cancel stops a running sub-agent and collects its terminal result.
+// Cancelling an agent that already finished (or is unknown to this
+// process) is a no-op that resolves from the durable record and reports
+// ErrConflict so the caller can tell "stopped now" from "was already
+// done".
+func (m *Manager) Cancel(ctx context.Context, sessionID domain.SessionID) (WaitResult, error) {
+	m.mu.Lock()
+	mr, ok := m.running[sessionID]
+	m.mu.Unlock()
+	if !ok {
+		// Not in memory: unknown, already collected, or finished in a
+		// previous process — resolve from the persisted record.
+		result, err := m.loadPersistedResult(ctx, sessionID)
+		if err != nil {
+			return WaitResult{}, err
+		}
+		return result, domain.NewError(domain.ErrConflict,
+			fmt.Sprintf("sub-agent %s is not running; nothing to cancel", sessionID))
+	}
+	select {
+	case <-mr.done:
+		m.collect(sessionID, mr)
+		return mr.result, domain.NewError(domain.ErrConflict,
+			fmt.Sprintf("sub-agent %s already finished; nothing to cancel", sessionID))
+	default:
+	}
+	if mr.cancel != nil {
+		mr.cancel()
+	}
+	select {
+	case <-mr.done:
+		m.collect(sessionID, mr)
+		return mr.result, nil
+	case <-ctx.Done():
+		return WaitResult{}, ctx.Err()
+	}
 }
 
 // collect removes a finished run from the registry — but only when the
@@ -486,6 +529,7 @@ func (m *Manager) Resume(spec SpawnSpec, sessionID domain.SessionID) error {
 	}
 
 	childCtx, cancel := context.WithCancel(m.rootCtx)
+	mr.cancel = cancel
 	go m.drive(childCtx, cancel, mr, run, snap, roleSpec, spec.ParentCall)
 	return nil
 }

@@ -20,7 +20,6 @@ go_library(
         "common.go",
         "exec_session.go",
         "manager.go",
-        "write_stdin.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/tool/exsession",
     visibility = ["//visibility:public"],

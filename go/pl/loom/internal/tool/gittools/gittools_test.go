@@ -626,59 +626,6 @@ func mustMkdirAll(t *testing.T, path string) {
 	}
 }
 
-func TestGitMergeBaseToolReturnsAncestralCommit(t *testing.T) {
-	ensureGitAvailable(t)
-	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)
-	configureGitRepo(t, repoRoot)
-
-	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\n"))
-	gitRun(t, repoRoot, "add", ".")
-	gitRun(t, repoRoot, "commit", "-m", "base commit")
-
-	initialSHA := strings.TrimSpace(gitOutput(t, repoRoot, "rev-parse", "HEAD"))
-	defaultBranch := currentBranchName(t, repoRoot)
-
-	// Create a feature branch and add a commit.
-	gitRun(t, repoRoot, "checkout", "-b", "feature")
-	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\nfeature change\n"))
-	gitRun(t, repoRoot, "add", ".")
-	gitRun(t, repoRoot, "commit", "-m", "feature commit")
-
-	// Go back to default branch and add an independent commit.
-	gitRun(t, repoRoot, "checkout", defaultBranch)
-	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("base\nmain change\n"))
-	gitRun(t, repoRoot, "add", ".")
-	gitRun(t, repoRoot, "commit", "-m", "main commit")
-
-	tool, err := NewGitMergeBaseTool(validator, runner)
-	if err != nil {
-		t.Fatalf("NewGitMergeBaseTool() error = %v", err)
-	}
-	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "git_merge_base", gitMergeBaseArgs{
-		RepoRoot: filepath.Join(workspaceRoot, "repo"),
-		Branch:   "feature",
-	}))
-	if err != nil {
-		t.Fatalf("Prepare() error = %v", err)
-	}
-	result := tool.Execute(context.Background(), prepared)
-	if result.Status != domain.ToolStatusSuccess {
-		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
-	}
-
-	var output gitMergeBaseOutput
-	decodeToolResult(t, result, &output)
-	if output.MergeBase != initialSHA {
-		t.Fatalf("merge_base = %q, want initial commit %q", output.MergeBase, initialSHA)
-	}
-	if output.Branch != "feature" {
-		t.Fatalf("branch = %q, want feature", output.Branch)
-	}
-	if output.BaseRef != "feature" {
-		t.Fatalf("base_ref = %q, want feature (no upstream)", output.BaseRef)
-	}
-}
-
 func TestGitDiffWithBaseRef(t *testing.T) {
 	ensureGitAvailable(t)
 	validator, runner, workspaceRoot, repoRoot := newGitValidator(t)

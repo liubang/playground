@@ -98,7 +98,7 @@ type Snapshot struct {
 	// switch/reload. Cleared when a later model call succeeds or a new
 	// turn starts.
 	LastError *SnapshotError `json:"last_error,omitempty"`
-	// Plan is the run's latest task plan (update_plan), projected so a
+	// Plan is the run's latest task plan (update_task), projected so a
 	// (re)connecting client can render the plan panel from the snapshot
 	// alone instead of waiting for the next plan.updated event.
 	Plan *domain.Plan `json:"plan,omitempty"`
@@ -1208,7 +1208,7 @@ func (c *Controller) handleSubmitPrompt(cmd controllerCommand) {
 	// already treats it as inert (complete plans are not re-injected into
 	// model context), so drop the projection to keep snapshots clean; the
 	// empty plan.updated below lets live clients hide the panel. An
-	// unfinished plan survives — the next update_plan revision refreshes
+	// unfinished plan survives — the next update_task revision refreshes
 	// the panel.
 	planArchived := c.hasPlan && c.plan.IsComplete()
 	if planArchived {

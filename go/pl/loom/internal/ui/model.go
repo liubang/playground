@@ -137,7 +137,7 @@ type Model struct {
 	// view (shown in the status bar once non-zero).
 	compactions int
 	// plan is the latest task plan published via plan.updated (empty when the
-	// model never called update_plan). planHidden is the ctrl+t toggle that
+	// model never called update_task). planHidden is the ctrl+t toggle that
 	// collapses the pinned plan panel above the composer.
 	plan       domain.Plan
 	planHidden bool

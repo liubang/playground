@@ -83,6 +83,88 @@ func TestEditToolSuccessAndPermissionPreserved(t *testing.T) {
 	}
 }
 
+func TestEditToolMultiEditAtomic(t *testing.T) {
+	validator, root := newValidator(t)
+	path := filepath.Join(root, "code.go")
+	original := []byte("package a\n\nfunc oldName() int {\n\treturn oldConst\n}\n\nconst oldConst = 1\n")
+	mustWriteFile(t, path, original, 0o644)
+
+	tool, err := NewEditTool(validator, nil)
+	if err != nil {
+		t.Fatalf("NewEditTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "edit", editArgs{
+		Path: "code.go",
+		Edits: []editSpec{
+			{OldString: "oldName", NewString: "newName"},
+			{OldString: "oldConst", NewString: "newConst", ReplaceAll: true},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output editOutput
+	decodeToolResult(t, result, &output)
+	if output.AppliedEdits != 2 {
+		t.Fatalf("applied_edits = %d, want 2", output.AppliedEdits)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+	want := "package a\n\nfunc newName() int {\n\treturn newConst\n}\n\nconst newConst = 1\n"
+	if string(content) != want {
+		t.Fatalf("content = %q, want %q", string(content), want)
+	}
+}
+
+func TestEditToolMultiEditRollbackOnFailure(t *testing.T) {
+	validator, root := newValidator(t)
+	path := filepath.Join(root, "note.txt")
+	original := []byte("alpha\nbeta\n")
+	mustWriteFile(t, path, original, 0o644)
+
+	tool, err := NewEditTool(validator, nil)
+	if err != nil {
+		t.Fatalf("NewEditTool() error = %v", err)
+	}
+	// The second edit matches nothing: the call must fail and the file
+	// must keep its original bytes (no partial application).
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "edit", editArgs{
+		Path: "note.txt",
+		Edits: []editSpec{
+			{OldString: "alpha", NewString: "ALPHA"},
+			{OldString: "gamma", NewString: "GAMMA"},
+		},
+	}))
+	if err == nil {
+		result := tool.Execute(context.Background(), prepared)
+		if result.Status != domain.ToolStatusError {
+			t.Fatalf("Execute() status = %s, want error", result.Status)
+		}
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+	if string(content) != string(original) {
+		t.Fatalf("content = %q, want unchanged %q", string(content), string(original))
+	}
+
+	// Mixing the two argument forms is rejected.
+	_, err = tool.Prepare(context.Background(), newToolCall(t, "edit", editArgs{
+		Path:      "note.txt",
+		OldString: "alpha",
+		NewString: "ALPHA",
+		Edits:     []editSpec{{OldString: "beta", NewString: "BETA"}},
+	}))
+	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
+}
+
 func TestEditToolConflictsAndTampering(t *testing.T) {
 	validator, root := newValidator(t)
 	path := filepath.Join(root, "multi.txt")

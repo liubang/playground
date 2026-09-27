@@ -15,9 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/07/24
 
-// Package webfetch implements the web_fetch tool: read-only HTTP/HTTPS GET
+// Package webfetch implements the web_fetch tool: HTTP/HTTPS GET
 // with SSRF protection, redirect bounding, size caps, HTML-to-markdown
-// conversion, artifact overflow, and a short-lived response cache.
+// conversion, artifact overflow, a short-lived response cache, and an
+// optional save_to mode that downloads the raw body to disk.
 package webfetch
 
 import (
@@ -31,12 +32,15 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
+	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
 const (
@@ -68,6 +72,9 @@ type fetchArgs struct {
 	MaxBytes     int    `json:"max_bytes,omitempty"`
 	TimeoutMs    int    `json:"timeout_ms,omitempty"`
 	AllowPrivate bool   `json:"allow_private,omitempty"`
+	// SaveTo downloads the raw response body to this path instead of
+	// returning converted content (binary-safe; bypasses the cache).
+	SaveTo string `json:"save_to,omitempty"`
 }
 
 type fetchOutput struct {
@@ -80,7 +87,8 @@ type fetchOutput struct {
 	Truncated   bool                `json:"truncated"`
 	Cache       string              `json:"cache"`
 	FetchedAt   time.Time           `json:"fetched_at"`
-	Content     string              `json:"content"`
+	Content     string              `json:"content,omitempty"`
+	SavedPath   string              `json:"saved_path,omitempty"`
 	Artifact    *domain.ArtifactRef `json:"artifact,omitempty"`
 }
 
@@ -88,14 +96,19 @@ type fetchOutput struct {
 // disables overflow externalization (truncated content is then lost).
 type WebFetchTool struct {
 	base      baseTool
+	validator *workspacepkg.PathValidator
 	artifacts domain.ArtifactStore
 	cache     *responseCache
 	resolver  *net.Resolver
 	now       func() time.Time
 }
 
-// NewWebFetchTool creates the web_fetch tool.
-func NewWebFetchTool(artifacts domain.ArtifactStore) (*WebFetchTool, error) {
+// NewWebFetchTool creates the web_fetch tool. The validator resolves
+// save_to download targets.
+func NewWebFetchTool(validator *workspacepkg.PathValidator, artifacts domain.ArtifactStore) (*WebFetchTool, error) {
+	if validator == nil {
+		return nil, domain.NewError(domain.ErrInvalidInput, "path validator is required")
+	}
 	base, err := newBaseTool(domain.ToolDefinition{
 		Name: "web_fetch",
 		Description: "Fetch a web page or text resource via HTTP/HTTPS GET and return its content. " +
@@ -103,9 +116,11 @@ func NewWebFetchTool(artifacts domain.ArtifactStore) (*WebFetchTool, error) {
 			"it has direct network access and is NOT subject to the run_cmd sandbox restrictions. " +
 			"You MUST use it when the answer depends on temporally unstable information (news, prices, weather, library/tool versions, current docs) or when the user explicitly asks to look something up. " +
 			"HTML is converted to markdown by default; use format=text for plain text or format=raw for the untouched body. " +
+			"To DOWNLOAD a file (PDF, archive, image, dataset), pass save_to: the raw body is written to that path " +
+			"(created or overwritten, binary-safe, cache bypassed) and only metadata is returned. " +
 			"Private/loopback/link-local destinations are blocked unless allow_private=true. " +
 			"Successful responses are cached for 15 minutes; large content is truncated with the full text stored as an artifact.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"url":{"type":"string","minLength":1,"maxLength":2048},"format":{"type":"string","enum":["markdown","text","raw"]},"max_bytes":{"type":"integer","minimum":1024,"maximum":1048576},"timeout_ms":{"type":"integer","minimum":1000,"maximum":60000},"allow_private":{"type":"boolean"}},"required":["url"]}`),
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"url":{"type":"string","minLength":1,"maxLength":2048},"format":{"type":"string","enum":["markdown","text","raw"]},"max_bytes":{"type":"integer","minimum":1024,"maximum":1048576},"timeout_ms":{"type":"integer","minimum":1000,"maximum":60000},"allow_private":{"type":"boolean"},"save_to":{"type":"string","minLength":1,"maxLength":4096,"description":"Download the raw body to this path instead of returning content (workspace-relative or approved absolute path)."}},"required":["url"]}`),
 		Capabilities: []domain.Capability{domain.CapNetworkConnect},
 		Source:       domain.ToolSourceBuiltin,
 	})
@@ -114,6 +129,7 @@ func NewWebFetchTool(artifacts domain.ArtifactStore) (*WebFetchTool, error) {
 	}
 	return &WebFetchTool{
 		base:      base,
+		validator: validator,
 		artifacts: artifacts,
 		cache:     newResponseCache(cacheMaxEntries, cacheMaxBodyBytes, cacheTTL, nil),
 		resolver:  net.DefaultResolver,
@@ -145,6 +161,19 @@ func (t *WebFetchTool) Prepare(ctx context.Context, call domain.ToolCall) (domai
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
 	approvalDesc := fmt.Sprintf("Fetch %s (GET)", args.URL)
+	opts := toolkit.PrepareOptions{ApprovalDesc: approvalDesc}
+	if args.SaveTo != "" {
+		resolved, external, err := t.validator.ResolveWrite(args.SaveTo)
+		if err != nil {
+			return domain.PreparedCall{}, domain.NewError(domain.ErrSecurity, "save_to path is not writable", domain.WithCause(err))
+		}
+		opts.WritePaths = []string{resolved.Absolute}
+		opts.WriteRequest = &domain.WriteRequest{Path: resolved.Absolute, OutsideRoots: external}
+		approvalDesc = fmt.Sprintf("Download %s → %s", args.URL, resolved.Display)
+		if external {
+			approvalDesc += " [outside workspace]"
+		}
+	}
 	// Extract the canonical host for the typed URLRequest (signed by the
 	// fingerprint below), so the policy layer evaluates domain rules from
 	// the typed field instead of re-parsing the arguments
@@ -154,7 +183,8 @@ func (t *WebFetchTool) Prepare(ctx context.Context, call domain.ToolCall) (domai
 	if host, ok := domain.HostFromURL(args.URL); ok {
 		urlReq = &domain.URLRequest{Host: host}
 	}
-	return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{ApprovalDesc: approvalDesc, URLRequest: urlReq})
+	opts.URLRequest = urlReq
+	return t.base.PrepareCall(ctx, call, canonical, opts)
 }
 
 func (t *WebFetchTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
@@ -165,6 +195,10 @@ func (t *WebFetchTool) Execute(ctx context.Context, prepared domain.PreparedCall
 	args, err := toolkit.DecodeStrict[fetchArgs](prepared.Call.Arguments)
 	if err != nil {
 		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
+	}
+
+	if args.SaveTo != "" {
+		return t.executeDownload(ctx, prepared, args, startedAt)
 	}
 
 	cacheKey := args.URL + "\x1f" + args.Format
@@ -180,6 +214,66 @@ func (t *WebFetchTool) Execute(ctx context.Context, prepared domain.PreparedCall
 		t.cache.Put(cacheKey, entry.cachedResponse, len(entry.Body))
 	}
 	return toolkit.SuccessResult(prepared.Call.ID, startedAt, t.buildOutput(ctx, args, entry.cachedResponse, "miss"))
+}
+
+// executeDownload fetches the raw body and writes it to the signed
+// save_to target. The cache is bypassed: a download must observe the
+// current bytes, and the cached form is the CONVERTED text, not the raw
+// body.
+func (t *WebFetchTool) executeDownload(ctx context.Context, prepared domain.PreparedCall, args fetchArgs, startedAt time.Time) domain.ToolResult {
+	if len(prepared.WritePaths) != 1 {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call write paths are invalid"))
+	}
+	resolved, _, err := t.validator.ResolveWrite(prepared.WritePaths[0])
+	if err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "save_to path is not writable", domain.WithCause(err)))
+	}
+	if prepared.WriteRequest == nil || prepared.WriteRequest.Path != resolved.Absolute {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "prepared call write request binding mismatch"))
+	}
+
+	raw, err := t.doRequest(ctx, args)
+	if err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)
+	}
+	if raw.truncated {
+		// Refuse to persist a silently truncated body: a partial download
+		// on disk looks identical to a complete one.
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrInvalidInput,
+			fmt.Sprintf("response body exceeds the %d byte download limit; for larger files use run_cmd with needs_network=true (e.g. curl -o)", hardFetchByteCap)))
+	}
+	if err := os.MkdirAll(filepath.Dir(resolved.Absolute), 0o755); err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrUnavailable, "failed to create parent directories", domain.WithCause(err)))
+	}
+	// The atomic writer requires an expected hash: bind the current state
+	// (or the empty file for a create) so a concurrent change fails the
+	// write instead of being silently clobbered.
+	expectedHash := workspacepkg.EmptyFileSHA256
+	if snapshot, statErr := t.validator.SnapshotResolved(resolved); statErr == nil {
+		expectedHash = snapshot.SHA256
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrSecurity, "save_to path is not a writable regular file", domain.WithCause(statErr)))
+	}
+	snapshot, err := t.validator.AtomicWriteResolved(resolved, raw.data, workspacepkg.AtomicWriteOptions{
+		ExpectedHash: expectedHash,
+		SyncParent:   true,
+	})
+	if err != nil {
+		return toolkit.ErrorResult(prepared.Call.ID, startedAt, domain.NewError(domain.ErrUnavailable, "failed to write file atomically", domain.WithCause(err)))
+	}
+
+	mediaType, _ := parseContentType(raw.contentType, raw.data)
+	return toolkit.SuccessResult(prepared.Call.ID, startedAt, fetchOutput{
+		URL:         args.URL,
+		FinalURL:    raw.finalURL,
+		Status:      raw.status,
+		ContentType: mediaType,
+		Format:      "download",
+		Bytes:       len(raw.data),
+		Cache:       "bypass",
+		FetchedAt:   t.now().UTC(),
+		SavedPath:   snapshot.Path,
+	})
 }
 
 // validateFetchArgs normalizes and validates the call. It is side-effect-free:
@@ -238,11 +332,24 @@ type fetchOutcome struct {
 	noStore bool
 }
 
-// fetch performs the HTTP GET with a dial-time IP guard. The guard checks
-// every resolved address immediately before connecting and pins the first
-// checked address for the connection, which closes the DNS-rebinding window
-// and covers every redirect hop.
-func (t *WebFetchTool) fetch(ctx context.Context, args fetchArgs) (fetchOutcome, error) {
+// rawResponse is the unconverted result of one HTTP GET.
+type rawResponse struct {
+	finalURL    string
+	status      int
+	contentType string
+	data        []byte
+	noStore     bool
+	// truncated is true when the body exceeded hardFetchByteCap and data
+	// holds only a prefix. Content fetches annotate this downstream; a
+	// save_to download must refuse to write a partial file.
+	truncated bool
+}
+
+// doRequest performs the HTTP GET with a dial-time IP guard. The guard
+// checks every resolved address immediately before connecting and pins the
+// first checked address for the connection, which closes the DNS-rebinding
+// window and covers every redirect hop.
+func (t *WebFetchTool) doRequest(ctx context.Context, args fetchArgs) (rawResponse, error) {
 	transport := &http.Transport{
 		DialContext:         GuardedDialFunc(t.resolver, args.AllowPrivate),
 		TLSHandshakeTimeout: dialTimeout,
@@ -268,46 +375,64 @@ func (t *WebFetchTool) fetch(ctx context.Context, args fetchArgs) (fetchOutcome,
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, args.URL, nil)
 	if err != nil {
-		return fetchOutcome{}, domain.NewError(domain.ErrInvalidInput, "failed to build request", domain.WithCause(err))
+		return rawResponse{}, domain.NewError(domain.ErrInvalidInput, "failed to build request", domain.WithCause(err))
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,text/*,application/json,application/xml;q=0.9,*/*;q=0.1")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return fetchOutcome{}, mapRequestError(err)
+		return rawResponse{}, mapRequestError(err)
 	}
 	defer resp.Body.Close()
 
 	finalURL := resp.Request.URL.String()
 	if resp.StatusCode >= 400 {
-		return fetchOutcome{}, httpStatusError(resp.StatusCode, finalURL)
+		return rawResponse{}, httpStatusError(resp.StatusCode, finalURL)
 	}
 
 	data, readErr := io.ReadAll(io.LimitReader(resp.Body, hardFetchByteCap+1))
 	if readErr != nil {
-		return fetchOutcome{}, domain.NewError(domain.ErrUnavailable, "failed to read response body", domain.WithCause(readErr), domain.WithRetryable(true))
+		return rawResponse{}, domain.NewError(domain.ErrUnavailable, "failed to read response body", domain.WithCause(readErr), domain.WithRetryable(true))
 	}
-	if len(data) > hardFetchByteCap {
+	truncated := len(data) > hardFetchByteCap
+	if truncated {
 		data = data[:hardFetchByteCap]
 	}
 
-	contentType := resp.Header.Get("Content-Type")
-	mediaType, charset := parseContentType(contentType, data)
-	body, err := convertBody(mediaType, charset, data, resp.Request.URL, args.Format)
+	return rawResponse{
+		finalURL:    finalURL,
+		status:      resp.StatusCode,
+		contentType: resp.Header.Get("Content-Type"),
+		data:        data,
+		noStore:     strings.Contains(strings.ToLower(resp.Header.Get("Cache-Control")), "no-store"),
+		truncated:   truncated,
+	}, nil
+}
+
+// fetch performs the GET and converts the body per content type and
+// requested format.
+func (t *WebFetchTool) fetch(ctx context.Context, args fetchArgs) (fetchOutcome, error) {
+	raw, err := t.doRequest(ctx, args)
+	if err != nil {
+		return fetchOutcome{}, err
+	}
+	mediaType, charset := parseContentType(raw.contentType, raw.data)
+	finalURL, _ := url.Parse(raw.finalURL)
+	body, err := convertBody(mediaType, charset, raw.data, finalURL, args.Format)
 	if err != nil {
 		return fetchOutcome{}, err
 	}
 
 	return fetchOutcome{
 		cachedResponse: cachedResponse{
-			FinalURL:    finalURL,
-			Status:      resp.StatusCode,
+			FinalURL:    raw.finalURL,
+			Status:      raw.status,
 			ContentType: mediaType,
 			FetchedAt:   t.now().UTC(),
 			Body:        body,
 		},
-		noStore: strings.Contains(strings.ToLower(resp.Header.Get("Cache-Control")), "no-store"),
+		noStore: raw.noStore,
 	}, nil
 }
 
