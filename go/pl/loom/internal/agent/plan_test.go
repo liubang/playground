@@ -60,7 +60,7 @@ func TestUpdatePlanPrepareValidSnapshot(t *testing.T) {
 		t.Fatalf("approval desc should name the in-progress step: %q", prepared.ApprovalDesc)
 	}
 	// Canonical arguments round-trip to the same plan.
-	plan, _, err := decodeUpdatePlanArgs(prepared.Call.Arguments)
+	plan, _, _, err := decodeUpdatePlanArgs(prepared.Call.Arguments)
 	if err != nil {
 		t.Fatalf("canonical arguments no longer decode: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestUpdatePlanPrepareToleratesStringEvidence(t *testing.T) {
 	if !strings.Contains(string(prepared.Call.Arguments), `"evidence":["read goal.go"]`) {
 		t.Fatalf("canonical arguments not normalized: %s", prepared.Call.Arguments)
 	}
-	plan, _, err := decodeUpdatePlanArgs(prepared.Call.Arguments)
+	plan, _, _, err := decodeUpdatePlanArgs(prepared.Call.Arguments)
 	if err != nil {
 		t.Fatalf("canonical arguments no longer decode: %v", err)
 	}
@@ -112,9 +112,7 @@ func TestUpdatePlanPrepareRejectsInvalidSnapshots(t *testing.T) {
 		"single step":        `{"action":"plan","plan":[{"goal":"only one","status":"in_progress"}]}`,
 		"empty plan":         `{"action":"plan","plan":[]}`,
 		"missing plan":       `{"action":"plan"}`,
-		"missing action":     `{"plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}]}`,
 		"unknown action":     `{"action":"task","plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}]}`,
-		"goal field on plan": `{"action":"plan","objective":"x","plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}]}`,
 		"unknown field":      `{"action":"plan","plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}],"extra":1}`,
 		"empty goal":         `{"action":"plan","plan":[{"goal":"  ","status":"todo"},{"goal":"b","status":"todo"}]}`,
 		"bad status":         `{"action":"plan","plan":[{"goal":"a","status":"doing"},{"goal":"b","status":"todo"}]}`,
@@ -196,6 +194,97 @@ func TestDrainPlanUpdatesPreservesTitleAcrossRevisions(t *testing.T) {
 	}
 }
 
+// Models routinely mirror the flat schema and fill goal-owned fields
+// (objective/token_budget/status) into a plan call. The strict-decode
+// rejection of those fields produced retry doom loops in the wild, so the
+// tool strips them and discloses the correction via ignored_fields.
+func TestUpdatePlanPrepareToleratesGoalFields(t *testing.T) {
+	tool, cell := newPlanTool(t)
+	args := `{"action":"plan","objective":"analyze the table","token_budget":5000,"status":"complete",` +
+		`"plan":[{"goal":"a","status":"in_progress"},{"goal":"b","status":"todo"}]}`
+	prepared, err := tool.Prepare(context.Background(), planCall(t, args))
+	if err != nil {
+		t.Fatalf("Prepare with goal fields error: %v", err)
+	}
+	// The canonical arguments record the stripped fields for audit.
+	if !strings.Contains(string(prepared.Call.Arguments), `"ignored_fields":["objective","token_budget","status"]`) {
+		t.Fatalf("canonical arguments missing ignored_fields record: %s", prepared.Call.Arguments)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var payload struct {
+		Applied       bool     `json:"applied"`
+		Items         int      `json:"items"`
+		IgnoredFields []string `json:"ignored_fields"`
+	}
+	if err := json.Unmarshal([]byte(result.Content[0].Text), &payload); err != nil {
+		t.Fatalf("result payload undecodable: %v", err)
+	}
+	if !payload.Applied || payload.Items != 2 {
+		t.Fatalf("plan not applied: %+v", payload)
+	}
+	if len(payload.IgnoredFields) != 3 || payload.IgnoredFields[0] != "objective" {
+		t.Fatalf("ignored_fields = %v, want [objective token_budget status]", payload.IgnoredFields)
+	}
+	// The goal side must NOT fire: stripping means the objective never
+	// reaches the goal cell (the goal machinery would otherwise start
+	// cross-turn continuation the model never asked for).
+	plan, ok := cell.Take()
+	if !ok || len(plan.Items) != 2 {
+		t.Fatalf("plan cell = %+v (ok=%v), want 2-item snapshot", plan, ok)
+	}
+}
+
+// Null-valued cross-action fields are removed silently: models mirror
+// optional properties they have no value for as explicit nulls, and
+// disclosing those would be noise on every call.
+func TestUpdatePlanPrepareIgnoresNullGoalFieldsSilently(t *testing.T) {
+	tool, _ := newPlanTool(t)
+	args := `{"action":"plan","objective":null,"token_budget":null,"status":null,` +
+		`"plan":[{"goal":"a","status":"in_progress"},{"goal":"b","status":"todo"}]}`
+	prepared, err := tool.Prepare(context.Background(), planCall(t, args))
+	if err != nil {
+		t.Fatalf("Prepare with null goal fields error: %v", err)
+	}
+	if strings.Contains(string(prepared.Call.Arguments), "ignored_fields") {
+		t.Fatalf("null strays must not be disclosed: %s", prepared.Call.Arguments)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute status = %s, want success: %+v", result.Status, result.Error)
+	}
+	if strings.Contains(result.Content[0].Text, "ignored_fields") {
+		t.Fatalf("result must not disclose null strays: %s", result.Content[0].Text)
+	}
+}
+
+// A missing action discriminator is inferred from the payload: a plan
+// array means the plan action, goal-owned fields mean the goal action.
+func TestUpdateTaskPrepareInfersMissingAction(t *testing.T) {
+	tool, cell := newPlanTool(t)
+	prepared, err := tool.Prepare(context.Background(), planCall(t,
+		`{"plan":[{"goal":"a","status":"in_progress"},{"goal":"b","status":"todo"}]}`))
+	if err != nil {
+		t.Fatalf("Prepare without action error: %v", err)
+	}
+	if !strings.Contains(string(prepared.Call.Arguments), `"action":"plan"`) {
+		t.Fatalf("canonical arguments must pin the inferred action: %s", prepared.Call.Arguments)
+	}
+	if result := tool.Execute(context.Background(), prepared); result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute status = %s, want success: %+v", result.Status, result.Error)
+	}
+	if plan, ok := cell.Take(); !ok || len(plan.Items) != 2 {
+		t.Fatalf("plan cell = %+v (ok=%v), want 2-item snapshot", plan, ok)
+	}
+
+	// An empty payload has nothing to infer from.
+	if _, err := tool.Prepare(context.Background(), planCall(t, `{}`)); err == nil {
+		t.Fatal("Prepare({}) succeeded, want rejection")
+	}
+}
+
 func TestUpdatePlanExecuteQueuesSnapshot(t *testing.T) {
 	tool, cell := newPlanTool(t)
 	call := planCall(t, validPlanArgs)
@@ -224,7 +313,7 @@ func TestDrainPlanUpdatesAppliesSnapshotAndAudits(t *testing.T) {
 	cell := NewPlanCell()
 	loop := &Loop{Run: run, PlanCell: cell}
 
-	plan, _, err := decodeUpdatePlanArgs(json.RawMessage(validPlanArgs))
+	plan, _, _, err := decodeUpdatePlanArgs(json.RawMessage(validPlanArgs))
 	if err != nil {
 		t.Fatalf("decode error: %v", err)
 	}

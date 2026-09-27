@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"regexp"
 	"strings"
 	"time"
@@ -53,6 +54,16 @@ const (
 
 // noteFilePattern validates ad-hoc note filenames.
 var noteFilePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-[a-z0-9][a-z0-9-]{0,79}\.md$`)
+
+// noteSlugPattern validates a bare note slug; the current UTC timestamp is
+// prepended automatically so the model never has to look up the date
+// (observed in live transcripts: an extra run_cmd date call per add_note).
+var noteSlugPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,79}\.md$`)
+
+// timestampedNoteFilename renders the canonical note filename for a slug.
+func timestampedNoteFilename(slug string) string {
+	return time.Now().UTC().Format("2006-01-02T15-04-05") + "-" + slug + ".md"
+}
 
 // memoryArgs is the model-visible schema of the unified memory tool:
 // action selects the operation, the remaining fields are per-action.
@@ -89,9 +100,9 @@ func NewMemoryTool(store *Store) (*MemoryTool, error) {
 			"hierarchy before reading; 'read' reads the memory file at path (required), paginating with " +
 			"line_offset/max_lines; 'search' finds substring matches for query (required) across memory files — " +
 			"use it before answering questions about prior work, user preferences, or project conventions; " +
-			"'add_note' appends a timestamped markdown note (filename + note required) after the user explicitly " +
+			"'add_note' appends a timestamped markdown note (note required) after the user explicitly " +
 			"asks to remember, forget, or update something — it is consolidated into the main memory later.",
-		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"action":{"type":"string","enum":["list","read","search","add_note"],"description":"The memory operation."},"path":{"type":"string","description":"Relative path within the memory store (list: default root; read: required)."},"query":{"type":"string","minLength":1,"maxLength":512,"description":"Search substring (search; required)."},"filename":{"type":"string","pattern":"^\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}-[a-z0-9][a-z0-9-]{0,79}\\.md$","minLength":24,"maxLength":128,"description":"Timestamped slug filename: YYYY-MM-DDTHH-MM-SS-slug.md (add_note; required)."},"note":{"type":"string","minLength":1,"maxLength":4096,"description":"The memory note content (add_note; required)."},"line_offset":{"type":"integer","minimum":1,"description":"1-indexed line offset to start reading from (read)."},"max_lines":{"type":"integer","minimum":1,"maximum":2000,"description":"Maximum lines to return (read; default: all)."},"max_results":{"type":"integer","minimum":1,"maximum":2000,"description":"Maximum entries/matches to return (list/search; default 200)."}},"required":["action"]}`),
+		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"action":{"type":"string","enum":["list","read","search","add_note"],"description":"The memory operation."},"path":{"type":"string","description":"Relative path within the memory store (list: default root; read: required)."},"query":{"type":"string","minLength":1,"maxLength":512,"description":"Search substring (search; required)."},"filename":{"type":"string","maxLength":128,"description":"Note filename slug, e.g. 'data-prefs.md' (add_note; optional, default 'note.md'). The current UTC timestamp YYYY-MM-DDTHH-MM-SS- is prepended automatically — no date lookup needed. A fully timestamped name is also accepted."},"note":{"type":"string","minLength":1,"maxLength":4096,"description":"The memory note content (add_note; required)."},"line_offset":{"type":"integer","minimum":1,"description":"1-indexed line offset to start reading from (read)."},"max_lines":{"type":"integer","minimum":1,"maximum":2000,"description":"Maximum lines to return (read; default: all)."},"max_results":{"type":"integer","minimum":1,"maximum":2000,"description":"Maximum entries/matches to return (list/search; default 200)."}},"required":["action"]}`),
 		Source:      domain.ToolSourceBuiltin,
 	}
 	if err := def.Validate(); err != nil {
@@ -126,13 +137,20 @@ func (args *memoryArgs) validate() (domain.RiskLevel, error) {
 		}
 		return domain.R1, nil
 	case ActionAddNote:
-		if !noteFilePattern.MatchString(args.Filename) {
-			return 0, domain.NewError(domain.ErrInvalidInput,
-				"filename must match YYYY-MM-DDTHH-MM-SS-slug.md pattern")
-		}
 		args.Note = strings.TrimSpace(args.Note)
 		if args.Note == "" {
 			return 0, domain.NewError(domain.ErrInvalidInput, "note is required for action=add_note")
+		}
+		switch {
+		case args.Filename == "":
+			args.Filename = timestampedNoteFilename("note")
+		case noteFilePattern.MatchString(args.Filename):
+			// Fully timestamped already; use as-is.
+		case noteSlugPattern.MatchString(args.Filename):
+			args.Filename = timestampedNoteFilename(strings.TrimSuffix(args.Filename, ".md"))
+		default:
+			return 0, domain.NewError(domain.ErrInvalidInput,
+				"filename must be a slug like \"data-prefs.md\" (a UTC timestamp is prepended automatically) or fully timestamped YYYY-MM-DDTHH-MM-SS-slug.md")
 		}
 		return domain.R2, nil
 	default:
@@ -166,6 +184,10 @@ func (t *MemoryTool) Prepare(_ context.Context, call domain.ToolCall) (domain.Pr
 		return domain.PreparedCall{}, err
 	}
 	canonical, _ := json.Marshal(args)
+	// validate mutates the args (add_note filename auto-timestamping,
+	// max_results defaults), so the canonical form — not the model's raw
+	// JSON — is what Execute must decode.
+	call.Arguments = canonical
 	return domain.PreparedCall{
 		Call:         call,
 		Definition:   t.def,
@@ -197,6 +219,12 @@ func (t *MemoryTool) Execute(_ context.Context, prepared domain.PreparedCall) do
 		var content string
 		var total int
 		content, total, err = t.store.ReadFile(args.Path, args.LineOffset, args.MaxLines)
+		if errors.Is(err, fs.ErrNotExist) {
+			// Replace the raw os.PathError (which leaks the store's
+			// absolute root) with actionable guidance.
+			err = domain.NewError(domain.ErrInvalidInput,
+				fmt.Sprintf("memory file not found: %q — nothing is stored there; use action=list to browse what exists", args.Path))
+		}
 		payload = map[string]any{"content": content, "total_lines": total}
 	case ActionSearch:
 		var matches any

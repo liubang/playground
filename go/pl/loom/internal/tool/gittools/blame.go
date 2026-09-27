@@ -171,6 +171,9 @@ func validateGitBlameArgs(
 	b *baseTool,
 	args gitBlameArgs,
 ) (gitBlameArgs, []string, error) {
+	args.RepoRoot = normalizeNullStringArg(args.RepoRoot)
+	args.Rev = normalizeNullStringArg(args.Rev)
+	args.Path = normalizeNullStringArg(args.Path)
 	repoRoot, err := resolveRepoRoot(b.validator, args.RepoRoot)
 	if err != nil {
 		return gitBlameArgs{}, nil, err

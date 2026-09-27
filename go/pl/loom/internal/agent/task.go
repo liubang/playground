@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
@@ -90,6 +91,7 @@ func (t *UpdateTaskTool) Definition() domain.ToolDefinition { return t.def }
 
 // decodeUpdateTaskAction peeks the action discriminator without rejecting
 // unknown sibling fields — the action-specific strict decoders own that.
+// A missing discriminator is inferred from the field set.
 func decodeUpdateTaskAction(raw json.RawMessage) (string, error) {
 	var envelope struct {
 		Action string `json:"action"`
@@ -101,11 +103,93 @@ func decodeUpdateTaskAction(raw json.RawMessage) (string, error) {
 	case taskActionGoal, taskActionPlan:
 		return envelope.Action, nil
 	case "":
-		return "", domain.NewError(domain.ErrInvalidInput, `action is required: "goal" or "plan"`)
+		return inferUpdateTaskAction(raw)
 	default:
 		return "", domain.NewError(domain.ErrInvalidInput,
 			fmt.Sprintf("unknown action %q: must be %q or %q", envelope.Action, taskActionGoal, taskActionPlan))
 	}
+}
+
+// inferUpdateTaskAction recovers a missing action discriminator from the
+// field set: a plan payload means the plan action, goal-owned fields mean
+// the goal action. Models occasionally skip the discriminator when the
+// payload itself already names the operation.
+func inferUpdateTaskAction(raw json.RawMessage) (string, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return "", domain.NewError(domain.ErrInvalidInput, "invalid update_task arguments", domain.WithCause(err))
+	}
+	for _, name := range crossActionFields[taskActionGoal] { // plan-owned fields
+		if _, ok := fields[name]; ok {
+			return taskActionPlan, nil
+		}
+	}
+	for _, name := range crossActionFields[taskActionPlan] { // goal-owned fields
+		if _, ok := fields[name]; ok {
+			return taskActionGoal, nil
+		}
+	}
+	return "", domain.NewError(domain.ErrInvalidInput, `action is required: "goal" or "plan"`)
+}
+
+// crossActionFields maps each action to the top-level fields owned by the
+// OTHER action, in canonical disclosure order.
+var crossActionFields = map[string][]string{
+	taskActionGoal: {"title", "plan"},
+	taskActionPlan: {"objective", "token_budget", "status"},
+}
+
+// stripCrossActionFields removes fields owned by the other action before
+// the strict decode, returning the cleaned JSON and the stripped field
+// names (in canonical order). The flat schema invites models to mirror
+// every visible property into one call; a strict rejection of the stray
+// fields costs a whole tool round-trip per retry — and models tend to
+// repeat the mistake (the grep normalizer precedent). Stripping with
+// in-band disclosure (ignored_fields in the result) fixes the call
+// without hiding the correction. Unparseable input passes through
+// untouched — the strict decoder owns reporting it.
+//
+// Null-valued strays are removed silently: models also mirror optional
+// properties they have no value for as explicit nulls (grep treats them
+// the same way), and disclosing those would be noise. Only fields that
+// carried a real value are reported.
+func stripCrossActionFields(raw json.RawMessage, action string) (json.RawMessage, []string) {
+	stray := crossActionFields[action]
+	if len(stray) == 0 {
+		return raw, nil
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return raw, nil
+	}
+	var stripped []string
+	removed := false
+	for _, name := range stray {
+		value, ok := fields[name]
+		if !ok {
+			continue
+		}
+		delete(fields, name)
+		removed = true
+		if !isJSONNullRaw(value) {
+			stripped = append(stripped, name)
+		}
+	}
+	if !removed {
+		return raw, nil
+	}
+	clean, err := json.Marshal(fields)
+	if err != nil {
+		return raw, nil
+	}
+	return clean, stripped
+}
+
+// isJSONNullRaw reports whether raw is the JSON null literal (mirrors
+// builtin.isJSONNull; duplicated to keep the agent package free of tool
+// internals).
+func isJSONNullRaw(raw json.RawMessage) bool {
+	return strings.TrimSpace(string(raw)) == "null"
 }
 
 // Prepare validates and canonicalizes the call; it is side-effect-free.
@@ -128,7 +212,7 @@ func (t *UpdateTaskTool) Prepare(_ context.Context, call domain.ToolCall) (domai
 		}
 		desc = goalApprovalDesc(args)
 	case taskActionPlan:
-		plan, planCanonical, err := decodeUpdatePlanArgs(call.Arguments)
+		plan, planCanonical, _, err := decodeUpdatePlanArgs(call.Arguments)
 		if err != nil {
 			return domain.PreparedCall{}, err
 		}
@@ -198,8 +282,11 @@ func (t *UpdateTaskTool) Execute(_ context.Context, prepared domain.PreparedCall
 			"close":        args.Status,
 			"note":         "goal update accepted; it takes effect after this tool batch",
 		}
+		if len(args.IgnoredFields) > 0 {
+			payload["ignored_fields"] = args.IgnoredFields
+		}
 	case taskActionPlan:
-		plan, _, err := decodeUpdatePlanArgs(prepared.Call.Arguments)
+		plan, _, ignored, err := decodeUpdatePlanArgs(prepared.Call.Arguments)
 		if err != nil {
 			return toolErrorResult(prepared.Call.ID, startedAt, err)
 		}
@@ -209,6 +296,9 @@ func (t *UpdateTaskTool) Execute(_ context.Context, prepared domain.PreparedCall
 			"applied": true,
 			"items":   len(plan.Items),
 			"note":    "plan update accepted; it takes effect after this tool batch",
+		}
+		if len(ignored) > 0 {
+			payload["ignored_fields"] = ignored
 		}
 	}
 

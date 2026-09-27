@@ -204,8 +204,10 @@ type memoryPromptWrapper struct {
 
 ### 笔记文件名验证
 
-临时笔记必须匹配：`YYYY-MM-DDTHH-MM-SS-slug.md`（在 JSON schema 和
-Go 校验中都用正则强制）。这防止了通过文件名进行路径穿越。
+临时笔记的最终文件名必须匹配：`YYYY-MM-DDTHH-MM-SS-slug.md`（Go 校验正则强制，
+防止通过文件名进行路径穿越）。模型传参可以只给 slug（如 `data-prefs.md`）或省略
+`filename`：工具会自动补当前 UTC 时间戳前缀——模型无需为构造时间戳额外查日期
+（真实 transcript 中观察到每次 add_note 前都多跑一次 `date` 命令）。
 
 ---
 

@@ -192,7 +192,11 @@ func NewDelegateTaskTool(f *Factory) (*DelegateTaskTool, error) {
 	def := domain.ToolDefinition{
 		Name: "delegate_task",
 		Description: "Delegate a self-contained task to a sub-agent that works in its own isolated context and " +
-			"returns a structured conclusion. Role 'researcher' (default) is read-only: it explores, reviews, and " +
+			"returns a structured conclusion. STRONGLY PREFER delegating when a subtask is self-contained and its " +
+			"intermediate output would flood this conversation: multi-file exploration or fact gathering, broad " +
+			"web/library research, independent review, or a focused implementation — do the synthesis and final " +
+			"decisions yourself on the sub-agent's conclusion instead of re-doing its legwork. " +
+			"Role 'researcher' (default) is read-only: it explores, reviews, and " +
 			"gathers facts, but cannot modify files or run commands. Role 'coder' edits files and runs sandboxed " +
 			"commands in the workspace — spawning one is an R3 approval because its writes are real. " +
 			"The sub-agent sees NO conversation history, so the task must be fully self-contained: images attached " +

@@ -484,6 +484,23 @@ func TestBuildSectionsSplitsStaticAndDynamic(t *testing.T) {
 	assert.Equal(t, secs.Static, again.Static)
 }
 
+// The delegation doctrine is opt-in: only builders created with
+// WithDelegation advertise delegate_task in the system prompt, so
+// deployments without sub-agents never reference a missing tool.
+func TestBuildSectionsDelegationOptIn(t *testing.T) {
+	without := NewBuilder("/ws", WithEnvProvider(staticEnvProvider{env: testEnvironment()}), noRules)
+	secs, err := without.BuildSections(context.Background())
+	require.NoError(t, err)
+	assert.NotContains(t, secs.Static, "delegate_task")
+
+	with := NewBuilder("/ws", WithEnvProvider(staticEnvProvider{env: testEnvironment()}), noRules, WithDelegation())
+	secs, err = with.BuildSections(context.Background())
+	require.NoError(t, err)
+	assert.Contains(t, secs.Static, "# Delegation")
+	assert.Contains(t, secs.Static, "delegate_task")
+	assert.Contains(t, secs.Static, "wait_subagent")
+}
+
 func TestFamilyPatch(t *testing.T) {
 	familyPatches["anthropic"] = "Always think step by step."
 	defer delete(familyPatches, "anthropic")

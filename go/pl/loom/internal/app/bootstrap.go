@@ -545,6 +545,11 @@ func (b *Bootstrap) buildPrompt(ctx context.Context, resolved *config.ResolvedCo
 	if b.skillsPromptOpt != nil {
 		promptOpts = append(promptOpts, b.skillsPromptOpt)
 	}
+	// The delegation doctrine is advertised only when sub-agents exist —
+	// the same conditional pattern as the skills catalog.
+	if b.SubagentFactory != nil {
+		promptOpts = append(promptOpts, prompt.WithDelegation())
+	}
 	var pb agent.PromptBuilder = prompt.NewBuilder(b.WorkspaceRoot, promptOpts...)
 	if b.MemoryStore != nil {
 		pb = &memoryPromptWrapper{inner: pb, store: b.MemoryStore, logger: logger}

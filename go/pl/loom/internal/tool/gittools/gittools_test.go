@@ -399,6 +399,109 @@ func TestGitLogToolReturnsRecentCommits(t *testing.T) {
 	}
 }
 
+// stat=true attaches each commit's changed files with numstat line counts
+// — the capability models otherwise re-create via run_cmd git log --stat
+// (observed in live transcripts).
+func TestGitLogToolStatIncludesPerCommitFiles(t *testing.T) {
+	validator, runner, _, repoRoot := newGitValidator(t)
+	configureGitRepo(t, repoRoot)
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("one\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "first commit")
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("one\ntwo\nthree\n"))
+	mustWriteFile(t, filepath.Join(repoRoot, "b.txt"), []byte("new\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "second commit")
+
+	tool, err := NewGitLogTool(validator, runner)
+	if err != nil {
+		t.Fatalf("NewGitLogTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), newToolCall(t, "git_log", gitLogArgs{RepoRoot: "repo", Limit: 10, Stat: true}))
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+
+	var output gitLogOutput
+	decodeToolResult(t, result, &output)
+	if output.Count != 2 {
+		t.Fatalf("output.Count = %d, want 2", output.Count)
+	}
+	second := output.Commits[0]
+	if len(second.Files) != 2 {
+		t.Fatalf("second commit files = %+v, want 2 entries", second.Files)
+	}
+	byPath := map[string]gitLogFileStat{}
+	for _, f := range second.Files {
+		byPath[f.Path] = f
+	}
+	if got := byPath["a.txt"]; got.Added != 2 || got.Deleted != 0 || got.Binary {
+		t.Fatalf("a.txt stat = %+v, want +2/-0 text", got)
+	}
+	if got := byPath["b.txt"]; got.Added != 1 || got.Deleted != 0 {
+		t.Fatalf("b.txt stat = %+v, want +1/-0", got)
+	}
+	first := output.Commits[1]
+	if len(first.Files) != 1 || first.Files[0].Path != "a.txt" || first.Files[0].Added != 1 {
+		t.Fatalf("first commit files = %+v, want a.txt +1", first.Files)
+	}
+}
+
+// Models mirror optional string properties they have no value for with the
+// literal STRING "null" (observed in live transcripts): as a path filter it
+// silently matches nothing, as a diff base it fails to resolve. The
+// validators normalize it to absent.
+func TestGitToolsTolerateLiteralNullStringArgs(t *testing.T) {
+	validator, runner, _, repoRoot := newGitValidator(t)
+	configureGitRepo(t, repoRoot)
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("one\n"))
+	gitRun(t, repoRoot, "add", ".")
+	gitRun(t, repoRoot, "commit", "-m", "first commit")
+	mustWriteFile(t, filepath.Join(repoRoot, "a.txt"), []byte("one\ntwo\n"))
+
+	logTool, err := NewGitLogTool(validator, runner)
+	if err != nil {
+		t.Fatalf("NewGitLogTool() error = %v", err)
+	}
+	prepared, err := logTool.Prepare(context.Background(), newToolCall(t, "git_log",
+		gitLogArgs{RepoRoot: "repo", Limit: 10, Path: "null"}))
+	if err != nil {
+		t.Fatalf("git_log Prepare() error = %v", err)
+	}
+	result := logTool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("git_log Execute() status = %s: %+v", result.Status, result.Error)
+	}
+	var logOutput gitLogOutput
+	decodeToolResult(t, result, &logOutput)
+	if logOutput.Count != 1 {
+		t.Fatalf("git_log with path=\"null\" matched %d commits, want 1 (null must mean no filter)", logOutput.Count)
+	}
+
+	diffTool, err := NewGitDiffTool(validator, runner)
+	if err != nil {
+		t.Fatalf("NewGitDiffTool() error = %v", err)
+	}
+	diffPrepared, err := diffTool.Prepare(context.Background(), newToolCall(t, "git_diff",
+		gitDiffArgs{RepoRoot: "repo", Base: "null", Path: "null"}))
+	if err != nil {
+		t.Fatalf("git_diff Prepare() error = %v", err)
+	}
+	diffResult := diffTool.Execute(context.Background(), diffPrepared)
+	if diffResult.Status != domain.ToolStatusSuccess {
+		t.Fatalf("git_diff Execute() status = %s: %+v", diffResult.Status, diffResult.Error)
+	}
+	var diffOutput gitDiffOutput
+	decodeToolResult(t, diffResult, &diffOutput)
+	if !strings.Contains(diffOutput.Diff, "+two") {
+		t.Fatalf("git_diff with base=\"null\" must diff the worktree, got: %q", diffOutput.Diff)
+	}
+}
+
 // The path filter must be resolved relative to repo_root: git log runs with
 // -C repoRoot, so a workspace-relative path ("repo/a.txt") matches nothing
 // when the repo lives in a workspace subdirectory (REVIEW H8).

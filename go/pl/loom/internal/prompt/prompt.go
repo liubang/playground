@@ -89,6 +89,7 @@ type Builder struct {
 	skills        SkillsProvider
 	clock         domain.Clock
 	managed       *managedBase
+	delegation    bool
 	// overviewMu guards the frozen workspace overview: the overview is
 	// captured once per builder — one builder instance is shared by the
 	// loop and by read-only projections (EstimateOverheadTokens can call
@@ -132,6 +133,15 @@ func WithRulesProvider(p RulesProvider) Option {
 // against).
 func WithSkillsProvider(p SkillsProvider) Option {
 	return func(b *Builder) { b.skills = p }
+}
+
+// WithDelegation appends the delegation doctrine section: the usage
+// policy for delegate_task (when to offload work to a sub-agent). It is
+// installed only when the sub-agent factory is enabled, so deployments
+// without sub-agents never advertise the tool in the prompt — the same
+// conditional pattern as the skills catalog.
+func WithDelegation() Option {
+	return func(b *Builder) { b.delegation = true }
 }
 
 // WithClock overrides the clock used for the environment snapshot.
@@ -216,6 +226,15 @@ func joinSectionTexts(static, dynamic string) string {
 // and per-request dynamic parts. See Sections for the contract.
 func (b *Builder) BuildSections(ctx context.Context) (Sections, error) {
 	static := builtinSections()
+	if b.delegation {
+		static = append(static, promptSection{
+			source: "loom://builtin/delegation",
+			title:  "Delegation",
+			body: `- delegate_task offloads a self-contained subtask to a sub-agent with its own isolated context: use it proactively for multi-file exploration or fact gathering, broad web/library research, and independent review — work whose intermediate output would flood this conversation. The sub-agent's raw searches and page reads stay OUT of your context; only its structured conclusion comes back.
+- When a request mixes research with your own edits, run them concurrently: delegate the research with async=true, do your part, then wait_subagent for the conclusion.
+- Act on the sub-agent's conclusion yourself (synthesize, decide, apply); do not re-do its legwork. It sees no conversation history, so the task must be fully self-contained.`,
+		})
+	}
 	if b.managed != nil {
 		static = []promptSection{{
 			source: fmt.Sprintf("langfuse://prompts/%s?v=%d", b.managed.name, b.managed.version),

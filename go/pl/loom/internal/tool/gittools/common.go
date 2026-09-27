@@ -354,6 +354,20 @@ func resolveUpstreamDiffBase(ctx context.Context, b *baseTool, repoRoot string) 
 	return sha, mergeBasePrefix + usedRef, nil
 }
 
+// normalizeNullStringArg treats the literal string "null" as absent:
+// models mirror optional properties they have no value for with the
+// STRING "null" (the same quirk toolkit.ParseSandboxPermissions and
+// NormalizeJustification handle for run_cmd). Left alone, "null" becomes
+// a pathspec that silently matches nothing (git log) or a revision that
+// fails with a confusing "revision null does not resolve" (git diff) —
+// both observed in live transcripts.
+func normalizeNullStringArg(value string) string {
+	if strings.EqualFold(strings.TrimSpace(value), "null") {
+		return ""
+	}
+	return value
+}
+
 // gitRefPattern is the whitelist for user-supplied refs and branch names:
 // letters, digits, and the punctuation git itself allows in refnames. The
 // leading-dash and ".." rejections keep refs from being interpreted as

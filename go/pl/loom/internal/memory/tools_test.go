@@ -20,6 +20,7 @@ package memory
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -92,7 +93,8 @@ func TestMemoryToolPrepareValidation(t *testing.T) {
 		"unknown action":        `{"action":"delete"}`,
 		"read missing path":     `{"action":"read"}`,
 		"search empty query":    `{"action":"search","query":"  "}`,
-		"add_note bad filename": `{"action":"add_note","filename":"prefer-go.md","note":"User prefers Go"}`,
+		"add_note bad filename": `{"action":"add_note","filename":"Bad Slug.md","note":"User prefers Go"}`,
+		"add_note traversal":    `{"action":"add_note","filename":"../escape.md","note":"User prefers Go"}`,
 		"add_note empty note":   `{"action":"add_note","filename":"2026-08-02T12-00-00-test.md","note":"  "}`,
 		"unknown field":         `{"action":"list","extra":true}`,
 	} {
@@ -104,6 +106,70 @@ func TestMemoryToolPrepareValidation(t *testing.T) {
 		if _, err := tool.Prepare(context.Background(), call); err == nil {
 			t.Errorf("%s: expected prepare error", name)
 		}
+	}
+}
+
+// add_note accepts a bare slug (or no filename at all) and prepends the
+// current UTC timestamp itself, so the model never burns a run_cmd date
+// call to satisfy the filename convention.
+func TestMemoryToolAddNoteAutoTimestamp(t *testing.T) {
+	s := newTestStore(t)
+	tool, _ := NewMemoryTool(s)
+
+	prepared := prepareMemory(t, tool, `{"action":"add_note","filename":"prefer-go.md","note":"User prefers Go"}`)
+	var args memoryArgs
+	if err := json.Unmarshal(prepared.Call.Arguments, &args); err != nil {
+		t.Fatalf("canonical args undecodable: %v", err)
+	}
+	if !noteFilePattern.MatchString(args.Filename) {
+		t.Fatalf("auto-timestamped filename %q does not match the canonical pattern", args.Filename)
+	}
+	if !strings.HasSuffix(args.Filename, "-prefer-go.md") {
+		t.Fatalf("slug lost in filename %q", args.Filename)
+	}
+	if result := tool.Execute(context.Background(), prepared); result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute status = %s: %+v", result.Status, result.Error)
+	}
+
+	// No filename at all falls back to the default slug.
+	prepared = prepareMemory(t, tool, `{"action":"add_note","note":"another note"}`)
+	if err := json.Unmarshal(prepared.Call.Arguments, &args); err != nil {
+		t.Fatalf("canonical args undecodable: %v", err)
+	}
+	if !strings.HasSuffix(args.Filename, "-note.md") {
+		t.Fatalf("default filename = %q, want *-note.md", args.Filename)
+	}
+
+	// A fully timestamped name passes through untouched.
+	prepared = prepareMemory(t, tool, `{"action":"add_note","filename":"2026-08-02T12-00-00-x.md","note":"n"}`)
+	if err := json.Unmarshal(prepared.Call.Arguments, &args); err != nil {
+		t.Fatalf("canonical args undecodable: %v", err)
+	}
+	if args.Filename != "2026-08-02T12-00-00-x.md" {
+		t.Fatalf("timestamped filename rewritten: %q", args.Filename)
+	}
+}
+
+// Reading a memory file that does not exist must fail with actionable
+// guidance, not a raw OS error leaking the store's absolute root.
+func TestMemoryToolReadNotFoundGuidance(t *testing.T) {
+	s := newTestStore(t)
+	tool, _ := NewMemoryTool(s)
+
+	prepared := prepareMemory(t, tool, `{"action":"read","path":"MEMORY.md"}`)
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusError {
+		t.Fatalf("Status = %s, want error", result.Status)
+	}
+	if result.Error == nil || !strings.Contains(result.Error.Message, "memory file not found") ||
+		!strings.Contains(result.Error.Message, "action=list") {
+		t.Fatalf("error = %+v, want not-found guidance pointing at list", result.Error)
+	}
+	if strings.Contains(result.Error.Message, s.root) {
+		t.Fatalf("error leaks the store root: %q", result.Error.Message)
+	}
+	if result.Error.Retryable {
+		t.Fatal("not-found must not be retryable")
 	}
 }
 

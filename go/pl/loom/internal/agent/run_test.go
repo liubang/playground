@@ -4264,13 +4264,23 @@ func TestUpdateGoalToolValidation(t *testing.T) {
 		`{"action":"goal","objective":"x","token_budget":-5}`,
 		`{"action":"goal","status":"complete","token_budget":1000}`,
 		`{"action":"plan","objective":"wrong action"}`,
-		`{"action":"goal","objective":"x","plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}]}`,
 	} {
 		if _, err := decodeUpdateGoalArgs(json.RawMessage(raw)); err == nil {
 			t.Fatalf("decodeUpdateGoalArgs(%s) must fail", raw)
 		}
 	}
-	args, err := decodeUpdateGoalArgs(json.RawMessage(`{"action":"goal","objective":" ship it ","token_budget":1000}`))
+
+	// Plan-owned fields mixed into a goal call are stripped and recorded
+	// for disclosure instead of rejected (the update_task schema is flat,
+	// so models routinely mirror every property into one call).
+	args, err := decodeUpdateGoalArgs(json.RawMessage(`{"action":"goal","objective":"x","plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}],"title":"t"}`))
+	if err != nil {
+		t.Fatalf("decodeUpdateGoalArgs(goal+plan fields) error = %v", err)
+	}
+	if args.Objective != "x" || len(args.IgnoredFields) != 2 || args.IgnoredFields[0] != "title" || args.IgnoredFields[1] != "plan" {
+		t.Fatalf("parsed args = %+v, want objective with ignored [title plan]", args)
+	}
+	args, err = decodeUpdateGoalArgs(json.RawMessage(`{"action":"goal","objective":" ship it ","token_budget":1000}`))
 	if err != nil {
 		t.Fatalf("decodeUpdateGoalArgs(valid) error = %v", err)
 	}

@@ -158,6 +158,8 @@ Codex（`gpt_5_codex_prompt.md`，原文照录）：
 | 场景 | 行为 |
 |---|---|
 | 模型提交非法快照（单步/多空 goal/两个 in_progress） | 工具返回 error 结果（invalid_input + 原因），run 不受影响，模型可修正重试 |
+| plan 调用夹带 goal 字段（objective/token_budget/status，或反之；schema 是扁平的，模型常把所有可见属性一起填） | 剥离夹带字段后正常受理，结果以 `ignored_fields` 披露；不触发对方 action 的副作用 |
+| 缺省 action 判别字段 | 按载荷推断（有 plan 数组/ title ⇒ plan；goal 字段 ⇒ goal）；canonical 参数固定推断结果 |
 | drain 时校验失败（防御性） | warn + 丢弃，保留旧 plan |
 | 一批内多次调用 update_plan | 取最后一次（与 goal cell 一致） |
 | run 失败/中断时 plan 未完成 | checkpoint 保留现状；resume 后 plan 与回注恢复 |

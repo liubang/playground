@@ -158,6 +158,11 @@ func (t *SearchTool) Definition() domain.ToolDefinition {
 // an independent rg process and shares no state across calls.
 func (t *SearchTool) ConcurrentSafe() bool { return true }
 
+// isJSONNull reports whether raw is the JSON null literal.
+func isJSONNull(raw json.RawMessage) bool {
+	return strings.TrimSpace(string(raw)) == "null"
+}
+
 // normalizeSearchJSON repairs the argument-shape deviations models make
 // in the wild before the strict decode, mirroring the tolerance the
 // type filter already applies: a lone glob string becomes the array the
@@ -171,6 +176,16 @@ func normalizeSearchJSON(raw json.RawMessage) json.RawMessage {
 		return raw
 	}
 	patched := false
+	// Models mirror the schema with explicit nulls for optional properties
+	// they have no value for; null means absent, so drop those keys before
+	// the shape repairs — otherwise a null glob would decode as a
+	// one-element empty slice below and fail validation.
+	for key, value := range fields {
+		if isJSONNull(value) {
+			delete(fields, key)
+			patched = true
+		}
+	}
 	fix := func(key string, rewrite func(json.RawMessage) (json.RawMessage, bool)) {
 		value, ok := fields[key]
 		if !ok {

@@ -155,6 +155,11 @@ type updatePlanArgs struct {
 	Action string               `json:"action"`
 	Title  string               `json:"title"`
 	Plan   []updatePlanArgsItem `json:"plan"`
+	// IgnoredFields records goal-owned fields the model mixed into a plan
+	// call; they were stripped during normalization and are disclosed in
+	// the tool result (see stripCrossActionFields). It rides the canonical
+	// arguments so Execute can report what Prepare dropped.
+	IgnoredFields []string `json:"ignored_fields,omitempty"`
 }
 
 // updatePlanArgsRawItem is the decoding form of a plan step: Evidence stays
@@ -170,11 +175,14 @@ type updatePlanArgsRawItem struct {
 
 // updatePlanArgsRaw is the decoding form of a plan-action call: the Action
 // field is decoded so the strict decoder rejects the goal action's fields
-// as unknown; it is validated against taskActionPlan.
+// as unknown; it is validated against taskActionPlan. IgnoredFields is
+// accepted so canonical arguments (which carry it) round-trip through the
+// strict decoder at Execute time.
 type updatePlanArgsRaw struct {
-	Action string                  `json:"action"`
-	Title  string                  `json:"title"`
-	Plan   []updatePlanArgsRawItem `json:"plan"`
+	Action        string                  `json:"action"`
+	Title         string                  `json:"title"`
+	Plan          []updatePlanArgsRawItem `json:"plan"`
+	IgnoredFields []string                `json:"ignored_fields,omitempty"`
 }
 
 // decodePlanItemEvidence normalizes the evidence field: absent/null → nil,
@@ -200,37 +208,53 @@ func decodePlanItemEvidence(raw json.RawMessage) ([]string, error) {
 
 // decodeUpdatePlanArgs parses, normalizes, and validates a plan snapshot:
 // unknown fields are rejected, indexes are assigned in array order, and the
-// result must satisfy Plan.Validate (at most one in_progress).
-func decodeUpdatePlanArgs(raw json.RawMessage) (domain.Plan, json.RawMessage, error) {
+// result must satisfy Plan.Validate (at most one in_progress). Goal-owned
+// fields mixed into the call are stripped first and reported via ignored
+// (see stripCrossActionFields); when the input is an already-canonical
+// payload (Execute), the recorded ignored_fields are reported instead.
+func decodeUpdatePlanArgs(raw json.RawMessage) (domain.Plan, json.RawMessage, []string, error) {
+	clean, stripped := stripCrossActionFields(raw, taskActionPlan)
 	var args updatePlanArgsRaw
-	dec := json.NewDecoder(strings.NewReader(string(raw)))
+	dec := json.NewDecoder(strings.NewReader(string(clean)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&args); err != nil {
-		return domain.Plan{}, nil, domain.NewError(domain.ErrInvalidInput, "invalid update_task plan arguments", domain.WithCause(err))
+		return domain.Plan{}, nil, nil, domain.NewError(domain.ErrInvalidInput, `invalid update_task plan arguments (valid fields for action "plan": action, title, plan)`, domain.WithCause(err))
+	}
+	// An empty action means the caller inferred the route from the payload
+	// (decodeUpdateTaskAction); pin it so the canonical arguments carry the
+	// discriminator.
+	if args.Action == "" {
+		args.Action = taskActionPlan
 	}
 	if args.Action != taskActionPlan {
-		return domain.Plan{}, nil, domain.NewError(domain.ErrInvalidInput,
+		return domain.Plan{}, nil, nil, domain.NewError(domain.ErrInvalidInput,
 			fmt.Sprintf("plan arguments require action %q, got %q", taskActionPlan, args.Action))
 	}
 	if len(args.Plan) < 2 {
-		return domain.Plan{}, nil, domain.NewError(domain.ErrInvalidInput,
+		return domain.Plan{}, nil, nil, domain.NewError(domain.ErrInvalidInput,
 			fmt.Sprintf("plan must contain at least 2 steps (got %d); never make single-step plans", len(args.Plan)))
 	}
 	title := strings.TrimSpace(args.Title)
 	if titleRunes := []rune(title); len(titleRunes) > 120 {
 		title = string(titleRunes[:120])
 	}
+	// Freshly stripped fields win; an already-canonical payload (Execute
+	// re-decode) reports the ones recorded at Prepare time.
+	ignored := stripped
+	if len(ignored) == 0 {
+		ignored = args.IgnoredFields
+	}
 	items := make([]domain.PlanItem, 0, len(args.Plan))
-	canonicalArgs := updatePlanArgs{Action: args.Action, Title: args.Title, Plan: make([]updatePlanArgsItem, 0, len(args.Plan))}
+	canonicalArgs := updatePlanArgs{Action: args.Action, Title: args.Title, Plan: make([]updatePlanArgsItem, 0, len(args.Plan)), IgnoredFields: ignored}
 	for i, raw := range args.Plan {
 		goal := strings.TrimSpace(raw.Goal)
 		if goal == "" {
-			return domain.Plan{}, nil, domain.NewError(domain.ErrInvalidInput,
+			return domain.Plan{}, nil, nil, domain.NewError(domain.ErrInvalidInput,
 				fmt.Sprintf("plan step %d: goal is required", i+1))
 		}
 		evidence, err := decodePlanItemEvidence(raw.Evidence)
 		if err != nil {
-			return domain.Plan{}, nil, domain.NewError(domain.ErrInvalidInput,
+			return domain.Plan{}, nil, nil, domain.NewError(domain.ErrInvalidInput,
 				fmt.Sprintf("plan step %d: invalid evidence", i+1), domain.WithCause(err))
 		}
 		item := domain.PlanItem{
@@ -248,11 +272,11 @@ func decodeUpdatePlanArgs(raw json.RawMessage) (domain.Plan, json.RawMessage, er
 	}
 	plan := domain.Plan{Title: title, Items: items}
 	if err := plan.Validate(); err != nil {
-		return domain.Plan{}, nil, domain.NewError(domain.ErrInvalidInput, "invalid plan snapshot", domain.WithCause(err))
+		return domain.Plan{}, nil, nil, domain.NewError(domain.ErrInvalidInput, "invalid plan snapshot", domain.WithCause(err))
 	}
 	canonical, err := json.Marshal(canonicalArgs)
 	if err != nil {
-		return domain.Plan{}, nil, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
+		return domain.Plan{}, nil, nil, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 	}
-	return plan, canonical, nil
+	return plan, canonical, ignored, nil
 }

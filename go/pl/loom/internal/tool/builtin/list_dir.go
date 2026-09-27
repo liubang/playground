@@ -24,6 +24,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -85,8 +87,41 @@ func (t *ListDirTool) Definition() domain.ToolDefinition {
 // independent reads.
 func (t *ListDirTool) ConcurrentSafe() bool { return true }
 
+// normalizeListDirJSON repairs the argument-shape deviations models make
+// in the wild (the normalizeSearchJSON precedent): depth arrives as a
+// stringified integer. Anything unrecognized passes through untouched so
+// the strict decoder still reports genuinely unknown shapes.
+func normalizeListDirJSON(raw json.RawMessage) json.RawMessage {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return raw
+	}
+	value, ok := fields["depth"]
+	if !ok {
+		return raw
+	}
+	var text string
+	if err := json.Unmarshal(value, &text); err != nil {
+		return raw
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(text))
+	if err != nil {
+		return raw
+	}
+	out, err := json.Marshal(n)
+	if err != nil {
+		return raw
+	}
+	fields["depth"] = out
+	patched, err := json.Marshal(fields)
+	if err != nil {
+		return raw
+	}
+	return patched
+}
+
 func (t *ListDirTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := decodeStrict[listDirArgs](call.Arguments)
+	args, err := decodeStrict[listDirArgs](normalizeListDirJSON(call.Arguments))
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}

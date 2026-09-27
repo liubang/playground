@@ -214,14 +214,29 @@ type updateGoalArgs struct {
 	Objective   string `json:"objective"`
 	TokenBudget int64  `json:"token_budget"`
 	Status      string `json:"status"`
+	// IgnoredFields records plan-owned fields the model mixed into a goal
+	// call; they were stripped during normalization and are disclosed in
+	// the tool result (see stripCrossActionFields). It rides the canonical
+	// arguments so Execute can report what Prepare dropped.
+	IgnoredFields []string `json:"ignored_fields,omitempty"`
 }
 
 func decodeUpdateGoalArgs(raw json.RawMessage) (updateGoalArgs, error) {
+	clean, stripped := stripCrossActionFields(raw, taskActionGoal)
 	var args updateGoalArgs
-	dec := json.NewDecoder(strings.NewReader(string(raw)))
+	dec := json.NewDecoder(strings.NewReader(string(clean)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&args); err != nil {
-		return updateGoalArgs{}, domain.NewError(domain.ErrInvalidInput, "invalid update_task goal arguments", domain.WithCause(err))
+		return updateGoalArgs{}, domain.NewError(domain.ErrInvalidInput, `invalid update_task goal arguments (valid fields for action "goal": action, objective, token_budget, status)`, domain.WithCause(err))
+	}
+	if len(stripped) > 0 {
+		args.IgnoredFields = stripped
+	}
+	// An empty action means the caller inferred the route from the payload
+	// (decodeUpdateTaskAction); pin it so the canonical arguments carry the
+	// discriminator.
+	if args.Action == "" {
+		args.Action = taskActionGoal
 	}
 	if args.Action != taskActionGoal {
 		return updateGoalArgs{}, domain.NewError(domain.ErrInvalidInput,

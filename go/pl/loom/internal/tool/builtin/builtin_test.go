@@ -291,6 +291,31 @@ func TestReadFileToolCancelled(t *testing.T) {
 	assertToolResultError(t, result, domain.ToolStatusCancelled, domain.ErrCancelled)
 }
 
+// Models stringify depth in the wild ("2" instead of 2 — observed in live
+// transcripts); the strict decoder must see the repaired integer.
+func TestListDirToolToleratesStringDepth(t *testing.T) {
+	validator, _ := newValidator(t)
+	tool, err := NewListDirTool(validator)
+	if err != nil {
+		t.Fatalf("NewListDirTool() error = %v", err)
+	}
+	prepared, err := tool.Prepare(context.Background(), domain.ToolCall{
+		ID:        domain.NewToolCallID(),
+		Name:      "list_dir",
+		Arguments: json.RawMessage(`{"path":".","depth":"2"}`),
+	})
+	if err != nil {
+		t.Fatalf("Prepare() error = %v, want stringified depth tolerated", err)
+	}
+	var args listDirArgs
+	if err := json.Unmarshal(prepared.Call.Arguments, &args); err != nil {
+		t.Fatalf("canonical args undecodable: %v", err)
+	}
+	if args.Depth != 2 {
+		t.Fatalf("canonical depth = %d, want 2", args.Depth)
+	}
+}
+
 func TestListDirToolExecuteAndTruncate(t *testing.T) {
 	validator, root := newValidator(t)
 	mustMkdirAll(t, filepath.Join(root, "subdir"))
@@ -427,6 +452,38 @@ func TestSearchGoFallbackSkipsBinaryAndSymlink(t *testing.T) {
 
 // The search path may point to a single file (models routinely scope a
 // search to one file; rg accepts file targets natively).
+// Models mirror the schema with explicit nulls for optional properties
+// they have no value for (observed in live transcripts: "glob": null).
+// Null means absent — before the fix, a null glob was wrapped into [""]
+// and rejected as "glob[0] must be 1..256 bytes".
+func TestSearchPrepareToleratesNullOptionalFields(t *testing.T) {
+	validator, root := newValidator(t)
+	mustWriteFile(t, filepath.Join(root, "a.go"), []byte("hello go\n"))
+
+	tool, err := NewSearchTool(validator, nil) // nil runner → go fallback
+	if err != nil {
+		t.Fatalf("NewSearchTool() error = %v", err)
+	}
+	call := domain.ToolCall{
+		ID:        domain.NewToolCallID(),
+		Name:      "grep",
+		Arguments: json.RawMessage(`{"pattern":"hello","path":".","glob":null,"type":null}`),
+	}
+	prepared, err := tool.Prepare(context.Background(), call)
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute() status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var output searchOutput
+	decodeToolResult(t, result, &output)
+	if output.MatchCount != 1 {
+		t.Fatalf("match_count = %d, want 1", output.MatchCount)
+	}
+}
+
 func TestSearchAcceptsSingleFilePath(t *testing.T) {
 	validator, root := newValidator(t)
 	target := filepath.Join(root, "docs", "guide.md")

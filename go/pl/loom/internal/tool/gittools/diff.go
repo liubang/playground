@@ -202,6 +202,9 @@ func validateGitDiffArgs(
 	b *baseTool,
 	args gitDiffArgs,
 ) (gitDiffArgs, []string, error) {
+	args.RepoRoot = normalizeNullStringArg(args.RepoRoot)
+	args.Base = normalizeNullStringArg(args.Base)
+	args.Path = normalizeNullStringArg(args.Path)
 	repoRoot, err := resolveRepoRoot(b.validator, args.RepoRoot)
 	if err != nil {
 		return gitDiffArgs{}, nil, err

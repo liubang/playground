@@ -155,6 +155,7 @@ func validateGitStatusArgs(
 	b *baseTool,
 	args gitStatusArgs,
 ) (gitStatusArgs, repoRootResolution, error) {
+	args.RepoRoot = normalizeNullStringArg(args.RepoRoot)
 	repoRoot, err := resolveRepoRoot(b.validator, args.RepoRoot)
 	if err != nil {
 		return gitStatusArgs{}, repoRootResolution{}, err
