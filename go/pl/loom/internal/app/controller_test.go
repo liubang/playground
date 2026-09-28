@@ -303,7 +303,7 @@ func TestControllerArchivesCompletedPlanOnNewTurn(t *testing.T) {
 
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{
-			{ID: domain.NewToolCallID(), Name: "update_task", Arguments: json.RawMessage(`{"action":"plan","plan":[{"goal":"step one","status":"done"},{"goal":"step two","status":"done"}]}`)},
+			{ID: domain.NewToolCallID(), Name: "update_task", Arguments: json.RawMessage(`{"action":"plan","plan":[{"goal":"step one","status":"completed"},{"goal":"step two","status":"completed"}]}`)},
 		}, StopReason: domain.StopToolUse},
 		fakes.ScriptEntry{Text: "task done", StopReason: domain.StopEndTurn},
 		fakes.ScriptEntry{Text: "follow-up answer", StopReason: domain.StopEndTurn},
@@ -400,7 +400,7 @@ func TestControllerKeepsUnfinishedPlanOnNewTurn(t *testing.T) {
 
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{
-			{ID: domain.NewToolCallID(), Name: "update_task", Arguments: json.RawMessage(`{"action":"plan","plan":[{"goal":"step one","status":"done"},{"goal":"step two","status":"in_progress"}]}`)},
+			{ID: domain.NewToolCallID(), Name: "update_task", Arguments: json.RawMessage(`{"action":"plan","plan":[{"goal":"step one","status":"completed"},{"goal":"step two","status":"in_progress"}]}`)},
 		}, StopReason: domain.StopToolUse},
 		fakes.ScriptEntry{Text: "answer", StopReason: domain.StopEndTurn},
 		// The one-shot reconcile nudge burns one extra scripted call.

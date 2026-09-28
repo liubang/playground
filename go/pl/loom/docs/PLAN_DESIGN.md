@@ -62,7 +62,7 @@ Codex（`gpt_5_codex_prompt.md`，原文照录）：
 
 - 工具不能直接触碰 `Run`：走 **mailbox 模式**（参照 `goal.go` 的 `GoalCell`/`drainGoalUpdates`），loop 在工具批后统一 drain 并追加审计事件；
 - `plan.revised` 事件的 payload 必须是 `domain.Plan` 本体——`RecoverRun` 现有回放逻辑直接 `json.Unmarshal(event.Payload, &plan)`，且历史上从未写入过该事件，无旧数据兼容负担；
-- loom 的 `PlanItem{Index, Goal, Status, Evidence}` 与 Codex 的 `{step, status}` 对应关系：`Goal↔step`、`todo↔pending`、`done↔completed`；`Evidence` 是 loom 增强（完成证据，呼应 workflow 的"验证闭环"文化）。
+- loom 的 `PlanItem{Index, Goal, Status, Evidence}` 与 Codex 的 `{step, status}` 对应关系：`Goal↔step`，状态命名直接采用主流事实标准 `pending|in_progress|completed`（早期版本用 `todo|done`，跨框架模型总按 Claude Code/Codex 的习惯回写成 pending/completed，对齐后误用率显著下降；`NormalizePlanItemStatus` 仍接受旧名与同义词）；`Evidence` 是 loom 增强（完成证据，呼应 workflow 的"验证闭环"文化）。
 
 ## 4. 设计
 
@@ -73,19 +73,19 @@ Codex（`gpt_5_codex_prompt.md`，原文照录）：
 ```json
 {
   "plan": [
-    {"goal": "阅读现有实现", "status": "done", "evidence": ["读完 run.go/goal.go"]},
+    {"goal": "阅读现有实现", "status": "completed", "evidence": ["读完 run.go/goal.go"]},
     {"goal": "实现 update_plan 工具", "status": "in_progress"},
-    {"goal": "补测试并回归", "status": "todo"}
+    {"goal": "补测试并回归", "status": "pending"}
   ]
 }
 ```
 
 校验规则（工具层 `Prepare` 强制执行，错误作为工具错误结果返回给模型，可重试修正）：
 
-1. `plan` 必填且 `len(items) >= 2`（Codex 规则：不做单步计划；全量快照语义下，"收尾"提交的是全 done 的多步计划，不受影响）；
-2. 每项 `goal` 非空（trim 后）、`status ∈ {todo, in_progress, done}`；
+1. `plan` 必填且 `len(items) >= 2`（Codex 规则：不做单步计划；全量快照语义下，"收尾"提交的是全 completed 的多步计划，不受影响）；
+2. 每项 `goal` 非空（trim 后）、`status ∈ {pending, in_progress, completed}`（旧名 `todo/done` 与常见变体在 decode 时归一，不报错）；
 3. 至多一个 `in_progress`（复用 `Plan.Validate`）；
-4. `evidence` 可选，仅对 `done` 项有意义；不强制（避免卡模型），prompt 中鼓励。
+4. `evidence` 可选，仅对 `completed` 项有意义；不强制（避免卡模型），prompt 中鼓励。
 
 ### 4.2 update_plan 工具
 
@@ -105,10 +105,10 @@ Codex（`gpt_5_codex_prompt.md`，原文照录）：
    - 每次请求按最新状态重建，不落 transcript、不进事件——天然抗压缩（Level 3 摘要丢弃消息也丢不了它），恢复后同样自动生效；
    - 渲染格式（纯文本、紧凑）：
      ```
-     [task plan] 2/4 done; current: 实现 update_plan 工具
-     1. [done] 阅读现有实现 — 证据: 读完 run.go/goal.go
+     [task plan] 2/4 completed; current: 实现 update_plan 工具
+     1. [completed] 阅读现有实现 — 证据: 读完 run.go/goal.go
      2. [in_progress] 实现 update_plan 工具
-     3. [todo] 补测试并回归
+     3. [pending] 补测试并回归
      ```
 
 ### 4.4 持久化与恢复
@@ -125,7 +125,7 @@ Codex（`gpt_5_codex_prompt.md`，原文照录）：
 
 - 简单直接的任务（约最简单 25%）不要用 update_plan；
 - 不做单步计划；
-- 制定计划后，每完成一个子任务就更新：先把当前步标 `done`（尽量附一句 `evidence`），再把下一步标 `in_progress`；任意时刻至多一个 `in_progress`；
+- 制定计划后，每完成一个子任务就更新：先把当前步标 `completed`（尽量附一句 `evidence`），再把下一步标 `in_progress`；任意时刻至多一个 `in_progress`；
 - 计划持久保存，压缩与中断恢复后仍然有效，其最新状态会在每次请求前自动出现在你的上下文里——不要在回复消息中复述计划。
 
 ### 4.6 TUI 渲染
@@ -143,7 +143,7 @@ Codex（`gpt_5_codex_prompt.md`，原文照录）：
 |---|---|---|
 | 语义 | 跨 turn 的目标 + token 预算 | 步骤清单 + 进度 |
 | 驱动行为 | 驱动自动续跑/wrap-up | 纯 advisory，不改变控制流 |
-| 完成判定 | 需证据审计后 close | 全部 done 即完成，无额外动作 |
+| 完成判定 | 需证据审计后 close | 全部 completed 即完成，无额外动作 |
 
 两者可独立使用：短任务都不用；长任务可只用 plan；需要跨 turn 自动续跑时用 goal（goal 的续跑 prompt 不感知 plan，plan 状态靠 4.3 的回注抵达模型）。
 
@@ -180,7 +180,7 @@ Codex（`gpt_5_codex_prompt.md`，原文照录）：
 
 E2E（真实模型 + 真实 DB）：
 
-1. `loom run` 跑多步任务 → sqlite 验证 `plan.revised` 事件序列及状态迁移（todo→in_progress→done）；
+1. `loom run` 跑多步任务 → sqlite 验证 `plan.revised` 事件序列及状态迁移（pending→in_progress→completed）；
 2. 触发压缩后任务继续 → 验证压缩后模型仍按计划推进（回注生效）；
 3. `loom resume` 追问 → plan 恢复；
 4. checkpoint plan 与 `loom inspect` 输出核对。

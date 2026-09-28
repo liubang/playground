@@ -1,6 +1,6 @@
 module github.com/liubang/playground/go
 
-go 1.26
+go 1.26.4
 
 require (
 	github.com/charmbracelet/bubbles v0.20.0
@@ -9,6 +9,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/go-rod/rod v0.116.2
 	github.com/gorilla/websocket v1.5.3
+	github.com/kaptinlin/jsonrepair v0.4.9
 	github.com/mattn/go-runewidth v0.0.19
 	github.com/onsi/ginkgo/v2 v2.19.0
 	github.com/onsi/gomega v1.33.1
@@ -50,6 +51,7 @@ require (
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
+	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect

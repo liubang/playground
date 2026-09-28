@@ -18,8 +18,13 @@ import { Icon } from '../../lib/icons'
 
 type PlanStatus = 'todo' | 'in_progress' | 'done'
 
+// The wire status renamed todo/done → pending/completed; accept both the
+// canonical values and the legacy ones replayed from pre-rename session
+// history, mapping onto the panel's internal (CSS-class) vocabulary.
 function normStatus(status?: string): PlanStatus {
-  return status === 'in_progress' || status === 'done' ? status : 'todo'
+  if (status === 'in_progress') return 'in_progress'
+  if (status === 'completed' || status === 'done') return 'done'
+  return 'todo'
 }
 
 export const PlanPanel = memo(function PlanPanel({ plan }: { plan?: Plan | null }) {

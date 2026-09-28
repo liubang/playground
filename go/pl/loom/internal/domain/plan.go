@@ -22,11 +22,39 @@ import "fmt"
 // PlanItemStatus tracks the state of a single plan item.
 type PlanItemStatus string
 
+// The canonical statuses deliberately match the naming mainstream agents
+// (Claude Code TodoWrite, Codex update_plan, Gemini write_todos) converged
+// on: models produce them far more reliably than loom's original
+// todo/done pair, which cross-harness models kept "correcting" to
+// pending/completed.
 const (
-	PlanItemTodo       PlanItemStatus = "todo"
+	PlanItemPending    PlanItemStatus = "pending"
 	PlanItemInProgress PlanItemStatus = "in_progress"
-	PlanItemDone       PlanItemStatus = "done"
+	PlanItemCompleted  PlanItemStatus = "completed"
 )
+
+// legacyPlanItemStatuses maps loom's pre-rename statuses and common
+// cross-harness variants onto the canonical trio. Models trained on other
+// agents' transcripts emit these no matter what the schema says; mapping
+// them costs nothing and saves a full tool round-trip per occurrence.
+var legacyPlanItemStatuses = map[PlanItemStatus]PlanItemStatus{
+	"todo":        PlanItemPending,
+	"done":        PlanItemCompleted,
+	"in-progress": PlanItemInProgress,
+	"inprogress":  PlanItemInProgress,
+	"complete":    PlanItemCompleted,
+	"finished":    PlanItemCompleted,
+}
+
+// NormalizePlanItemStatus maps legacy loom names ("todo", "done") and
+// common variants onto the canonical statuses; unrecognized values pass
+// through unchanged so validation still rejects them.
+func NormalizePlanItemStatus(s PlanItemStatus) PlanItemStatus {
+	if canonical, ok := legacyPlanItemStatuses[s]; ok {
+		return canonical
+	}
+	return s
+}
 
 // PlanItem represents a single step in the dynamic plan.
 type PlanItem struct {
@@ -39,9 +67,10 @@ type PlanItem struct {
 // Validate checks the plan item.
 func (p PlanItem) Validate() error {
 	switch p.Status {
-	case PlanItemTodo, PlanItemInProgress, PlanItemDone:
+	case PlanItemPending, PlanItemInProgress, PlanItemCompleted:
 	default:
-		return fmt.Errorf("invalid plan item status %q", p.Status)
+		return fmt.Errorf("invalid plan item status %q (valid: %s, %s, %s)",
+			p.Status, PlanItemPending, PlanItemInProgress, PlanItemCompleted)
 	}
 	if p.Goal == "" {
 		return fmt.Errorf("plan item goal required")
@@ -87,22 +116,32 @@ func (p Plan) CurrentInProgress() *PlanItem {
 	return nil
 }
 
-// NextTodo returns the next todo item, if any.
-func (p Plan) NextTodo() *PlanItem {
+// NextPending returns the next pending item, if any.
+func (p Plan) NextPending() *PlanItem {
 	for i := range p.Items {
-		if p.Items[i].Status == PlanItemTodo {
+		if p.Items[i].Status == PlanItemPending {
 			return &p.Items[i]
 		}
 	}
 	return nil
 }
 
-// IsComplete reports whether all items are done.
+// IsComplete reports whether all items are completed.
 func (p Plan) IsComplete() bool {
 	for _, item := range p.Items {
-		if item.Status != PlanItemDone {
+		if item.Status != PlanItemCompleted {
 			return false
 		}
 	}
 	return len(p.Items) > 0
+}
+
+// NormalizeStatuses rewrites legacy and variant item statuses to their
+// canonical forms in place. Call it on plans restored from checkpoints
+// written before the pending/completed rename so the re-injected plan
+// note never shows the model a stale vocabulary.
+func (p *Plan) NormalizeStatuses() {
+	for i := range p.Items {
+		p.Items[i].Status = NormalizePlanItemStatus(p.Items[i].Status)
+	}
 }

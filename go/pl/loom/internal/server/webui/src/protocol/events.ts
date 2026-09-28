@@ -168,7 +168,9 @@ export interface ReasoningChangedPayload {
 }
 
 export interface PlanItem {
-  status?: 'todo' | 'in_progress' | 'done' | string
+  // Canonical post-rename values; pre-rename sessions may still replay
+  // 'todo'/'done', so consumers must normalize (see PlanPanel.normStatus).
+  status?: 'pending' | 'in_progress' | 'completed' | string
   goal?: string
 }
 

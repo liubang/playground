@@ -43,9 +43,9 @@ func planCall(t *testing.T, args string) domain.ToolCall {
 }
 
 const validPlanArgs = `{"action":"plan","plan":[` +
-	`{"goal":"read existing code","status":"done","evidence":["read goal.go"]},` +
+	`{"goal":"read existing code","status":"completed","evidence":["read goal.go"]},` +
 	`{"goal":"implement update_task","status":"in_progress"},` +
-	`{"goal":"add tests","status":"todo"}]}`
+	`{"goal":"add tests","status":"pending"}]}`
 
 func TestUpdatePlanPrepareValidSnapshot(t *testing.T) {
 	tool, _ := newPlanTool(t)
@@ -83,8 +83,8 @@ func TestUpdatePlanPrepareValidSnapshot(t *testing.T) {
 func TestUpdatePlanPrepareToleratesStringEvidence(t *testing.T) {
 	tool, _ := newPlanTool(t)
 	args := `{"action":"plan","plan":[` +
-		`{"goal":"read existing code","status":"done","evidence":"read goal.go"},` +
-		`{"goal":"implement update_task","status":"done","evidence":null},` +
+		`{"goal":"read existing code","status":"completed","evidence":"read goal.go"},` +
+		`{"goal":"implement update_task","status":"completed","evidence":null},` +
 		`{"goal":"add tests","status":"in_progress"}]}`
 	prepared, err := tool.Prepare(context.Background(), planCall(t, args))
 	if err != nil {
@@ -106,19 +106,53 @@ func TestUpdatePlanPrepareToleratesStringEvidence(t *testing.T) {
 	}
 }
 
+// Cross-harness models emit the status names they learned elsewhere
+// (Claude Code / Codex / Gemini all use pending/completed) or loom's own
+// pre-rename todo/done; both are mapped onto the canonical trio instead
+// of rejected, the same tolerance the string-evidence normalizer shows.
+func TestUpdatePlanPrepareNormalizesStatusAliases(t *testing.T) {
+	tool, _ := newPlanTool(t)
+	args := `{"action":"plan","plan":[` +
+		`{"goal":"a","status":"done","evidence":["ok"]},` +
+		`{"goal":"b","status":"in-progress"},` +
+		`{"goal":"c","status":"todo"}]}`
+	prepared, err := tool.Prepare(context.Background(), planCall(t, args))
+	if err != nil {
+		t.Fatalf("Prepare error: %v", err)
+	}
+	plan, _, _, err := decodeUpdatePlanArgs(prepared.Call.Arguments)
+	if err != nil {
+		t.Fatalf("canonical arguments no longer decode: %v", err)
+	}
+	wants := []domain.PlanItemStatus{domain.PlanItemCompleted, domain.PlanItemInProgress, domain.PlanItemPending}
+	for i, want := range wants {
+		if plan.Items[i].Status != want {
+			t.Fatalf("items[%d].Status = %q, want normalized %q", i, plan.Items[i].Status, want)
+		}
+	}
+	// The canonical arguments carry the normalized names, so the Execute
+	// re-decode sees only the canonical vocabulary.
+	canonical := string(prepared.Call.Arguments)
+	for _, stale := range []string{"todo", "done", "in-progress"} {
+		if strings.Contains(canonical, stale) {
+			t.Fatalf("canonical arguments still carry alias %q: %s", stale, canonical)
+		}
+	}
+}
+
 func TestUpdatePlanPrepareRejectsInvalidSnapshots(t *testing.T) {
 	tool, _ := newPlanTool(t)
 	cases := map[string]string{
 		"single step":        `{"action":"plan","plan":[{"goal":"only one","status":"in_progress"}]}`,
 		"empty plan":         `{"action":"plan","plan":[]}`,
 		"missing plan":       `{"action":"plan"}`,
-		"unknown action":     `{"action":"task","plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}]}`,
-		"unknown field":      `{"action":"plan","plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}],"extra":1}`,
-		"empty goal":         `{"action":"plan","plan":[{"goal":"  ","status":"todo"},{"goal":"b","status":"todo"}]}`,
-		"bad status":         `{"action":"plan","plan":[{"goal":"a","status":"doing"},{"goal":"b","status":"todo"}]}`,
+		"unknown action":     `{"action":"task","plan":[{"goal":"a","status":"pending"},{"goal":"b","status":"pending"}]}`,
+		"unknown field":      `{"action":"plan","plan":[{"goal":"a","status":"pending"},{"goal":"b","status":"pending"}],"extra":1}`,
+		"empty goal":         `{"action":"plan","plan":[{"goal":"  ","status":"pending"},{"goal":"b","status":"pending"}]}`,
+		"bad status":         `{"action":"plan","plan":[{"goal":"a","status":"doing"},{"goal":"b","status":"pending"}]}`,
 		"two in_progress":    `{"action":"plan","plan":[{"goal":"a","status":"in_progress"},{"goal":"b","status":"in_progress"}]}`,
-		"unknown item field": `{"action":"plan","plan":[{"goal":"a","status":"todo","step":"a"},{"goal":"b","status":"todo"}]}`,
-		"numeric evidence":   `{"action":"plan","plan":[{"goal":"a","status":"done","evidence":5},{"goal":"b","status":"todo"}]}`,
+		"unknown item field": `{"action":"plan","plan":[{"goal":"a","status":"pending","step":"a"},{"goal":"b","status":"pending"}]}`,
+		"numeric evidence":   `{"action":"plan","plan":[{"goal":"a","status":"completed","evidence":5},{"goal":"b","status":"pending"}]}`,
 	}
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -134,7 +168,7 @@ func TestUpdatePlanTitleHandling(t *testing.T) {
 
 	// Title set at creation.
 	withTitle := `{"action":"plan","title":"loom 架构梳理","plan":[` +
-		`{"goal":"a","status":"in_progress"},{"goal":"b","status":"todo"}]}`
+		`{"goal":"a","status":"in_progress"},{"goal":"b","status":"pending"}]}`
 	prepared, err := tool.Prepare(context.Background(), planCall(t, withTitle))
 	if err != nil {
 		t.Fatalf("Prepare with title error: %v", err)
@@ -147,7 +181,7 @@ func TestUpdatePlanTitleHandling(t *testing.T) {
 
 	// Title capped at 120 runes.
 	long := strings.Repeat("长", 130)
-	longArgs := `{"action":"plan","title":"` + long + `","plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}]}`
+	longArgs := `{"action":"plan","title":"` + long + `","plan":[{"goal":"a","status":"pending"},{"goal":"b","status":"pending"}]}`
 	prepared, err = tool.Prepare(context.Background(), planCall(t, longArgs))
 	if err != nil {
 		t.Fatalf("Prepare long title error: %v", err)
@@ -166,7 +200,7 @@ func TestDrainPlanUpdatesPreservesTitleAcrossRevisions(t *testing.T) {
 
 	cell.Put(domain.Plan{Title: "overall objective", Items: []domain.PlanItem{
 		{Index: 0, Goal: "a", Status: domain.PlanItemInProgress},
-		{Index: 1, Goal: "b", Status: domain.PlanItemTodo},
+		{Index: 1, Goal: "b", Status: domain.PlanItemPending},
 	}})
 	loop.drainPlanUpdates()
 	if run.Plan.Title != "overall objective" {
@@ -175,7 +209,7 @@ func TestDrainPlanUpdatesPreservesTitleAcrossRevisions(t *testing.T) {
 
 	// A revision without a title keeps the existing one.
 	cell.Put(domain.Plan{Items: []domain.PlanItem{
-		{Index: 0, Goal: "a", Status: domain.PlanItemDone},
+		{Index: 0, Goal: "a", Status: domain.PlanItemCompleted},
 		{Index: 1, Goal: "b", Status: domain.PlanItemInProgress},
 	}})
 	loop.drainPlanUpdates()
@@ -185,8 +219,8 @@ func TestDrainPlanUpdatesPreservesTitleAcrossRevisions(t *testing.T) {
 
 	// A revision with a new title replaces it.
 	cell.Put(domain.Plan{Title: "renamed", Items: []domain.PlanItem{
-		{Index: 0, Goal: "a", Status: domain.PlanItemDone},
-		{Index: 1, Goal: "b", Status: domain.PlanItemDone},
+		{Index: 0, Goal: "a", Status: domain.PlanItemCompleted},
+		{Index: 1, Goal: "b", Status: domain.PlanItemCompleted},
 	}})
 	loop.drainPlanUpdates()
 	if run.Plan.Title != "renamed" {
@@ -201,7 +235,7 @@ func TestDrainPlanUpdatesPreservesTitleAcrossRevisions(t *testing.T) {
 func TestUpdatePlanPrepareToleratesGoalFields(t *testing.T) {
 	tool, cell := newPlanTool(t)
 	args := `{"action":"plan","objective":"analyze the table","token_budget":5000,"status":"complete",` +
-		`"plan":[{"goal":"a","status":"in_progress"},{"goal":"b","status":"todo"}]}`
+		`"plan":[{"goal":"a","status":"in_progress"},{"goal":"b","status":"pending"}]}`
 	prepared, err := tool.Prepare(context.Background(), planCall(t, args))
 	if err != nil {
 		t.Fatalf("Prepare with goal fields error: %v", err)
@@ -243,7 +277,7 @@ func TestUpdatePlanPrepareToleratesGoalFields(t *testing.T) {
 func TestUpdatePlanPrepareIgnoresNullGoalFieldsSilently(t *testing.T) {
 	tool, _ := newPlanTool(t)
 	args := `{"action":"plan","objective":null,"token_budget":null,"status":null,` +
-		`"plan":[{"goal":"a","status":"in_progress"},{"goal":"b","status":"todo"}]}`
+		`"plan":[{"goal":"a","status":"in_progress"},{"goal":"b","status":"pending"}]}`
 	prepared, err := tool.Prepare(context.Background(), planCall(t, args))
 	if err != nil {
 		t.Fatalf("Prepare with null goal fields error: %v", err)
@@ -265,7 +299,7 @@ func TestUpdatePlanPrepareIgnoresNullGoalFieldsSilently(t *testing.T) {
 func TestUpdateTaskPrepareInfersMissingAction(t *testing.T) {
 	tool, cell := newPlanTool(t)
 	prepared, err := tool.Prepare(context.Background(), planCall(t,
-		`{"plan":[{"goal":"a","status":"in_progress"},{"goal":"b","status":"todo"}]}`))
+		`{"plan":[{"goal":"a","status":"in_progress"},{"goal":"b","status":"pending"}]}`))
 	if err != nil {
 		t.Fatalf("Prepare without action error: %v", err)
 	}
@@ -307,7 +341,7 @@ func TestUpdateTaskInferSkipsNullMirroredFields(t *testing.T) {
 func TestUpdateTaskInferPrefersPlanOnAmbiguousPayload(t *testing.T) {
 	tool, cell := newPlanTool(t)
 	prepared, err := tool.Prepare(context.Background(), planCall(t,
-		`{"objective":"ship it","plan":[{"goal":"a","status":"in_progress"},{"goal":"b","status":"todo"}]}`))
+		`{"objective":"ship it","plan":[{"goal":"a","status":"in_progress"},{"goal":"b","status":"pending"}]}`))
 	if err != nil {
 		t.Fatalf("Prepare error: %v", err)
 	}
@@ -397,8 +431,8 @@ func TestDrainPlanUpdatesAppliesSnapshotAndAudits(t *testing.T) {
 
 	// A second snapshot in a later batch replaces the first.
 	cell.Put(domain.Plan{Items: []domain.PlanItem{
-		{Index: 0, Goal: "read existing code", Status: domain.PlanItemDone},
-		{Index: 1, Goal: "implement update_task", Status: domain.PlanItemDone},
+		{Index: 0, Goal: "read existing code", Status: domain.PlanItemCompleted},
+		{Index: 1, Goal: "implement update_task", Status: domain.PlanItemCompleted},
 		{Index: 2, Goal: "add tests", Status: domain.PlanItemInProgress},
 	}})
 	loop.drainPlanUpdates()
@@ -433,9 +467,9 @@ func TestEffectiveMessagesInjectsPlanNote(t *testing.T) {
 	}
 
 	run.Plan = domain.Plan{Items: []domain.PlanItem{
-		{Index: 0, Goal: "step one", Status: domain.PlanItemDone, Evidence: []string{"verified"}},
+		{Index: 0, Goal: "step one", Status: domain.PlanItemCompleted, Evidence: []string{"verified"}},
 		{Index: 1, Goal: "step two", Status: domain.PlanItemInProgress},
-		{Index: 2, Goal: "step three", Status: domain.PlanItemTodo},
+		{Index: 2, Goal: "step three", Status: domain.PlanItemPending},
 	}}
 	messages, _, _ = loop.effectiveMessages(context.Background())
 	if len(messages) != 2 {
@@ -446,7 +480,7 @@ func TestEffectiveMessagesInjectsPlanNote(t *testing.T) {
 		t.Fatalf("plan note role = %s, want system", note.Role)
 	}
 	text := strings.Join(note.TextParts(), "\n")
-	for _, want := range []string{"[task plan] 1/3 done", "current: step two", "[done] step one", "evidence: verified"} {
+	for _, want := range []string{"[task plan] 1/3 completed", "current: step two", "[completed] step one", "evidence: verified"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("plan note missing %q:\n%s", want, text)
 		}
@@ -457,8 +491,8 @@ func TestEffectiveMessagesInjectsPlanNote(t *testing.T) {
 	}
 
 	// A complete plan is not re-injected.
-	run.Plan.Items[1].Status = domain.PlanItemDone
-	run.Plan.Items[2].Status = domain.PlanItemDone
+	run.Plan.Items[1].Status = domain.PlanItemCompleted
+	run.Plan.Items[2].Status = domain.PlanItemCompleted
 	messages, _, _ = loop.effectiveMessages(context.Background())
 	if len(messages) != 1 {
 		t.Fatalf("messages = %d with complete plan, want 1", len(messages))
@@ -472,10 +506,10 @@ func TestEffectiveMessagesInjectsPlanNote(t *testing.T) {
 func TestPlanStatusNoteTrimsEvidence(t *testing.T) {
 	longEvidence := strings.Repeat("x", 200)
 	note := planStatusNote(domain.Plan{Items: []domain.PlanItem{
-		{Index: 0, Goal: "oldest", Status: domain.PlanItemDone, Evidence: []string{"old-evidence-should-vanish"}},
-		{Index: 1, Goal: "older", Status: domain.PlanItemDone, Evidence: []string{"another-old-evidence"}},
-		{Index: 2, Goal: "recent", Status: domain.PlanItemDone, Evidence: []string{"recent-evidence"}},
-		{Index: 3, Goal: "latest", Status: domain.PlanItemDone, Evidence: []string{longEvidence}},
+		{Index: 0, Goal: "oldest", Status: domain.PlanItemCompleted, Evidence: []string{"old-evidence-should-vanish"}},
+		{Index: 1, Goal: "older", Status: domain.PlanItemCompleted, Evidence: []string{"another-old-evidence"}},
+		{Index: 2, Goal: "recent", Status: domain.PlanItemCompleted, Evidence: []string{"recent-evidence"}},
+		{Index: 3, Goal: "latest", Status: domain.PlanItemCompleted, Evidence: []string{longEvidence}},
 		{Index: 4, Goal: "current", Status: domain.PlanItemInProgress},
 	}})
 	if strings.Contains(note, "old-evidence-should-vanish") || strings.Contains(note, "another-old-evidence") {
@@ -490,7 +524,7 @@ func TestPlanStatusNoteTrimsEvidence(t *testing.T) {
 	if !strings.Contains(note, "…") {
 		t.Fatalf("truncation marker missing:\n%s", note)
 	}
-	for _, want := range []string{"[done] oldest", "[done] older", "4/5 done"} {
+	for _, want := range []string{"[completed] oldest", "[completed] older", "4/5 completed"} {
 		if !strings.Contains(note, want) {
 			t.Fatalf("note missing %q:\n%s", want, note)
 		}
@@ -501,7 +535,7 @@ func TestRecoverRunReplaysPlanRevisions(t *testing.T) {
 	clock := domain.NewFakeClock(time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC))
 	sessionID := domain.NewSessionID()
 	plan := domain.Plan{Items: []domain.PlanItem{
-		{Index: 0, Goal: "step one", Status: domain.PlanItemDone},
+		{Index: 0, Goal: "step one", Status: domain.PlanItemCompleted},
 		{Index: 1, Goal: "step two", Status: domain.PlanItemInProgress},
 	}}
 	payload, err := domain.MarshalPayload(plan)

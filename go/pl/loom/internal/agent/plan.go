@@ -102,15 +102,15 @@ func planStatusNote(plan domain.Plan) string {
 	done := 0
 	lastDone := -1
 	for i, item := range plan.Items {
-		if item.Status == domain.PlanItemDone {
+		if item.Status == domain.PlanItemCompleted {
 			done++
 			lastDone = i
 		}
 	}
-	// Evidence rides only with the most recent done steps.
+	// Evidence rides only with the most recent completed steps.
 	prevDone := -1
 	for i := lastDone - 1; i >= 0 && prevDone < 0; i-- {
-		if plan.Items[i].Status == domain.PlanItemDone {
+		if plan.Items[i].Status == domain.PlanItemCompleted {
 			prevDone = i
 		}
 	}
@@ -120,13 +120,13 @@ func planStatusNote(plan domain.Plan) string {
 	}
 	var sb strings.Builder
 	if plan.Title != "" {
-		fmt.Fprintf(&sb, "[task plan] %s: %d/%d done; current: %s\n", plan.Title, done, len(plan.Items), current)
+		fmt.Fprintf(&sb, "[task plan] %s: %d/%d completed; current: %s\n", plan.Title, done, len(plan.Items), current)
 	} else {
-		fmt.Fprintf(&sb, "[task plan] %d/%d done; current: %s\n", done, len(plan.Items), current)
+		fmt.Fprintf(&sb, "[task plan] %d/%d completed; current: %s\n", done, len(plan.Items), current)
 	}
 	for i, item := range plan.Items {
 		fmt.Fprintf(&sb, "%d. [%s] %s", i+1, item.Status, item.Goal)
-		if item.Status == domain.PlanItemDone && len(item.Evidence) > 0 && (i == lastDone || (planNoteEvidenceItems > 1 && i == prevDone)) {
+		if item.Status == domain.PlanItemCompleted && len(item.Evidence) > 0 && (i == lastDone || (planNoteEvidenceItems > 1 && i == prevDone)) {
 			fmt.Fprintf(&sb, " — evidence: %s", toolkit.Ellipsize(strings.Join(item.Evidence, "; "), planNoteEvidenceMaxLen))
 		}
 		sb.WriteString("\n")
@@ -134,7 +134,7 @@ func planStatusNote(plan domain.Plan) string {
 	// Guidance is deliberately stage-boundary rather than "update
 	// immediately": every update is a full snapshot that persists in the
 	// transcript, so updates belong at step transitions, not mid-step.
-	sb.WriteString("Rule: update the plan at step boundaries (mark the finished step done, start the next); avoid mid-step or back-to-back revisions.")
+	sb.WriteString("Rule: update the plan at step boundaries (mark the finished step completed, start the next); avoid mid-step or back-to-back revisions.")
 	return sb.String()
 }
 
@@ -257,10 +257,15 @@ func decodeUpdatePlanArgs(raw json.RawMessage) (domain.Plan, json.RawMessage, []
 			return domain.Plan{}, nil, nil, domain.NewError(domain.ErrInvalidInput,
 				fmt.Sprintf("plan step %d: invalid evidence", i+1), domain.WithCause(err))
 		}
+		// Legacy loom names and cross-harness variants (todo, done,
+		// in-progress, complete) are mapped onto the canonical
+		// pending/in_progress/completed instead of rejected — the model
+		// means well, and a strict rejection costs a whole tool
+		// round-trip (the evidence-string precedent below).
 		item := domain.PlanItem{
 			Index:  i,
 			Goal:   goal,
-			Status: domain.PlanItemStatus(strings.TrimSpace(raw.Status)),
+			Status: domain.NormalizePlanItemStatus(domain.PlanItemStatus(strings.TrimSpace(raw.Status))),
 		}
 		for _, ev := range evidence {
 			if trimmed := strings.TrimSpace(ev); trimmed != "" {
@@ -268,7 +273,7 @@ func decodeUpdatePlanArgs(raw json.RawMessage) (domain.Plan, json.RawMessage, []
 			}
 		}
 		items = append(items, item)
-		canonicalArgs.Plan = append(canonicalArgs.Plan, updatePlanArgsItem{Goal: raw.Goal, Status: raw.Status, Evidence: evidence})
+		canonicalArgs.Plan = append(canonicalArgs.Plan, updatePlanArgsItem{Goal: raw.Goal, Status: string(item.Status), Evidence: evidence})
 	}
 	plan := domain.Plan{Title: title, Items: items}
 	if err := plan.Validate(); err != nil {

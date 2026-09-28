@@ -908,8 +908,10 @@ func (m Model) renderPlanPanel() string {
 		item := m.plan.Items[i]
 		mark := icons.PlanTodo
 		style := lipgloss.NewStyle()
-		switch item.Status {
-		case domain.PlanItemDone:
+		// Normalize: sessions recorded before the pending/completed
+		// rename replay plan snapshots carrying todo/done.
+		switch domain.NormalizePlanItemStatus(item.Status) {
+		case domain.PlanItemCompleted:
 			mark = icons.PlanDone
 			style = m.theme.Dim
 		case domain.PlanItemInProgress:

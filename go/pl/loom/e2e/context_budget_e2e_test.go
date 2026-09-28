@@ -528,11 +528,16 @@ func TestE2EUnifiedOutputTruncation(t *testing.T) {
 // E7: prepare failures keep the event stream paired (degraded
 // prepared/started events), and a malformed-arguments placeholder
 // surfaces its embedded hint instead of the internal field name.
+// The malformed call streams EMPTY arguments (the "no arguments at
+// all" provider failure): repairable near-miss JSON now gets repaired
+// and routed into normal Prepare for read-only tools (and the strict
+// bounce for side-effecting ones), so the placeholder hint path is
+// exercised via the payload shape the repair pass declines.
 func TestE2EPrepareFailedPairingAndMalformedHint(t *testing.T) {
 	ws := t.TempDir()
 	mock := newMockOpenAI(t, []mockEntry{
 		{ToolName: "grep", ToolArgs: `{"pattern":""}`, UsageIn: 100, UsageOut: 10},
-		{ToolName: "grep", ToolArgs: `{"pattern":`, UsageIn: 100, UsageOut: 10},
+		{ToolName: "grep", ToolArgs: ``, UsageIn: 100, UsageOut: 10},
 		{Text: "recovered", UsageIn: 100, UsageOut: 10},
 	})
 	registry, artStore := realEnv(t, ws)

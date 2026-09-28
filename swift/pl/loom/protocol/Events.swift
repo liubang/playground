@@ -370,7 +370,7 @@ struct PlanPayload: Decodable, Sendable {
         let index: Int
         let goal: String
         let status: String
-        /// Completion evidence lines (domain todo item) — an ARRAY of
+        /// Completion evidence lines (domain plan item) — an ARRAY of
         /// strings; decoding it as a single String used to fail the
         /// whole snapshot with a typeMismatch.
         let evidence: [String]?

@@ -376,8 +376,8 @@ func builtinSections() []promptSection {
 			title:  "Task Planning",
 			body: `- Do not use update_task (action "plan") for simple, straightforward tasks (roughly the easiest 25%); for multi-step tasks, plan first, then execute.
 - No single-step plans; a plan decomposes into independently verifiable steps. Give the plan a short title at creation (a few words capturing the goal, e.g. "loom architecture review").
-- Call update_task (action "plan") immediately when a sub-task completes — first mark the current step done (ideally with a one-line evidence note citing the verification), then mark the next step in_progress; at most one in_progress at any time. Never batch updates at the end of the task.
-- Produce before marking: only mark a step done after its artifact (code change, command verification, conclusion text) actually exists; for steps about outputting/summarizing/delivering, the visible content must appear in the same reply BEFORE calling update_task — never mark early.
+- Call update_task (action "plan") immediately when a sub-task completes — first mark the current step completed (ideally with a one-line evidence note citing the verification), then mark the next step in_progress (the rest stay pending); at most one in_progress at any time. Never batch updates at the end of the task.
+- Produce before marking: only mark a step completed after its artifact (code change, command verification, conclusion text) actually exists; for steps about outputting/summarizing/delivering, the visible content must appear in the same reply BEFORE calling update_task — never mark early.
 - The plan persists across session turns, context compaction, and interruption recovery; its latest state is automatically injected into your context before every model request — do not restate the plan in your replies.`,
 		},
 		{

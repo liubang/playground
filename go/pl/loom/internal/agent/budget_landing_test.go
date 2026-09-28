@@ -113,7 +113,13 @@ func TestPrepareFailedKeepsEventStreamPaired(t *testing.T) {
 				ID:   domain.NewToolCallID(),
 				Name: "read_file",
 				Arguments: json.RawMessage(
-					`{"__malformed_arguments":"{bad json","error":"model emitted invalid arguments JSON; re-issue the tool call with valid arguments"}`,
+					// An empty embedded payload (the provider streamed no
+					// arguments at all) declines the tolerant repair pass,
+					// so read-only read_file still exercises the strict
+					// interception path — repairable near-miss JSON now
+					// routes into normal Prepare instead (see
+					// TestLoopMalformedArgumentsRepairedForReadTools).
+					`{"__malformed_arguments":"","error":"model emitted invalid arguments JSON; re-issue the tool call with valid arguments"}`,
 				),
 			}},
 			StopReason: domain.StopToolUse,

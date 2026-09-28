@@ -355,9 +355,9 @@ func TestApplyRuntimeEventBudgetNotice(t *testing.T) {
 func TestPlanPanelRendersChecklistAndHides(t *testing.T) {
 	m := Model{theme: NoColorTheme(), width: 100}
 	m.plan = domain.Plan{Items: []domain.PlanItem{
-		{Index: 0, Goal: "read code", Status: domain.PlanItemDone},
+		{Index: 0, Goal: "read code", Status: domain.PlanItemCompleted},
 		{Index: 1, Goal: "implement feature", Status: domain.PlanItemInProgress},
-		{Index: 2, Goal: "add tests", Status: domain.PlanItemTodo},
+		{Index: 2, Goal: "add tests", Status: domain.PlanItemPending},
 	}}
 
 	panel := m.renderPlanPanel()
@@ -594,8 +594,8 @@ func TestSessionSwitchResetsEventStreamLockout(t *testing.T) {
 func TestTurnStartedClearsPlanPanel(t *testing.T) {
 	m := NewModel(newTestController(t), "test-model", "/ws")
 	m.plan = domain.Plan{Items: []domain.PlanItem{
-		{Index: 0, Goal: "read code", Status: domain.PlanItemDone},
-		{Index: 1, Goal: "implement feature", Status: domain.PlanItemDone},
+		{Index: 0, Goal: "read code", Status: domain.PlanItemCompleted},
+		{Index: 1, Goal: "implement feature", Status: domain.PlanItemCompleted},
 	}}
 	m.width = 100
 	if m.renderPlanPanel() == "" {
@@ -618,7 +618,7 @@ func TestPlanPanelCollapsesLongPlans(t *testing.T) {
 	m := Model{theme: NoColorTheme(), width: 100}
 	items := make([]domain.PlanItem, 0, 9)
 	for i := 0; i < 9; i++ {
-		items = append(items, domain.PlanItem{Index: i, Goal: fmt.Sprintf("step %d", i+1), Status: domain.PlanItemTodo})
+		items = append(items, domain.PlanItem{Index: i, Goal: fmt.Sprintf("step %d", i+1), Status: domain.PlanItemPending})
 	}
 	m.plan = domain.Plan{Items: items}
 

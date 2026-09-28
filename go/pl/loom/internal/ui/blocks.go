@@ -623,11 +623,12 @@ func ApplyRuntimeEvent(idx *BlockIndex, evt runtimeevent.RuntimeEvent) string {
 	return ""
 }
 
-// planDoneCount counts completed plan items.
+// planDoneCount counts completed plan items. Statuses are normalized so
+// pre-rename sessions (todo/done) replayed from history still count.
 func planDoneCount(plan domain.Plan) int {
 	done := 0
 	for _, item := range plan.Items {
-		if item.Status == domain.PlanItemDone {
+		if domain.NormalizePlanItemStatus(item.Status) == domain.PlanItemCompleted {
 			done++
 		}
 	}

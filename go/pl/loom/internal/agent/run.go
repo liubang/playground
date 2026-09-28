@@ -41,6 +41,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/model/httpc"
 	"github.com/liubang/playground/go/pl/loom/internal/model/replay"
 	"github.com/liubang/playground/go/pl/loom/internal/prompt"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 	"github.com/liubang/playground/go/pl/loom/internal/trace"
 )
 
@@ -188,6 +189,10 @@ func ContinueRun(checkpoint domain.Checkpoint, messages []domain.Message, sessio
 		}
 	}
 	plan := checkpoint.Plan
+	// Checkpoints written before the pending/completed rename still carry
+	// todo/done; canonicalize before the completion check and any
+	// re-injection so the model never sees the stale vocabulary.
+	plan.NormalizeStatuses()
 	if plan.IsComplete() {
 		plan = domain.Plan{}
 	}
@@ -297,6 +302,7 @@ func RecoverRun(sessionID domain.SessionID, checkpoint *domain.Checkpoint, messa
 	var goal *domain.Goal
 	if checkpoint != nil {
 		plan = checkpoint.Plan
+		plan.NormalizeStatuses()
 		usage = checkpoint.Usage
 		goal = checkpoint.Goal
 	}
@@ -1138,6 +1144,12 @@ type Loop struct {
 	ParentToolCallID domain.ToolCallID
 
 	prepared map[domain.ToolCallID]domain.PreparedCall
+	// repairedArgs marks calls whose transcript arguments carry the
+	// malformed-arguments placeholder while routing substituted a repaired
+	// payload: the freshness re-Prepare (executeTools) must baseline those
+	// calls on the repaired prepared arguments, not on the placeholder the
+	// built-in decoders would reject (see repairMalformedCallArgs).
+	repairedArgs map[domain.ToolCallID]struct{}
 	// execStarted records which calls already emitted
 	// tool.execution_started, so the early-rejection pairing never
 	// double-emits a start for a call that reached executeOne.
@@ -1853,7 +1865,7 @@ func systemMessage(text string, cacheable bool, clock domain.Clock) domain.Messa
 
 // reconcilePlanIfUnfinished gives the model exactly one extra turn to
 // close out an unfinished plan before the run terminates. Advisory plans are
-// otherwise routinely left with an in_progress (or todo) step after the
+// otherwise routinely left with an in_progress (or pending) step after the
 // final answer, so a session that succeeded looks like it is still working.
 // One nudge per run: if the model still ends with an open plan afterwards,
 // accept it and terminate.
@@ -1880,7 +1892,7 @@ func (l *Loop) reconcilePlanIfUnfinished() bool {
 func planReconcilePrompt(plan domain.Plan) string {
 	var remaining strings.Builder
 	for _, item := range plan.Items {
-		if item.Status != domain.PlanItemDone {
+		if item.Status != domain.PlanItemCompleted {
 			fmt.Fprintf(&remaining, "- [%s] %s\n", item.Status, item.Goal)
 		}
 	}
@@ -1888,7 +1900,7 @@ func planReconcilePrompt(plan domain.Plan) string {
 
 %s
 
-Before ending your turn, reconcile the plan: if the remaining work is in fact complete (its deliverable is already produced in this conversation), call update_task (action "plan") to mark those steps done with a brief evidence note — that is closing bookkeeping, not pre-marking. Otherwise keep executing the remaining steps instead of ending.`, strings.TrimRight(remaining.String(), "\n"))
+Before ending your turn, reconcile the plan: if the remaining work is in fact complete (its deliverable is already produced in this conversation), call update_task (action "plan") to mark those steps completed with a brief evidence note — that is closing bookkeeping, not pre-marking. Otherwise keep executing the remaining steps instead of ending.`, strings.TrimRight(remaining.String(), "\n"))
 }
 
 func (l *Loop) determineCompletion(ctx context.Context, stop domain.StopReason) error {
@@ -1956,6 +1968,7 @@ func (l *Loop) determineCompletion(ctx context.Context, stop domain.StopReason) 
 
 func (l *Loop) routeToolCalls(ctx context.Context) error {
 	l.prepared = make(map[domain.ToolCallID]domain.PreparedCall)
+	l.repairedArgs = nil
 	calls := lastToolCalls(l.Run.Messages)
 	// Soft-landing guard (docs/CONTEXT_DESIGN.md §4.4.2): during the
 	// budget wrap-up turn every tool call is denied outright — never
@@ -2007,13 +2020,27 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 		// same recoverable prepare failure with the actionable hint
 		// (docs/CONTEXT_DESIGN.md §4.6).
 		if hint, malformed := malformedArgumentsHint(tc.Arguments); malformed {
-			rawHash := rawArgsHash(tc.Arguments)
-			l.appendEarlyRejectionEvents(tc, rawHash)
-			l.recordToolError(ctx, tc, "prepare_failed", hint)
-			if reason := l.runaway.trackToolCall(l.runawayConfig(), tc.Name, tc.Arguments, &l.notices, l.Run.Clock); reason != "" {
-				return l.terminateRunaway(ctx, reason)
+			// First try to salvage the raw payload: providers stream
+			// near-miss JSON (unquoted string values, literal newlines
+			// inside strings) that a tolerant repair pass restores
+			// faithfully, and bouncing the call costs a whole model
+			// round-trip (sess_a34cc4d2992d3fe5ade4731669cdf5f1).
+			if repaired, ok := repairMalformedCallArgs(tool, tc); ok {
+				l.Logger.Warn("repaired malformed tool-call arguments", "tool", tc.Name)
+				tc.Arguments = repaired
+				if l.repairedArgs == nil {
+					l.repairedArgs = make(map[domain.ToolCallID]struct{})
+				}
+				l.repairedArgs[tc.ID] = struct{}{}
+			} else {
+				rawHash := rawArgsHash(tc.Arguments)
+				l.appendEarlyRejectionEvents(tc, rawHash)
+				l.recordToolError(ctx, tc, "prepare_failed", hint)
+				if reason := l.runaway.trackToolCall(l.runawayConfig(), tc.Name, tc.Arguments, &l.notices, l.Run.Clock); reason != "" {
+					return l.terminateRunaway(ctx, reason)
+				}
+				continue
 			}
-			continue
 		}
 		prepared, err := tool.Prepare(ctx, tc)
 		if err != nil {
@@ -2209,6 +2236,30 @@ func malformedArgumentsHint(raw json.RawMessage) (string, bool) {
 	return hint, true
 }
 
+// repairMalformedCallArgs attempts a tolerant JSON repair of the raw
+// payload embedded in a malformed-arguments placeholder. The escape
+// hatch is gated on the tool's audited blast radius: only built-in
+// tools whose static risk is read-only or bookkeeping (≤ R1) qualify —
+// a wrong repair there costs a failed read or a garbled plan, both
+// cheap and self-correcting, whereas a guessed repair on a write/exec
+// call could apply a truncated payload for real. MCP/config tools
+// declare their own capabilities (an undeclared set grades R0 while
+// the real blast radius is unknown), so they keep the strict bounce
+// that makes the model re-issue the call.
+func repairMalformedCallArgs(tool domain.Tool, tc domain.ToolCall) (json.RawMessage, bool) {
+	def := tool.Definition()
+	if def.Source != domain.ToolSourceBuiltin || def.Risk() > domain.R1 {
+		return nil, false
+	}
+	var placeholder struct {
+		Raw string `json:"__malformed_arguments"`
+	}
+	if err := json.Unmarshal(tc.Arguments, &placeholder); err != nil || placeholder.Raw == "" {
+		return nil, false
+	}
+	return toolkit.RepairJSON(placeholder.Raw)
+}
+
 // terminateRunaway closes the dangling calls of the current batch (the
 // transcript must stay replayable) and terminates the run as failed.
 func (l *Loop) terminateRunaway(ctx context.Context, reason string) error {
@@ -2366,7 +2417,15 @@ func (l *Loop) executeTools(ctx context.Context) error {
 			l.recordToolExecutionError(ctx, tc, err)
 			continue
 		}
-		if err := verifyPreparedFreshness(ctx, tool, tc, prepared); err != nil {
+		// A repaired call's transcript arguments are the
+		// malformed-arguments placeholder; what Prepare saw (and the
+		// approval bound to) is the repaired payload, so the freshness
+		// baseline is the prepared call itself.
+		freshnessOriginal := tc
+		if _, repaired := l.repairedArgs[tc.ID]; repaired {
+			freshnessOriginal = prepared.Call
+		}
+		if err := verifyPreparedFreshness(ctx, tool, freshnessOriginal, prepared); err != nil {
 			l.markExecutionStarted(prepared)
 			l.recordToolExecutionError(ctx, tc, err)
 			continue
@@ -2394,6 +2453,7 @@ func (l *Loop) executeTools(ctx context.Context) error {
 
 	// After tools, prepare the next turn; the loop entry decides compaction.
 	l.prepared = nil
+	l.repairedArgs = nil
 	l.drainGoalUpdates()
 	l.drainPlanUpdates()
 	l.reportContextUsage(ctx)

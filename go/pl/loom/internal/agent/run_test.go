@@ -149,8 +149,8 @@ func TestContinueRunPlanCarryOver(t *testing.T) {
 	}
 
 	completed := domain.Plan{Title: "old task", Items: []domain.PlanItem{
-		{Index: 0, Goal: "step one", Status: domain.PlanItemDone},
-		{Index: 1, Goal: "step two", Status: domain.PlanItemDone},
+		{Index: 0, Goal: "step one", Status: domain.PlanItemCompleted},
+		{Index: 1, Goal: "step two", Status: domain.PlanItemCompleted},
 	}}
 	run, err := ContinueRun(newCheckpoint(completed), nil, 7, domain.DefaultLimits(), clock)
 	if err != nil {
@@ -161,7 +161,7 @@ func TestContinueRunPlanCarryOver(t *testing.T) {
 	}
 
 	unfinished := domain.Plan{Title: "ongoing task", Items: []domain.PlanItem{
-		{Index: 0, Goal: "step one", Status: domain.PlanItemDone},
+		{Index: 0, Goal: "step one", Status: domain.PlanItemCompleted},
 		{Index: 1, Goal: "step two", Status: domain.PlanItemInProgress},
 	}}
 	run, err = ContinueRun(newCheckpoint(unfinished), nil, 7, domain.DefaultLimits(), clock)
@@ -803,8 +803,11 @@ func TestLoopRewritesCollidingProviderToolCallIDs(t *testing.T) {
 // arguments) used to kill the whole run at stream finalization
 // ("invalid tool call at index N: invalid arguments JSON"). The run must
 // survive: the aggregator preserves the raw payload as valid placeholder
-// JSON, the tool layer rejects the call with a recoverable prepare error,
-// and the transcript stays valid for checkpointing/recovery.
+// JSON, and for a read-only built-in tool the routing layer repairs the
+// near-miss JSON (literal newline inside the string here, as observed
+// from glm-5.2) and lets the call prepare and execute instead of
+// bouncing a whole model round-trip; the transcript stays valid for
+// checkpointing/recovery either way.
 func TestLoopSurvivesMalformedToolCallArguments(t *testing.T) {
 	// Emulate the real read_file's strict argument decoding: unknown fields
 	// are rejected, so the malformed-arguments placeholder never executes.
@@ -860,10 +863,10 @@ func TestLoopSurvivesMalformedToolCallArguments(t *testing.T) {
 		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
 	}
 
-	// The malformed call was routed and rejected by the tool layer with a
-	// recoverable error result (never executed).
-	if len(readTool.ExecutedCalls()) != 0 {
-		t.Fatalf("malformed call must not execute: %+v", readTool.ExecutedCalls())
+	// read_file is a read-only built-in (R1), so the repaired arguments
+	// went through the normal Prepare path and executed exactly once.
+	if len(readTool.ExecutedCalls()) != 1 {
+		t.Fatalf("repaired call executions = %d, want 1", len(readTool.ExecutedCalls()))
 	}
 	errorResults := 0
 	for _, msg := range run.Messages {
@@ -883,11 +886,110 @@ func TestLoopSurvivesMalformedToolCallArguments(t *testing.T) {
 			}
 		}
 	}
-	if errorResults != 1 {
-		t.Fatalf("recoverable tool error results = %d, want 1", errorResults)
+	if errorResults != 0 {
+		t.Fatalf("tool error results = %d, want 0 (the repaired call succeeded)", errorResults)
 	}
 	if dangling := unresolvedToolCalls(run.Messages); len(dangling) > 0 {
 		t.Fatalf("transcript has unresolved tool calls: %+v", dangling)
+	}
+}
+
+// The repair escape hatch must not apply to side-effecting tools: a
+// write-capable tool (R2) with malformed arguments keeps the strict
+// bounce — a guessed repair (e.g. an auto-closed truncated payload)
+// must never execute as a real write.
+func TestLoopMalformedArgumentsRepairSkipsWriteTools(t *testing.T) {
+	callID := domain.NewToolCallID()
+	writeTool := fakes.NewFakeTool(domain.ToolDefinition{
+		Name:         "write_file",
+		Description:  "Write file contents",
+		InputSchema:  json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}`),
+		Capabilities: []domain.Capability{domain.CapFSWrite},
+		Source:       domain.ToolSourceBuiltin,
+	}, domain.ToolResult{
+		Status:  domain.ToolStatusSuccess,
+		Content: []domain.ContentPart{{Kind: domain.PartText, Text: "written"}},
+	})
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls: []domain.ToolCall{{
+				ID:   callID,
+				Name: "write_file",
+				// Repairable near-miss JSON (unquoted string value); the
+				// repair would succeed — the risk gate must stop it.
+				Arguments: json.RawMessage(`{"path": "out.txt", "content": hello world}`),
+			}},
+			StopReason: domain.StopToolUse,
+		},
+		fakes.ScriptEntry{Text: "abandoned the write", StopReason: domain.StopEndTurn},
+	)
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
+	addUserTextMessage(run, "write out.txt")
+	registry := NewToolRegistry()
+	if err := registry.Register(writeTool); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	loop := &Loop{
+		Run: run, Model: model,
+		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
+		Registry: registry, Logger: slog.Default(),
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	if got := len(writeTool.PreparedCalls()); got != 0 {
+		t.Fatalf("Prepare calls = %d, want 0 (malformed write args must not be repaired)", got)
+	}
+	if got := len(writeTool.ExecutedCalls()); got != 0 {
+		t.Fatalf("Execute calls = %d, want 0 (malformed write args must never execute)", got)
+	}
+	result, ok := findToolResult(run, callID)
+	if !ok || result.Error == nil {
+		t.Fatalf("malformed write call must surface a tool error, got %+v (ok=%v)", result, ok)
+	}
+	if !strings.Contains(result.Error.Message, "re-issue the tool call with valid arguments") {
+		t.Fatalf("error message = %q, want the actionable hint", result.Error.Message)
+	}
+}
+
+// For a read-only built-in tool the repair applies to the real-world
+// failure shape from deepseek-v4-flash (unquoted CJK string value,
+// sess_a34cc4d2992d3fe5ade4731669cdf5f1): the call prepares and
+// executes in the same turn instead of bouncing a model round-trip.
+func TestLoopMalformedArgumentsRepairedForReadTools(t *testing.T) {
+	callID := domain.NewToolCallID()
+	readTool := fakes.ReadFileTool()
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls: []domain.ToolCall{{
+				ID:        callID,
+				Name:      "read_file",
+				Arguments: json.RawMessage(`{"path": 深入分析报告.md}`),
+			}},
+			StopReason: domain.StopToolUse,
+		},
+		fakes.ScriptEntry{Text: "read it", StopReason: domain.StopEndTurn},
+	)
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
+	addUserTextMessage(run, "read the report")
+	registry := NewToolRegistry()
+	if err := registry.Register(readTool); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	loop := &Loop{
+		Run: run, Model: model,
+		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
+		Registry: registry, Logger: slog.Default(),
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	if got := len(readTool.ExecutedCalls()); got != 1 {
+		t.Fatalf("Execute calls = %d, want 1 (repaired read args must execute)", got)
+	}
+	result, ok := findToolResult(run, callID)
+	if !ok || result.Error != nil {
+		t.Fatalf("repaired read call must succeed, got %+v (ok=%v)", result, ok)
 	}
 }
 
@@ -902,11 +1004,11 @@ func TestLoopReconcilesUnfinishedPlanOnce(t *testing.T) {
 		t.Fatalf("Register error: %v", err)
 	}
 	openSnapshot := `{"action":"plan","plan":[` +
-		`{"goal":"step one","status":"done","evidence":["done earlier"]},` +
+		`{"goal":"step one","status":"completed","evidence":["done earlier"]},` +
 		`{"goal":"step two","status":"in_progress"}]}`
 	closeSnapshot := `{"action":"plan","plan":[` +
-		`{"goal":"step one","status":"done","evidence":["done earlier"]},` +
-		`{"goal":"step two","status":"done","evidence":["produced"]}]}`
+		`{"goal":"step one","status":"completed","evidence":["done earlier"]},` +
+		`{"goal":"step two","status":"completed","evidence":["produced"]}]}`
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{
 			ToolCalls:  []domain.ToolCall{{ID: domain.NewToolCallID(), Name: "update_task", Arguments: json.RawMessage(openSnapshot)}},
@@ -969,7 +1071,7 @@ func TestLoopReconcileNudgeIsOneShot(t *testing.T) {
 		t.Fatalf("Register error: %v", err)
 	}
 	openSnapshot := `{"action":"plan","plan":[` +
-		`{"goal":"step one","status":"done"},` +
+		`{"goal":"step one","status":"completed"},` +
 		`{"goal":"step two","status":"in_progress"}]}`
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{
@@ -1017,7 +1119,7 @@ func TestLoopDoesNotNudgeForStalePlan(t *testing.T) {
 	})
 	// Inherited plan state from a previous turn: never revised this run.
 	run.Plan = domain.Plan{Items: []domain.PlanItem{
-		{Index: 0, Goal: "step one", Status: domain.PlanItemDone},
+		{Index: 0, Goal: "step one", Status: domain.PlanItemCompleted},
 		{Index: 1, Goal: "step two", Status: domain.PlanItemInProgress},
 	}}
 	loop := &Loop{
@@ -4273,7 +4375,7 @@ func TestUpdateGoalToolValidation(t *testing.T) {
 	// Plan-owned fields mixed into a goal call are stripped and recorded
 	// for disclosure instead of rejected (the update_task schema is flat,
 	// so models routinely mirror every property into one call).
-	args, err := decodeUpdateGoalArgs(json.RawMessage(`{"action":"goal","objective":"x","plan":[{"goal":"a","status":"todo"},{"goal":"b","status":"todo"}],"title":"t"}`))
+	args, err := decodeUpdateGoalArgs(json.RawMessage(`{"action":"goal","objective":"x","plan":[{"goal":"a","status":"pending"},{"goal":"b","status":"pending"}],"title":"t"}`))
 	if err != nil {
 		t.Fatalf("decodeUpdateGoalArgs(goal+plan fields) error = %v", err)
 	}

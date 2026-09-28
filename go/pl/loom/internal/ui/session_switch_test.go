@@ -37,7 +37,7 @@ func TestSessionSwitchResetsPerSessionUIState(t *testing.T) {
 	m.lastActivityAt = time.Now()
 	m.spinning = true
 	m.plan = domain.Plan{Items: []domain.PlanItem{
-		{Index: 0, Goal: "read code", Status: domain.PlanItemDone},
+		{Index: 0, Goal: "read code", Status: domain.PlanItemCompleted},
 		{Index: 1, Goal: "implement", Status: domain.PlanItemInProgress},
 	}}
 	m.planHidden = true

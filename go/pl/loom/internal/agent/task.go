@@ -66,7 +66,7 @@ func NewUpdateTaskTool(goalCell *GoalCell, planCell *PlanCell) (*UpdateTaskTool,
 			"with a status, 'objective' may carry the final summary recorded on the goal. " +
 			"action='plan' updates the task plan: the checklist you maintain for the current multi-step task. " +
 			"Submit the COMPLETE plan snapshot on every call — each call fully replaces the previous plan (not a diff). " +
-			"'plan' lists the steps (at least 2); each step carries a goal, a status ('todo' | 'in_progress' | 'done'), " +
+			"'plan' lists the steps (at least 2); each step carries a goal, a status ('pending' | 'in_progress' | 'completed'), " +
 			"and optional evidence notes (one-line verifications, a list of strings) for a completed step. " +
 			"'title' is a few words naming the overall objective — required when you first create the plan, omittable on later revisions. " +
 			"The plan's latest state is automatically shown to you before every model call and persists across turns and compaction; " +
@@ -77,7 +77,7 @@ func NewUpdateTaskTool(goalCell *GoalCell, planCell *PlanCell) (*UpdateTaskTool,
 			`"token_budget":{"type":"integer","minimum":1,"description":"goal action: cumulative input+output token budget for the goal."},` +
 			`"status":{"type":"string","enum":["complete","blocked"],"description":"goal action: close the goal with this outcome."},` +
 			`"title":{"type":"string","maxLength":120,"description":"plan action: short plan title (required on creation, omittable on revisions)."},` +
-			`"plan":{"type":"array","minItems":2,"description":"plan action: the complete step snapshot.","items":{"type":"object","additionalProperties":false,"properties":{"goal":{"type":"string","minLength":1,"maxLength":1024},"status":{"type":"string","enum":["todo","in_progress","done"]},"evidence":{"type":"array","items":{"type":"string","maxLength":1024}}},"required":["goal","status"]}}` +
+			`"plan":{"type":"array","minItems":2,"description":"plan action: the complete step snapshot.","items":{"type":"object","additionalProperties":false,"properties":{"goal":{"type":"string","minLength":1,"maxLength":1024},"status":{"type":"string","enum":["pending","in_progress","completed"]},"evidence":{"type":"array","items":{"type":"string","maxLength":1024}}},"required":["goal","status"]}}` +
 			`},"required":["action"]}`),
 		Source: domain.ToolSourceBuiltin,
 	}

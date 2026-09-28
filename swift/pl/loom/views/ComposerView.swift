@@ -777,7 +777,7 @@ struct PlanPanel: View {
     }
 
     private var doneCount: Int {
-        items.filter { $0.status == "done" }.count
+        items.filter { Self.renderStatus($0.status) == "done" }.count
     }
 
     private var currentIndex: Int? {
@@ -786,6 +786,17 @@ struct PlanPanel: View {
 
     private var allDone: Bool {
         doneCount == items.count
+    }
+
+    /// The wire status renamed todo/done → pending/completed; pre-rename
+    /// sessions replay the legacy names, so accept both, mapping onto the
+    /// panel's internal rendering vocabulary (done/in_progress/todo).
+    private static func renderStatus(_ status: String) -> String {
+        switch status {
+        case "completed", "done": "done"
+        case "in_progress": "in_progress"
+        default: "todo"
+        }
     }
 
     var body: some View {
@@ -942,7 +953,7 @@ struct PlanPanel: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 HStack(spacing: 10) {
-                    PlanStepNode(status: item.status, base: Theme.bg1)
+                    PlanStepNode(status: Self.renderStatus(item.status), base: Theme.bg1)
                         .frame(width: 16, height: 16)
                         .frame(width: 18)
                     Text(item.goal)
@@ -967,7 +978,7 @@ struct PlanPanel: View {
                     // contiguous 24pt, so node centers are 24 apart); each
                     // node's opaque base occludes the rail where they meet.
                     if index < items.count - 1 {
-                        PlanRailLine(status: item.status)
+                        PlanRailLine(status: Self.renderStatus(item.status))
                             .frame(width: 2, height: 24)
                             .offset(x: 8, y: 12)
                     }
@@ -982,7 +993,7 @@ struct PlanPanel: View {
             // into the header's bottom padding (the node ends there); in
             // the scrolling variant that part clips at the viewport — the
             // rail simply continues out of view.
-            PlanRailLine(status: items.first?.status ?? "todo")
+            PlanRailLine(status: Self.renderStatus(items.first?.status ?? "pending"))
                 .frame(width: 2, height: 11)
                 .offset(x: 8, y: -7)
         }

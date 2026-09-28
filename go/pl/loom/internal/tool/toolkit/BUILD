@@ -25,6 +25,7 @@ go_library(
         "cache.go",
         "command.go",
         "normalize.go",
+        "repair.go",
         "signing.go",
         "text.go",
     ],
@@ -33,6 +34,7 @@ go_library(
     deps = [
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/workspace:workspace_lib",
+        "@com_github_kaptinlin_jsonrepair//:jsonrepair",
     ],
 )
 
@@ -44,6 +46,7 @@ go_test(
         "cache_test.go",
         "command_test.go",
         "normalize_test.go",
+        "repair_test.go",
         "text_test.go",
     ],
     embed = [":toolkit_lib"],

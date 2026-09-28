@@ -105,7 +105,7 @@ func TestServeSessionsDoNotCrossTalk(t *testing.T) {
 			// plan would arm the loop's closing reconcile nudge and burn an
 			// extra scripted call.
 			{ID: domain.NewToolCallID(), Name: "update_task", Arguments: json.RawMessage(`{"action":"goal","objective":"goal-A","status":"complete"}`)},
-			{ID: domain.NewToolCallID(), Name: "update_task", Arguments: json.RawMessage(`{"action":"plan","plan":[{"goal":"step one","status":"done"},{"goal":"step two","status":"done"}]}`)},
+			{ID: domain.NewToolCallID(), Name: "update_task", Arguments: json.RawMessage(`{"action":"plan","plan":[{"goal":"step one","status":"completed"},{"goal":"step two","status":"completed"}]}`)},
 		}, StopReason: domain.StopToolUse},
 		fakes.ScriptEntry{Text: "A1 done", StopReason: domain.StopEndTurn},
 		// A turn 2: an ask_user question, answered mid-test; the steered
