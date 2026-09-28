@@ -47,6 +47,26 @@ final class MarkdownBlocksTests: XCTestCase {
         ])
     }
 
+    /// `\|` is a GFM-escaped literal pipe (cell content, not a column
+    /// boundary) — the only way to write a pipe inside a code span in
+    /// a table. The escape is consumed even inside code spans.
+    func testTableEscapedPipe() {
+        let blocks = MarkdownText.splitBlocks(
+            "| key | value |\n"
+                + "| --- | --- |\n"
+                + "| pattern | `{x\\|y}:n` |\n"
+                + "| a\\|b | c \\\\| d |",
+        )
+        XCTAssertEqual(blocks, [
+            .table(
+                header: ["key", "value"],
+                // `\\` is an escaped backslash — the pipe after it
+                // still separates cells.
+                rows: [["pattern", "`{x|y}:n`"], ["a|b", "c \\\\", "d"]],
+            ),
+        ])
+    }
+
     // MARK: Block-level line structure (headings, lists, paragraphs)
 
     func testHeadings() {

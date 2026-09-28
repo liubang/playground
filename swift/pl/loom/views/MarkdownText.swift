@@ -392,13 +392,34 @@ struct MarkdownText: View {
     }
 
     /// A line holding at least two pipes (or one leading pipe) — a
-    /// candidate table row. Single-pipe prose stays prose.
+    /// candidate table row. Single-pipe prose stays prose. `\|`
+    /// (a backslash-escaped pipe) is literal cell content, not a
+    /// boundary, so it doesn't count.
     private static func isTableRow(_ line: String) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         if trimmed.hasPrefix("|") {
             return true
         }
-        return trimmed.filter { $0 == "|" }.count >= 2
+        return unescapedPipeCount(trimmed) >= 2
+    }
+
+    /// Pipes not preceded by an odd-length backslash run: `\|` is an
+    /// escaped literal pipe, `\\|` is an escaped backslash then a
+    /// boundary pipe.
+    private static func unescapedPipeCount(_ line: String) -> Int {
+        var count = 0
+        var backslashes = 0
+        for char in line {
+            if char == "\\" {
+                backslashes += 1
+            } else {
+                if char == "|", backslashes % 2 == 0 {
+                    count += 1
+                }
+                backslashes = 0
+            }
+        }
+        return count
     }
 
     /// The GFM separator row: only pipes, dashes, colons and spaces,
@@ -410,16 +431,45 @@ struct MarkdownText: View {
     }
 
     /// Splits a pipe row into trimmed cells, dropping the edge pipes.
+    /// GFM escapes a literal in-cell pipe as `\|` — the only way to
+    /// put a pipe inside a code span in a table — so splitting must
+    /// skip it AND consume the backslash (the GFM spec strips the
+    /// escape even inside code spans, unlike normal inline parsing).
     private static func splitRow(_ line: String) -> [String] {
         var row = line.trimmingCharacters(in: .whitespaces)
         if row.hasPrefix("|") {
             row = String(row.dropFirst())
         }
-        if row.hasSuffix("|") {
-            row = String(row.dropLast())
+        var cells: [String] = []
+        var cell = ""
+        var backslashes = 0
+        for char in row {
+            if char == "\\" {
+                backslashes += 1
+                cell.append(char)
+                continue
+            }
+            if char == "|" {
+                if backslashes % 2 == 0 {
+                    cells.append(cell)
+                    cell = ""
+                } else {
+                    // Odd backslashes: the escape pairs with this pipe —
+                    // drop the escaping backslash, keep the literal pipe.
+                    cell.removeLast()
+                    cell.append(char)
+                }
+            } else {
+                cell.append(char)
+            }
+            backslashes = 0
         }
-        return row.components(separatedBy: "|")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
+        cells.append(cell)
+        // A trailing edge pipe leaves a final empty cell; drop it.
+        if cells.count > 1, cells.last?.trimmingCharacters(in: .whitespaces).isEmpty == true {
+            cells.removeLast()
+        }
+        return cells.map { $0.trimmingCharacters(in: .whitespaces) }
     }
 }
 
