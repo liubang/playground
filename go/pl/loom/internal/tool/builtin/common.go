@@ -106,15 +106,14 @@ func malformedArgumentsHint(raw json.RawMessage) (string, bool) {
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return "", false
 	}
-	payload, ok := fields[malformedArgumentsKey]
-	if !ok {
+	if _, ok := fields[malformedArgumentsKey]; !ok {
 		return "", false
 	}
+	// The raw payload is not echoed back: a garbled head fed into the
+	// transcript becomes an in-context example the model parrots
+	// (sess_23234e5b6235ccceb04652b13cfbf732). Evidence stays in the
+	// event store.
 	hint := "model emitted invalid arguments JSON; re-issue the tool call with valid arguments"
-	if head := strings.TrimSpace(string(payload)); len(head) > 200 {
-		head = head[:200] + "…"
-		hint += "; arguments began with " + head
-	}
 	return hint, true
 }
 

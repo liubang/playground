@@ -378,6 +378,19 @@ func TestValidateCommandArgsMissingCommandError(t *testing.T) {
 	}
 }
 
+// Like run_cmd, the model-visible schema must not advertise the
+// max_output_tokens alias (decoder-only); advertising both budgets
+// invited null-mirroring and hallucinated variants
+// (sess_23234e5b6235ccceb04652b13cfbf732).
+func TestExecSessionSchemaOmitsMaxOutputTokensAlias(t *testing.T) {
+	validator, _ := newValidator(t)
+	manager := newManager(t, validator)
+	execTool := newExecSessionTool(t, validator, manager)
+	if strings.Contains(string(execTool.Definition().InputSchema), "max_output_tokens") {
+		t.Fatalf("model-visible schema still advertises the alias: %s", execTool.Definition().InputSchema)
+	}
+}
+
 // The Codex-style max_output_tokens alias (the field models keep emitting
 // from OpenAI training priors) folds into the byte budget at Prepare time;
 // the signed canonical arguments carry max_output_bytes only, and the

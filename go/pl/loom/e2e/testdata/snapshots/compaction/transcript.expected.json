@@ -413,10 +413,6 @@
                       "minimum": 0,
                       "type": "integer"
                     },
-                    "max_output_tokens": {
-                      "description": "Alias of max_output_bytes (1 token ~ 4 bytes); ignored when max_output_bytes is present.",
-                      "type": "integer"
-                    },
                     "needs_gui_open": {
                       "description": "Allow the session to open URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval (start only).",
                       "type": "boolean"
@@ -1005,10 +1001,6 @@
                       "description": "Maximum stdout/stderr bytes returned inline.",
                       "maximum": 1048576,
                       "minimum": 1,
-                      "type": "integer"
-                    },
-                    "max_output_tokens": {
-                      "description": "Alias of max_output_bytes (1 token ~ 4 bytes); ignored when max_output_bytes is present.",
                       "type": "integer"
                     },
                     "needs_gui_open": {
@@ -2017,10 +2009,6 @@
                       "minimum": 0,
                       "type": "integer"
                     },
-                    "max_output_tokens": {
-                      "description": "Alias of max_output_bytes (1 token ~ 4 bytes); ignored when max_output_bytes is present.",
-                      "type": "integer"
-                    },
                     "needs_gui_open": {
                       "description": "Allow the session to open URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval (start only).",
                       "type": "boolean"
@@ -2609,10 +2597,6 @@
                       "description": "Maximum stdout/stderr bytes returned inline.",
                       "maximum": 1048576,
                       "minimum": 1,
-                      "type": "integer"
-                    },
-                    "max_output_tokens": {
-                      "description": "Alias of max_output_bytes (1 token ~ 4 bytes); ignored when max_output_bytes is present.",
                       "type": "integer"
                     },
                     "needs_gui_open": {
@@ -3277,12 +3261,12 @@
         "id": "{{id:69}}",
         "ignorable": true,
         "payload": {
-          "est_tokens_after": 1457,
-          "est_tokens_before": 3258,
+          "est_tokens_after": 1438,
+          "est_tokens_before": 3239,
           "masked_bytes": 0,
           "masked_outputs": 0,
-          "occupancy_after": 12477,
-          "occupancy_before": 14278,
+          "occupancy_after": 12386,
+          "occupancy_before": 14187,
           "phase": "pre_turn",
           "pruned_bytes": 12389,
           "pruned_outputs": 1,
@@ -3693,10 +3677,6 @@
                       "description": "Maximum bytes of merged output returned.",
                       "maximum": 65536,
                       "minimum": 0,
-                      "type": "integer"
-                    },
-                    "max_output_tokens": {
-                      "description": "Alias of max_output_bytes (1 token ~ 4 bytes); ignored when max_output_bytes is present.",
                       "type": "integer"
                     },
                     "needs_gui_open": {
@@ -4289,10 +4269,6 @@
                       "minimum": 1,
                       "type": "integer"
                     },
-                    "max_output_tokens": {
-                      "description": "Alias of max_output_bytes (1 token ~ 4 bytes); ignored when max_output_bytes is present.",
-                      "type": "integer"
-                    },
                     "needs_gui_open": {
                       "description": "Allow opening URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval.",
                       "type": "boolean"
@@ -4704,7 +4680,7 @@
                 "arguments": {
                   "limit": 500,
                   "offset": 1,
-                  "path": "{{cwd}}/band.txt"
+                  "path": "band.txt"
                 },
                 "id": "call_4e619e12383b4e26b49daa40",
                 "name": "read_file"
@@ -4798,7 +4774,7 @@
                 "arguments": {
                   "limit": 500,
                   "offset": 1,
-                  "path": "{{cwd}}/small.txt"
+                  "path": "small.txt"
                 },
                 "id": "call_2069432d9f2b437c80e244b0",
                 "name": "read_file"

@@ -18,6 +18,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -602,6 +603,82 @@ func (r *Run) AddBudgetNotice(payload domain.BudgetNoticePayload) domain.Event {
 	evt := r.newEvent(domain.EventBudgetNotice, payload)
 	r.pendingEvents = append(r.pendingEvents, evt)
 	return evt
+}
+
+// RewriteToolCallArguments replaces the in-memory copy of one tool
+// call's streamed arguments with the canonical form Prepare produced,
+// so the history replayed to the model carries the clean shape instead
+// of the raw stream. Raw model output (null-mirrored optional fields,
+// tolerated deviations, repaired payloads) is itself a strong in-context
+// example: replayed verbatim, the model imitates and escalates it
+// (sess_23234e5b6235ccceb04652b13cfbf732). The persisted response event
+// keeps the raw payload as evidence — only the model-facing in-memory
+// history is rewritten, so a resumed session briefly shows the raw form
+// again until its calls re-prepare. Reports whether a matching tool
+// call part was found.
+func (r *Run) RewriteToolCallArguments(callID domain.ToolCallID, canonical json.RawMessage) bool {
+	if !json.Valid(canonical) {
+		return false
+	}
+	for i := len(r.Messages) - 1; i >= 0; i-- {
+		msg := &r.Messages[i]
+		if msg.Role != domain.RoleAssistant {
+			continue
+		}
+		for j := range msg.Parts {
+			part := &msg.Parts[j]
+			if part.Kind != domain.PartToolCall || part.ToolCall == nil || part.ToolCall.ID != callID {
+				continue
+			}
+			if string(part.ToolCall.Arguments) == string(canonical) {
+				return true
+			}
+			part.ToolCall.Arguments = canonical
+			return true
+		}
+	}
+	return false
+}
+
+// modelFacingCanonicalArgs projects a prepared call's signed canonical
+// arguments onto the tool's model-visible input schema, for replay as
+// transcript history (RewriteToolCallArguments). Some tools sign a
+// canonical form carrying fields the model never sees — write binds the
+// file state with created/old_hash (internal/tool/edit/write.go).
+// Replaying those fields verbatim teaches the model to imitate them
+// (sess_f59104313f866e60289409f10a4af59a: write bounced 6x on
+// `unknown field "created"` until the model detoured through a run_cmd
+// heredoc) and breaks the freshness re-Prepare, which decodes the
+// model-visible shape. Tools whose canonical form is already
+// schema-shaped pass through byte-identical; when the schema's property
+// set cannot be determined the rewrite is skipped (nil) rather than
+// risking a shape the tool cannot decode.
+func modelFacingCanonicalArgs(prepared domain.PreparedCall) json.RawMessage {
+	var schema struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	if err := json.Unmarshal(prepared.Definition.InputSchema, &schema); err != nil || schema.Properties == nil {
+		return nil
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(prepared.Call.Arguments, &fields); err != nil {
+		return nil
+	}
+	dropped := false
+	for key := range fields {
+		if _, ok := schema.Properties[key]; !ok {
+			delete(fields, key)
+			dropped = true
+		}
+	}
+	if !dropped {
+		return prepared.Call.Arguments
+	}
+	projected, err := json.Marshal(fields)
+	if err != nil {
+		return nil
+	}
+	return projected
 }
 
 // AddAssistantMessage appends an assistant message.
@@ -1503,10 +1580,77 @@ func (l *Loop) drainSteer() {
 // and user-role artifact parts — outright. The canonical history itself
 // is never mutated.
 func (l *Loop) wireMessages(ctx context.Context, messages []domain.Message) []domain.Message {
+	messages = scrubMalformedArgumentsWire(messages)
 	if l.SupportsImages {
 		return media.Materialize(ctx, l.Artifacts, messages)
 	}
 	return media.StripImages(messages)
+}
+
+// elidedMalformedArguments is the compact stand-in for a
+// malformed-arguments placeholder on the wire. The full placeholder
+// keeps up to 2KB of the provider's garbled stream as evidence in the
+// event store, but replaying that garbage to the model makes it an
+// in-context example the model parrots and escalates
+// (sess_23234e5b6235ccceb04652b13cfbf732). The paired tool result
+// already carries the recovery hint, so the wire form only needs to
+// keep the call's shape valid.
+var elidedMalformedArguments = json.RawMessage(
+	`{"__malformed_arguments":"","error":"model emitted invalid arguments JSON; re-issue the tool call with valid arguments"}`,
+)
+
+// scrubMalformedArgumentsWire swaps the evidence-carrying
+// malformed-arguments placeholder in assistant tool calls for the
+// compact elided form. It returns the input unchanged (no allocation)
+// when no placeholder is present, and never mutates the canonical
+// history — scrubbed messages get a fresh parts slice and a fresh
+// ToolCall value.
+func scrubMalformedArgumentsWire(messages []domain.Message) []domain.Message {
+	marker := []byte(`"__malformed_arguments"`)
+	var out []domain.Message
+	for i := range messages {
+		msg := messages[i]
+		scrub := msg.Role == domain.RoleAssistant
+		if scrub {
+			found := false
+			for j := range msg.Parts {
+				part := msg.Parts[j]
+				if part.Kind == domain.PartToolCall && part.ToolCall != nil &&
+					bytes.Contains(part.ToolCall.Arguments, marker) {
+					found = true
+					break
+				}
+			}
+			scrub = found
+		}
+		if !scrub {
+			if out != nil {
+				out = append(out, msg)
+			}
+			continue
+		}
+		if out == nil {
+			out = make([]domain.Message, 0, len(messages))
+			out = append(out, messages[:i]...)
+		}
+		parts := make([]domain.ContentPart, len(msg.Parts))
+		for j := range msg.Parts {
+			part := msg.Parts[j]
+			if part.Kind == domain.PartToolCall && part.ToolCall != nil &&
+				bytes.Contains(part.ToolCall.Arguments, marker) {
+				call := *part.ToolCall
+				call.Arguments = elidedMalformedArguments
+				part.ToolCall = &call
+			}
+			parts[j] = part
+		}
+		msg.Parts = parts
+		out = append(out, msg)
+	}
+	if out == nil {
+		return messages
+	}
+	return out
 }
 
 func (l *Loop) callModel(ctx context.Context) error {
@@ -2053,6 +2197,15 @@ func (l *Loop) routeToolCalls(ctx context.Context) error {
 			continue
 		}
 		l.Run.appendEvent(domain.EventToolCallPrepared, makeToolCallAuditPayload(prepared))
+		// Prepare succeeded: the shape the model streamed is known-good
+		// (or repairable), so swap the transcript's copy for the canonical
+		// arguments before it becomes an in-context example for later
+		// turns. The persisted response event keeps the raw payload. The
+		// rewrite is projected onto the model-visible schema: tools like
+		// write sign a canonical form carrying internal fields (created,
+		// old_hash) that the model must never imitate and that the
+		// freshness re-Prepare could not decode.
+		l.Run.RewriteToolCallArguments(tc.ID, modelFacingCanonicalArgs(prepared))
 		// Repeat detection hashes the canonical arguments, not the HMAC
 		// call signature (which embeds the unique call ID).
 		if reason := l.runaway.trackToolCall(l.runawayConfig(), tc.Name, prepared.Call.Arguments, &l.notices, l.Run.Clock); reason != "" {
@@ -2214,13 +2367,17 @@ func actionablePrepareError(tc domain.ToolCall, err error) string {
 // malformedArgumentsHint extracts the model-facing guidance embedded in
 // the malformed-arguments placeholder (stream_hooks.go), so the model
 // sees actionable advice instead of `json: unknown field
-// "__malformed_arguments"` — a field it never sent.
+// "__malformed_arguments"` — a field it never sent. The raw payload is
+// deliberately NOT echoed back: the garbled head is itself an in-context
+// example the model parrots into its next attempt
+// (sess_23234e5b6235ccceb04652b13cfbf732), so the evidence stays in the
+// event store and the model gets only the recovery instruction.
 func malformedArgumentsHint(raw json.RawMessage) (string, bool) {
 	var placeholder map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &placeholder); err != nil {
 		return "", false
 	}
-	rawBad, hasBad := placeholder["__malformed_arguments"]
+	_, hasBad := placeholder["__malformed_arguments"]
 	hintRaw, hasHint := placeholder["error"]
 	if !hasBad || !hasHint {
 		return "", false
@@ -2228,10 +2385,6 @@ func malformedArgumentsHint(raw json.RawMessage) (string, bool) {
 	var hint string
 	if err := json.Unmarshal(hintRaw, &hint); err != nil || hint == "" {
 		return "", false
-	}
-	var bad string
-	if err := json.Unmarshal(rawBad, &bad); err == nil && bad != "" {
-		hint += fmt.Sprintf(" (received: %s)", domain.TruncateAtRuneBoundary(bad, 200))
 	}
 	return hint, true
 }

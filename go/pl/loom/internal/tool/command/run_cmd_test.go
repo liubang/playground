@@ -602,6 +602,24 @@ func TestRunCmdToolPrepareAcceptsMaxOutputTokens(t *testing.T) {
 	}
 }
 
+// The model-visible schema must NOT advertise the max_output_tokens
+// alias: two budget fields for one knob made weaker models mirror both
+// with explicit nulls, then hallucinate suffixed variants
+// (max_output_tokens_note{,2,3,...} — sess_23234e5b6235ccceb04652b13cfbf732).
+// The decoder keeps accepting the alias (test above); the schema just
+// stops teaching it.
+func TestRunCmdSchemaOmitsMaxOutputTokensAlias(t *testing.T) {
+	validator, _ := newValidator(t)
+	runner := newRunner(t, validator, process.RunnerOptions{
+		Sandbox:  process.ExplicitTestSandbox{},
+		LookPath: exec.LookPath,
+	})
+	tool := newTool(t, validator, runner)
+	if strings.Contains(string(tool.Definition().InputSchema), "max_output_tokens") {
+		t.Fatalf("model-visible schema still advertises the alias: %s", tool.Definition().InputSchema)
+	}
+}
+
 // The missing-command error is the model's only signal when it sends the
 // wrong shape: it must state the fix, not just the missing field (a bare
 // "program is required" once cost a model two blind retries).

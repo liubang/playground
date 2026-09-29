@@ -40,9 +40,16 @@ func DecodeLenient[T any](raw json.RawMessage) (T, error) {
 // the wild before the strict decode, replacing the per-tool normalizers
 // (the former grep/list_dir point fixes) with one type-driven mechanism:
 //
-//   - object fields whose value is JSON null are dropped: models mirror
-//     the schema with explicit nulls for optional properties they have no
-//     value for, and null means absent in every tool schema;
+//   - known object fields whose value is JSON null are dropped: models
+//     mirror the schema with explicit nulls for optional properties they
+//     have no value for, and null means absent in every tool schema.
+//     Unknown fields are NEVER dropped, even when null: a silently
+//     deleted hallucinated field (e.g. max_output_tokens_note: null)
+//     gives the model zero corrective feedback, and the tolerated shape
+//     keeps getting replayed in history as a successful example the
+//     model imitates and escalates (sess_23234e5b6235ccceb04652b13cfbf732).
+//     Unknown fields pass through so the strict decoder reports them
+//     with the valid-field list and a did-you-mean;
 //   - a stringified scalar ("1", "true") is coerced when the target field
 //     is numeric or boolean and the parse is lossless;
 //   - a lone value where the target field is a slice is wrapped into a
@@ -159,9 +166,11 @@ func normalizeJSONValue(raw json.RawMessage, typ reflect.Type) (json.RawMessage,
 	}
 }
 
-// normalizeJSONObject drops null-valued fields and repairs the remaining
-// ones whose names map to a struct field. Unknown keys pass through so
-// the strict decoder owns reporting them.
+// normalizeJSONObject drops null-valued KNOWN fields and repairs the
+// remaining ones whose names map to a struct field. Unknown keys pass
+// through untouched — null included — so the strict decoder owns
+// reporting them: silently dropping a hallucinated field removes the
+// model's only corrective signal (see NormalizeArgsJSON).
 func normalizeJSONObject(raw json.RawMessage, typ reflect.Type) (json.RawMessage, bool) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || trimmed[0] != '{' {
@@ -174,13 +183,13 @@ func normalizeJSONObject(raw json.RawMessage, typ reflect.Type) (json.RawMessage
 	fieldTypes := structJSONFieldTypes(typ)
 	changed := false
 	for key, value := range fields {
+		ft, ok := fieldTypes[key]
+		if !ok {
+			continue
+		}
 		if isJSONNullRaw(value) {
 			delete(fields, key)
 			changed = true
-			continue
-		}
-		ft, ok := fieldTypes[key]
-		if !ok {
 			continue
 		}
 		if out, c := normalizeJSONValue(value, ft); c {

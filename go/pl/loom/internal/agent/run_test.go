@@ -18,6 +18,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -876,8 +877,16 @@ func TestLoopSurvivesMalformedToolCallArguments(t *testing.T) {
 				if !json.Valid(part.ToolCall.Arguments) {
 					t.Fatalf("persisted call args are not valid JSON: %q", part.ToolCall.Arguments)
 				}
-				if !strings.Contains(string(part.ToolCall.Arguments), "__malformed_arguments") {
-					t.Fatalf("malformed payload not preserved as evidence: %q", part.ToolCall.Arguments)
+				// The model-facing transcript carries the repaired
+				// canonical shape (a repaired call went through Prepare
+				// successfully, so its arguments were rewritten); the raw
+				// malformed payload stays as evidence on the persisted
+				// response event only — never replayed to the model.
+				if strings.Contains(string(part.ToolCall.Arguments), "__malformed_arguments") {
+					t.Fatalf("placeholder leaked into transcript args: %q", part.ToolCall.Arguments)
+				}
+				if !strings.Contains(string(part.ToolCall.Arguments), "test.go") {
+					t.Fatalf("repaired payload not reflected in transcript args: %q", part.ToolCall.Arguments)
 				}
 			case domain.PartToolResult:
 				if part.ToolResult != nil && part.ToolResult.Status == domain.ToolStatusError {
@@ -888,6 +897,17 @@ func TestLoopSurvivesMalformedToolCallArguments(t *testing.T) {
 	}
 	if errorResults != 0 {
 		t.Fatalf("tool error results = %d, want 0 (the repaired call succeeded)", errorResults)
+	}
+	// The raw malformed payload survives as evidence on the persisted
+	// response event even though the transcript was rewritten.
+	evidence := false
+	for _, evt := range run.PendingEvents() {
+		if evt.Type == domain.EventModelResponseCompleted && bytes.Contains(evt.Payload, []byte(`"__malformed_arguments"`)) {
+			evidence = true
+		}
+	}
+	if !evidence {
+		t.Fatal("malformed payload not preserved as evidence on the response event")
 	}
 	if dangling := unresolvedToolCalls(run.Messages); len(dangling) > 0 {
 		t.Fatalf("transcript has unresolved tool calls: %+v", dangling)
@@ -949,6 +969,219 @@ func TestLoopMalformedArgumentsRepairSkipsWriteTools(t *testing.T) {
 	}
 	if !strings.Contains(result.Error.Message, "re-issue the tool call with valid arguments") {
 		t.Fatalf("error message = %q, want the actionable hint", result.Error.Message)
+	}
+	// The hint must not echo the raw garbage back: a garbled head in the
+	// transcript is an in-context example the model parrots into its next
+	// attempt (sess_23234e5b6235ccceb04652b13cfbf732).
+	if strings.Contains(result.Error.Message, "out.txt") || strings.Contains(result.Error.Message, "received:") {
+		t.Fatalf("error message echoes the raw payload: %q", result.Error.Message)
+	}
+}
+
+// Regression (sess_23234e5b6235ccceb04652b13cfbf732): the raw streamed
+// arguments — null-mirrored optional fields and other tolerated
+// deviations — must not be replayed to the model as in-context examples.
+// Once Prepare succeeds, the transcript's copy of the call is rewritten
+// to the canonical arguments, so later turns imitate the clean shape.
+func TestLoopRewritesTranscriptArgsToCanonical(t *testing.T) {
+	callID := domain.NewToolCallID()
+	canonical := json.RawMessage(`{"path":"a.txt"}`)
+	readTool := fakes.ReadFileTool()
+	readTool.WithPrepareFn(func(_ context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
+		call.Arguments = canonical
+		return domain.PreparedCall{
+			Call: call, Definition: readTool.Definition(), Risk: domain.R1,
+			ApprovalDesc: "Read a.txt", ArgsHash: "deadbeef",
+		}, nil
+	})
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls: []domain.ToolCall{{
+				ID:   callID,
+				Name: "read_file",
+				// Null-mirrored optional fields, the deepseek-v4-flash habit.
+				Arguments: json.RawMessage(`{"path":"a.txt","offset":null,"limit":null}`),
+			}},
+			StopReason: domain.StopToolUse,
+		},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn},
+	)
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
+	addUserTextMessage(run, "read a.txt")
+	registry := NewToolRegistry()
+	if err := registry.Register(readTool); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	loop := &Loop{
+		Run: run, Model: model,
+		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
+		Registry: registry, Logger: slog.Default(),
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	for _, msg := range run.Messages {
+		for _, part := range msg.Parts {
+			if part.Kind != domain.PartToolCall || part.ToolCall == nil || part.ToolCall.ID != callID {
+				continue
+			}
+			if string(part.ToolCall.Arguments) != string(canonical) {
+				t.Fatalf("transcript args = %s, want the canonical %s", part.ToolCall.Arguments, canonical)
+			}
+		}
+	}
+}
+
+// The malformed-arguments placeholder keeps the provider's garbled
+// stream as evidence in the event store, but the wire form must be the
+// compact elided stand-in — replaying the garbage taught the model to
+// parrot it (sess_23234e5b6235ccceb04652b13cfbf732).
+func TestScrubMalformedArgumentsWire(t *testing.T) {
+	callID := domain.NewToolCallID()
+	placeholder := json.RawMessage(`{"__malformed_arguments":"{\"command\": garbage garbage garbage","error":"model emitted invalid arguments JSON; re-issue the tool call with valid arguments"}`)
+	messages := []domain.Message{
+		{ID: domain.NewMessageID(), Role: domain.RoleUser, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "hi"}}},
+		{ID: domain.NewMessageID(), Role: domain.RoleAssistant, Parts: []domain.ContentPart{
+			{Kind: domain.PartText, Text: "trying"},
+			{Kind: domain.PartToolCall, ToolCall: &domain.ToolCall{ID: callID, Name: "run_cmd", Arguments: placeholder}},
+		}},
+	}
+	out := scrubMalformedArgumentsWire(messages)
+
+	// Canonical history untouched: the input message still carries the
+	// full evidence payload.
+	if string(messages[1].Parts[1].ToolCall.Arguments) != string(placeholder) {
+		t.Fatalf("canonical history mutated: %s", messages[1].Parts[1].ToolCall.Arguments)
+	}
+	got := out[1].Parts[1].ToolCall.Arguments
+	if !bytes.Contains(got, []byte(`"__malformed_arguments":""`)) {
+		t.Fatalf("wire args = %s, want the elided placeholder", got)
+	}
+	if bytes.Contains(got, []byte("garbage")) {
+		t.Fatalf("wire args still carry the raw garbage: %s", got)
+	}
+	// Non-placeholder parts pass through untouched.
+	if out[1].Parts[0].Text != "trying" || out[0].Role != domain.RoleUser {
+		t.Fatalf("unrelated messages/parts altered: %+v", out)
+	}
+
+	// No placeholder: the input slice is returned as-is (no copy).
+	clean := []domain.Message{{ID: domain.NewMessageID(), Role: domain.RoleAssistant, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "ok"}}}}
+	if got := scrubMalformedArgumentsWire(clean); &got[0] != &clean[0] {
+		t.Fatal("clean history should pass through without copying")
+	}
+}
+
+// Run.RewriteToolCallArguments rewrites only the matching assistant
+// tool-call part, tolerates unknown IDs, and rejects invalid canonical
+// JSON (a defensive guard: the rewritten history must stay parseable).
+func TestRunRewriteToolCallArguments(t *testing.T) {
+	callID := domain.NewToolCallID()
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
+	run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "go"}},
+	})
+	run.AddAssistantMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleAssistant,
+		Parts: []domain.ContentPart{
+			{Kind: domain.PartToolCall, ToolCall: &domain.ToolCall{ID: callID, Name: "run_cmd", Arguments: json.RawMessage(`{"command":"ls","env":null}`)}},
+		},
+	})
+	if !run.RewriteToolCallArguments(callID, json.RawMessage(`{"command":"ls"}`)) {
+		t.Fatal("rewrite reported no match for an existing call")
+	}
+	got := run.Messages[1].Parts[0].ToolCall.Arguments
+	if string(got) != `{"command":"ls"}` {
+		t.Fatalf("rewritten args = %s", got)
+	}
+	if run.RewriteToolCallArguments(domain.NewToolCallID(), json.RawMessage(`{}`)) {
+		t.Fatal("rewrite reported a match for an unknown call ID")
+	}
+	if run.RewriteToolCallArguments(callID, json.RawMessage(`{bad`)) {
+		t.Fatal("rewrite accepted invalid canonical JSON")
+	}
+}
+
+// Regression (sess_f59104313f866e60289409f10a4af59a): a tool whose signed
+// canonical arguments carry internal fields beyond the model-visible
+// schema (write binds created/old_hash for drift detection) must have
+// the transcript rewrite projected back onto the schema. Replaying the
+// canonical form verbatim broke the freshness re-Prepare — it decodes
+// the model-visible shape and bounced every write with `unknown field
+// "created"` until the model detoured through a run_cmd heredoc — and
+// taught the model to imitate the internal fields.
+func TestLoopCanonicalRewriteProjectsOntoSchema(t *testing.T) {
+	callID := domain.NewToolCallID()
+	writeTool := fakes.NewFakeTool(domain.ToolDefinition{
+		Name:         "write",
+		Description:  "Write file contents",
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}`),
+		Capabilities: []domain.Capability{domain.CapFSWrite},
+		Source:       domain.ToolSourceBuiltin,
+	}, domain.ToolResult{
+		Status:  domain.ToolStatusSuccess,
+		Content: []domain.ContentPart{{Kind: domain.PartText, Text: "written"}},
+	})
+	writeTool.WithPrepareFn(func(_ context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
+		// Model-visible decode is strict, like the real write tool.
+		var args struct {
+			Path    string `json:"path"`
+			Content string `json:"content"`
+		}
+		dec := json.NewDecoder(strings.NewReader(string(call.Arguments)))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&args); err != nil {
+			return domain.PreparedCall{}, fmt.Errorf("invalid write arguments: %w", err)
+		}
+		// The signed canonical form binds internal state the model never sees.
+		call.Arguments = json.RawMessage(`{"path":"out.txt","content":"hello","created":true,"old_hash":"abc"}`)
+		return domain.PreparedCall{
+			Call: call, Definition: writeTool.Definition(), Risk: domain.R2,
+			ApprovalDesc: "Write out.txt", ArgsHash: "deadbeef",
+		}, nil
+	})
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{
+			ToolCalls: []domain.ToolCall{{
+				ID:        callID,
+				Name:      "write",
+				Arguments: json.RawMessage(`{"path":"out.txt","content":"hello"}`),
+			}},
+			StopReason: domain.StopToolUse,
+		},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn},
+	)
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
+	addUserTextMessage(run, "write out.txt")
+	registry := NewToolRegistry()
+	if err := registry.Register(writeTool); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	loop := &Loop{
+		Run: run, Model: model,
+		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
+		Registry: registry, Logger: slog.Default(),
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	if got := len(writeTool.ExecutedCalls()); got != 1 {
+		t.Fatalf("write executions = %d, want 1 (the freshness re-Prepare must decode the projected shape)", got)
+	}
+	for _, msg := range run.Messages {
+		for _, part := range msg.Parts {
+			if part.Kind != domain.PartToolCall || part.ToolCall == nil || part.ToolCall.ID != callID {
+				continue
+			}
+			args := string(part.ToolCall.Arguments)
+			if strings.Contains(args, "created") || strings.Contains(args, "old_hash") {
+				t.Fatalf("internal canonical fields leaked into transcript args: %s", args)
+			}
+			if !strings.Contains(args, `"path"`) || !strings.Contains(args, `"content"`) {
+				t.Fatalf("projected args lost model-visible fields: %s", args)
+			}
+		}
 	}
 }
 

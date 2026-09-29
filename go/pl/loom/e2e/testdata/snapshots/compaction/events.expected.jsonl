@@ -48,7 +48,7 @@
 {"durable":true,"kind":"turn.started","payload":{"prompt":"用一个字回答：嗯","turn_index":3},"run_id":"{{id:5}}","sequence":0,"session_id":"{{id:1}}","time":0,"turn":3,"version":1}
 {"durable":true,"kind":"context.usage","payload":{"occupancy_tokens":0},"run_id":"{{id:8}}","sequence":0,"session_id":"{{id:1}}","time":0,"turn":3,"version":1}
 {"durable":true,"kind":"run.phase_changed","payload":{"phase":"compacting"},"run_id":"{{id:8}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
-{"durable":true,"kind":"context.compacted","payload":{"est_tokens_after":1457,"est_tokens_before":3258,"masked_bytes":0,"masked_outputs":0,"phase":"pre_turn","trigger":"manual"},"run_id":"{{id:8}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
+{"durable":true,"kind":"context.compacted","payload":{"est_tokens_after":1438,"est_tokens_before":3239,"masked_bytes":0,"masked_outputs":0,"phase":"pre_turn","trigger":"manual"},"run_id":"{{id:8}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
 {"durable":true,"kind":"run.phase_changed","payload":{"phase":"preparing"},"run_id":"{{id:8}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
 {"durable":true,"kind":"run.phase_changed","payload":{"phase":"calling_model"},"run_id":"{{id:8}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}
 {"durable":true,"kind":"budget.updated","payload":{"cached_input_tokens":57792,"context_tokens":79362,"input_tokens":79362,"output_tokens":120,"tool_calls":0,"turns":1},"run_id":"{{id:8}}","sequence":0,"session_id":"{{id:1}}","time":0,"version":1}

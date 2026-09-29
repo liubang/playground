@@ -141,6 +141,39 @@ func TestNormalizeArgsJSONKeepsUnknownFieldsForStrictDecoder(t *testing.T) {
 	}
 }
 
+// A hallucinated field with a null value must NOT be silently dropped:
+// the silent drop removed the model's only corrective signal, and the
+// tolerated shape kept replaying in history as a successful example the
+// model imitated and escalated (sess_23234e5b6235ccceb04652b13cfbf732:
+// max_output_tokens_note{,2,3,...}: null sailed through Prepare while
+// the strict decoder's did-you-mean fixed non-null inventions in one
+// shot). Unknown keys pass through — null included — so the strict
+// decoder reports them with the valid-field list.
+func TestNormalizeArgsJSONKeepsUnknownNullFieldsForStrictDecoder(t *testing.T) {
+	raw := json.RawMessage(`{"pattern":"fib","depth":null,"bogus_note":null}`)
+	out := NormalizeArgsJSON(raw, normalizeSampleType())
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(out, &fields); err != nil {
+		t.Fatalf("normalized output is invalid JSON: %v", err)
+	}
+	if _, ok := fields["depth"]; ok {
+		t.Fatalf("known null field should have been dropped, got %s", out)
+	}
+	if value, ok := fields["bogus_note"]; !ok || string(value) != "null" {
+		t.Fatalf("unknown null field should pass through untouched, got %s", out)
+	}
+
+	// And the strict decode then produces the corrective error.
+	_, err := DecodeLenient[normalizeSample](raw)
+	if err == nil {
+		t.Fatal("DecodeLenient accepted an unknown null field, want the corrective error")
+	}
+	if !strings.Contains(err.Error(), `unknown field "bogus_note"`) || !strings.Contains(err.Error(), "Valid fields:") {
+		t.Fatalf("error lacks the corrective guidance: %s", err.Error())
+	}
+}
+
 func TestNormalizeArgsJSONUnchangedReturnsOriginalBytes(t *testing.T) {
 	raw := json.RawMessage(`{"pattern":"fib","depth":2,"glob":["a","b"]}`)
 	out := NormalizeArgsJSON(raw, normalizeSampleType())
