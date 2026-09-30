@@ -174,6 +174,100 @@ func TestContinueRunPlanCarryOver(t *testing.T) {
 	}
 }
 
+// An unfinished plan inherited from an interrupted predecessor (anything
+// but a clean success) arms the closing reconcile nudge: the open plan
+// belongs to the task the continuation resumes. A plan surviving a
+// successful run stays gated — the next prompt may be unrelated.
+func TestContinueRunInheritedOpenPlanArming(t *testing.T) {
+	clock := domain.NewFakeClock(time.Now().UTC())
+	unfinished := domain.Plan{Title: "ongoing task", Items: []domain.PlanItem{
+		{Index: 0, Goal: "step one", Status: domain.PlanItemCompleted},
+		{Index: 1, Goal: "step two", Status: domain.PlanItemInProgress},
+	}}
+	newCheckpoint := func(outcome domain.Outcome, plan domain.Plan) domain.Checkpoint {
+		return domain.Checkpoint{
+			ID: domain.NewCheckpointID(), SessionID: domain.NewSessionID(), Sequence: 7,
+			State:     domain.RunState{Lifecycle: domain.LifecycleTerminal, Outcome: outcome},
+			Plan:      plan,
+			CreatedAt: clock.Now(),
+		}
+	}
+
+	for _, outcome := range []domain.Outcome{
+		domain.OutcomeFailed, domain.OutcomeCancelled, domain.OutcomeBudgetExhausted, domain.OutcomeNeedsUser,
+	} {
+		run, err := ContinueRun(newCheckpoint(outcome, unfinished), nil, 7, domain.DefaultLimits(), clock)
+		if err != nil {
+			t.Fatalf("ContinueRun(%s): %v", outcome, err)
+		}
+		if !run.InheritedOpenPlan {
+			t.Fatalf("ContinueRun(%s): InheritedOpenPlan = false, want armed for interrupted predecessor", outcome)
+		}
+	}
+
+	for _, outcome := range []domain.Outcome{domain.OutcomeSucceeded, domain.OutcomeCompletedUnverified} {
+		run, err := ContinueRun(newCheckpoint(outcome, unfinished), nil, 7, domain.DefaultLimits(), clock)
+		if err != nil {
+			t.Fatalf("ContinueRun(%s): %v", outcome, err)
+		}
+		if run.InheritedOpenPlan {
+			t.Fatalf("ContinueRun(%s): InheritedOpenPlan = true, want gated for clean success", outcome)
+		}
+	}
+
+	completed := domain.Plan{Title: "done task", Items: []domain.PlanItem{
+		{Index: 0, Goal: "step one", Status: domain.PlanItemCompleted},
+		{Index: 1, Goal: "step two", Status: domain.PlanItemCompleted},
+	}}
+	run, err := ContinueRun(newCheckpoint(domain.OutcomeFailed, completed), nil, 7, domain.DefaultLimits(), clock)
+	if err != nil {
+		t.Fatalf("ContinueRun(completed plan): %v", err)
+	}
+	if run.InheritedOpenPlan {
+		t.Fatal("ContinueRun(completed plan): InheritedOpenPlan = true, want disarmed (plan dropped)")
+	}
+}
+
+// Crash recovery replays a plan whose predecessor never terminated, so an
+// unfinished replayed plan always belongs to the interrupted task and arms
+// the reconcile nudge; a completed replay does not.
+func TestRecoverRunInheritedOpenPlanArming(t *testing.T) {
+	clock := domain.NewFakeClock(time.Now().UTC())
+	replay := func(t *testing.T, plan domain.Plan) *Run {
+		t.Helper()
+		payload, err := json.Marshal(plan)
+		if err != nil {
+			t.Fatalf("marshal plan: %v", err)
+		}
+		sessionID := domain.NewSessionID()
+		events := []domain.Event{{
+			ID: domain.NewEventID(), SessionID: sessionID, Sequence: 1,
+			Type: domain.EventPlanRevised, Timestamp: clock.Now(), Payload: payload,
+		}}
+		run, err := RecoverRun(sessionID, nil, nil, events, 1, domain.DefaultLimits(), clock, nil)
+		if err != nil {
+			t.Fatalf("RecoverRun: %v", err)
+		}
+		return run
+	}
+
+	unfinished := domain.Plan{Title: "ongoing task", Items: []domain.PlanItem{
+		{Index: 0, Goal: "step one", Status: domain.PlanItemCompleted},
+		{Index: 1, Goal: "step two", Status: domain.PlanItemInProgress},
+	}}
+	if run := replay(t, unfinished); !run.InheritedOpenPlan {
+		t.Fatal("RecoverRun(unfinished plan): InheritedOpenPlan = false, want armed")
+	}
+
+	completed := domain.Plan{Title: "done task", Items: []domain.PlanItem{
+		{Index: 0, Goal: "step one", Status: domain.PlanItemCompleted},
+		{Index: 1, Goal: "step two", Status: domain.PlanItemCompleted},
+	}}
+	if run := replay(t, completed); run.InheritedOpenPlan {
+		t.Fatal("RecoverRun(completed plan): InheritedOpenPlan = true, want disarmed")
+	}
+}
+
 func TestContinueRunRejectsUnsafeRecovery(t *testing.T) {
 	clock := domain.NewFakeClock(time.Now().UTC())
 	sessionID := domain.NewSessionID()
@@ -1374,6 +1468,71 @@ func TestLoopDoesNotNudgeForStalePlan(t *testing.T) {
 		if msg.Role == domain.RoleUser && strings.Contains(strings.Join(msg.TextParts(), ""), "still has unfinished steps") {
 			t.Fatal("stale plan triggered a reconcile nudge")
 		}
+	}
+}
+
+// Regression (sess_ec24a9ba2476290a4fbe54f0ae17b6e5): a continuation that
+// resumed an unfinished plan from an interrupted run delivers the final
+// answer with zero tool calls — the reconcile nudge must still fire so the
+// model can close the bookkeeping, not terminate with the plan stuck open.
+func TestLoopReconcilesInheritedOpenPlan(t *testing.T) {
+	planTool, planCell := newPlanTool(t)
+	registry := NewToolRegistry()
+	if err := registry.Register(planTool); err != nil {
+		t.Fatalf("Register error: %v", err)
+	}
+	closeSnapshot := `{"action":"plan","plan":[` +
+		`{"goal":"step one","status":"completed","evidence":["done earlier"]},` +
+		`{"goal":"step two","status":"completed","evidence":["report delivered"]}]}`
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "final report", StopReason: domain.StopEndTurn, UsageIn: 100, UsageOut: 30},
+		fakes.ScriptEntry{
+			ToolCalls:  []domain.ToolCall{{ID: domain.NewToolCallID(), Name: "update_task", Arguments: json.RawMessage(closeSnapshot)}},
+			StopReason: domain.StopToolUse,
+			UsageIn:    100,
+			UsageOut:   20,
+		},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn, UsageIn: 100, UsageOut: 10},
+	)
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
+	// Inherited from an interrupted predecessor: never revised this run,
+	// but armed by ContinueRun/RecoverRun.
+	run.Plan = domain.Plan{Title: "research", Items: []domain.PlanItem{
+		{Index: 0, Goal: "step one", Status: domain.PlanItemCompleted},
+		{Index: 1, Goal: "step two", Status: domain.PlanItemInProgress},
+	}}
+	run.InheritedOpenPlan = true
+	run.AddUserMessage(domain.Message{
+		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "Continue the unfinished task from where you left off."}}, CreatedAt: time.Now(),
+	})
+	loop := &Loop{
+		Run: run, Model: model,
+		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
+		Registry: registry, Logger: slog.Default(),
+		PlanCell: planCell,
+	}
+
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	if run.State.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("outcome = %s, want succeeded", run.State.Outcome)
+	}
+	if calls := len(model.Calls()); calls != 3 {
+		t.Fatalf("model calls = %d, want 3 (answer, closing call, closing text)", calls)
+	}
+	if !run.Plan.IsComplete() {
+		t.Fatalf("plan not closed by the reconcile turn: %+v", run.Plan.Items)
+	}
+	nudges := 0
+	for _, msg := range run.Messages {
+		if msg.Role == domain.RoleUser && strings.Contains(strings.Join(msg.TextParts(), ""), "still has unfinished steps") {
+			nudges++
+		}
+	}
+	if nudges != 1 {
+		t.Fatalf("reconcile nudges = %d, want exactly 1", nudges)
 	}
 }
 

@@ -100,6 +100,15 @@ type Run struct {
 	// scope: a resumed run never re-enters the dead request, so the streak
 	// applies to exactly the next call). In-memory only; never persisted.
 	StartRetryStreak int
+	// InheritedOpenPlan marks a run that resumed with an unfinished plan
+	// from an interrupted predecessor (ContinueRun after a non-success
+	// outcome, or crash recovery): the open plan belongs to the task this
+	// run resumes, so the loop's closing reconcile nudge stays armed even
+	// when the plan goes untouched this run. A plan surviving a successful
+	// run does NOT arm it — the next prompt may be unrelated and the nudge
+	// must not hijack it (the planRevisedThisRun gate). In-memory only;
+	// never persisted.
+	InheritedOpenPlan bool
 }
 
 // NewRun creates a new Run in the preparing phase.
@@ -146,6 +155,13 @@ func RestoreRun(id domain.RunID, sessionID domain.SessionID, state domain.RunSta
 		// original start is unknowable from the checkpoint.
 		turnStartedAt: clock.Now(),
 	}
+}
+
+// cleanSuccess reports whether a terminal outcome means the run's task was
+// done; anything else (failed, cancelled, budget-exhausted, needs-user)
+// leaves an inherited open plan attached to the still-live task.
+func cleanSuccess(outcome domain.Outcome) bool {
+	return outcome == domain.OutcomeSucceeded || outcome == domain.OutcomeCompletedUnverified
 }
 
 // ContinueRun starts a new active run in an existing session from a complete
@@ -200,6 +216,15 @@ func ContinueRun(checkpoint domain.Checkpoint, messages []domain.Message, sessio
 	run := RestoreRun(domain.NewRunID(), checkpoint.SessionID,
 		domain.RunState{Lifecycle: domain.LifecycleActive, Phase: domain.PhasePreparing},
 		plan, checkpoint.Usage, limits, append([]domain.Message(nil), messages...), sessionVersion, clock)
+	// The plan here is either empty or unfinished (a completed one was
+	// dropped above). One inherited from an interrupted predecessor belongs
+	// to the task this continuation resumes, so arm the closing reconcile
+	// nudge for it — otherwise a continuation whose model delivers the
+	// final answer without touching the plan terminates cleanly with the
+	// plan stuck open (sess_ec24a9ba2476290a4fbe54f0ae17b6e5).
+	if len(run.Plan.Items) > 0 && !cleanSuccess(checkpoint.State.Outcome) {
+		run.InheritedOpenPlan = true
+	}
 	run.ResetUsageForNewTurn()
 	// A goal survives the prompt boundary: the continuation keeps pursuing
 	// the same objective (a budget-limited/closed goal stays closed).
@@ -340,6 +365,12 @@ func RecoverRun(sessionID domain.SessionID, checkpoint *domain.Checkpoint, messa
 	run := RestoreRun(domain.NewRunID(), sessionID,
 		domain.RunState{Lifecycle: domain.LifecycleActive, Phase: domain.PhasePreparing},
 		plan, usage, limits, append([]domain.Message(nil), messages...), sessionVersion, clock)
+	// Crash recovery: the predecessor never reached a terminal state, so
+	// an unfinished replayed plan belongs to the interrupted task — arm
+	// the closing reconcile nudge (same reasoning as ContinueRun).
+	if len(plan.Items) > 0 && !plan.IsComplete() {
+		run.InheritedOpenPlan = true
+	}
 	if goal != nil {
 		cloned := *goal
 		run.Goal = &cloned
@@ -1277,7 +1308,9 @@ type Loop struct {
 	unknownStopStreak int
 	// planRevisedThisRun gates the closing nudge to plans this run actually
 	// touched: a stale plan inherited from an earlier turn must not hijack
-	// an unrelated prompt with a reconcile turn.
+	// an unrelated prompt with a reconcile turn. The exception is
+	// Run.InheritedOpenPlan: a plan resumed from an interrupted predecessor
+	// is by construction related to the continuation prompt.
 	planRevisedThisRun bool
 }
 
@@ -2014,7 +2047,7 @@ func systemMessage(text string, cacheable bool, clock domain.Clock) domain.Messa
 // One nudge per run: if the model still ends with an open plan afterwards,
 // accept it and terminate.
 func (l *Loop) reconcilePlanIfUnfinished() bool {
-	if l.planReconcileUsed || !l.planRevisedThisRun {
+	if l.planReconcileUsed || !(l.planRevisedThisRun || l.Run.InheritedOpenPlan) {
 		return false
 	}
 	plan := l.Run.Plan
