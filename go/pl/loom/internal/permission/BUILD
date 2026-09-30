@@ -41,6 +41,7 @@ go_library(
         "semcmd_git.go",
         "semcmd_interp.go",
         "semcmd_net.go",
+        "semcmd_read.go",
         "user_intent_extract.go",
     ],
     embedsrcs = [
@@ -68,6 +69,7 @@ go_test(
         "packages_test.go",
         "remembered_test.go",
         "security_test.go",
+        "semcmd_read_test.go",
         "semcmd_test.go",
     ],
     embed = [":permission_lib"],

@@ -1398,8 +1398,8 @@ func TestLastToolCallsScansPastBookkeepingMessages(t *testing.T) {
 }
 
 // Regression: a tool call whose raw arguments differ from the canonical form
-// produced by Prepare (e.g. "./sub" vs "sub", or an absolute path vs the
-// workspace-relative display form) must still execute. Previously the
+// produced by Prepare (e.g. "./sub/a.txt" vs "sub/a.txt", or an absolute path
+// vs the workspace-relative display form) must still execute. Previously the
 // execution-time validation compared raw against canonical bytes and rejected
 // every legitimately normalized call with a "security" error.
 func TestLoopExecuteToolCallWithNonCanonicalPath(t *testing.T) {
@@ -1407,31 +1407,34 @@ func TestLoopExecuteToolCallWithNonCanonicalPath(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "sub"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(root, "sub", "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	validator, err := workspacepkg.NewPathValidator(root)
 	if err != nil {
 		t.Fatalf("NewPathValidator: %v", err)
 	}
-	listDir, err := builtin.NewListDirTool(validator)
+	readFile, err := builtin.NewReadFileTool(validator, nil)
 	if err != nil {
-		t.Fatalf("NewListDirTool: %v", err)
+		t.Fatalf("NewReadFileTool: %v", err)
 	}
 
 	registry := NewToolRegistry()
-	if err := registry.Register(listDir); err != nil {
+	if err := registry.Register(readFile); err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
 
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{
 			ToolCalls: []domain.ToolCall{
-				{ID: domain.NewToolCallID(), Name: "list_dir", Arguments: json.RawMessage(`{"path":"./sub"}`)},
+				{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage(`{"path":"./sub/a.txt"}`)},
 			},
 			StopReason: domain.StopToolUse,
 			UsageIn:    100,
 			UsageOut:   30,
 		},
 		fakes.ScriptEntry{
-			Text:       "listed",
+			Text:       "read",
 			StopReason: domain.StopEndTurn,
 			UsageIn:    50,
 			UsageOut:   10,
@@ -1444,7 +1447,7 @@ func TestLoopExecuteToolCallWithNonCanonicalPath(t *testing.T) {
 	run.AddUserMessage(domain.Message{
 		ID:        domain.NewMessageID(),
 		Role:      domain.RoleUser,
-		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "list ./sub"}},
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "read ./sub/a.txt"}},
 		CreatedAt: time.Now(),
 	})
 
@@ -1483,27 +1486,31 @@ func TestExecuteToolsFailsClosedWhenEnvironmentDrifts(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "sub"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	target := filepath.Join(root, "sub", "a.txt")
+	if err := os.WriteFile(target, []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	validator, err := workspacepkg.NewPathValidator(root)
 	if err != nil {
 		t.Fatalf("NewPathValidator: %v", err)
 	}
-	listDir, err := builtin.NewListDirTool(validator)
+	readFile, err := builtin.NewReadFileTool(validator, nil)
 	if err != nil {
-		t.Fatalf("NewListDirTool: %v", err)
+		t.Fatalf("NewReadFileTool: %v", err)
 	}
 
-	call := domain.ToolCall{ID: domain.NewToolCallID(), Name: "list_dir", Arguments: json.RawMessage(`{"path":"./sub"}`)}
-	prepared, err := listDir.Prepare(context.Background(), call)
+	call := domain.ToolCall{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage(`{"path":"./sub/a.txt"}`)}
+	prepared, err := readFile.Prepare(context.Background(), call)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
 
-	// The directory disappears after preparation: freshness re-check fails.
-	if err := os.RemoveAll(filepath.Join(root, "sub")); err != nil {
+	// The file disappears after preparation: freshness re-check fails.
+	if err := os.Remove(target); err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyPreparedFreshness(context.Background(), listDir, call, prepared); err == nil {
-		t.Fatal("verifyPreparedFreshness succeeded after the directory vanished")
+	if err := verifyPreparedFreshness(context.Background(), readFile, call, prepared); err == nil {
+		t.Fatal("verifyPreparedFreshness succeeded after the file vanished")
 	}
 }
 
@@ -4784,9 +4791,9 @@ func TestSegmentBatchSplitsOnSafety(t *testing.T) {
 
 func TestLoopExecutesConcurrentSafeBatchInParallel(t *testing.T) {
 	toolA := &slowSafeTool{def: newTestToolDefinition("read_file", []domain.Capability{domain.CapFSRead}), delay: 200 * time.Millisecond}
-	toolB := &slowSafeTool{def: newTestToolDefinition("list_dir", []domain.Capability{domain.CapFSRead}), delay: 200 * time.Millisecond}
+	toolB := &slowSafeTool{def: newTestToolDefinition("glob", []domain.Capability{domain.CapFSRead}), delay: 200 * time.Millisecond}
 	callA := domain.ToolCall{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage(`{"path":"a.go"}`)}
-	callB := domain.ToolCall{ID: domain.NewToolCallID(), Name: "list_dir", Arguments: json.RawMessage(`{"path":"dir_b"}`)}
+	callB := domain.ToolCall{ID: domain.NewToolCallID(), Name: "glob", Arguments: json.RawMessage(`{"pattern":"*"}`)}
 
 	model := fakes.NewFakeModel(
 		fakes.ScriptEntry{
@@ -5285,7 +5292,7 @@ func TestRunAssistantTextScopesToCurrentRun(t *testing.T) {
 func TestActionablePrepareErrorGuidesWorkspaceEscape(t *testing.T) {
 	escapeErr := domain.NewError(domain.ErrSecurity, "path escapes workspace or is invalid",
 		domain.WithCause(fmt.Errorf("path %q escapes workspace root %q", "/outside", "/ws")))
-	fileToolCall := domain.ToolCall{ID: domain.NewToolCallID(), Name: "list_dir"}
+	fileToolCall := domain.ToolCall{ID: domain.NewToolCallID(), Name: "read_file"}
 	msg := actionablePrepareError(fileToolCall, escapeErr)
 	if !strings.Contains(msg, escapeErr.Error()) {
 		t.Fatalf("guidance must keep the original error, got %q", msg)

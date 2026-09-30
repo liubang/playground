@@ -61,6 +61,35 @@ func TestIsSensitiveAbsolute(t *testing.T) {
 	}
 }
 
+// IsSensitiveHomeLocation is the home half of IsSensitiveAbsolute:
+// positional components (.env, .git, credentials.json) must NOT trigger it
+// — callers that scan components with their own exemptions compose it.
+func TestIsSensitiveHomeLocation(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	canonicalHome := Canonicalize(home)
+
+	tests := []struct {
+		path   string
+		expect bool
+	}{
+		{filepath.Join(canonicalHome, ".aws", "credentials"), true},
+		{filepath.Join(canonicalHome, ".config", "gh", "hosts.yml"), true},
+		{filepath.Join(canonicalHome, ".netrc"), true},
+		// Positional components are not home locations — even under home.
+		{"/srv/repo/.git/config", false},
+		{"/etc/.env", false},
+		{filepath.Join(canonicalHome, "project", ".env"), false},
+		{"/etc/hosts", false},
+		{".aws/credentials", false},
+	}
+	for _, tt := range tests {
+		if got := IsSensitiveHomeLocation(tt.path); got != tt.expect {
+			t.Errorf("IsSensitiveHomeLocation(%q) = %v, want %v", tt.path, got, tt.expect)
+		}
+	}
+}
+
 // TestIsSensitiveAbsoluteFollowsHomeOverride proves the canonicalized home
 // is cached keyed by the raw $HOME: a later override must still take
 // effect (the seatbelt profile tests rely on t.Setenv).

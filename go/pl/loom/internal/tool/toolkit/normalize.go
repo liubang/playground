@@ -38,7 +38,7 @@ func DecodeLenient[T any](raw json.RawMessage) (T, error) {
 
 // NormalizeArgsJSON repairs the argument-shape deviations models make in
 // the wild before the strict decode, replacing the per-tool normalizers
-// (the former grep/list_dir point fixes) with one type-driven mechanism:
+// (the former per-tool point fixes) with one type-driven mechanism:
 //
 //   - known object fields whose value is JSON null are dropped: models
 //     mirror the schema with explicit nulls for optional properties they

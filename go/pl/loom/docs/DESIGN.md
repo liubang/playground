@@ -444,25 +444,20 @@ type Tool interface {
 | 工具 | 风险 | 职责 |
 |---|---:|---|
 | `read_file` | R1 | 分页读取 UTF-8 文件（带行号，offset/limit，二进制拒绝；编辑前必须先读） |
-| `list_dir` | R1 | 单层目录罗列（kind/size/mode/mtime，字典序，200 条截断，不递归） |
 | `glob` | R1 | 按 glob 模式发现文件（如 `**/*.go`），字典序，200 条截断 |
 | `grep` | R1 | 正则/字面内容搜索（path/glob/type/context/case/fixed_strings/head_limit）；`rg --json` 引擎优先，Go 实现回退，`.gitignore` 默认生效（2026-08 由 `search` 更名） |
 | `write` | R2 | 创建（自动建父目录）或整文件覆写；审批展示路径/字节数/创建或覆盖；堵 `run_cmd` + heredoc 旁路 |
 | `edit` | R2 | `old_string`/`new_string` 精确替换（唯一匹配或 `replace_all`）；陈旧检测内部化（文件自上次读取后被外部修改则报可行动错误）；`expected_hash` 仅作可选高级校验 |
 | `run_cmd` | R2/R3 | 沙箱内执行程序；仅 `program` 必填，其余参数均有默认值；shell 语法用 `sh -c`（R3）；`sandbox_permissions=require_escalated` + `justification` 提权到沙箱外执行（R3，审批展示理由），沙箱失败（外网/DNS/写权限）时的标准出路 |
-| `git_status` | R1 | 仓库状态（porcelain v2，`repo_root` 默认 `"."`） |
-| `git_diff` | R1 | 变更内容（`repo_root` 默认 `"."`，可选 `base`） |
-| `git_log` | R1 | 提交历史（`limit` 分页） |
-| `lint` | R2 | 项目代码诊断：按标记文件确定性检测引擎（go.mod → golangci-lint/go vet，package.json → eslint，pyproject.toml → ruff，compile_commands.json → clang-tidy），沙箱内执行，输出归一化结构化 diagnostics |
 | `web_fetch` | R3 | HTTP/HTTPS GET 抓取网页：HTML 转 markdown（可 text/raw），SSRF 拨号时防护（默认拒绝私网/环回），重定向限 5 跳，大小截断走 artifact 溢出，成功响应进程内缓存 15 分钟 |
 | `web_search` | R3 | 网页检索（brave/tavily/ddg 后端：`LOOM_WEB_SEARCH_PROVIDER` 显式选择，否则按已配置的 API key 探测，再否则无 key DuckDuckGo），进程内缓存 |
 | `read_skill` | R1 | 按名称读取已发现技能的 SKILL.md 或其目录内文件（白名单寻址：技能目录内路径解析 + 复验 fail-closed，offset/limit 分页，256KB 上限）；技能发现/注入机制见 SKILL_DESIGN.md |
 
-分工边界（写入 system prompt）：找文件用 `glob`，找内容用 `grep`，看目录用 `list_dir`，读文件用 `read_file`，新建/覆写用 `write`，局部修改用 `edit`，构建/测试/任意程序用 `run_cmd`，仓库信息用 `git_*`，代码诊断用 `lint`，网页内容用 `web_fetch`，网页搜索用 `web_search`，技能正文与其目录内引用用 `read_skill`。
+分工边界（写入 system prompt）：找文件用 `glob`，找内容用 `grep`，读文件用 `read_file`，新建/覆写用 `write`，局部修改用 `edit`，构建/测试/代码诊断/仓库信息/任意程序用 `run_cmd`，网页内容用 `web_fetch`，网页搜索用 `web_search`，技能正文与其目录内引用用 `read_skill`。
 
 技能（Skills）：`SKILL.md` 从 `<ws>/.loom/skills`、`<ws>/.agents/skills`、`~/.loom/skills`、`~/.agents/skills`（及 config.yaml 的 `skills.extra_roots`）发现；清单以 token 预算降级注入系统提示词（`loom://skills/catalog` 进入 Context Manifest），正文经 `read_skill` 渐进式披露读取；技能脚本走 `run_cmd` 既有沙箱/提权通道。完整设计见 SKILL_DESIGN.md。
 
-合并与退役：`replace_text` 与 `apply_patch` 合并为 `edit`；`search_text` 重构为 `grep`（2026-08 由 `search` 更名）；`list_directory` 更名 `list_dir`；`run_command` 更名 `run_cmd`。旧 Session 中的已退役工具名在恢复时按 `unknown_tool` 语义处理。
+合并与退役：`replace_text` 与 `apply_patch` 合并为 `edit`；`search_text` 重构为 `grep`（2026-08 由 `search` 更名）；`list_directory` 更名 `list_dir`；`run_command` 更名 `run_cmd`。2026-09 向 codex 的「shell 可达的能力不占工具位」对齐：`list_dir`、`git_status`/`git_diff`/`git_log`/`git_blame`、`lint` 全部退役——目录罗列走 `glob`，git 与代码诊断走 `run_cmd`（其语义推导器比专用工具的 argv 白名单更强），凭证保护由 seatbelt 读拒绝与 shell 读命令的敏感路径指示器承接。旧 Session 中的已退役工具名在恢复时按 `unknown_tool` 语义处理。
 
 进程工具与长期进程分开建模，避免一次 Tool Call 永久阻塞循环：后续 `start_process`、`poll_process`、`stop_process` 独立演进。
 

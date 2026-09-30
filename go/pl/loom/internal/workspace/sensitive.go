@@ -165,6 +165,18 @@ func IsSensitiveAbsolute(path string) bool {
 	if ContainsSensitiveComponent(path) {
 		return true
 	}
+	return IsSensitiveHomeLocation(path)
+}
+
+// IsSensitiveHomeLocation reports whether a canonical absolute path lands
+// in a home-rooted credential location: under a sensitive home directory
+// or exactly a sensitive home file. Unlike IsSensitiveAbsolute it ignores
+// positional components — callers that scan components themselves (with
+// their own exemptions, e.g. ".git") compose this for the home half.
+func IsSensitiveHomeLocation(path string) bool {
+	if !filepath.IsAbs(path) {
+		return false
+	}
 	home := SensitiveHome()
 	if home == "" {
 		return false

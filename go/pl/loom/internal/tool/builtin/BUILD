@@ -22,7 +22,6 @@ go_library(
     srcs = [
         "common.go",
         "glob.go",
-        "list_dir.go",
         "present_image.go",
         "read_file.go",
         "rg.go",

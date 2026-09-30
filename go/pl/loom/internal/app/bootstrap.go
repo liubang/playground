@@ -41,10 +41,8 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/tool/command"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/edit"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/exsession"
-	"github.com/liubang/playground/go/pl/loom/internal/tool/gittools"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/imagegen"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/kbsearch"
-	"github.com/liubang/playground/go/pl/loom/internal/tool/lint"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/subagent"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/webfetch"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/websearch"
@@ -781,14 +779,9 @@ func registerToolFactories(registry *agent.ToolRegistry, tools []toolFactory) er
 func readOnlyToolFactories(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook) []toolFactory {
 	return []toolFactory{
 		{"read_file", func() (domain.Tool, error) { return builtin.NewReadFileTool(validator, book) }},
-		{"list_dir", func() (domain.Tool, error) { return builtin.NewListDirTool(validator) }},
 		{"grep", func() (domain.Tool, error) { return builtin.NewSearchTool(validator, runner) }},
 		{"glob", func() (domain.Tool, error) { return builtin.NewGlobTool(validator, runner) }},
 		{"view_image", func() (domain.Tool, error) { return builtin.NewViewImageTool(validator, artStore) }},
-		{"git_status", func() (domain.Tool, error) { return gittools.NewGitStatusTool(validator, runner) }},
-		{"git_diff", func() (domain.Tool, error) { return gittools.NewGitDiffTool(validator, runner) }},
-		{"git_log", func() (domain.Tool, error) { return gittools.NewGitLogTool(validator, runner) }},
-		{"git_blame", func() (domain.Tool, error) { return gittools.NewGitBlameTool(validator, runner) }},
 		{"web_fetch", func() (domain.Tool, error) { return webfetch.NewWebFetchTool(validator, artStore) }},
 		{"web_search", func() (domain.Tool, error) { return websearch.NewWebSearchTool() }},
 	}
@@ -836,7 +829,6 @@ func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.Pat
 		readOnlyToolFactories(validator, runner, artStore, book),
 		toolFactory{"edit", func() (domain.Tool, error) { return edit.NewEditTool(validator, book) }},
 		toolFactory{"write", func() (domain.Tool, error) { return edit.NewWriteTool(validator) }},
-		toolFactory{"lint", func() (domain.Tool, error) { return lint.NewLintTool(validator, runner) }},
 	)
 	if err := registerToolFactories(registry, tools); err != nil {
 		return err
@@ -919,7 +911,7 @@ func buildSubagentRegistry(validator *workspace.PathValidator, runner *process.R
 
 // buildCoderRegistry assembles the read-write tool set for the coder
 // sub-agent role. It carries every researcher tool plus edit, write,
-// run_cmd, and lint — the tools that make code changes. Excluded by
+// and run_cmd — the tools that make code changes. Excluded by
 // design: update_task (parent-run state), ask_user (no one
 // to answer), exec_session (interactive sessions), and
 // delegate_task itself (no recursion).
@@ -930,7 +922,6 @@ func buildCoderRegistry(validator *workspace.PathValidator, runner *process.Runn
 		readOnlyToolFactories(validator, runner, artStore, book),
 		toolFactory{"edit", func() (domain.Tool, error) { return edit.NewEditTool(validator, book) }},
 		toolFactory{"write", func() (domain.Tool, error) { return edit.NewWriteTool(validator) }},
-		toolFactory{"lint", func() (domain.Tool, error) { return lint.NewLintTool(validator, runner) }},
 	)
 	if err := registerToolFactories(registry, tools); err != nil {
 		return nil, err

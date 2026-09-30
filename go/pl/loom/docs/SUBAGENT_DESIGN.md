@@ -128,8 +128,8 @@ codex 的 multi-agent 仍在快速演进：V1/V2 并存、`multiAgentMode` 已�
 
 ### 4.2 子 Agent 工具集（只读子集）
 
-`read_file`、`list_dir`、`grep`、`glob`、`view_image`、`git_status`、`git_diff`、`git_log`、`git_blame`、`web_fetch`、`web_search`。
-明确排除：`edit`/`write`（写）、`run_cmd`（进程执行）、`lint`（进程执行）、`update_task`（父 run 状态）、`ask_user`（无交互对象）、`delegate_task`（递归）、`present_image`（把图片渲染进**用户** transcript 的展示工具——子 run 不拥有该展示通道，主 Agent 专属）。`view_image`（模型自己看图）保留，由主/子 run 在请求时按模型是否支持图片（`SupportsImages`）过滤。
+`read_file`、`grep`、`glob`、`view_image`、`web_fetch`、`web_search`。
+明确排除：`edit`/`write`（写）、`run_cmd`（进程执行）、`update_task`（父 run 状态）、`ask_user`（无交互对象）、`delegate_task`（递归）、`present_image`（把图片渲染进**用户** transcript 的展示工具——子 run 不拥有该展示通道，主 Agent 专属）。`view_image`（模型自己看图）保留，由主/子 run 在请求时按模型是否支持图片（`SupportsImages`）过滤。
 
 ### 4.3 子 Agent 系统提示
 
@@ -245,7 +245,7 @@ subagent:
 
 ### 11.1 机制
 
-1. **opt-in 接口**：`domain.ConcurrentSafely`（`ConcurrentSafe() bool`）是工具实现的显式声明——共享状态必须只有 mutex 保护的基础设施（file-state book、artifact store、response cache），副作用必须限于本调用。已接入：全部只读工具（read_file/list_dir/grep/glob/view_image/present_image/git_*/web_fetch/web_search/read_skill）与 `delegate_task`（每次委托都是全新隔离 session）。未接入（默认串行）：edit/write/run_cmd/lint/update_task/ask_user/browser；
+1. **opt-in 接口**：`domain.ConcurrentSafely`（`ConcurrentSafe() bool`）是工具实现的显式声明——共享状态必须只有 mutex 保护的基础设施（file-state book、artifact store、response cache），副作用必须限于本调用。已接入：全部只读工具（read_file/grep/glob/view_image/present_image/web_fetch/web_search/read_skill）与 `delegate_task`（每次委托都是全新隔离 session）。未接入（默认串行）：edit/write/run_cmd/update_task/ask_user/browser；
 2. **分段**：一个批次的调用按原始顺序切成「连续安全调用」的最大段。段内并行，段间严格串行——写操作永远不会和读操作重叠，顺序语义不受影响；
 3. **持久化不变量不变**：并行段的**全部** `tool.execution_started` 事件在任何副作用发生前一次性 flush——崩溃恢复对每个 started-but-uncompleted 调用的 reconcile 证据与串行路径完全一致；
 4. **投影保持单线程**：只有 `tool.Execute` 并发；结果收集后**按调用顺序**串行记录（RecordToolResult / trace / 用量折算 / runaway 计数），transcript、事件序列、预算记账全部确定；

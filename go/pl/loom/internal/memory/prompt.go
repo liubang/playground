@@ -96,7 +96,7 @@ const MemoryInstructions = `You have access to a persistent memory system that s
 
 ## Verify before acting
 
-Memory can be stale: files move or get deleted, commands and state drift between sessions. Treat remembered paths, commands, and configurations as leads, not ground truth — verify them with tools (list_dir, glob, run_cmd) before acting on them, and never reconstruct a file path from memory alone.
+Memory can be stale: files move or get deleted, commands and state drift between sessions. Treat remembered paths, commands, and configurations as leads, not ground truth — verify them with tools (glob, grep, run_cmd) before acting on them, and never reconstruct a file path from memory alone.
 
 ## Updating memory
 

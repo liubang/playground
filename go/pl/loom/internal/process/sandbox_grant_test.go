@@ -191,7 +191,7 @@ func TestSeatbeltGitCommitStillWorks(t *testing.T) {
 	// (GIT_AUTHOR_*/GIT_COMMITTER_* overrides are filtered out) and
 	// ambient ~/.gitconfig is disabled by GIT_CONFIG_GLOBAL=/dev/null, so
 	// the repo config is the only identity source that survives into the
-	// sandbox. Mirrors configureGitRepo in gittools_test.go.
+	// sandbox.
 	setup("config", "user.name", "Loom Test")
 	setup("config", "user.email", "loom@example.com")
 	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("one"), 0o644); err != nil {
@@ -211,7 +211,7 @@ func TestSeatbeltGitCommitStillWorks(t *testing.T) {
 			Timeout: 15 * time.Second,
 			// Only allowlisted keys survive the sandbox's minimal env; the
 			// author/committer identity now comes from the repo-local config
-			// set during setup. Mirrors gitCommandEnv (gittools/common.go).
+			// set during setup.
 			Env: map[string]string{
 				"LANG":                "C",
 				"LC_ALL":              "C",

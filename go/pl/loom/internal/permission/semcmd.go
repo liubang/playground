@@ -51,6 +51,10 @@ func init() {
 	semTable = map[string]semDeriveFunc{
 		// git family (subcommand semantics, full option grammar)
 		"git": semDeriveGit,
+		// read-only file viewers (credential-path read indicator)
+		"cat": semDeriveFileRead, "head": semDeriveFileRead,
+		"tail": semDeriveFileRead, "nl": semDeriveFileRead,
+		"od": semDeriveFileRead,
 		// destructive-at-target filesystem programs
 		"rm": semDeriveRm, "rmdir": semDeriveRm, "unlink": semDeriveRm,
 		"chmod": semDeriveChmod, "chown": semDeriveChmod, "chgrp": semDeriveChmod,
