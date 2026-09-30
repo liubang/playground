@@ -1237,6 +1237,8 @@
                   "metadata": {
                     "child_outcome": "succeeded",
                     "child_session_id": "{{id:7}}",
+                    "external_cached_input_tokens": "5120",
+                    "external_context_tokens": "10396",
                     "external_input_tokens": "10396",
                     "external_output_tokens": "313"
                   },
@@ -1265,6 +1267,8 @@
           "metadata": {
             "child_outcome": "succeeded",
             "child_session_id": "{{id:7}}",
+            "external_cached_input_tokens": "5120",
+            "external_context_tokens": "10396",
             "external_input_tokens": "10396",
             "external_output_tokens": "313"
           },
@@ -1279,7 +1283,7 @@
       {
         "id": "{{id:23}}",
         "payload": {
-          "cached_input_tokens": 14976,
+          "cached_input_tokens": 20096,
           "context_tokens": 25601,
           "cost_usd": 0,
           "input_tokens": 25601,
@@ -1323,7 +1327,7 @@
       {
         "id": "{{id:26}}",
         "payload": {
-          "cached_input_tokens": 14976,
+          "cached_input_tokens": 20096,
           "context_tokens": 25601,
           "cost_usd": 0,
           "input_tokens": 25601,
@@ -1393,7 +1397,7 @@
       {
         "id": "{{id:30}}",
         "payload": {
-          "cached_input_tokens": 30144,
+          "cached_input_tokens": 35264,
           "context_tokens": 41116,
           "cost_usd": 0,
           "input_tokens": 41116,
@@ -1508,6 +1512,8 @@
                 "metadata": {
                   "child_outcome": "succeeded",
                   "child_session_id": "{{id:7}}",
+                  "external_cached_input_tokens": "5120",
+                  "external_context_tokens": "10396",
                   "external_input_tokens": "10396",
                   "external_output_tokens": "313"
                 },

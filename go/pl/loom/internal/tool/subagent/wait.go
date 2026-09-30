@@ -22,7 +22,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -163,13 +162,7 @@ func (t *WaitSubagentTool) Execute(ctx context.Context, prepared domain.Prepared
 	}
 	tr := marshalWaitResult(prepared.Call.ID, startedAt, payload)
 	// Fold external usage into metadata so the parent loop accounts for it.
-	if result.Usage.InputTokens > 0 || result.Usage.OutputTokens > 0 {
-		if tr.Metadata == nil {
-			tr.Metadata = make(map[string]string)
-		}
-		tr.Metadata[domain.ToolMetaExternalInputTokens] = strconv.FormatInt(result.Usage.InputTokens, 10)
-		tr.Metadata[domain.ToolMetaExternalOutputTokens] = strconv.FormatInt(result.Usage.OutputTokens, 10)
-	}
+	tr.Metadata = withExternalUsage(tr.Metadata, result.Usage)
 	return tr
 }
 

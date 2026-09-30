@@ -142,7 +142,7 @@ func stageRunning(t *testing.T, mgr *Manager) (domain.SessionID, *managedRun) {
 			Role:       RoleResearcher,
 			Outcome:    domain.OutcomeCancelled,
 			Conclusion: "partial work",
-			Usage:      domain.Usage{InputTokens: 12, OutputTokens: 4},
+			Usage:      domain.Usage{InputTokens: 12, OutputTokens: 4, CachedInputTokens: 8, ContextTokens: 12},
 		}
 		close(mr.done)
 	}
@@ -218,6 +218,12 @@ func TestCancelSubagentExecuteCancelled(t *testing.T) {
 	// Usage rides the metadata so the parent loop accounts for it.
 	if result.Metadata[domain.ToolMetaExternalInputTokens] != "12" {
 		t.Fatalf("external input tokens = %q, want 12", result.Metadata[domain.ToolMetaExternalInputTokens])
+	}
+	if result.Metadata[domain.ToolMetaExternalCachedInputTokens] != "8" {
+		t.Fatalf("external cached input tokens = %q, want 8", result.Metadata[domain.ToolMetaExternalCachedInputTokens])
+	}
+	if result.Metadata[domain.ToolMetaExternalContextTokens] != "12" {
+		t.Fatalf("external context tokens = %q, want 12", result.Metadata[domain.ToolMetaExternalContextTokens])
 	}
 }
 

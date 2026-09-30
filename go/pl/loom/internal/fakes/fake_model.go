@@ -33,7 +33,10 @@ type ScriptEntry struct {
 	StopReason domain.StopReason
 	UsageIn    int64
 	UsageOut   int64
-	Error      string // if set, stream returns this error
+	// UsageCached is the response's provider-reported prompt-cache hit
+	// count (0 when the entry does not exercise cache accounting).
+	UsageCached int64
+	Error       string // if set, stream returns this error
 	// Err returns a typed error as-is (e.g. a retryable domain.AgentError),
 	// taking precedence over Error; string errors cannot exercise the
 	// classification paths that typed errors reach.
@@ -114,10 +117,11 @@ func newFakeStream(entry ScriptEntry) *fakeStream {
 
 	if entry.UsageIn > 0 || entry.UsageOut > 0 {
 		events = append(events, domain.ModelEvent{
-			Kind:          domain.ModelEventUsage,
-			InputTokens:   entry.UsageIn,
-			OutputTokens:  entry.UsageOut,
-			ContextTokens: entry.UsageIn,
+			Kind:              domain.ModelEventUsage,
+			InputTokens:       entry.UsageIn,
+			OutputTokens:      entry.UsageOut,
+			CachedInputTokens: entry.UsageCached,
+			ContextTokens:     entry.UsageIn,
 		})
 	}
 

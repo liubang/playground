@@ -109,7 +109,7 @@ func TestWaitSubagentPrepareCanonicalizesSessionID(t *testing.T) {
 func TestWaitSubagentExecuteCompleted(t *testing.T) {
 	mgr, _, _, _ := newTestManager(
 		t,
-		fakes.ScriptEntry{Text: "结论：查找完毕", StopReason: domain.StopEndTurn, UsageIn: 80, UsageOut: 20},
+		fakes.ScriptEntry{Text: "结论：查找完毕", StopReason: domain.StopEndTurn, UsageIn: 80, UsageOut: 20, UsageCached: 64},
 	)
 
 	childID, err := mgr.Spawn(SpawnSpec{
@@ -164,6 +164,12 @@ func TestWaitSubagentExecuteCompleted(t *testing.T) {
 	}
 	if result.Metadata[domain.ToolMetaExternalOutputTokens] != "20" {
 		t.Fatalf("external output tokens = %q, want 20", result.Metadata[domain.ToolMetaExternalOutputTokens])
+	}
+	if result.Metadata[domain.ToolMetaExternalCachedInputTokens] != "64" {
+		t.Fatalf("external cached input tokens = %q, want 64", result.Metadata[domain.ToolMetaExternalCachedInputTokens])
+	}
+	if result.Metadata[domain.ToolMetaExternalContextTokens] != "80" {
+		t.Fatalf("external context tokens = %q, want 80", result.Metadata[domain.ToolMetaExternalContextTokens])
 	}
 }
 

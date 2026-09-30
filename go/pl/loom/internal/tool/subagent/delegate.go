@@ -513,21 +513,37 @@ func (t *DelegateTaskTool) successResult(callID domain.ToolCallID, startedAt tim
 	}
 }
 
+// withExternalUsage records the externally-metered usage fold-back keys
+// (domain.ToolMetaExternalInputTokens/OutputTokens/CachedInputTokens/
+// ContextTokens) on metadata, allocating the map when needed, so the
+// parent loop accounts for the child run's consumption — cache-hit
+// split and context footprint included, keeping the session cache-hit
+// ratio truthful across delegated work. A zero-usage run records
+// nothing.
+func withExternalUsage(metadata map[string]string, usage domain.Usage) map[string]string {
+	if usage.InputTokens <= 0 && usage.OutputTokens <= 0 {
+		return metadata
+	}
+	if metadata == nil {
+		metadata = make(map[string]string)
+	}
+	metadata[domain.ToolMetaExternalInputTokens] = strconv.FormatInt(usage.InputTokens, 10)
+	metadata[domain.ToolMetaExternalOutputTokens] = strconv.FormatInt(usage.OutputTokens, 10)
+	metadata[domain.ToolMetaExternalCachedInputTokens] = strconv.FormatInt(usage.CachedInputTokens, 10)
+	metadata[domain.ToolMetaExternalContextTokens] = strconv.FormatInt(usage.ContextTokens, 10)
+	return metadata
+}
+
 // resultMetadata builds the audit + fold-back metadata carried by every
 // terminal delegation result: the child session reference (the V2
 // spawn/wait seam — a result that names its agent, not just text) and
 // the externally-metered token usage the parent loop folds into its
-// budget (domain.ToolMetaExternalInputTokens/OutputTokens).
+// budget (withExternalUsage).
 func resultMetadata(childSessionID domain.SessionID, run *agent.Run) map[string]string {
-	metadata := map[string]string{
+	return withExternalUsage(map[string]string{
 		"child_session_id": childSessionID.String(),
 		"child_outcome":    string(run.State.Outcome),
-	}
-	if run.Usage.InputTokens > 0 || run.Usage.OutputTokens > 0 {
-		metadata[domain.ToolMetaExternalInputTokens] = strconv.FormatInt(run.Usage.InputTokens, 10)
-		metadata[domain.ToolMetaExternalOutputTokens] = strconv.FormatInt(run.Usage.OutputTokens, 10)
-	}
-	return metadata
+	}, run.Usage)
 }
 
 // childTaskPrompt renders the child's single user message: the task

@@ -166,15 +166,17 @@ func TestDelegateExecuteSuccess(t *testing.T) {
 			ToolCalls: []domain.ToolCall{
 				{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage(`{"path":"main.go"}`)},
 			},
-			StopReason: domain.StopToolUse,
-			UsageIn:    100,
-			UsageOut:   20,
+			StopReason:  domain.StopToolUse,
+			UsageIn:     100,
+			UsageOut:    20,
+			UsageCached: 60,
 		},
 		fakes.ScriptEntry{
-			Text:       "结论：入口在 cmd/loom/main.go。",
-			StopReason: domain.StopEndTurn,
-			UsageIn:    200,
-			UsageOut:   30,
+			Text:        "结论：入口在 cmd/loom/main.go。",
+			StopReason:  domain.StopEndTurn,
+			UsageIn:     200,
+			UsageOut:    30,
+			UsageCached: 150,
 		},
 	)
 	publishSnapshot(models, model)
@@ -193,13 +195,15 @@ func TestDelegateExecuteSuccess(t *testing.T) {
 	}
 
 	// Metadata: child session reference + fold-back usage (100+200 in,
-	// 20+30 out from the two scripted calls).
+	// 20+30 out, 60+150 cached, 300 context from the two scripted calls).
 	childID, err := domain.ParseSessionID(result.Metadata["child_session_id"])
 	if err != nil {
 		t.Fatalf("child_session_id metadata: %v", err)
 	}
 	if result.Metadata[domain.ToolMetaExternalInputTokens] != "300" ||
-		result.Metadata[domain.ToolMetaExternalOutputTokens] != "50" {
+		result.Metadata[domain.ToolMetaExternalOutputTokens] != "50" ||
+		result.Metadata[domain.ToolMetaExternalCachedInputTokens] != "210" ||
+		result.Metadata[domain.ToolMetaExternalContextTokens] != "300" {
 		t.Fatalf("external usage metadata = %v", result.Metadata)
 	}
 

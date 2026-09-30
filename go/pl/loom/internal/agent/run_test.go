@@ -5093,8 +5093,10 @@ func TestLoopFoldsExternalToolUsageIntoBudget(t *testing.T) {
 			Status:  domain.ToolStatusSuccess,
 			Content: []domain.ContentPart{{Kind: domain.PartText, Text: "conclusion"}},
 			Metadata: map[string]string{
-				domain.ToolMetaExternalInputTokens:  "500",
-				domain.ToolMetaExternalOutputTokens: "120",
+				domain.ToolMetaExternalInputTokens:       "500",
+				domain.ToolMetaExternalOutputTokens:      "120",
+				domain.ToolMetaExternalCachedInputTokens: "400",
+				domain.ToolMetaExternalContextTokens:     "520",
 			},
 			StartedAt:  time.Now(),
 			FinishedAt: time.Now(),
@@ -5105,9 +5107,10 @@ func TestLoopFoldsExternalToolUsageIntoBudget(t *testing.T) {
 			ToolCalls: []domain.ToolCall{
 				{ID: domain.NewToolCallID(), Name: "read_file", Arguments: json.RawMessage(`{"path":"x.go"}`)},
 			},
-			StopReason: domain.StopToolUse,
-			UsageIn:    100,
-			UsageOut:   30,
+			StopReason:  domain.StopToolUse,
+			UsageIn:     100,
+			UsageOut:    30,
+			UsageCached: 80,
 		},
 		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn},
 	)
@@ -5135,6 +5138,14 @@ func TestLoopFoldsExternalToolUsageIntoBudget(t *testing.T) {
 	if run.Usage.InputTokens != 600 || run.Usage.OutputTokens != 150 {
 		t.Fatalf("usage = %d/%d, want 600/150 (model + folded external)",
 			run.Usage.InputTokens, run.Usage.OutputTokens)
+	}
+	// The cache-hit split folds too — model-metered 80 + external 400 —
+	// and the denominator is the externally metered footprint (model 100
+	// + external 520, not the 500 input), so delegated work keeps the
+	// session cache-hit ratio truthful.
+	if run.Usage.CachedInputTokens != 480 || run.Usage.ContextTokens != 620 {
+		t.Fatalf("cache/context = %d/%d, want 480/620 (model + folded external)",
+			run.Usage.CachedInputTokens, run.Usage.ContextTokens)
 	}
 }
 

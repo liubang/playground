@@ -3026,26 +3026,33 @@ func (l *Loop) accountUsage(inputTokens, outputTokens, cachedInputTokens, contex
 }
 
 // foldExternalUsage accounts externally-metered token usage reported in
-// a tool result's metadata (domain.ToolMetaExternalInputTokens /
-// ToolMetaExternalOutputTokens) into the run's budget counters. It is
-// the delegate_task contract: a sub-agent run consumes tokens outside
-// the parent's own model calls, and folding them back keeps delegation
-// budget-transparent instead of a loophole (docs/SUBAGENT_DESIGN.md
-// §5.2). The accounting path is the same one model calls use, so the
-// cost estimate and the goal meter stay consistent.
+// a tool result's metadata (the domain.ToolMetaExternal* keys) into the
+// run's budget counters. It is the delegate_task contract: a sub-agent
+// run consumes tokens outside the parent's own model calls, and folding
+// them back keeps delegation budget-transparent instead of a loophole
+// (docs/SUBAGENT_DESIGN.md §5.2). The accounting path is the same one
+// model calls use, so the cost estimate and the goal meter stay
+// consistent.
 func (l *Loop) foldExternalUsage(result domain.ToolResult) {
 	if result.Metadata == nil {
 		return
 	}
 	inputTokens, _ := strconv.ParseInt(result.Metadata[domain.ToolMetaExternalInputTokens], 10, 64)
 	outputTokens, _ := strconv.ParseInt(result.Metadata[domain.ToolMetaExternalOutputTokens], 10, 64)
+	cachedInputTokens, _ := strconv.ParseInt(result.Metadata[domain.ToolMetaExternalCachedInputTokens], 10, 64)
 	if inputTokens <= 0 && outputTokens <= 0 {
 		return
 	}
-	// Externally metered input (a sub-agent's) is a full footprint: the
-	// delegate contract reports complete input sizes, not cache splits;
-	// the reasoning share is not split out either (0).
-	l.accountUsage(inputTokens, outputTokens, 0, inputTokens, 0)
+	// The cache-ratio denominator is the externally metered window
+	// footprint; producers that predate the context key fall back to the
+	// complete input size (exact under OpenAI-style metering, whose input
+	// is already cache-inclusive). The reasoning share is not split
+	// out (0).
+	contextTokens, _ := strconv.ParseInt(result.Metadata[domain.ToolMetaExternalContextTokens], 10, 64)
+	if contextTokens <= 0 {
+		contextTokens = inputTokens
+	}
+	l.accountUsage(inputTokens, outputTokens, cachedInputTokens, contextTokens, 0)
 	l.Run.appendEvent(domain.EventBudgetUpdated, l.Run.Usage)
 }
 
