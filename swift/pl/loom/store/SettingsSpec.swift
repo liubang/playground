@@ -592,6 +592,50 @@ func preserveUnmanaged(_ cfg: inout [String: JSONValue], orig: [String: JSONValu
     }
 }
 
+// MARK: - Provider rename cascade
+
+/// Rename detection, symmetric with the server's RestoreSecretsFrom
+/// fallback (an API key is scoped to its endpoint): a stored provider
+/// whose name vanished from the draft maps to a new-named provider on
+/// the same base_url. The match must be unique on BOTH sides — two
+/// vanished providers behind one endpoint, or two new-named providers
+/// claiming it, cannot be told apart and yield no rename (the server
+/// rejects the masked key the same way).
+func detectProviderRenames(
+    old: [(name: String, baseURL: String)],
+    new: [(name: String, baseURL: String)],
+) -> [String: String] {
+    let newNames = Set(new.map(\.name))
+    let oldNames = Set(old.map(\.name))
+    let vanished = old.filter { !newNames.contains($0.name) }
+    let added = new.filter { !oldNames.contains($0.name) }
+    var renames: [String: String] = [:]
+    for prev in vanished {
+        let candidates = added.filter { $0.baseURL == prev.baseURL }
+        guard candidates.count == 1, let candidate = candidates.first else { continue }
+        let rivals = vanished.filter { $0.name != prev.name && $0.baseURL == prev.baseURL }
+        guard rivals.isEmpty else { continue }
+        renames[prev.name] = candidate.name
+    }
+    return renames
+}
+
+/// Rewrite a `default`-style model reference through a rename map:
+/// "provider/model" and the bare-provider form follow the rename; a
+/// bare model name references no provider and passes through untouched.
+func cascadeModelRef(_ ref: String, renames: [String: String]) -> String {
+    for (old, new) in renames {
+        if ref == old {
+            return new
+        }
+        let prefix = old + "/"
+        if ref.hasPrefix(prefix) {
+            return new + "/" + ref.dropFirst(prefix.count)
+        }
+    }
+    return ref
+}
+
 // MARK: - Fill / collect (convert.ts)
 
 /// Returns a field-specific error before lossy collection can omit invalid input.

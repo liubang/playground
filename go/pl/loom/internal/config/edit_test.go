@@ -135,15 +135,51 @@ func TestRestoreSecretsFrom(t *testing.T) {
 	}
 }
 
+// A rename keeps the endpoint the key is scoped to, so the masked key
+// resolves through the base_url fallback without re-entering it.
+func TestRestoreSecretsFromRenamedProvider(t *testing.T) {
+	cur := editTestFile()
+	masked := editTestFile()
+	masked.MaskSecrets()
+	masked.Providers[0].Name = "renamed"
+	if err := masked.RestoreSecretsFrom(cur); err != nil {
+		t.Fatalf("RestoreSecretsFrom: %v", err)
+	}
+	if masked.Providers[0].APIKey != "sk-real-key" {
+		t.Fatalf("api_key = %q, want the stored key restored through the rename", masked.Providers[0].APIKey)
+	}
+}
+
+// Renaming AND moving the provider to another endpoint breaks both the
+// name match and the base_url fallback: the mask cannot resolve.
 func TestRestoreSecretsFromUnresolvable(t *testing.T) {
 	cur := editTestFile()
 	masked := editTestFile()
 	masked.MaskSecrets()
-	// Renaming the provider in the same edit breaks the structural match.
 	masked.Providers[0].Name = "renamed"
+	masked.Providers[0].BaseURL = "https://api.other.com/v1"
 	err := masked.RestoreSecretsFrom(cur)
 	if err == nil || !strings.Contains(err.Error(), "renamed") {
 		t.Fatalf("err = %v, want an unresolved-mask error naming the provider", err)
+	}
+}
+
+// Two stored providers behind the same endpoint make a rename
+// ambiguous: restoring either key would be a guess, so the edit is
+// rejected and the key must be re-entered.
+func TestRestoreSecretsFromAmbiguousRename(t *testing.T) {
+	cur := editTestFile()
+	dup := cur.Providers[0]
+	dup.Name = "deepseek-eu"
+	dup.APIKey = "sk-other-key"
+	cur.Providers = append(cur.Providers, dup)
+
+	masked := editTestFile()
+	masked.MaskSecrets()
+	masked.Providers[0].Name = "renamed" // same base_url as both stored providers
+	err := masked.RestoreSecretsFrom(cur)
+	if err == nil || !strings.Contains(err.Error(), "renamed") {
+		t.Fatalf("err = %v, want an ambiguous-rename error naming the provider", err)
 	}
 }
 

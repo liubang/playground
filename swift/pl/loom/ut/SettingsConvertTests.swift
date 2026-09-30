@@ -199,6 +199,72 @@ final class SettingsConvertTests: XCTestCase {
         XCTAssertNil(cfg["approval"])
     }
 
+    // MARK: Provider rename cascade
+
+    func testDetectProviderRenamesByEndpoint() {
+        let old = [
+            (name: "gateway", baseURL: "https://gw/v1"),
+            (name: "imagen", baseURL: "https://gw/v1/img"),
+        ]
+        // Rename gateway → main; the untouched provider is not a candidate.
+        let new = [
+            (name: "main", baseURL: "https://gw/v1"),
+            (name: "imagen", baseURL: "https://gw/v1/img"),
+        ]
+        XCTAssertEqual(detectProviderRenames(old: old, new: new), ["gateway": "main"])
+    }
+
+    func testDetectProviderRenamesAmbiguousEndpointYieldsNothing() {
+        // Two stored providers behind the same endpoint both vanish: the
+        // rename target cannot be told apart.
+        let old = [
+            (name: "a", baseURL: "https://gw/v1"),
+            (name: "b", baseURL: "https://gw/v1"),
+        ]
+        let new = [(name: "c", baseURL: "https://gw/v1")]
+        XCTAssertEqual(detectProviderRenames(old: old, new: new), [:])
+    }
+
+    func testDetectProviderRenamesIgnoresEndpointChangeAndReusedNames() {
+        // Renaming AND moving endpoints is not a rename.
+        XCTAssertEqual(
+            detectProviderRenames(
+                old: [(name: "a", baseURL: "https://gw/v1")],
+                new: [(name: "b", baseURL: "https://other/v1")],
+            ),
+            [:],
+        )
+        // A brand-new provider must not adopt a vanished provider's name
+        // mapping: the added card keeps its own identity.
+        XCTAssertEqual(
+            detectProviderRenames(
+                old: [(name: "a", baseURL: "https://gw/v1")],
+                new: [
+                    (name: "b", baseURL: "https://gw/v1"),
+                    (name: "c", baseURL: "https://gw/v1"),
+                ],
+            ),
+            [:],
+        )
+    }
+
+    func testCascadeModelRef() {
+        let renames = ["gateway": "main"]
+        // provider/model form follows the rename.
+        XCTAssertEqual(
+            cascadeModelRef("gateway/deepseek-chat", renames: renames),
+            "main/deepseek-chat",
+        )
+        // Bare provider form follows the rename.
+        XCTAssertEqual(cascadeModelRef("gateway", renames: renames), "main")
+        // Bare model name references no provider and stays put.
+        XCTAssertEqual(cascadeModelRef("deepseek-chat", renames: renames), "deepseek-chat")
+        // A name merely sharing a prefix is not the renamed provider.
+        XCTAssertEqual(cascadeModelRef("gateway2/m", renames: renames), "gateway2/m")
+        // Empty reference stays empty.
+        XCTAssertEqual(cascadeModelRef("", renames: renames), "")
+    }
+
     // MARK: fillValue
 
     func testFillScalars() {

@@ -534,6 +534,45 @@ final class SettingsStore {
 
     // MARK: Save
 
+    /// A provider rename strands every name-based reference (default
+    /// model, image provider) on the old name. Detect renames by
+    /// endpoint — the same rule the server uses to restore masked keys
+    /// — and rewrite the references in the draft before validation and
+    /// collection, so the save cannot dangle them. Returns the labels
+    /// of the references it rewrote.
+    private func cascadeProviderRenames() -> [String] {
+        var old: [(name: String, baseURL: String)] = []
+        if case let .array(providers) = origCfg["providers"] {
+            for value in providers {
+                guard case let .object(p) = value, let name = p["name"]?.stringValue
+                else { continue }
+                old.append((name, p["base_url"]?.stringValue ?? ""))
+            }
+        }
+        let new: [(name: String, baseURL: String)] = draft.providers.compactMap { card in
+            let name = card.fields["name"]?.textValue.trimmingCharacters(in: .whitespaces) ?? ""
+            guard !name.isEmpty else { return nil }
+            return (name, card.fields["base_url"]?.textValue.trimmingCharacters(in: .whitespaces) ?? "")
+        }
+        let renames = detectProviderRenames(old: old, new: new)
+        guard !renames.isEmpty else { return [] }
+        var touched: [String] = []
+        if let def = draft.globals[defaultModelField.key]?.textValue, !def.isEmpty {
+            let updated = cascadeModelRef(def, renames: renames)
+            if updated != def {
+                draft.globals[defaultModelField.key] = .text(updated)
+                touched.append("默认模型")
+            }
+        }
+        if let imageProvider = draft.globals["image.provider"]?.textValue,
+           let updated = renames[imageProvider]
+        {
+            draft.globals["image.provider"] = .text(updated)
+            touched.append("图像 Provider")
+        }
+        return touched
+    }
+
     private func applyMsg(_ result: PutConfigResult) -> String {
         guard let applied = result.applied else { return "已保存" }
         var parts: [String] = []
@@ -555,6 +594,7 @@ final class SettingsStore {
         } // a repeated PUT carries the old revision and inevitably 409s
         saving = true
         defer { saving = false }
+        let cascaded = cascadeProviderRenames()
         if let bad = firstInvalid() {
             locate(bad)
             showMsg(bad.msg, isError: true)
@@ -639,7 +679,10 @@ final class SettingsStore {
             let pathExtraChanged = getPath(cfg, "tools.path_extra") != getPath(origCfg, "tools.path_extra")
             origCfg = cfg
             dirty = skippedCards > 0
-            let success = applyMsg(result)
+            var success = applyMsg(result)
+            if !cascaded.isEmpty {
+                success += "；已同步更新引用：" + cascaded.joined(separator: "、")
+            }
             showMsg(
                 skippedCards > 0 ? "\(success)；\(skippedCards) 张卡片未保存（缺少必填字段或名称重复）" : success,
                 isError: skippedCards > 0,

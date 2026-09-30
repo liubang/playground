@@ -158,13 +158,20 @@ func (f *File) MaskSecrets() {
 
 // RestoreSecretsFrom resolves SecretMask placeholders in f back to the
 // stored values from cur, matching structurally (providers by name,
-// MCP headers by server+key). A placeholder without a stored counterpart
-// — e.g. the provider was renamed in the same edit — is an error: the
-// mask must never be written to disk as a literal value.
+// MCP headers by server+key). A masked provider key whose name is not
+// in cur falls back to rename detection (renamedProvider): an API key
+// is scoped to its endpoint, so a rename that keeps base_url still
+// resolves. A placeholder that stays unresolved — the endpoint changed
+// too, or the endpoint match is ambiguous — is an error: the mask must
+// never be written to disk as a literal value.
 func (f *File) RestoreSecretsFrom(cur *File) error {
 	prevProviders := make(map[string]*Provider, len(cur.Providers))
 	for i := range cur.Providers {
 		prevProviders[cur.Providers[i].Name] = &cur.Providers[i]
+	}
+	newNames := make(map[string]bool, len(f.Providers))
+	for i := range f.Providers {
+		newNames[f.Providers[i].Name] = true
 	}
 	for i := range f.Providers {
 		p := &f.Providers[i]
@@ -172,7 +179,10 @@ func (f *File) RestoreSecretsFrom(cur *File) error {
 			continue
 		}
 		prev, ok := prevProviders[p.Name]
-		if !ok || prev.APIKey == "" {
+		if !ok {
+			prev = renamedProvider(cur, newNames, p.BaseURL)
+		}
+		if prev == nil || prev.APIKey == "" {
 			return fmt.Errorf("config: providers[%d] (%q): api_key is masked but no stored key exists — please re-enter it", i, p.Name)
 		}
 		p.APIKey = prev.APIKey
@@ -209,6 +219,26 @@ func (f *File) RestoreSecretsFrom(cur *File) error {
 		f.MCPServers[name] = srv
 	}
 	return nil
+}
+
+// renamedProvider identifies the stored provider a renamed one was
+// saved as: its old name vanished from the edit while the endpoint the
+// API key is scoped to (base_url) stayed. Returns nil unless exactly
+// one vanished stored provider shares baseURL — an ambiguous endpoint
+// (two providers behind the same gateway) must not guess a key.
+func renamedProvider(cur *File, newNames map[string]bool, baseURL string) *Provider {
+	var match *Provider
+	for i := range cur.Providers {
+		prev := &cur.Providers[i]
+		if newNames[prev.Name] || prev.BaseURL != baseURL {
+			continue
+		}
+		if match != nil {
+			return nil
+		}
+		match = prev
+	}
+	return match
 }
 
 func restoreSecret(field *string, prev, name string) error {
