@@ -399,6 +399,89 @@ func TestManagerShutdownIdempotent(t *testing.T) {
 	mgr.Shutdown(ctx) // second call is a no-op
 }
 
+// TestManagerCancelChildren guards the regression where a session-scoped
+// teardown (deleting one session) shut the workspace-scoped manager down,
+// permanently breaking delegate_task for every sibling session: draining
+// one parent must cancel only ITS children and leave the manager open.
+func TestManagerCancelChildren(t *testing.T) {
+	mgr, _, _, _ := newTestManager(
+		t,
+		fakes.ScriptEntry{Text: "结论", StopReason: domain.StopEndTurn},
+		fakes.ScriptEntry{Text: "结论", StopReason: domain.StopEndTurn},
+	)
+	ctx := t.Context()
+
+	parentA := domain.NewSessionID()
+	parentB := domain.NewSessionID()
+
+	// A still-running child of parent A whose loop honors cancellation:
+	// cancel() closes done, mimicking drive's deferred close.
+	childA := domain.NewSessionID()
+	if err := mgr.factory.Store.CreateSession(ctx, childA, domain.WorkspaceID{}); err != nil {
+		t.Fatalf("create child session: %v", err)
+	}
+	mrA := &managedRun{
+		sessionID:     childA,
+		parentSession: parentA,
+		role:          RoleResearcher,
+		done:          make(chan struct{}),
+	}
+	mrA.cancel = func() { close(mrA.done) }
+	mgr.mu.Lock()
+	mgr.running[childA] = mrA
+	mgr.wg.Add(1)
+	mgr.mu.Unlock()
+
+	// A child of parent B that runs to completion.
+	childB, err := mgr.Spawn(SpawnSpec{
+		Task:          "other session's task",
+		Role:          RoleResearcher,
+		ParentSession: parentB,
+		ParentCall:    domain.NewToolCallID(),
+	})
+	if err != nil {
+		t.Fatalf("Spawn: %v", err)
+	}
+
+	// Draining parent A cancels only its own child.
+	drainCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	mgr.CancelChildren(drainCtx, parentA)
+	mgr.wg.Done() // balance the hand-built registry entry above
+
+	if got := mgr.Status(childA); got != StatusDone {
+		t.Fatalf("Status(childA) = %q, want done", got)
+	}
+	mgr.mu.Lock()
+	_, stillRegistered := mgr.running[childA]
+	mgr.mu.Unlock()
+	if stillRegistered {
+		t.Fatal("childA should have been collected from the registry")
+	}
+
+	// Parent B's child is unaffected and resolves normally.
+	result, err := mgr.Wait(ctx, childB, 10*time.Second)
+	if err != nil {
+		t.Fatalf("Wait(childB): %v", err)
+	}
+	if result.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("childB outcome = %q, want succeeded", result.Outcome)
+	}
+
+	// The manager itself stays open: delegation keeps working.
+	if _, err := mgr.Spawn(SpawnSpec{
+		Task:          "post-drain task",
+		Role:          RoleResearcher,
+		ParentSession: parentB,
+		ParentCall:    domain.NewToolCallID(),
+	}); err != nil {
+		t.Fatalf("Spawn after CancelChildren: %v", err)
+	}
+
+	// Draining a parent with no children is a no-op.
+	mgr.CancelChildren(ctx, domain.NewSessionID())
+}
+
 func TestManagerSpawnWithCoderRole(t *testing.T) {
 	mgr, _, _, _ := newTestManager(
 		t,

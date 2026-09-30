@@ -552,9 +552,48 @@ func (m *Manager) Status(sessionID domain.SessionID) RunStatus {
 	}
 }
 
+// CancelChildren cancels every in-flight sub-agent spawned by parentSession
+// and waits (bounded by ctx) for their loops to land in a terminal persisted
+// state. Unlike Shutdown the manager itself stays open: a session-scoped
+// teardown (session deletion, handle eviction) must only drain THAT session's
+// delegations, never close the workspace-scoped manager shared with every
+// other live session. The drain re-scans after waiting so a delegation that
+// slipped in mid-drain (an in-flight parallel tool batch whose Spawn lands
+// after the first snapshot) is cancelled on the next pass.
+func (m *Manager) CancelChildren(ctx context.Context, parentSession domain.SessionID) {
+	for {
+		m.mu.Lock()
+		var children []*managedRun
+		for _, mr := range m.running {
+			if mr.parentSession == parentSession {
+				children = append(children, mr)
+			}
+		}
+		m.mu.Unlock()
+		if len(children) == 0 {
+			return
+		}
+		for _, mr := range children {
+			if mr.cancel != nil {
+				mr.cancel()
+			}
+		}
+		for _, mr := range children {
+			select {
+			case <-mr.done:
+				m.collect(mr.sessionID, mr)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+}
+
 // Shutdown cancels every in-flight sub-agent and waits (bounded by ctx)
 // for their loops to land in a terminal persisted state. After Shutdown
-// returns, Spawn and Resume fail with ErrUnavailable.
+// returns, Spawn and Resume fail with ErrUnavailable. Reserved for
+// workspace teardown (Bootstrap.Close); session-scoped teardowns must use
+// CancelChildren instead.
 func (m *Manager) Shutdown(ctx context.Context) {
 	m.mu.Lock()
 	if m.closed {

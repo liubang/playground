@@ -30,11 +30,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/fakes"
+	"github.com/liubang/playground/go/pl/loom/internal/prompt"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/subagent"
 )
 
 func newTestService(t *testing.T, model domain.Model) (*SessionService, *runtimeevent.Broker) {
@@ -828,5 +831,83 @@ func TestSessionServiceEvictsPurgedSessionHandles(t *testing.T) {
 	b.ProcessRuntime.notifySessionsPurged(ctx, []domain.SessionID{h.ID})
 	if _, ok := svc.Get(h.ID); ok {
 		t.Fatal("purged session handle must be evicted")
+	}
+}
+
+// Regression: the sub-agent manager is a workspace-scoped shared resource,
+// but a session-scoped teardown used to call Manager.Shutdown on it —
+// deleting one session (e.g. while bulk-cleaning old sessions in the UI)
+// permanently closed the manager, and every other live session's
+// delegate_task failed with "sub-agent manager is shut down". Deleting a
+// session must drain only its own children and leave the manager open.
+func TestDeleteSessionKeepsSharedSubagentManagerOpen(t *testing.T) {
+	ctx := context.Background()
+	model := fakes.NewFakeModel(fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn})
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+
+	b := testBootstrap(store, model)
+	models := &subagent.ModelSource{}
+	models.Set(subagent.ModelSnapshot{Model: model, ModelName: "test-model"})
+	researcherRegistry := agent.NewToolRegistry()
+	if err := researcherRegistry.Register(fakes.ReadFileTool()); err != nil {
+		t.Fatalf("register read_file: %v", err)
+	}
+	researcherPrompt := prompt.NewBuilder(t.TempDir())
+	factory := &subagent.Factory{
+		Store:    store,
+		Registry: researcherRegistry,
+		Prompt:   researcherPrompt,
+		Limits:   domain.DefaultLimits(),
+		Runaway:  domain.DefaultRunawayConfig(),
+		Models:   models,
+	}
+	manager, err := subagent.NewManager(factory, map[subagent.Role]*subagent.RoleSpec{
+		subagent.RoleResearcher: {Registry: researcherRegistry, Prompt: researcherPrompt, Risk: domain.R1},
+	}, nil)
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	b.SubagentManager = manager
+
+	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
+	t.Cleanup(broker.Close)
+	svc := NewSingletonWorkspaceService(b, broker, SessionServiceConfig{})
+	t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
+
+	victim, err := svc.CreateSession(ctx, domain.WorkspaceID{})
+	if err != nil {
+		t.Fatalf("CreateSession (victim): %v", err)
+	}
+	survivor, err := svc.CreateSession(ctx, domain.WorkspaceID{})
+	if err != nil {
+		t.Fatalf("CreateSession (survivor): %v", err)
+	}
+
+	// Deleting the sibling session shuts its controller down; that teardown
+	// used to close the shared manager.
+	if err := svc.DeleteSession(ctx, victim.ID); err != nil {
+		t.Fatalf("DeleteSession: %v", err)
+	}
+
+	// The surviving session can still delegate.
+	childID, err := manager.Spawn(subagent.SpawnSpec{
+		Task:          "delegate after sibling delete",
+		Role:          subagent.RoleResearcher,
+		ParentSession: survivor.ID,
+		ParentCall:    domain.NewToolCallID(),
+	})
+	if err != nil {
+		t.Fatalf("Spawn after deleting sibling session: %v", err)
+	}
+	result, err := manager.Wait(ctx, childID, 10*time.Second)
+	if err != nil {
+		t.Fatalf("Wait: %v", err)
+	}
+	if result.Outcome != domain.OutcomeSucceeded {
+		t.Fatalf("child outcome = %q, want succeeded", result.Outcome)
 	}
 }

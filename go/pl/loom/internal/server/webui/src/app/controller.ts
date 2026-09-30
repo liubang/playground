@@ -1001,14 +1001,30 @@ export class AppController {
       if (action === 'delete') {
         const sess = this.store.get().sessions.find((x) => x.id === id)
         const title = (sess && sess.title) || shortId(id)
+        // The backend cascades the delete to every sub-agent session the
+        // target spawned; reflect that in the confirmation (the count is a
+        // lower bound — pagination may not have loaded every child).
+        const childCount = this.store
+          .get()
+          .sessions.filter((x) => x.parent_session_id === id).length
+        const body =
+          childCount > 0
+            ? `"${title}" and its ${childCount}+ sub-agent ${childCount === 1 ? 'session' : 'sessions'} will be permanently deleted, including all messages and event records. This cannot be undone.`
+            : `"${title}" will be permanently deleted, including all messages and event records. This cannot be undone.`
         const ok = await confirmDialog({
           title: 'Delete session',
-          body: `"${title}" will be permanently deleted, including all messages and event records. This cannot be undone.`,
+          body,
           okLabel: 'Delete',
         })
         if (!ok) return
         await this.api.deleteSession(id)
-        if (id === this.store.get().sessionId) {
+        // The cascade also deletes the currently open session when it is a
+        // child of the deleted one (direct parentage — children visible in
+        // the sidebar never sit deeper than one level).
+        const openId = this.store.get().sessionId
+        const openSess = openId ? this.store.get().sessions.find((x) => x.id === openId) : undefined
+        const openDeleted = id === openId || (openSess && openSess.parent_session_id === id)
+        if (openDeleted) {
           // Deleted the currently open session: detach the stream, return to
           // the empty state (read-only state resets too)
           this.stream.detach()

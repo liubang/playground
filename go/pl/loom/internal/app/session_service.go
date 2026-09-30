@@ -659,14 +659,23 @@ func (s *SessionService) ListSessions(ctx context.Context, cursor string, limit 
 	return result, nextCursor, nil
 }
 
-// DeleteSession removes a session and all its persisted data. A live
-// handle is shut down first so no in-flight turn keeps writing into a
-// deleted session.
+// DeleteSession removes a session and all its persisted data, including
+// every sub-agent session it spawned (the store cascades over the
+// delegation edge). Live handles are shut down first — the parent's before
+// the descendant scan, so no in-flight turn can spawn a new child after the
+// scan — so no in-flight turn keeps writing into a deleted session.
 func (s *SessionService) DeleteSession(ctx context.Context, id domain.SessionID) error {
 	s.dropHandle(ctx, id)
 	store, ok := s.proc.Store.(*session.SQLiteStore)
 	if !ok {
 		return fmt.Errorf("session deletion is unavailable for this store")
+	}
+	descendants, err := store.DescendantSessionIDs(ctx, id)
+	if err != nil {
+		return err
+	}
+	for _, child := range descendants {
+		s.dropHandle(ctx, child)
 	}
 	return store.DeleteSession(ctx, id)
 }

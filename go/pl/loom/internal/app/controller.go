@@ -2191,11 +2191,21 @@ func (c *Controller) handleShutdown() {
 		c.questioner.SkipAll()
 	}
 
-	// Drain in-flight async sub-agents; the Manager cancels their
-	// contexts and waits for their loops to persist a terminal state.
-	if c.bootstrap.SubagentManager != nil {
+	// Drain only THIS session's in-flight async sub-agents. The manager is a
+	// workspace-scoped shared resource that never reopens once shut down, so
+	// a session-scoped teardown must NOT call Manager.Shutdown here — doing so
+	// permanently broke delegate_task for every other live session in the
+	// workspace (regression: deleting one session killed delegation in all
+	// sibling sessions). Workspace teardown shuts the manager down via
+	// Bootstrap.Close.
+	if c.bootstrap.SubagentManager != nil && !c.sessionID.IsZero() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		c.bootstrap.SubagentManager.Shutdown(ctx)
+		c.bootstrap.SubagentManager.CancelChildren(ctx, c.sessionID)
+		if delegated {
+			// This session is itself a delegated child; stop its own loop
+			// too, preserving "delete the session stops its run".
+			_, _ = c.bootstrap.SubagentManager.Cancel(ctx, c.sessionID)
+		}
 		cancel()
 	}
 

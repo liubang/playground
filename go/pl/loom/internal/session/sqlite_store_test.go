@@ -1554,6 +1554,98 @@ func TestSQLiteStoreDeleteSessionRemovesAllSessionData(t *testing.T) {
 	}
 }
 
+// DeleteSession cascades over the delegation edge: every sub-agent session
+// spawned directly or transitively by the target goes away in the same
+// transaction, while unrelated sessions (and their own children) survive.
+func TestSQLiteStoreDeleteSessionCascadesToSubAgents(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+
+	parent := domain.NewSessionID()
+	child := domain.NewSessionID()
+	grandchild := domain.NewSessionID()
+	unrelated := domain.NewSessionID()
+	unrelatedChild := domain.NewSessionID()
+	for _, id := range []domain.SessionID{parent, child, grandchild, unrelated, unrelatedChild} {
+		if err := store.CreateSession(ctx, id, domain.WorkspaceID{}); err != nil {
+			t.Fatalf("CreateSession: %v", err)
+		}
+	}
+	delegate := func(t *testing.T, childSession, parentSession domain.SessionID) {
+		t.Helper()
+		payload, err := json.Marshal(struct {
+			RunID           domain.RunID      `json:"run_id"`
+			Delegated       bool              `json:"delegated"`
+			ParentSessionID domain.SessionID  `json:"parent_session_id"`
+			ParentToolCall  domain.ToolCallID `json:"parent_tool_call_id"`
+		}{RunID: domain.NewRunID(), Delegated: true, ParentSessionID: parentSession, ParentToolCall: domain.NewToolCallID()})
+		if err != nil {
+			t.Fatalf("marshal delegation payload: %v", err)
+		}
+		if err := store.AppendEvents(ctx, childSession, 0, []domain.Event{
+			newEvent(childSession, 1, domain.EventRunCreated, payload),
+		}); err != nil {
+			t.Fatalf("AppendEvents: %v", err)
+		}
+	}
+	delegate(t, child, parent)
+	delegate(t, grandchild, child)
+	delegate(t, unrelatedChild, unrelated)
+
+	// FK-less rows on a descendant must go away with the cascade too.
+	if err := store.RecordFileChange(ctx, child, domain.RunID{}, "a.go", true, "h1", []byte("v1"), "h2"); err != nil {
+		t.Fatalf("RecordFileChange: %v", err)
+	}
+	if err := store.EnqueueMemoryJob(ctx, child, "/ws"); err != nil {
+		t.Fatalf("EnqueueMemoryJob: %v", err)
+	}
+
+	// DescendantSessionIDs walks the edge transitively, root excluded.
+	descendants, err := store.DescendantSessionIDs(ctx, parent)
+	if err != nil {
+		t.Fatalf("DescendantSessionIDs: %v", err)
+	}
+	if len(descendants) != 2 || descendants[0] != child || descendants[1] != grandchild {
+		t.Fatalf("DescendantSessionIDs(parent) = %v, want [%s %s]", descendants, child, grandchild)
+	}
+
+	if err := store.DeleteSession(ctx, parent); err != nil {
+		t.Fatalf("DeleteSession: %v", err)
+	}
+	for _, gone := range []domain.SessionID{parent, child, grandchild} {
+		if _, err := store.InspectSession(ctx, gone); err == nil {
+			t.Fatalf("deleted session %s is still inspectable", gone)
+		}
+		for _, table := range []string{"file_changes", "memory_jobs"} {
+			var n int
+			if err := store.db.QueryRowContext(ctx,
+				"SELECT COUNT(*) FROM "+table+" WHERE session_id = ?", gone.String()).Scan(&n); err != nil {
+				t.Fatalf("count %s: %v", table, err)
+			}
+			if n != 0 {
+				t.Fatalf("%s rows for %s after cascade = %d, want 0", table, gone, n)
+			}
+		}
+	}
+	for _, kept := range []domain.SessionID{unrelated, unrelatedChild} {
+		if _, err := store.InspectSession(ctx, kept); err != nil {
+			t.Fatalf("unrelated session %s must survive the cascade: %v", kept, err)
+		}
+	}
+
+	// Deleting a child directly leaves its parent intact but still cascades
+	// to the child's own descendants.
+	if err := store.DeleteSession(ctx, unrelatedChild); err != nil {
+		t.Fatalf("DeleteSession(unrelatedChild): %v", err)
+	}
+	if _, err := store.InspectSession(ctx, unrelated); err != nil {
+		t.Fatalf("parent of a deleted child must survive: %v", err)
+	}
+	if _, err := store.InspectSession(ctx, unrelatedChild); err == nil {
+		t.Fatal("directly deleted child is still inspectable")
+	}
+}
+
 func errorCode(err error) domain.ErrorCode {
 	if err == nil {
 		return ""

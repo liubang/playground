@@ -294,16 +294,41 @@ final class SessionListStore {
 
     @discardableResult
     func deleteSession(_ sessionId: String) async -> Bool {
+        // The backend cascades the delete to every sub-agent session the
+        // target spawned (directly or transitively); tear their live
+        // stores down alongside the target's.
+        let doomed = descendantIds(of: sessionId)
         do {
             try await api.deleteSession(sessionId)
-            stores[sessionId]?.stop()
-            stores[sessionId] = nil
+            for id in doomed {
+                stores[id]?.stop()
+                stores[id] = nil
+            }
             await loadSessions()
             return true
         } catch {
             loadError = error.localizedDescription
             return false
         }
+    }
+
+    /// Transitive sub-agent closure of a session (root included), resolved
+    /// over the loaded summaries' parent links — mirrors the backend's
+    /// delegation-edge cascade. Paginated listings make this a lower bound.
+    func descendantIds(of root: String) -> Set<String> {
+        var seen: Set<String> = [root]
+        var frontier = [root]
+        while !frontier.isEmpty {
+            var next: [String] = []
+            for current in frontier {
+                for session in sessions where session.parentSessionId == current && !seen.contains(session.id) {
+                    seen.insert(session.id)
+                    next.append(session.id)
+                }
+            }
+            frontier = next
+        }
+        return seen
     }
 
     /// Archives a session (it leaves the default listing; the WebUI's

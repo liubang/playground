@@ -923,17 +923,102 @@ SELECT artifact_id, MAX(size) FROM artifact_refs GROUP BY artifact_id ORDER BY a
 	return refs, nil
 }
 
-// DeleteSession removes a session and all of its persisted data. Events,
-// checkpoints and artifact_refs cascade from the sessions row; file_changes
-// and memory_jobs carry no foreign key and are deleted explicitly. All
-// three deletes run in one transaction (review M29): a failure must never
-// leave a half-deleted session behind.
+// DescendantSessionIDs returns every sub-agent session spawned directly or
+// transitively by sessionID, resolved over the delegation edge carried by
+// each child's run.created event payload (docs/SUBAGENT_DESIGN.md §6.1).
+// Sub-agent registries exclude delegate_task (depth 1 by construction), but
+// a child session resumed for audit regains the full tool set and may spawn
+// children of its own — hence the transitive walk. Cycles (only reachable
+// through hand-edited data) are cut by the visited set.
+func (s *SQLiteStore) DescendantSessionIDs(ctx context.Context, sessionID domain.SessionID) ([]domain.SessionID, error) {
+	return descendantSessionIDs(ctx, s.db, sessionID)
+}
+
+// queryContexter is satisfied by *sql.DB and *sql.Tx so the descendant walk
+// rides either a standalone connection or the caller's transaction.
+type queryContexter interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+func descendantSessionIDs(ctx context.Context, q queryContexter, root domain.SessionID) ([]domain.SessionID, error) {
+	seen := map[domain.SessionID]struct{}{root: {}}
+	frontier := []domain.SessionID{root}
+	var out []domain.SessionID
+	for len(frontier) > 0 {
+		var next []domain.SessionID
+		for _, cur := range frontier {
+			rows, err := q.QueryContext(ctx, `
+SELECT DISTINCT session_id FROM events
+WHERE type = ? AND json_extract(CAST(payload AS TEXT), '$.parent_session_id') = ?`,
+				string(domain.EventRunCreated), cur.String())
+			if err != nil {
+				return nil, storeError("query child sessions", err)
+			}
+			for rows.Next() {
+				var raw string
+				if err := rows.Scan(&raw); err != nil {
+					_ = rows.Close()
+					return nil, storeError("scan child session", err)
+				}
+				id, err := domain.ParseSessionID(raw)
+				if err != nil {
+					_ = rows.Close()
+					return nil, storeError("decode child session ID", err)
+				}
+				if _, dup := seen[id]; dup {
+					continue
+				}
+				seen[id] = struct{}{}
+				out = append(out, id)
+				next = append(next, id)
+			}
+			if err := rows.Err(); err != nil {
+				_ = rows.Close()
+				return nil, storeError("iterate child sessions", err)
+			}
+			_ = rows.Close()
+		}
+		frontier = next
+	}
+	return out, nil
+}
+
+// DeleteSession removes a session and all of its persisted data, together
+// with every sub-agent session it spawned (directly or transitively): the
+// delegation edge lives in the child's run.created event payload, so the
+// descendants are resolved inside the same transaction before any row goes
+// away — a child created concurrently in another process either lands
+// before this transaction's read (and is deleted) or after (and fails its
+// next append against the deleted parent). Events, checkpoints and
+// artifact_refs cascade from the sessions rows; file_changes and
+// memory_jobs carry no foreign key and are deleted explicitly. All deletes
+// run in one transaction (review M29): a failure must never leave a
+// half-deleted session behind.
 func (s *SQLiteStore) DeleteSession(ctx context.Context, sessionID domain.SessionID) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return storeError("begin delete session transaction", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	descendants, err := descendantSessionIDs(ctx, tx, sessionID)
+	if err != nil {
+		return err
+	}
+	for _, id := range descendants {
+		if _, err := tx.ExecContext(ctx,
+			"DELETE FROM file_changes WHERE session_id = ?", id.String()); err != nil {
+			return storeError("delete descendant file changes", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			"DELETE FROM memory_jobs WHERE session_id = ?", id.String()); err != nil {
+			return storeError("delete descendant memory job", err)
+		}
+		// Events, checkpoints and artifact_refs cascade from the sessions row.
+		if _, err := tx.ExecContext(ctx,
+			"DELETE FROM sessions WHERE session_id = ?", id.String()); err != nil {
+			return storeError("delete descendant session", err)
+		}
+	}
 	if _, err := tx.ExecContext(ctx,
 		"DELETE FROM file_changes WHERE session_id = ?", sessionID.String()); err != nil {
 		return storeError("delete session file changes", err)

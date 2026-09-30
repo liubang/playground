@@ -86,25 +86,43 @@ struct SidebarView: View {
     }
 
     private func confirmDelete(_ target: SessionSummary) {
+        // The backend cascades the delete to every sub-agent session the
+        // target spawned; reflect that in the confirmation (the count is a
+        // lower bound — pagination may not have loaded every child).
+        let doomed = list.descendantIds(of: target.id)
+        let childCount = doomed.count - 1
         postConfirm(ConfirmRequest(
             title: "Delete this session?",
-            message: "Its history is removed from the store.",
+            message: childCount > 0
+                ? "Its \(childCount)+ sub-agent session\(childCount == 1 ? "" : "s") and all their history are removed from the store."
+                : "Its history is removed from the store.",
             confirmTitle: "Delete",
         ) {
             Task {
                 guard await list.deleteSession(target.id) else { return }
-                if selection == target.id {
+                // The cascade also removes the open session when it is a
+                // descendant of the deleted one.
+                if let selected = selection, doomed.contains(selected) {
                     selection = nil
                 }
-                markedSessions.remove(target.id)
+                markedSessions.subtract(doomed)
             }
         })
     }
 
     private func confirmBatchDelete() {
+        // Cascade awareness: children of marked sessions are deleted too,
+        // even when not themselves marked.
+        var extra = Set<String>()
+        for id in markedSessions {
+            extra.formUnion(list.descendantIds(of: id))
+        }
+        extra.subtract(markedSessions)
         postConfirm(ConfirmRequest(
             title: "Delete the selected sessions?",
-            message: "Their history is removed from the store.",
+            message: extra.isEmpty
+                ? "Their history is removed from the store."
+                : "\(extra.count) additional sub-agent session\(extra.count == 1 ? "" : "s") spawned by the selection will be deleted too.",
             confirmTitle: "Delete \(markedSessions.count) Sessions",
         ) {
             Task { await batchDelete() }
@@ -323,9 +341,13 @@ struct SidebarView: View {
     private func batchDelete() async {
         let ids = markedSessions
         for id in ids {
+            // An earlier delete in this loop may already have cascaded
+            // over this session.
+            guard markedSessions.contains(id) else { continue }
+            let doomed = list.descendantIds(of: id)
             guard await list.deleteSession(id) else { continue }
-            markedSessions.remove(id)
-            if selection == id {
+            markedSessions.subtract(doomed)
+            if let selected = selection, doomed.contains(selected) {
                 selection = nil
             }
         }
