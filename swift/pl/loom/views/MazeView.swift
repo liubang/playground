@@ -358,6 +358,18 @@ struct SessionMazeView: View {
     // MARK: Toolbar (maze.css .maze-toolbar)
 
     private func toolbar(_ data: MazeData) -> some View {
+        // CRITICAL: this row must never report a width beyond the
+        // proposal. When its children can't compress (fixedSize / fixed
+        // frames), the HStack reports their overflowing ideal width
+        // upward (a .frame(maxWidth:) does NOT stop it — frames grow
+        // with an oversized child): the VStack, and with it the
+        // canvas's GeometryReader, then lays out WIDER than the window,
+        // and every right-anchored canvas element (lane stats,
+        // sub-agent titles, hover-card clamps) computes against the
+        // inflated scene.width and spills past the window's right edge.
+        // So the legend/toggle text TRUNCATES (.lineLimit(1), never
+        // wraps mid-word or grows the row taller) while the functional
+        // controls keep their full size via layoutPriority.
         HStack(spacing: 14) {
             legend
             Spacer(minLength: 8)
@@ -365,14 +377,20 @@ struct SessionMazeView: View {
                 .toggleStyle(.checkbox)
                 .font(.system(size: Theme.textXs))
                 .foregroundStyle(failOnly ? Theme.primary : Theme.muted)
+                .lineLimit(1)
+                .layoutPriority(1)
             MiniSearchField(placeholder: "Search commands/results…", text: $query,
                             externalFocus: $searchFocused)
+                .layoutPriority(1)
             if filtering, hitCount(data) >= 0 {
                 Text("\(hitCount(data)) hits")
                     .font(.system(size: Theme.textXs))
                     .foregroundStyle(Theme.primary)
+                    .lineLimit(1)
+                    .layoutPriority(1)
             }
             MazeButton(title: "⤢ Full view", help: "Reset zoom") { window = nil }
+                .layoutPriority(1)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -395,6 +413,9 @@ struct SessionMazeView: View {
         HStack(spacing: 6) {
             RoundedRectangle(cornerRadius: 5).fill(color).frame(width: 10, height: 10)
             Text(label)
+                // Truncate, never wrap mid-word ("Answ\ner") or grow
+                // the toolbar taller on narrow windows.
+                .lineLimit(1)
         }
     }
 
@@ -686,13 +707,6 @@ struct SessionMazeView: View {
         if let laneTitle = lane.title, !laneTitle.isEmpty {
             title += " · \(laneTitle)"
         }
-        ctx.draw(
-            Text(title)
-                .font(.system(size: Theme.textSm, weight: .semibold))
-                .foregroundStyle(Theme.fg),
-            at: CGPoint(x: MazeMetrics.padX, y: layout.top + 12),
-            anchor: .leading,
-        )
         let st = lane.stats
         var stats = "\(st.steps) steps · \(st.tools) tools · \(st.detours) branches · \(mazeFormatDur(st.t))"
         if st.outTok > 0 {
@@ -701,10 +715,33 @@ struct SessionMazeView: View {
         if let rzMs = st.rzMs, rzMs > 0 {
             stats += " · reasoning \(formatDuration(rzMs))"
         }
+        // The title used to paint unbounded from the leading edge and,
+        // on narrow canvases, straight over the trailing stats (the two
+        // strings rendered on top of each other). Give the stats its
+        // measured width on the right and ellipsize the title into what
+        // remains; the stats itself ellipsizes as a last resort.
+        let rowW = scene.width - MazeMetrics.padX * 2
+        var statsW = mazeMeasure(stats, size: Theme.textXs)
+        var fittedStats = stats
+        if statsW > rowW {
+            fittedStats = mazeFitText(stats, budget: rowW, size: Theme.textXs)
+            statsW = mazeMeasure(fittedStats, size: Theme.textXs)
+        }
         ctx.draw(
-            Text(stats).font(.system(size: Theme.textXs)).foregroundStyle(Theme.muted),
+            Text(fittedStats).font(.system(size: Theme.textXs)).foregroundStyle(Theme.muted),
             at: CGPoint(x: scene.width - MazeMetrics.padX, y: layout.top + 12),
             anchor: .trailing,
+        )
+        let titleBudget = rowW - statsW - 16
+        guard titleBudget > 32 else { return }
+        let fittedTitle = mazeFitText(title, budget: titleBudget,
+                                      size: Theme.textSm, weight: .semibold)
+        ctx.draw(
+            Text(fittedTitle)
+                .font(.system(size: Theme.textSm, weight: .semibold))
+                .foregroundStyle(Theme.fg),
+            at: CGPoint(x: MazeMetrics.padX, y: layout.top + 12),
+            anchor: .leading,
         )
     }
 
@@ -817,7 +854,7 @@ struct SessionMazeView: View {
         let labelText = isSub ? "⤴ \(node.label ?? "")" : "S\(node.step) \(glyph)"
         let estW = CGFloat(mazeEstTextWidth(labelText)) + 8 // +8 capsule padding
         if isSub {
-            drawSubLabel(ctx: c, x: x, w: w, y: y, text: labelText, estW: estW, scene: scene)
+            drawSubLabel(ctx: c, x: x, w: w, y: y, text: labelText, scene: scene)
         } else if w >= estW {
             let color = (node.v == .deadend || node.v == .retry) ? Theme.bg0 : Theme.onAccent
             c.draw(
@@ -842,33 +879,74 @@ struct SessionMazeView: View {
 
     /// Sub-agent titles annotate beside the bar: right side preferred,
     /// flipping left near the canvas edge, ellipsized when neither side
-    /// fits (MazeView.tsx SubLabel).
+    /// fits (MazeView.tsx SubLabel). Widths are MEASURED, not estimated:
+    /// mazeEstTextWidth's 6px/10px per-glyph guess underestimates wide
+    /// glyph mixes (caps, emoji), and a "fits" verdict then drew the
+    /// title past the canvas edge where the window clipped it.
     private func drawSubLabel(
         ctx: GraphicsContext, x: CGFloat, w: CGFloat, y: CGFloat,
-        text: String, estW: CGFloat, scene: MazeScene,
+        text: String, scene: MazeScene,
     ) {
         let spaceRight = scene.width - MazeMetrics.padX - (x + w + 6)
         let spaceLeft = x - 6 - MazeMetrics.padX
+        let fullW = mazeMeasure(text, size: 10)
         let style = Text(text).font(.system(size: 10)).foregroundStyle(Theme.fg)
-        if estW <= spaceRight {
+        if fullW <= spaceRight {
             ctx.draw(style, at: CGPoint(x: x + w + 6, y: y), anchor: .leading)
-        } else if estW <= spaceLeft {
+        } else if fullW <= spaceLeft {
             ctx.draw(style, at: CGPoint(x: x - 6, y: y), anchor: .trailing)
         } else if spaceRight >= spaceLeft {
             ctx.draw(
-                Text(mazeFitLabel(text, budget: Double(max(spaceRight, 0))))
+                Text(mazeFitText(text, budget: max(spaceRight, 0), size: 10))
                     .font(.system(size: 10)).foregroundStyle(Theme.fg),
                 at: CGPoint(x: x + w + 6, y: y),
                 anchor: .leading,
             )
         } else {
             ctx.draw(
-                Text(mazeFitLabel(text, budget: Double(max(spaceLeft, 0))))
+                Text(mazeFitText(text, budget: max(spaceLeft, 0), size: 10))
                     .font(.system(size: 10)).foregroundStyle(Theme.fg),
                 at: CGPoint(x: x - 6, y: y),
                 anchor: .trailing,
             )
         }
+    }
+
+    /// Exact rendered width of a maze label, for the overflow-critical
+    /// fits (lane header, sub-agent title) where mazeEstTextWidth's
+    /// guess is not safe.
+    private func mazeMeasure(_ s: String, size: CGFloat,
+                             weight: NSFont.Weight = .regular) -> CGFloat
+    {
+        let font = NSFont.systemFont(ofSize: size, weight: weight)
+        return ceil((s as NSString).size(withAttributes: [.font: font]).width)
+    }
+
+    /// Longest prefix of `s` (plus "…") whose MEASURED width fits the
+    /// budget; returns `s` untouched when it already fits.
+    private func mazeFitText(_ s: String, budget: CGFloat, size: CGFloat,
+                             weight: NSFont.Weight = .regular) -> String
+    {
+        if budget <= 0 {
+            return ""
+        }
+        if mazeMeasure(s, size: size, weight: weight) <= budget {
+            return s
+        }
+        let ellW = mazeMeasure("…", size: size, weight: weight)
+        guard ellW <= budget else { return "" }
+        var lo = 0
+        var hi = s.count
+        while lo < hi {
+            let mid = (lo + hi + 1) / 2
+            let prefix = String(s.prefix(mid))
+            if mazeMeasure(prefix, size: size, weight: weight) + ellW <= budget {
+                lo = mid
+            } else {
+                hi = mid - 1
+            }
+        }
+        return String(s.prefix(lo)) + "…"
     }
 
     // MARK: Gestures — brush zoom / Shift-drag pan / wheel / pinch
@@ -1056,14 +1134,31 @@ struct SessionMazeView: View {
         // the card would cross the visible bottom. hover.point is in
         // CONTENT coordinates, so the visible band is
         // [offsetY, offsetY + viewportH].
-        let maxX = max(4, scene.width - hoverCardSize.width - 8)
-        let x = hoverCardSize.width > 0 ? min(hover.point.x + 10, maxX) : hover.point.x + 10
+        // Before the first measurement lands (hoverCardSize == .zero)
+        // clamp against the card's max possible width — an unclamped
+        // point.x + 10 flashed the card past the right edge for a frame.
+        let cardW = hoverCardSize.width > 0 ? hoverCardSize.width : 320
+        let maxX = max(4, scene.width - cardW - 8)
+        let x = min(hover.point.x + 10, maxX)
         let bottomLimit = offsetY + viewportH - 8
         var y = hover.point.y + 12
         if hoverCardSize.height > 0, y + hoverCardSize.height > bottomLimit {
             y = max(offsetY + 4, hover.point.y - hoverCardSize.height - 8)
         }
-        return VStack(alignment: .leading, spacing: 2) {
+        // .fixedSize() measures the IDEAL height with every Text on a
+        // single line; a title/line that then wraps inside its 300pt
+        // cap renders one line TALLER than the measured card, and the
+        // last line spills past the card's bottom edge (verified with
+        // an offscreen NSHostingView render). When any line must wrap,
+        // pin the card to the 320pt cap so the wrapped height is
+        // computed in a real layout pass; otherwise fixedSize hugs the
+        // single-line content as before.
+        // 298, not 300: bias toward the fixed-width branch — a false
+        // trigger only widens the card slightly, a miss re-opens the
+        // bottom spill.
+        let needsWrap = mazeMeasure(hover.card.title, size: Theme.textXs, weight: .semibold) > 298
+            || hover.card.lines.contains { mazeMeasure($0, size: Theme.textXs) > 298 }
+        let card = VStack(alignment: .leading, spacing: 2) {
             Text(hover.card.title)
                 .font(.system(size: Theme.textXs, weight: .semibold))
                 .foregroundStyle(Theme.fg)
@@ -1082,7 +1177,13 @@ struct SessionMazeView: View {
         .background(Theme.bg2, in: RoundedRectangle(cornerRadius: Theme.radiusMd))
         .overlay(RoundedRectangle(cornerRadius: Theme.radiusMd).strokeBorder(Theme.bg0, lineWidth: 1))
         .shadow(color: .black.opacity(0.35), radius: 8, y: 2)
-        .fixedSize()
+        return Group {
+            if needsWrap {
+                card.frame(width: 320)
+            } else {
+                card.fixedSize()
+            }
+        }
         .background(
             GeometryReader { proxy in
                 Color.clear
