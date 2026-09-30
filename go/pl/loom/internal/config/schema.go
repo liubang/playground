@@ -40,7 +40,7 @@ import (
 type File struct {
 	// Default selects the startup model: "provider/model", a bare model
 	// name (must be unique across providers), or a bare provider name (its
-	// default_model). Empty means providers[0]'s default model.
+	// first model). Empty means providers[0]'s first model.
 	Default string `yaml:"default,omitempty"`
 
 	// Providers is the only required section: at least one entry.
@@ -105,9 +105,19 @@ type Provider struct {
 	AuthType string `yaml:"auth_type,omitempty"`
 	// WireAPI is the provider-level default ("chat" or "responses");
 	// models may override it. Empty means "chat".
-	WireAPI      string `yaml:"wire_api,omitempty"`
-	MaxRetries   *int   `yaml:"max_retries,omitempty"`
-	DefaultModel string `yaml:"default_model,omitempty"`
+	WireAPI    string `yaml:"wire_api,omitempty"`
+	MaxRetries *int   `yaml:"max_retries,omitempty"`
+	// Liveness bounds for streaming calls, in Go duration syntax
+	// ("60s", "2m"); empty keeps the built-in default, "0" disables.
+	// ResponseHeaderTimeout bounds the wait for the first response byte
+	// (default 60s). StreamIdleTimeout bounds mid-stream silence — any
+	// received byte resets it, so long generations are safe while a
+	// wedged connection fails retryably (default 120s). AttemptTimeout
+	// caps one model attempt end to end regardless of activity, the
+	// backstop against keepalive-masked wedges (default 0 = disabled).
+	ResponseHeaderTimeout string `yaml:"response_header_timeout,omitempty"`
+	StreamIdleTimeout     string `yaml:"stream_idle_timeout,omitempty"`
+	AttemptTimeout        string `yaml:"attempt_timeout,omitempty"`
 	// Reasoning is the provider-level default reasoning (thinking) intent;
 	// models may override it.
 	Reasoning Reasoning `yaml:"reasoning,omitempty"`

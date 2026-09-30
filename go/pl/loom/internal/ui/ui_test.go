@@ -44,7 +44,6 @@ func newTestController(t *testing.T) client.Client {
 				{Name: "model-a", ContextWindow: 128000},
 				{Name: "model-b", ContextWindow: 64000},
 			},
-			DefaultModel: "model-a",
 		}},
 		Default: config.ProviderModelRef{Provider: "test", Model: "model-a"},
 		Limits:  domain.DefaultLimits(),

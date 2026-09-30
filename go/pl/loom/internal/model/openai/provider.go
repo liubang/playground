@@ -54,6 +54,15 @@ type Config struct {
 	MaxRetries     int
 	InitialBackoff time.Duration
 	MaxBackoff     time.Duration
+	// StreamIdleTimeout bounds mid-stream silence: any received byte
+	// resets the timer, so long-but-progressing generations are safe
+	// while a wedged connection fails (retryably) instead of hanging
+	// forever. Zero disables the watchdog.
+	StreamIdleTimeout time.Duration
+	// StreamMaxDuration bounds one stream's whole lifetime regardless of
+	// activity — the backstop against a peer trickling keepalive frames
+	// while its upstream is dead. Zero disables the cap.
+	StreamMaxDuration time.Duration
 }
 
 // Provider implements domain.Model against OpenAI-compatible streaming APIs.
@@ -62,6 +71,7 @@ type Provider struct {
 	apiKey      string
 	client      *httpc.Client
 	wireAPI     WireAPI
+	streamOpts  stream.Options
 }
 
 // New creates a new OpenAI-compatible provider.
@@ -96,6 +106,10 @@ func New(cfg Config) (*Provider, error) {
 		apiKey:      cfg.APIKey,
 		client:      client,
 		wireAPI:     wireAPI,
+		streamOpts: stream.Options{
+			IdleTimeout: cfg.StreamIdleTimeout,
+			MaxDuration: cfg.StreamMaxDuration,
+		},
 	}, nil
 }
 
@@ -111,7 +125,7 @@ func (p *Provider) Stream(ctx context.Context, req domain.ModelRequest) (domain.
 		headers.Set("Authorization", "Bearer "+p.apiKey)
 	}
 
-	return wireutil.StartStream(ctx, p.client, p.endpointURL, body, headers, "openai", p.pump)
+	return wireutil.StartStream(ctx, p.client, p.endpointURL, body, headers, "openai", p.pump, p.streamOpts)
 }
 
 func normalizeWireAPI(wireAPI WireAPI) (WireAPI, error) {

@@ -51,10 +51,9 @@ func testBootstrapForContract(t *testing.T, model domain.Model) (*app.Bootstrap,
 	t.Cleanup(func() { store.Close() })
 	resolved := &config.ResolvedConfig{
 		Providers: []config.ResolvedProvider{{
-			Name:         "test",
-			Model:        model,
-			Models:       []config.Model{{Name: "model-a", ContextWindow: 128000}},
-			DefaultModel: "model-a",
+			Name:   "test",
+			Model:  model,
+			Models: []config.Model{{Name: "model-a", ContextWindow: 128000}},
 		}},
 		Default: config.ProviderModelRef{Provider: "test", Model: "model-a"},
 		Limits:  domain.DefaultLimits(),

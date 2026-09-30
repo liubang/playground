@@ -35,6 +35,7 @@ go_library(
         "//go/pl/loom/internal/model/anthropic:anthropic_lib",
         "//go/pl/loom/internal/model/images:images_lib",
         "//go/pl/loom/internal/model/openai:openai_lib",
+        "//go/pl/loom/internal/model/wireutil:wireutil_lib",
         "//go/pl/loom/internal/permission:permission_lib",
         "//go/pl/loom/internal/trace",
         "@in_gopkg_yaml_v3//:yaml_v3",

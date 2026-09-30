@@ -30,7 +30,6 @@ prompt:
 providers:
   - api_key: replay-keyless
     base_url: https://replay.invalid
-    default_model: glm-5.2
     max_retries: 2
     models:
       - context_window: 1000000
@@ -67,7 +66,6 @@ providers:
   - api_key: replay-keyless
     auth_type: bearer
     base_url: https://replay.invalid
-    default_model: glm-5.2
     models:
       - context_window: 1000000
         name: glm-5.3

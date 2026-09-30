@@ -437,7 +437,6 @@ struct ComposerView: View {
 
     @ViewBuilder private var modelPicker: some View {
         if !models.isEmpty {
-            let nameCounts = Dictionary(models.map { ($0.name, 1) }, uniquingKeysWith: +)
             PickerCapsule(
                 icon: "square.3.layers.3d",
                 label: store.modelName.isEmpty ? "model" : store.modelName,
@@ -447,8 +446,10 @@ struct ComposerView: View {
                 ForEach(models, id: \.self) { model in
                     let ref = "\(model.provider)/\(model.name)"
                     PickerMenuItem(
-                        title: nameCounts[model.name, default: 0] > 1
-                            ? "\(model.provider) / \(model.name)" : model.name,
+                        // Always qualify with the provider: a bare name hides
+                        // ownership, and conditional qualification flips form
+                        // whenever a duplicate name appears or disappears.
+                        title: "\(model.provider) / \(model.name)",
                         detail: model.contextWindow.map { formatContextWindow($0) },
                         isCurrent: ref == currentModelRef,
                     ) {

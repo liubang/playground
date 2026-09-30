@@ -28,8 +28,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+	"time"
+
+	"golang.org/x/net/http2"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/model/httpc"
@@ -56,9 +60,56 @@ func StreamHeaders() http.Header {
 	}
 }
 
+// Establishment-phase transport defaults for NewStreamingHTTPClient.
+// They bound dial/TLS and — via responseHeaderTimeout — the wait for
+// response headers; everything after the headers is the stream's own
+// liveness domain (stream.Options), where fixed timeouts cannot express
+// "no progress" semantics.
+const (
+	defaultDialTimeout         = 10 * time.Second
+	defaultTLSHandshakeTimeout = 10 * time.Second
+	// HTTP/2 keepalive: with no frames for ReadIdleTimeout the transport
+	// pings the peer and tears the connection down unless the ACK lands
+	// within PingTimeout — a half-open connection through an LB (peer
+	// gone, TCP still ESTABLISHED) fails fast instead of wedging reads.
+	defaultH2ReadIdleTimeout = 30 * time.Second
+	defaultH2PingTimeout     = 15 * time.Second
+)
+
+// NewStreamingHTTPClient builds the dedicated HTTP client for streaming
+// model calls. It deliberately sets no Client.Timeout — that would clip
+// legitimately long streams — and instead bounds every phase that can
+// wedge silently: dial, TLS handshake, the wait for response headers
+// (responseHeaderTimeout; 0 disables), and half-open HTTP/2 connections.
+// The returned client is safe to share across a provider's instances.
+func NewStreamingHTTPClient(responseHeaderTimeout time.Duration) *http.Client {
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   defaultDialTimeout,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout:   defaultTLSHandshakeTimeout,
+		ResponseHeaderTimeout: responseHeaderTimeout,
+		MaxIdleConns:          16,
+		IdleConnTimeout:       90 * time.Second,
+	}
+	// ConfigureTransports registers x/net's HTTP/2 handler, which —
+	// unlike the stdlib's implicit h2 — exposes keepalive pings. Setting
+	// TLSNextProto disables the stdlib's automatic h2, so
+	// ForceAttemptHTTP2 stays off; the error is only reachable for an
+	// already-configured transport, impossible for this fresh one.
+	if h2, err := http2.ConfigureTransports(transport); err == nil {
+		h2.ReadIdleTimeout = defaultH2ReadIdleTimeout
+		h2.PingTimeout = defaultH2PingTimeout
+	}
+	return &http.Client{Transport: transport}
+}
+
 // StartStream posts one streaming request and launches the shared pump
-// runner. provider is the error/log prefix ("anthropic", "openai").
-func StartStream(ctx context.Context, client *httpc.Client, endpoint string, body []byte, headers http.Header, provider string, pump stream.Pump) (domain.ModelStream, error) {
+// runner with the given liveness bounds. provider is the error/log
+// prefix ("anthropic", "openai").
+func StartStream(ctx context.Context, client *httpc.Client, endpoint string, body []byte, headers http.Header, provider string, pump stream.Pump, opts stream.Options) (domain.ModelStream, error) {
 	resp, err := client.Post(ctx, endpoint, body, headers)
 	if err != nil {
 		// Classify the failure (rate limit / permission / transient) so the
@@ -69,7 +120,7 @@ func StartStream(ctx context.Context, client *httpc.Client, endpoint string, bod
 		_ = resp.Body.Close()
 		return nil, fmt.Errorf("%s provider: %w", provider, err)
 	}
-	return stream.Start(ctx, resp.Body, pump), nil
+	return stream.StartWithOptions(ctx, resp.Body, pump, opts), nil
 }
 
 // MessageText concatenates the text parts of a message; any non-text part

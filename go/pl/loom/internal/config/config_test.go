@@ -67,7 +67,6 @@ providers:
     type: openai
     base_url: https://api.openai.com/v1
     api_key_env: OPENAI_API_KEY
-    default_model: gpt-5
     models:
       - name: gpt-5
         context_window: 400000
@@ -106,12 +105,8 @@ func TestLoadResolvesProvidersAndDefault(t *testing.T) {
 	if deepseek == nil || deepseek.Model == nil {
 		t.Fatal("deepseek provider not assembled")
 	}
-	if deepseek.DefaultModel != "deepseek-chat" {
-		t.Fatalf("deepseek default model = %q (implicit models[0])", deepseek.DefaultModel)
-	}
-	openai := cfg.ProviderByName("openai")
-	if openai == nil || openai.DefaultModel != "gpt-5" {
-		t.Fatalf("openai provider = %+v", openai)
+	if openai := cfg.ProviderByName("openai"); openai == nil {
+		t.Fatal("openai provider not assembled")
 	}
 	meta, ok := cfg.ModelMeta(ProviderModelRef{Provider: "deepseek", Model: "deepseek-reasoner"})
 	if !ok || meta.ContextWindow != 65536 || meta.WireAPI != "responses" {
@@ -427,7 +422,7 @@ func TestResolveRef(t *testing.T) {
 	}{
 		{"deepseek/deepseek-reasoner", ProviderModelRef{"deepseek", "deepseek-reasoner"}},
 		{"gpt-5", ProviderModelRef{"openai", "gpt-5"}},  // bare unique model
-		{"openai", ProviderModelRef{"openai", "gpt-5"}}, // bare provider → its default
+		{"openai", ProviderModelRef{"openai", "gpt-5"}}, // bare provider → its first model
 		{" deepseek/deepseek-chat ", ProviderModelRef{"deepseek", "deepseek-chat"}},
 	}
 	for _, tc := range cases {
@@ -489,7 +484,6 @@ func TestLoadValidationErrors(t *testing.T) {
 		{"bad base_url", "providers:\n  - {name: x, base_url: '::bad', api_key: k, models: [{name: m}]}", ""},
 		{"empty models", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: []}", "at least one model"},
 		{"duplicate model", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}, {name: m}]}", "duplicate model"},
-		{"bad default_model", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, default_model: nope, models: [{name: m}]}", "default_model"},
 		{"bad wire_api", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, wire_api: grpc, models: [{name: m}]}", "wire_api"},
 		{"bad model wire_api", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m, wire_api: grpc}]}", "wire_api"},
 		{"key conflict", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, api_key_env: E, models: [{name: m}]}", "mutually exclusive"},
@@ -503,6 +497,9 @@ func TestLoadValidationErrors(t *testing.T) {
 		{"negative runaway threshold", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\nrunaway:\n  max_repeated_calls: -1", "runaway"},
 		{"removed limit max_wall_time", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\nlimits:\n  max_wall_time: 30m", "max_wall_time"},
 		{"bad stall duration", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\nrunaway:\n  stall_timeout: soon", "stall_timeout"},
+		{"bad response_header_timeout", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, response_header_timeout: soon, models: [{name: m}]}", "response_header_timeout"},
+		{"bad stream_idle_timeout", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, stream_idle_timeout: -5s, models: [{name: m}]}", "stream_idle_timeout"},
+		{"bad attempt_timeout", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, attempt_timeout: forever, models: [{name: m}]}", "attempt_timeout"},
 		{"negative context window", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m, context_window: -1}]}", ">= 0"},
 		{"slash in provider name", "providers:\n  - {name: a/b, base_url: 'https://a.com', api_key: k, models: [{name: m}]}", "must not contain '/'"},
 		{"slash in model name", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: a/b}]}", "must not contain '/'"},

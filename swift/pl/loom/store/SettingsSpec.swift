@@ -150,7 +150,6 @@ let providerBaseFields: [FieldSpec] = [
         hint: "只保存变量名，变量值在启动时读取",
         ph: "如 DEEPSEEK_API_KEY",
     ),
-    FieldSpec("default_model", label: "默认模型", ph: "留空 = 目录中的第一个模型"),
 ]
 
 let providerAdvFields: [FieldSpec] = [
@@ -228,7 +227,7 @@ let skillsConfigFields: [FieldSpec] = [
 
 let defaultModelField = FieldSpec(
     "default", label: "默认模型",
-    hint: "留空 = 第一个 provider 的默认模型",
+    hint: "留空 = 第一个 provider 的第一个模型",
     ph: "provider/model",
 )
 

@@ -101,7 +101,6 @@ export const PROVIDER_BASE_FIELDS: FieldSpec[] = [
     ph: '如 DEEPSEEK_API_KEY',
     hint: '只存变量名，启动时读取值',
   },
-  { key: 'default_model', label: '默认模型', ph: '留空取模型列表第一个' },
 ]
 
 export const PROVIDER_ADV_FIELDS: FieldSpec[] = [

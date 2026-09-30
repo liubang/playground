@@ -234,7 +234,7 @@ func TestStartStreamLaunchesPump(t *testing.T) {
 		stream.Pump(func(_ context.Context, _ io.Reader, emit stream.Emitter) {
 			emit(domain.ModelEvent{Kind: domain.ModelEventResponseStart})
 			emit(domain.ModelEvent{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopEndTurn})
-		}))
+		}), stream.Options{})
 	if err != nil {
 		t.Fatalf("StartStream: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestStartStreamRejectsNonSSE(t *testing.T) {
 	if err != nil {
 		t.Fatalf("httpc.New: %v", err)
 	}
-	if _, err := StartStream(context.Background(), client, server.URL, []byte(`{}`), StreamHeaders(), "anthropic", nil); err == nil ||
+	if _, err := StartStream(context.Background(), client, server.URL, []byte(`{}`), StreamHeaders(), "anthropic", nil, stream.Options{}); err == nil ||
 		!strings.Contains(err.Error(), "anthropic provider:") {
 		t.Fatalf("err = %v", err)
 	}
@@ -282,9 +282,105 @@ func TestStartStreamClassifiesHTTPFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("httpc.New: %v", err)
 	}
-	_, err = StartStream(context.Background(), client, server.URL, []byte(`{}`), StreamHeaders(), "openai", nil)
+	_, err = StartStream(context.Background(), client, server.URL, []byte(`{}`), StreamHeaders(), "openai", nil, stream.Options{})
 	var ae *domain.AgentError
 	if !errors.As(err, &ae) || ae.Code != domain.ErrRateLimited {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// TestStartStreamIdleWatchdog Turns a wedged stream — headers delivered,
+// then eternal silence — into a retryable StreamError instead of a
+// permanent hang (the production incident this guards against).
+func TestStartStreamIdleWatchdog(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		<-release // wedged: headers sent, body never comes
+	}))
+	defer func() {
+		close(release)
+		server.Close()
+	}()
+
+	client, err := httpc.New(httpc.Config{})
+	if err != nil {
+		t.Fatalf("httpc.New: %v", err)
+	}
+	model, err := StartStream(context.Background(), client, server.URL, []byte(`{}`), StreamHeaders(), "openai",
+		stream.Pump(func(_ context.Context, body io.Reader, emit stream.Emitter) {
+			buf := make([]byte, 4096)
+			for {
+				if _, err := body.Read(buf); err != nil {
+					EmitStreamFailure(emit, err, domain.StopProviderError, true, nil)
+					return
+				}
+			}
+		}), stream.Options{IdleTimeout: 60 * time.Millisecond})
+	if err != nil {
+		t.Fatalf("StartStream: %v", err)
+	}
+	defer func() { _ = model.Close() }()
+
+	deadline := time.After(5 * time.Second)
+	var streamErr string
+	var retryable bool
+	for {
+		evt, err := model.Recv()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			t.Fatalf("Recv: %v", err)
+		}
+		if evt.Kind == domain.ModelEventStreamError {
+			streamErr = evt.Error
+			retryable = evt.Retryable
+		}
+		select {
+		case <-deadline:
+			t.Fatal("watchdog did not fire; stream hung")
+		default:
+		}
+	}
+	if !strings.Contains(streamErr, "stalled") {
+		t.Fatalf("stream error = %q, want stall mention", streamErr)
+	}
+	if !retryable {
+		t.Fatalf("stall must stay retryable, got %+v", streamErr)
+	}
+}
+
+// TestStreamingHTTPClientResponseHeaderTimeout covers the establishment-
+// phase wedge: the server accepts the request and never writes headers.
+func TestStreamingHTTPClientResponseHeaderTimeout(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release // wedged before headers
+	}))
+	defer func() {
+		close(release)
+		server.Close()
+	}()
+
+	client, err := httpc.New(httpc.Config{HTTPClient: NewStreamingHTTPClient(60 * time.Millisecond)})
+	if err != nil {
+		t.Fatalf("httpc.New: %v", err)
+	}
+	start := time.Now()
+	_, err = client.Post(context.Background(), server.URL, []byte(`{}`), StreamHeaders())
+	if err == nil {
+		t.Fatal("Post succeeded against a headerless server")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("Post took %s; ResponseHeaderTimeout did not bound it", elapsed)
 	}
 }

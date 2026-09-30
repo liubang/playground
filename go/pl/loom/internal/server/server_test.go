@@ -75,10 +75,9 @@ func newTestServiceFull(t *testing.T, model domain.Model, rec trace.Recorder, sv
 	t.Cleanup(func() { store.Close() })
 	resolved := &config.ResolvedConfig{
 		Providers: []config.ResolvedProvider{{
-			Name:         "test",
-			Model:        model,
-			Models:       []config.Model{{Name: "model-a", ContextWindow: 128000}},
-			DefaultModel: "model-a",
+			Name:   "test",
+			Model:  model,
+			Models: []config.Model{{Name: "model-a", ContextWindow: 128000}},
 		}},
 		Default: config.ProviderModelRef{Provider: "test", Model: "model-a"},
 		Limits:  domain.DefaultLimits(),
@@ -1189,10 +1188,9 @@ func newWorkspaceScopedServer(t *testing.T, model domain.Model) (*httptest.Serve
 	t.Cleanup(func() { store.Close() })
 	resolved := &config.ResolvedConfig{
 		Providers: []config.ResolvedProvider{{
-			Name:         "test",
-			Model:        model,
-			Models:       []config.Model{{Name: "model-a", ContextWindow: 128000}},
-			DefaultModel: "model-a",
+			Name:   "test",
+			Model:  model,
+			Models: []config.Model{{Name: "model-a", ContextWindow: 128000}},
 		}},
 		Default: config.ProviderModelRef{Provider: "test", Model: "model-a"},
 		Limits:  domain.DefaultLimits(),

@@ -96,8 +96,8 @@ const minimalExample = `  default: deepseek/deepseek-chat
 const template = `# loom 配置文件 — 位置: <loom home>/config.yaml（默认 ~/.loom，可用 LOOM_HOME 指定）
 # 除 providers 外所有节可省略，省略取内置默认值。含明文密钥时建议 chmod 600。
 
-# 默认模型。写法: provider/model（推荐）| 裸模型名（须全局唯一）| 裸 provider 名。
-# 省略取 providers[0] 的默认模型。
+# 默认模型。写法: provider/model（推荐）| 裸模型名（须全局唯一）| 裸 provider 名
+# （解析为其 models 列表第一个）。省略取 providers[0] 的第一个模型。
 default: deepseek/deepseek-chat
 
 # 模型提供方（必填，至少一个）。运行中用 /model 切换。
@@ -110,7 +110,11 @@ providers:
     #   api_key_env: DEEPSEEK_API_KEY
     wire_api: chat              # openai: chat（默认）| responses；anthropic: messages
     max_retries: 2
-    default_model: deepseek-chat
+    # 流式调用的活性兜底（Go duration；省略取默认，"0" 关闭）。网关挂死时
+    # 按可重试错误自动重试，而不是永久卡住：
+    #   response_header_timeout: 60s   # 等响应头的上限（默认 60s）
+    #   stream_idle_timeout: 120s      # 流中沉默上限，任何字节重置（默认 120s）
+    #   attempt_timeout: 0             # 单次尝试总时长上限（默认关闭）
     # reasoning:                # provider 级推理意图（可被模型覆盖）
     #   effort: medium          # off | low | medium | high
     #   budget_tokens: 0        # 显式推理预算，>0 优先于 effort

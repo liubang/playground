@@ -20,6 +20,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -34,6 +35,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/model/anthropic"
 	"github.com/liubang/playground/go/pl/loom/internal/model/images"
 	"github.com/liubang/playground/go/pl/loom/internal/model/openai"
+	"github.com/liubang/playground/go/pl/loom/internal/model/wireutil"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/trace"
 )
@@ -56,10 +58,9 @@ func (r ProviderModelRef) String() string { return r.Provider + "/" + r.Model }
 // is built at load time (construction is cheap — an HTTP client config — so
 // every provider is prebuilt and switching costs nothing).
 type ResolvedProvider struct {
-	Name         string
-	Model        domain.Model
-	Models       []Model
-	DefaultModel string
+	Name   string
+	Model  domain.Model
+	Models []Model
 	// WireModels holds one prebuilt instance per distinct wire_api in the
 	// catalog, keyed by wire-api short name ("chat"/"responses"/"messages").
 	// Models may override the provider-level wire_api; without this the
@@ -529,7 +530,7 @@ func (c *ResolvedConfig) ModelMeta(ref ProviderModelRef) (Model, bool) {
 // the config "default" key) into a concrete selection:
 //
 //  1. "provider/model" — exact match;
-//  2. bare name matching a provider — that provider's default model;
+//  2. bare name matching a provider — that provider's first model;
 //  3. bare model name — must match exactly one provider's catalog;
 //
 // Any ambiguity or miss is an error listing the candidates.
@@ -550,7 +551,7 @@ func (c *ResolvedConfig) ResolveRef(ref string) (ProviderModelRef, error) {
 		return ProviderModelRef{Provider: parts[0], Model: parts[1]}, nil
 	}
 	if p := c.ProviderByName(ref); p != nil {
-		return ProviderModelRef{Provider: p.Name, Model: p.DefaultModel}, nil
+		return ProviderModelRef{Provider: p.Name, Model: p.Models[0].Name}, nil
 	}
 	var matches []ProviderModelRef
 	for i := range c.Providers {
@@ -672,9 +673,9 @@ func resolve(f *File, baseDir string, lookup EnvLookup) (*ResolvedConfig, error)
 	if len(providers) > 0 {
 		def := f.Default
 		if def == "" {
-			// Implicit default: the first provider's default model, so a
+			// Implicit default: the first provider's first model, so a
 			// single-provider file need not spell "default" out (§4.2).
-			def = providers[0].Name + "/" + providers[0].DefaultModel
+			def = providers[0].Name + "/" + providers[0].Models[0].Name
 		}
 		ref, err := out.ResolveRef(def)
 		if err != nil {
@@ -849,6 +850,13 @@ func resolveProviderList(in []Provider, lookup EnvLookup, auths map[string]provi
 			}
 			retries = *p.MaxRetries
 		}
+		timeouts, err := resolveProviderTimeouts(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		// One transport per provider, shared by every wire-API variant
+		// below: connection pooling and h2 keepalive state span variants.
+		httpClient := wireutil.NewStreamingHTTPClient(timeouts.responseHeader)
 		modelSeen := make(map[string]bool, len(p.Models))
 		for j := range p.Models {
 			m := &p.Models[j]
@@ -886,13 +894,7 @@ func resolveProviderList(in []Provider, lookup EnvLookup, auths map[string]provi
 				m.Reasoning = p.Reasoning
 			}
 		}
-		defaultModel := p.DefaultModel
-		if defaultModel == "" {
-			defaultModel = p.Models[0].Name
-		} else if !modelSeen[defaultModel] {
-			return nil, fmt.Errorf("config: %s: default_model %q is not in its models list", ctx, defaultModel)
-		}
-		instance, err := buildProvider(pType, p, apiKey, wireAPI, retries)
+		instance, err := buildProvider(pType, p, apiKey, wireAPI, retries, httpClient, timeouts)
 		if err != nil {
 			// Assembly failure (e.g. an unparseable base_url) is a config
 			// error, not a runtime one — fail fast with full context.
@@ -911,7 +913,7 @@ func resolveProviderList(in []Provider, lookup EnvLookup, auths map[string]provi
 			if err != nil {
 				return nil, err
 			}
-			inst, err := buildProvider(pType, p, apiKey, modelWireAPI, retries)
+			inst, err := buildProvider(pType, p, apiKey, modelWireAPI, retries, httpClient, timeouts)
 			if err != nil {
 				return nil, fmt.Errorf("config: %s: %w", ctx, err)
 			}
@@ -919,11 +921,10 @@ func resolveProviderList(in []Provider, lookup EnvLookup, auths map[string]provi
 		}
 		auths[p.Name] = providerAuth{pType: pType, baseURL: strings.TrimSpace(p.BaseURL), apiKey: apiKey}
 		out = append(out, ResolvedProvider{
-			Name:         p.Name,
-			Model:        instance,
-			Models:       p.Models,
-			DefaultModel: defaultModel,
-			WireModels:   wireModels,
+			Name:       p.Name,
+			Model:      instance,
+			Models:     p.Models,
+			WireModels: wireModels,
 		})
 	}
 	return out, nil
@@ -1091,24 +1092,75 @@ func resolveSecret(ctx, field, inline, envName string, lookup EnvLookup) (string
 }
 
 // buildProvider dispatches provider assembly on the protocol family.
-func buildProvider(pType string, p Provider, apiKey string, wireAPI openai.WireAPI, retries int) (domain.Model, error) {
+func buildProvider(pType string, p Provider, apiKey string, wireAPI openai.WireAPI, retries int, httpClient *http.Client, timeouts providerTimeouts) (domain.Model, error) {
 	switch pType {
 	case "anthropic":
 		return anthropic.New(anthropic.Config{
-			BaseURL:    p.BaseURL,
-			APIKey:     apiKey,
-			AuthType:   anthropic.AuthType(p.AuthType),
-			Version:    p.APIVersion,
-			MaxRetries: retries,
+			BaseURL:           p.BaseURL,
+			APIKey:            apiKey,
+			AuthType:          anthropic.AuthType(p.AuthType),
+			Version:           p.APIVersion,
+			HTTPClient:        httpClient,
+			MaxRetries:        retries,
+			StreamIdleTimeout: timeouts.streamIdle,
+			StreamMaxDuration: timeouts.attempt,
 		})
 	default:
 		return openai.New(openai.Config{
-			BaseURL:    p.BaseURL,
-			APIKey:     apiKey,
-			WireAPI:    wireAPI,
-			MaxRetries: retries,
+			BaseURL:           p.BaseURL,
+			APIKey:            apiKey,
+			WireAPI:           wireAPI,
+			HTTPClient:        httpClient,
+			MaxRetries:        retries,
+			StreamIdleTimeout: timeouts.streamIdle,
+			StreamMaxDuration: timeouts.attempt,
 		})
 	}
+}
+
+// providerTimeouts carries the parsed per-provider liveness bounds.
+type providerTimeouts struct {
+	responseHeader time.Duration
+	streamIdle     time.Duration
+	attempt        time.Duration
+}
+
+// Built-in liveness defaults. 60s for response headers tolerates a slow
+// but alive scheduler; 120s of mid-stream silence is far beyond any
+// inter-token gap a healthy streaming gateway exhibits, even with
+// buffered reasoning. The attempt cap stays opt-in: legitimate
+// generations have no trustworthy upper bound.
+const (
+	defaultResponseHeaderTimeout = 60 * time.Second
+	defaultStreamIdleTimeout     = 120 * time.Second
+)
+
+// resolveProviderTimeouts parses the provider's duration strings; empty
+// keeps the built-in default and an explicit "0" disables the bound.
+func resolveProviderTimeouts(ctx string, p Provider) (providerTimeouts, error) {
+	parse := func(field, value string, def time.Duration) (time.Duration, error) {
+		if strings.TrimSpace(value) == "" {
+			return def, nil
+		}
+		d, err := time.ParseDuration(strings.TrimSpace(value))
+		if err != nil || d < 0 {
+			return 0, fmt.Errorf("config: %s: %s: expected a non-negative Go duration (e.g. \"120s\"), got %q", ctx, field, value)
+		}
+		return d, nil
+	}
+	header, err := parse("response_header_timeout", p.ResponseHeaderTimeout, defaultResponseHeaderTimeout)
+	if err != nil {
+		return providerTimeouts{}, err
+	}
+	idle, err := parse("stream_idle_timeout", p.StreamIdleTimeout, defaultStreamIdleTimeout)
+	if err != nil {
+		return providerTimeouts{}, err
+	}
+	attempt, err := parse("attempt_timeout", p.AttemptTimeout, 0)
+	if err != nil {
+		return providerTimeouts{}, err
+	}
+	return providerTimeouts{responseHeader: header, streamIdle: idle, attempt: attempt}, nil
 }
 
 // resolveProviderWireAPI validates a wire_api value in the vocabulary of

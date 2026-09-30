@@ -26,6 +26,7 @@ go_library(
         "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/model/httpc:httpc_lib",
         "//go/pl/loom/internal/model/stream:stream_lib",
+        "@org_golang_x_net//http2",
     ],
 )
 

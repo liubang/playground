@@ -72,6 +72,15 @@ type Config struct {
 	MaxRetries     int
 	InitialBackoff time.Duration
 	MaxBackoff     time.Duration
+	// StreamIdleTimeout bounds mid-stream silence: any received byte
+	// resets the timer, so long-but-progressing generations are safe
+	// while a wedged connection fails (retryably) instead of hanging
+	// forever. Zero disables the watchdog.
+	StreamIdleTimeout time.Duration
+	// StreamMaxDuration bounds one stream's whole lifetime regardless of
+	// activity — the backstop against a peer trickling keepalive frames
+	// while its upstream is dead. Zero disables the cap.
+	StreamMaxDuration time.Duration
 }
 
 // Provider implements domain.Model against the Anthropic Messages API.
@@ -81,6 +90,7 @@ type Provider struct {
 	authType    AuthType
 	version     string
 	client      *httpc.Client
+	streamOpts  stream.Options
 }
 
 // New creates a new Anthropic provider.
@@ -130,6 +140,10 @@ func New(cfg Config) (*Provider, error) {
 		authType:    authType,
 		version:     version,
 		client:      client,
+		streamOpts: stream.Options{
+			IdleTimeout: cfg.StreamIdleTimeout,
+			MaxDuration: cfg.StreamMaxDuration,
+		},
 	}, nil
 }
 
@@ -150,7 +164,7 @@ func (p *Provider) Stream(ctx context.Context, req domain.ModelRequest) (domain.
 		}
 	}
 
-	return wireutil.StartStream(ctx, p.client, p.endpointURL, body, headers, "anthropic", pump)
+	return wireutil.StartStream(ctx, p.client, p.endpointURL, body, headers, "anthropic", pump, p.streamOpts)
 }
 
 // --- request assembly ---

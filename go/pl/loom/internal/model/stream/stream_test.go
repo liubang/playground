@@ -147,6 +147,146 @@ func TestStreamPumpPanicBecomesStreamError(t *testing.T) {
 	}
 }
 
+// drainEvents collects events until EOF, returning the first StreamError
+// message seen.
+func drainEvents(t *testing.T, s *Stream) string {
+	t.Helper()
+	deadline := time.After(5 * time.Second)
+	var streamErr string
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("stream did not terminate")
+		default:
+		}
+		evt, err := s.Recv()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return streamErr
+			}
+			t.Fatalf("Recv: %v", err)
+		}
+		if evt.Kind == domain.ModelEventStreamError {
+			streamErr = evt.Error
+		}
+	}
+}
+
+// readFailPump reads the body until it fails, then surfaces the failure
+// the way provider pumps do (StreamError + ResponseEnd).
+func readFailPump(ctx context.Context, body io.Reader, emit Emitter) {
+	buf := make([]byte, 4096)
+	for {
+		if _, err := body.Read(buf); err != nil {
+			emit(domain.ModelEvent{Kind: domain.ModelEventStreamError, Error: err.Error(), Retryable: true})
+			emit(domain.ModelEvent{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopProviderError})
+			return
+		}
+	}
+}
+
+// TestWatchdogIdleTimeoutFires covers the wedged-gateway failure mode:
+// the peer accepted the response and then went silent forever.
+func TestWatchdogIdleTimeoutFires(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer func() { _ = pw.Close() }()
+
+	s := StartWithOptions(context.Background(), pr, readFailPump, Options{IdleTimeout: 50 * time.Millisecond})
+	defer func() { _ = s.Close() }()
+
+	if got := drainEvents(t, s); !strings.Contains(got, "stalled") {
+		t.Fatalf("stream error = %q, want stall mention", got)
+	}
+}
+
+// TestWatchdogIdleResetByProgress proves the watchdog never fires while
+// bytes keep arriving slower than the timeout — the "slow but alive"
+// generation must not be clipped.
+func TestWatchdogIdleResetByProgress(t *testing.T) {
+	pr, pw := io.Pipe()
+	go func() {
+		defer func() { _ = pw.Close() }()
+		for i := 0; i < 10; i++ {
+			time.Sleep(30 * time.Millisecond)
+			if _, err := pw.Write([]byte("x")); err != nil {
+				return
+			}
+		}
+	}()
+
+	var delivered int
+	s := StartWithOptions(context.Background(), pr, func(ctx context.Context, body io.Reader, emit Emitter) {
+		buf := make([]byte, 4096)
+		for {
+			if _, err := body.Read(buf); err != nil {
+				if errors.Is(err, io.EOF) {
+					emit(domain.ModelEvent{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopEndTurn})
+				} else {
+					emit(domain.ModelEvent{Kind: domain.ModelEventStreamError, Error: err.Error()})
+					emit(domain.ModelEvent{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopProviderError})
+				}
+				return
+			}
+			delivered++
+		}
+	}, Options{IdleTimeout: 150 * time.Millisecond})
+	defer func() { _ = s.Close() }()
+
+	if got := drainEvents(t, s); got != "" {
+		t.Fatalf("unexpected stream error = %q", got)
+	}
+	if delivered == 0 {
+		t.Fatal("no bytes delivered")
+	}
+}
+
+// TestWatchdogMaxDurationFires covers the heartbeat-masked wedge: bytes
+// keep trickling (the idle timer keeps resetting) but the stream never
+// completes, so the absolute cap must end it.
+func TestWatchdogMaxDurationFires(t *testing.T) {
+	pr, pw := io.Pipe()
+	go func() {
+		defer func() { _ = pw.Close() }()
+		for {
+			if _, err := pw.Write([]byte(":")); err != nil {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+
+	s := StartWithOptions(context.Background(), pr, readFailPump, Options{
+		IdleTimeout: time.Minute,
+		MaxDuration: 80 * time.Millisecond,
+	})
+	defer func() { _ = s.Close() }()
+
+	if got := drainEvents(t, s); !strings.Contains(got, "lifetime exceeded") {
+		t.Fatalf("stream error = %q, want lifetime mention", got)
+	}
+}
+
+// TestWatchdogStickyFailure asserts the failure persists across reads:
+// after the watchdog fires, subsequent reads report it instead of
+// re-blocking on the dead source.
+func TestWatchdogStickyFailure(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer func() { _ = pw.Close() }()
+
+	body := newWatchdogBody(pr, Options{IdleTimeout: 50 * time.Millisecond})
+	defer func() { _ = body.Close() }()
+
+	buf := make([]byte, 16)
+	_, err := body.Read(buf)
+	if err == nil || !strings.Contains(err.Error(), "stalled") {
+		t.Fatalf("first read err = %v", err)
+	}
+	_, err = body.Read(buf)
+	if err == nil || !strings.Contains(err.Error(), "stalled") {
+		t.Fatalf("second read err = %v (must be sticky)", err)
+	}
+}
+
 func TestStreamContextCancelUnblocksPump(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	body := io.NopCloser(strings.NewReader(""))

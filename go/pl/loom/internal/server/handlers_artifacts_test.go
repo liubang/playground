@@ -49,10 +49,9 @@ func newArtifactTestServer(t *testing.T) (*httptest.Server, *artifact.Store) {
 	t.Cleanup(func() { store.Close() })
 	resolved := &config.ResolvedConfig{
 		Providers: []config.ResolvedProvider{{
-			Name:         "test",
-			Model:        fakes.NewFakeModel(),
-			Models:       []config.Model{{Name: "model-a", ContextWindow: 128000}},
-			DefaultModel: "model-a",
+			Name:   "test",
+			Model:  fakes.NewFakeModel(),
+			Models: []config.Model{{Name: "model-a", ContextWindow: 128000}},
 		}},
 		Default: config.ProviderModelRef{Provider: "test", Model: "model-a"},
 		Limits:  domain.DefaultLimits(),
