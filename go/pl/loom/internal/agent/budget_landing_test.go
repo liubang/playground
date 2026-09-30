@@ -187,11 +187,11 @@ func TestPrepareFailedKeepsEventStreamPaired(t *testing.T) {
 
 func TestUnknownFieldGuidanceReachesModel(t *testing.T) {
 	// The chronic cross-toolkit inheritance case from live transcripts:
-	// the model invents max_output_tokens for run_cmd. The rejection must
+	// the model invents max_output_bytes for run_cmd. The rejection must
 	// name the closest valid field so the next attempt self-corrects.
 	type runCmdArgs struct {
-		Command        string `json:"command"`
-		MaxOutputBytes int    `json:"max_output_bytes"`
+		Command         string `json:"command"`
+		MaxOutputTokens int    `json:"max_output_tokens"`
 	}
 	tool := fakes.NewFakeTool(domain.ToolDefinition{
 		Name:         "run_cmd",
@@ -213,7 +213,7 @@ func TestUnknownFieldGuidanceReachesModel(t *testing.T) {
 	}
 	loop, run := newPairingTestLoop(t, domain.ToolCall{
 		ID: domain.NewToolCallID(), Name: "run_cmd",
-		Arguments: json.RawMessage(`{"command":"seq 1 100000","max_output_tokens":4000}`),
+		Arguments: json.RawMessage(`{"command":"seq 1 100000","max_output_bytes":16000}`),
 	}, registry, DefaultPolicy{}, fakes.NewFakeApprover(domain.DecisionAllow))
 	if err := loop.Execute(context.Background()); err != nil {
 		t.Fatalf("Execute error = %v", err)
@@ -226,10 +226,10 @@ func TestUnknownFieldGuidanceReachesModel(t *testing.T) {
 			}
 		}
 	}
-	if !strings.Contains(errText, `did you mean "max_output_bytes"?`) {
+	if !strings.Contains(errText, `did you mean "max_output_tokens"?`) {
 		t.Fatalf("model-facing error lacks the did-you-mean hint: %q", errText)
 	}
-	if !strings.Contains(errText, "Valid fields: command, max_output_bytes") {
+	if !strings.Contains(errText, "Valid fields: command, max_output_tokens") {
 		t.Fatalf("model-facing error lacks the valid field list: %q", errText)
 	}
 }

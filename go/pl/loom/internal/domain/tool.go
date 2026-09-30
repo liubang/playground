@@ -237,6 +237,15 @@ type PreparedCall struct {
 	WritePaths   []string // paths this call will write
 	ArgsHash     string   // hash of arguments for approval binding
 	Recovery     *RecoverySpec
+	// IgnoredFields records model-supplied fields Prepare deliberately
+	// dropped during normalization (update_task's cross-action strays),
+	// for disclosure in the tool result. Like Grant, it is deliberately
+	// outside the signed fingerprint and the canonical arguments: an
+	// internal field riding the canonical form is dropped by the
+	// transcript rewrite's schema projection (modelFacingCanonicalArgs),
+	// and the freshness re-Prepare then produces a different canonical
+	// form than the signed one (sess_eb40ddfc64b734371efe224695f6beeb).
+	IgnoredFields []string
 	// Grant carries the execution capabilities the policy layer granted
 	// this call (docs/PERMISSION_DESIGN.md). It is assigned by the agent
 	// loop AFTER Prepare and HMAC signing (policy evaluation happens

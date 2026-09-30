@@ -140,22 +140,33 @@ var crossActionFields = map[string][]string{
 	taskActionPlan: {"objective", "token_budget", "status"},
 }
 
-// stripCrossActionFields removes fields owned by the other action before
-// the strict decode, returning the cleaned JSON and the stripped field
-// names (in canonical order). The flat schema invites models to mirror
-// every visible property into one call; a strict rejection of the stray
-// fields costs a whole tool round-trip per retry — and models tend to
-// repeat the mistake (the grep normalizer precedent). Stripping with
-// in-band disclosure (ignored_fields in the result) fixes the call
-// without hiding the correction. Unparseable input passes through
-// untouched — the strict decoder owns reporting it.
+// itemLevelFields are plan-item properties models hoist to the top level
+// while mirroring the schema (sess_5fb89a53cf2ed7ae37ac02d3a52eb3c1: a
+// top-level "evidence": null bounced two prepare retries before the model
+// dropped it). Unlike the cross-action fields they carry no
+// action-discriminating signal, so they join the strip set of BOTH
+// actions but never the inference set in crossActionFields.
+var itemLevelFields = []string{"evidence"}
+
+// stripCrossActionFields removes fields owned by the other action — plus
+// item-level properties hoisted to the top level — before the strict
+// decode, returning the cleaned JSON and the stripped field names (in
+// canonical order). The flat schema invites models to mirror every
+// visible property into one call; a strict rejection of the stray fields
+// costs a whole tool round-trip per retry — and models tend to repeat
+// the mistake (the grep normalizer precedent). Stripping with in-band
+// disclosure (ignored_fields in the result) fixes the call without
+// hiding the correction. Unparseable input passes through untouched —
+// the strict decoder owns reporting it.
 //
 // Null-valued strays are removed silently: models also mirror optional
 // properties they have no value for as explicit nulls (grep treats them
 // the same way), and disclosing those would be noise. Only fields that
 // carried a real value are reported.
 func stripCrossActionFields(raw json.RawMessage, action string) (json.RawMessage, []string) {
-	stray := crossActionFields[action]
+	stray := make([]string, 0, len(crossActionFields[action])+len(itemLevelFields))
+	stray = append(stray, crossActionFields[action]...)
+	stray = append(stray, itemLevelFields...)
 	if len(stray) == 0 {
 		return raw, nil
 	}
@@ -219,32 +230,40 @@ func (t *UpdateTaskTool) Prepare(_ context.Context, call domain.ToolCall) (domai
 	}
 	var canonical json.RawMessage
 	var desc string
+	var ignored []string
 	switch action {
 	case taskActionGoal:
 		args, err := decodeUpdateGoalArgs(normalized)
 		if err != nil {
 			return domain.PreparedCall{}, err
 		}
+		// The canonical arguments carry the schema shape only; the
+		// stripped cross-action fields ride the prepared call for
+		// disclosure instead (domain.PreparedCall.IgnoredFields).
+		ignored = args.IgnoredFields
+		args.IgnoredFields = nil
 		canonical, err = json.Marshal(args)
 		if err != nil {
 			return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
 		}
 		desc = goalApprovalDesc(args)
 	case taskActionPlan:
-		plan, planCanonical, _, err := decodeUpdatePlanArgs(normalized)
+		plan, planCanonical, planIgnored, err := decodeUpdatePlanArgs(normalized)
 		if err != nil {
 			return domain.PreparedCall{}, err
 		}
 		canonical = planCanonical
+		ignored = planIgnored
 		desc = planApprovalDesc(plan)
 	}
 	call.Arguments = canonical
 	return domain.PreparedCall{
-		Call:         call,
-		Definition:   t.def,
-		Risk:         domain.R1,
-		ApprovalDesc: desc,
-		ArgsHash:     toolkit.ArgsFingerprint(canonical),
+		Call:          call,
+		Definition:    t.def,
+		Risk:          domain.R1,
+		ApprovalDesc:  desc,
+		ArgsHash:      toolkit.ArgsFingerprint(canonical),
+		IgnoredFields: ignored,
 	}, nil
 }
 
@@ -301,11 +320,11 @@ func (t *UpdateTaskTool) Execute(_ context.Context, prepared domain.PreparedCall
 			"close":        args.Status,
 			"note":         "goal update accepted; it takes effect after this tool batch",
 		}
-		if len(args.IgnoredFields) > 0 {
-			payload["ignored_fields"] = args.IgnoredFields
+		if len(prepared.IgnoredFields) > 0 {
+			payload["ignored_fields"] = prepared.IgnoredFields
 		}
 	case taskActionPlan:
-		plan, _, ignored, err := decodeUpdatePlanArgs(prepared.Call.Arguments)
+		plan, _, _, err := decodeUpdatePlanArgs(prepared.Call.Arguments)
 		if err != nil {
 			return toolErrorResult(prepared.Call.ID, startedAt, err)
 		}
@@ -316,8 +335,8 @@ func (t *UpdateTaskTool) Execute(_ context.Context, prepared domain.PreparedCall
 			"items":   len(plan.Items),
 			"note":    "plan update accepted; it takes effect after this tool batch",
 		}
-		if len(ignored) > 0 {
-			payload["ignored_fields"] = ignored
+		if len(prepared.IgnoredFields) > 0 {
+			payload["ignored_fields"] = prepared.IgnoredFields
 		}
 	}
 

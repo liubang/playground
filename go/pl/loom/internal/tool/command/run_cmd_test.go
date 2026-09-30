@@ -52,11 +52,11 @@ func TestRunCmdToolExternalizesLargeOutput(t *testing.T) {
 		t.Fatalf("NewRunCmdToolWithArtifacts() error = %v", err)
 	}
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Command:        stringPtr(pyCmd(python, "import sys; sys.stdout.write('o' * 600); sys.stderr.write('e' * 400)")),
-		WorkingDir:     stringPtr(root),
-		Env:            &map[string]string{},
-		TimeoutMs:      int64Ptr(2000),
-		MaxOutputBytes: int64Ptr(1024),
+		Command:         stringPtr(pyCmd(python, "import sys; sys.stdout.write('o' * 600); sys.stderr.write('e' * 400)")),
+		WorkingDir:      stringPtr(root),
+		Env:             &map[string]string{},
+		TimeoutMs:       int64Ptr(2000),
+		MaxOutputTokens: int64Ptr(256),
 	}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
@@ -134,7 +134,7 @@ func TestRunCmdToolMarksArtifactTruncationAndDrainsProcessOutput(t *testing.T) {
 	}
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
 		Command:    stringPtr(pyCmd(python, "import sys; sys.stdout.write('x' * 500); sys.stderr.write('y' * 300)")),
-		WorkingDir: stringPtr(root), Env: &map[string]string{}, TimeoutMs: int64Ptr(2000), MaxOutputBytes: int64Ptr(1024),
+		WorkingDir: stringPtr(root), Env: &map[string]string{}, TimeoutMs: int64Ptr(2000), MaxOutputTokens: int64Ptr(256),
 	}))
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
@@ -168,11 +168,11 @@ func TestRunCmdToolArtifactFailureDoesNotEmbedLargeOutput(t *testing.T) {
 		t.Fatalf("NewRunCmdToolWithArtifacts() error = %v", err)
 	}
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Command:        stringPtr(pyCmd(python, "print('x' * 1000)")),
-		WorkingDir:     stringPtr(root),
-		Env:            &map[string]string{},
-		TimeoutMs:      int64Ptr(2000),
-		MaxOutputBytes: int64Ptr(1024),
+		Command:         stringPtr(pyCmd(python, "print('x' * 1000)")),
+		WorkingDir:      stringPtr(root),
+		Env:             &map[string]string{},
+		TimeoutMs:       int64Ptr(2000),
+		MaxOutputTokens: int64Ptr(256),
 	}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
@@ -211,11 +211,11 @@ func TestRunCmdToolSuccessAndNonZeroExit(t *testing.T) {
 	// to keep the approval description within its display budget — the
 	// PATH allowlist entry below makes the lookup work inside the sandbox.
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Command:        stringPtr("python3 -c \"import json, os, sys; print(json.dumps({'argv': sys.argv[1:], 'cwd': os.getcwd(), 'safe': os.environ.get('SAFE_VALUE', ''), 'secret': os.environ.get('MY_SECRET_TOKEN', '')}, sort_keys=True)); sys.stderr.buffer.write(b'bad\\xfferr')\" alpha beta"),
-		WorkingDir:     stringPtr(workingDir),
-		Env:            &map[string]string{"SAFE_VALUE": "kept", "MY_SECRET_TOKEN": "drop-me"},
-		TimeoutMs:      int64Ptr(2000),
-		MaxOutputBytes: int64Ptr(4096),
+		Command:         stringPtr("python3 -c \"import json, os, sys; print(json.dumps({'argv': sys.argv[1:], 'cwd': os.getcwd(), 'safe': os.environ.get('SAFE_VALUE', ''), 'secret': os.environ.get('MY_SECRET_TOKEN', '')}, sort_keys=True)); sys.stderr.buffer.write(b'bad\\xfferr')\" alpha beta"),
+		WorkingDir:      stringPtr(workingDir),
+		Env:             &map[string]string{"SAFE_VALUE": "kept", "MY_SECRET_TOKEN": "drop-me"},
+		TimeoutMs:       int64Ptr(2000),
+		MaxOutputTokens: int64Ptr(1024),
 	}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
@@ -307,11 +307,11 @@ func TestRunCmdToolSuccessAndNonZeroExit(t *testing.T) {
 	}
 
 	nonZeroPrepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Command:        stringPtr(pyCmd(python, "import sys; sys.stderr.write('boom\\n'); sys.exit(7)")),
-		WorkingDir:     stringPtr(root),
-		Env:            &map[string]string{},
-		TimeoutMs:      int64Ptr(2000),
-		MaxOutputBytes: int64Ptr(4096),
+		Command:         stringPtr(pyCmd(python, "import sys; sys.stderr.write('boom\\n'); sys.exit(7)")),
+		WorkingDir:      stringPtr(root),
+		Env:             &map[string]string{},
+		TimeoutMs:       int64Ptr(2000),
+		MaxOutputTokens: int64Ptr(1024),
 	}))
 	if err != nil {
 		t.Fatalf("Prepare(non-zero) error = %v", err)
@@ -336,11 +336,11 @@ func TestRunCmdToolTimeoutAndCancelled(t *testing.T) {
 	tool := newTool(t, validator, runner)
 
 	timeoutPrepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Command:        stringPtr(pyCmd(python, "import time; print('start', flush=True); time.sleep(30)")),
-		WorkingDir:     stringPtr(root),
-		Env:            &map[string]string{},
-		TimeoutMs:      int64Ptr(100),
-		MaxOutputBytes: int64Ptr(4096),
+		Command:         stringPtr(pyCmd(python, "import time; print('start', flush=True); time.sleep(30)")),
+		WorkingDir:      stringPtr(root),
+		Env:             &map[string]string{},
+		TimeoutMs:       int64Ptr(100),
+		MaxOutputTokens: int64Ptr(1024),
 	}))
 	if err != nil {
 		t.Fatalf("Prepare(timeout) error = %v", err)
@@ -356,11 +356,11 @@ func TestRunCmdToolTimeoutAndCancelled(t *testing.T) {
 	}
 
 	cancelPrepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Command:        stringPtr(pyCmd(python, "import time; time.sleep(30)")),
-		WorkingDir:     stringPtr(root),
-		Env:            &map[string]string{},
-		TimeoutMs:      int64Ptr(2000),
-		MaxOutputBytes: int64Ptr(4096),
+		Command:         stringPtr(pyCmd(python, "import time; time.sleep(30)")),
+		WorkingDir:      stringPtr(root),
+		Env:             &map[string]string{},
+		TimeoutMs:       int64Ptr(2000),
+		MaxOutputTokens: int64Ptr(1024),
 	}))
 	if err != nil {
 		t.Fatalf("Prepare(cancel) error = %v", err)
@@ -398,40 +398,40 @@ func TestRunCmdToolRejectsTamperingAndWorkspaceEscape(t *testing.T) {
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 
 	_, err = tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Command:        stringPtr("echo hi"),
-		WorkingDir:     stringPtr(filepath.Join(root, "..")),
-		Env:            &map[string]string{},
-		TimeoutMs:      int64Ptr(10),
-		MaxOutputBytes: int64Ptr(1024),
+		Command:         stringPtr("echo hi"),
+		WorkingDir:      stringPtr(filepath.Join(root, "..")),
+		Env:             &map[string]string{},
+		TimeoutMs:       int64Ptr(10),
+		MaxOutputTokens: int64Ptr(256),
 	}))
 	assertAgentErrorCode(t, err, domain.ErrSecurity)
 
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Command:        stringPtr(pyCmd(python, "print('ok')")),
-		WorkingDir:     stringPtr(root),
-		Env:            &map[string]string{},
-		TimeoutMs:      int64Ptr(1000),
-		MaxOutputBytes: int64Ptr(1024),
+		Command:         stringPtr(pyCmd(python, "print('ok')")),
+		WorkingDir:      stringPtr(root),
+		Env:             &map[string]string{},
+		TimeoutMs:       int64Ptr(1000),
+		MaxOutputTokens: int64Ptr(256),
 	}))
 	if err != nil {
 		t.Fatalf("Prepare(valid) error = %v", err)
 	}
 	prepared.Call.Arguments = mustMarshalRaw(t, runCmdArgs{
-		Command:        pyCmd(python, "print('tampered')"),
-		WorkingDir:     ".",
-		Env:            map[string]string{},
-		TimeoutMs:      1000,
-		MaxOutputBytes: 1024,
+		Command:         pyCmd(python, "print('tampered')"),
+		WorkingDir:      ".",
+		Env:             map[string]string{},
+		TimeoutMs:       1000,
+		MaxOutputTokens: 256,
 	})
 	tampered := tool.Execute(context.Background(), prepared)
 	assertToolResultError(t, tampered, domain.ToolStatusError, domain.ErrSecurity)
 
 	prepared, err = tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Command:        stringPtr(pyCmd(python, "print('ok')")),
-		WorkingDir:     stringPtr(root),
-		Env:            &map[string]string{},
-		TimeoutMs:      int64Ptr(1000),
-		MaxOutputBytes: int64Ptr(1024),
+		Command:         stringPtr(pyCmd(python, "print('ok')")),
+		WorkingDir:      stringPtr(root),
+		Env:             &map[string]string{},
+		TimeoutMs:       int64Ptr(1000),
+		MaxOutputTokens: int64Ptr(256),
 	}))
 	if err != nil {
 		t.Fatalf("Prepare(valid) error = %v", err)
@@ -440,11 +440,11 @@ func TestRunCmdToolRejectsTamperingAndWorkspaceEscape(t *testing.T) {
 	// workspace root must still fail closed at Execute time: the binding
 	// check is semantic, not something a valid signature can paper over.
 	canonical := mustMarshalRaw(t, runCmdArgs{
-		Command:        pyCmd(python, "print('ok')"),
-		WorkingDir:     ".",
-		Env:            map[string]string{},
-		TimeoutMs:      1000,
-		MaxOutputBytes: 1024,
+		Command:         pyCmd(python, "print('ok')"),
+		WorkingDir:      ".",
+		Env:             map[string]string{},
+		TimeoutMs:       1000,
+		MaxOutputTokens: 256,
 	})
 	prepared, err = tool.base.PrepareCall(context.Background(), domain.ToolCall{
 		ID:        prepared.Call.ID,
@@ -471,11 +471,11 @@ func TestRunCmdToolFailsClosedWithoutSandbox(t *testing.T) {
 	tool := newTool(t, validator, runner)
 
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Command:        stringPtr(pyCmd(python, "print('ok')")),
-		WorkingDir:     stringPtr(root),
-		Env:            &map[string]string{},
-		TimeoutMs:      int64Ptr(1000),
-		MaxOutputBytes: int64Ptr(1024),
+		Command:         stringPtr(pyCmd(python, "print('ok')")),
+		WorkingDir:      stringPtr(root),
+		Env:             &map[string]string{},
+		TimeoutMs:       int64Ptr(1000),
+		MaxOutputTokens: int64Ptr(256),
 	}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
@@ -490,47 +490,54 @@ func TestRunCmdToolFailsClosedWithoutSandbox(t *testing.T) {
 func TestRunCmdToolValidateArguments(t *testing.T) {
 	validator, root := newValidator(t)
 	_, _, err := validateArgs(validator, rawRunCmdArgs{
-		Command:        stringPtr(" "),
-		WorkingDir:     stringPtr(root),
-		Env:            &map[string]string{},
-		TimeoutMs:      int64Ptr(1),
-		MaxOutputBytes: int64Ptr(1),
+		Command:         stringPtr(" "),
+		WorkingDir:      stringPtr(root),
+		Env:             &map[string]string{},
+		TimeoutMs:       int64Ptr(1),
+		MaxOutputTokens: int64Ptr(1),
 	})
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 
 	_, _, err = validateArgs(validator, rawRunCmdArgs{
-		Command:        stringPtr("python3 --version"),
-		WorkingDir:     stringPtr(root),
-		Env:            &map[string]string{"": "bad"},
-		TimeoutMs:      int64Ptr(1),
-		MaxOutputBytes: int64Ptr(1),
+		Command:         stringPtr("python3 --version"),
+		WorkingDir:      stringPtr(root),
+		Env:             &map[string]string{"": "bad"},
+		TimeoutMs:       int64Ptr(1),
+		MaxOutputTokens: int64Ptr(1),
 	})
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 
 	_, _, err = validateArgs(validator, rawRunCmdArgs{
-		Command:        stringPtr("python3 --version"),
-		WorkingDir:     stringPtr(root),
-		Env:            &map[string]string{},
-		TimeoutMs:      int64Ptr(0),
-		MaxOutputBytes: int64Ptr(1),
+		Command:         stringPtr("python3 --version"),
+		WorkingDir:      stringPtr(root),
+		Env:             &map[string]string{},
+		TimeoutMs:       int64Ptr(0),
+		MaxOutputTokens: int64Ptr(1),
 	})
 	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
 
-	_, _, err = validateArgs(validator, rawRunCmdArgs{
-		Command:        stringPtr("python3 --version"),
-		WorkingDir:     stringPtr(root),
-		Env:            &map[string]string{},
-		TimeoutMs:      int64Ptr(1),
-		MaxOutputBytes: int64Ptr(maxOutputBytes + 1),
+	// An out-of-range token budget saturates at the token ceiling instead
+	// of failing (Codex semantics).
+	args, _, err := validateArgs(validator, rawRunCmdArgs{
+		Command:         stringPtr("python3 --version"),
+		WorkingDir:      stringPtr(root),
+		Env:             &map[string]string{},
+		TimeoutMs:       int64Ptr(1),
+		MaxOutputTokens: int64Ptr(1 << 40),
 	})
-	assertAgentErrorCode(t, err, domain.ErrInvalidInput)
+	if err != nil {
+		t.Fatalf("validateArgs(huge token budget) error = %v", err)
+	}
+	if args.MaxOutputTokens != maxOutputTokens {
+		t.Fatalf("MaxOutputTokens = %d, want saturation at %d", args.MaxOutputTokens, maxOutputTokens)
+	}
 }
 
-// The Codex-style max_output_tokens alias (the field models keep emitting
-// from OpenAI training priors — observed repeatedly in live transcripts)
-// folds into the byte budget instead of failing schema validation; the
-// canonical max_output_bytes always wins when both are present.
-func TestRunCmdToolMaxOutputTokensAlias(t *testing.T) {
+// The model-facing max_output_tokens budget (the name mainstream agents
+// use, and the one models emit from training priors) crosses verbatim
+// into the canonical arguments, saturated at the bounds instead of
+// failing; the byte budget derives at the execution boundary.
+func TestRunCmdToolMaxOutputTokensBudget(t *testing.T) {
 	validator, root := newValidator(t)
 
 	args, _, err := validateArgs(validator, rawRunCmdArgs{
@@ -539,23 +546,22 @@ func TestRunCmdToolMaxOutputTokensAlias(t *testing.T) {
 		MaxOutputTokens: int64Ptr(1024),
 	})
 	if err != nil {
-		t.Fatalf("validateArgs(alias only) error = %v", err)
+		t.Fatalf("validateArgs(tokens) error = %v", err)
 	}
-	if args.MaxOutputBytes != 4096 {
-		t.Fatalf("MaxOutputBytes = %d, want 4096 (1024 tokens x 4)", args.MaxOutputBytes)
+	if args.MaxOutputTokens != 1024 {
+		t.Fatalf("MaxOutputTokens = %d, want 1024", args.MaxOutputTokens)
 	}
 
+	// The default applies when the model omits the budget.
 	args, _, err = validateArgs(validator, rawRunCmdArgs{
-		Command:         stringPtr("echo hi"),
-		WorkingDir:      stringPtr(root),
-		MaxOutputBytes:  int64Ptr(1024),
-		MaxOutputTokens: int64Ptr(4096),
+		Command:    stringPtr("echo hi"),
+		WorkingDir: stringPtr(root),
 	})
 	if err != nil {
-		t.Fatalf("validateArgs(both) error = %v", err)
+		t.Fatalf("validateArgs(default) error = %v", err)
 	}
-	if args.MaxOutputBytes != 1024 {
-		t.Fatalf("MaxOutputBytes = %d, want the canonical 1024 to win over the alias", args.MaxOutputBytes)
+	if args.MaxOutputTokens != defaultOutputTokens {
+		t.Fatalf("MaxOutputTokens = %d, want the default %d", args.MaxOutputTokens, defaultOutputTokens)
 	}
 
 	args, _, err = validateArgs(validator, rawRunCmdArgs{
@@ -564,16 +570,19 @@ func TestRunCmdToolMaxOutputTokensAlias(t *testing.T) {
 		MaxOutputTokens: int64Ptr(1 << 62),
 	})
 	if err != nil {
-		t.Fatalf("validateArgs(huge alias) error = %v", err)
+		t.Fatalf("validateArgs(huge budget) error = %v", err)
 	}
-	if args.MaxOutputBytes != maxOutputBytes {
-		t.Fatalf("MaxOutputBytes = %d, want saturation at %d", args.MaxOutputBytes, maxOutputBytes)
+	if args.MaxOutputTokens != maxOutputTokens {
+		t.Fatalf("MaxOutputTokens = %d, want saturation at %d", args.MaxOutputTokens, maxOutputTokens)
 	}
 }
 
-// The wire-level contract: a call whose only output cap is the alias must
-// pass Prepare, and the signed canonical arguments must carry
-// max_output_bytes only — never the alias.
+// The wire-level contract: the model-facing token budget passes Prepare
+// and the signed canonical arguments carry max_output_tokens verbatim —
+// never the byte field. The transcript rewrite projects canonical
+// arguments onto the schema by field name, so a canonical-only unit
+// would be dropped there and break the freshness re-Prepare
+// (sess_2e5c16c02e285ee4e608d0b136e7d4e9).
 func TestRunCmdToolPrepareAcceptsMaxOutputTokens(t *testing.T) {
 	validator, _ := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
@@ -588,35 +597,39 @@ func TestRunCmdToolPrepareAcceptsMaxOutputTokens(t *testing.T) {
 		Arguments: json.RawMessage(`{"command":"echo hi","max_output_tokens":256}`),
 	})
 	if err != nil {
-		t.Fatalf("Prepare(alias) error = %v", err)
+		t.Fatalf("Prepare(tokens) error = %v", err)
 	}
-	if strings.Contains(string(prepared.Call.Arguments), "max_output_tokens") {
-		t.Fatalf("canonical arguments still carry the alias: %s", prepared.Call.Arguments)
+	if strings.Contains(string(prepared.Call.Arguments), "max_output_bytes") {
+		t.Fatalf("canonical arguments still carry the byte field: %s", prepared.Call.Arguments)
 	}
 	var canonical runCmdArgs
 	if err := json.Unmarshal(prepared.Call.Arguments, &canonical); err != nil {
 		t.Fatalf("decode canonical arguments: %v", err)
 	}
-	if canonical.MaxOutputBytes != 1024 {
-		t.Fatalf("canonical max_output_bytes = %d, want 1024 (256 tokens x 4)", canonical.MaxOutputBytes)
+	if canonical.MaxOutputTokens != 256 {
+		t.Fatalf("canonical max_output_tokens = %d, want 256", canonical.MaxOutputTokens)
 	}
 }
 
-// The model-visible schema must NOT advertise the max_output_tokens
-// alias: two budget fields for one knob made weaker models mirror both
-// with explicit nulls, then hallucinate suffixed variants
+// The model-visible schema advertises exactly one output budget:
+// max_output_tokens, the name mainstream agents use and models emit from
+// training priors. Advertising max_output_bytes instead bought prepare
+// failures on every Codex-shaped call, and advertising both invited
+// null-mirroring and hallucinated variants
 // (max_output_tokens_note{,2,3,...} — sess_23234e5b6235ccceb04652b13cfbf732).
-// The decoder keeps accepting the alias (test above); the schema just
-// stops teaching it.
-func TestRunCmdSchemaOmitsMaxOutputTokensAlias(t *testing.T) {
+func TestRunCmdSchemaAdvertisesMaxOutputTokens(t *testing.T) {
 	validator, _ := newValidator(t)
 	runner := newRunner(t, validator, process.RunnerOptions{
 		Sandbox:  process.ExplicitTestSandbox{},
 		LookPath: exec.LookPath,
 	})
 	tool := newTool(t, validator, runner)
-	if strings.Contains(string(tool.Definition().InputSchema), "max_output_tokens") {
-		t.Fatalf("model-visible schema still advertises the alias: %s", tool.Definition().InputSchema)
+	schema := string(tool.Definition().InputSchema)
+	if !strings.Contains(schema, "max_output_tokens") {
+		t.Fatalf("model-visible schema does not advertise max_output_tokens: %s", schema)
+	}
+	if strings.Contains(schema, "max_output_bytes") {
+		t.Fatalf("model-visible schema still advertises the byte budget: %s", schema)
 	}
 }
 
@@ -1474,11 +1487,11 @@ func TestRunCmdToolApprovalDescShowsDangerousPayloadAndTruncation(t *testing.T) 
 	tool := newTool(t, validator, runner)
 	payload := "python3 -c \"" + strings.Repeat("print('boom');", 80) + "\""
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Command:        stringPtr(payload),
-		WorkingDir:     stringPtr(root),
-		Env:            &map[string]string{"OPENAI_API_KEY": "super-secret", "VISIBLE_KEY": "visible-secret"},
-		TimeoutMs:      int64Ptr(1234),
-		MaxOutputBytes: int64Ptr(4096),
+		Command:         stringPtr(payload),
+		WorkingDir:      stringPtr(root),
+		Env:             &map[string]string{"OPENAI_API_KEY": "super-secret", "VISIBLE_KEY": "visible-secret"},
+		TimeoutMs:       int64Ptr(1234),
+		MaxOutputTokens: int64Ptr(1024),
 	}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
@@ -1508,11 +1521,11 @@ func TestRunCmdToolRejectsKilledBindingMismatch(t *testing.T) {
 	})
 	tool := newTool(t, validator, runner)
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Command:        stringPtr("python3 -c \"print('ok')\""),
-		WorkingDir:     stringPtr(root),
-		Env:            &map[string]string{},
-		TimeoutMs:      int64Ptr(1000),
-		MaxOutputBytes: int64Ptr(1024),
+		Command:         stringPtr("python3 -c \"print('ok')\""),
+		WorkingDir:      stringPtr(root),
+		Env:             &map[string]string{},
+		TimeoutMs:       int64Ptr(1000),
+		MaxOutputTokens: int64Ptr(256),
 	}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
@@ -1560,11 +1573,11 @@ func TestRunCmdToolClassifySignalStillSuccess(t *testing.T) {
 	})
 	tool := newTool(t, validator, runner)
 	prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
-		Command:        stringPtr("exec " + pyCmd(python, "import os, signal; os.kill(os.getpid(), signal.SIGTERM)")),
-		WorkingDir:     stringPtr(root),
-		Env:            &map[string]string{},
-		TimeoutMs:      int64Ptr(1000),
-		MaxOutputBytes: int64Ptr(1024),
+		Command:         stringPtr("exec " + pyCmd(python, "import os, signal; os.kill(os.getpid(), signal.SIGTERM)")),
+		WorkingDir:      stringPtr(root),
+		Env:             &map[string]string{},
+		TimeoutMs:       int64Ptr(1000),
+		MaxOutputTokens: int64Ptr(256),
 	}))
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)

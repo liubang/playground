@@ -68,6 +68,27 @@ func timestampedNoteFilename(slug string) string {
 	return time.Now().UTC().Format("2006-01-02T15-04-05") + "-" + slug + ".md"
 }
 
+// resolveNoteFilename maps a validated filename onto the final note name,
+// prepending the current UTC timestamp to bare slugs. It runs at Execute
+// time, never Prepare: a timestamp baked into the signed canonical
+// arguments cannot survive the freshness re-Prepare, which runs after
+// approval — at a later second — and would mint a different name, so
+// every slug-form add_note would fail closed as a security error.
+func resolveNoteFilename(filename string) (string, error) {
+	switch {
+	case filename == "":
+		return timestampedNoteFilename("note"), nil
+	case noteFilePattern.MatchString(filename):
+		// Fully timestamped already; use as-is.
+		return filename, nil
+	case noteSlugPattern.MatchString(filename):
+		return timestampedNoteFilename(strings.TrimSuffix(filename, ".md")), nil
+	default:
+		return "", domain.NewError(domain.ErrInvalidInput,
+			"filename must be a slug like \"data-prefs.md\" (a UTC timestamp is prepended automatically) or fully timestamped YYYY-MM-DDTHH-MM-SS-slug.md")
+	}
+}
+
 // memoryArgs is the model-visible schema of the unified memory tool:
 // action selects the operation, the remaining fields are per-action.
 type memoryArgs struct {
@@ -144,13 +165,14 @@ func (args *memoryArgs) validate() (domain.RiskLevel, error) {
 		if args.Note == "" {
 			return 0, domain.NewError(domain.ErrInvalidInput, "note is required for action=add_note")
 		}
+		// Shape-check only: the timestamp is prepended at Execute time
+		// (resolveNoteFilename) so the signed canonical arguments stay
+		// stable across the freshness re-Prepare. The empty filename
+		// defaults to the bare slug — a deterministic, idempotent fill.
 		switch {
 		case args.Filename == "":
-			args.Filename = timestampedNoteFilename("note")
-		case noteFilePattern.MatchString(args.Filename):
-			// Fully timestamped already; use as-is.
-		case noteSlugPattern.MatchString(args.Filename):
-			args.Filename = timestampedNoteFilename(strings.TrimSuffix(args.Filename, ".md"))
+			args.Filename = "note.md"
+		case noteFilePattern.MatchString(args.Filename), noteSlugPattern.MatchString(args.Filename):
 		default:
 			return 0, domain.NewError(domain.ErrInvalidInput,
 				"filename must be a slug like \"data-prefs.md\" (a UTC timestamp is prepended automatically) or fully timestamped YYYY-MM-DDTHH-MM-SS-slug.md")
@@ -185,9 +207,9 @@ func (t *MemoryTool) Prepare(_ context.Context, call domain.ToolCall) (domain.Pr
 		return domain.PreparedCall{}, err
 	}
 	canonical, _ := json.Marshal(args)
-	// validate mutates the args (add_note filename auto-timestamping,
-	// max_results defaults), so the canonical form — not the model's raw
-	// JSON — is what Execute must decode.
+	// validate mutates the args (add_note filename defaulting, max_results
+	// defaults), so the canonical form — not the model's raw JSON — is
+	// what Execute must decode.
 	call.Arguments = canonical
 	return domain.PreparedCall{
 		Call:         call,
@@ -251,9 +273,13 @@ func (t *MemoryTool) Execute(_ context.Context, prepared domain.PreparedCall) do
 		matches, err = t.store.Search(args.Query, maxResults)
 		payload = map[string]any{"matches": matches}
 	case ActionAddNote:
-		err = t.store.AddNote(args.Filename, args.Note)
+		var filename string
+		filename, err = resolveNoteFilename(args.Filename)
+		if err == nil {
+			err = t.store.AddNote(filename, args.Note)
+		}
 		payload = map[string]any{
-			"path":   NotesDir + "/" + args.Filename,
+			"path":   NotesDir + "/" + filename,
 			"status": "created",
 		}
 	default:

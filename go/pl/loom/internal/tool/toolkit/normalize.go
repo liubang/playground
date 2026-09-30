@@ -266,7 +266,7 @@ func unknownFieldName(err error) (string, bool) {
 // decode error when the model invents a property: the valid field list,
 // so the model stops guessing, plus a did-you-mean when one valid name
 // is close enough. Cross-toolkit field inheritance (another toolkit's
-// max_output_tokens for our max_output_bytes) is the common case observed
+// max_output_bytes for our max_output_tokens) is the common case observed
 // in live transcripts — without the hint models burn several round-trips
 // retrying the identical shape, even when their own reasoning already
 // names the right field.
@@ -345,14 +345,14 @@ func isJSONNullRaw(raw json.RawMessage) bool {
 	return bytes.Equal(bytes.TrimSpace(raw), []byte("null"))
 }
 
-// ApproxBytesPerToken converts a Codex-style max_output_tokens alias value
-// into a byte budget: 1 token ~ 4 bytes, the same fixed approximation
-// OpenAI Codex applies internally to its shell tool's output budget — no
+// ApproxBytesPerToken converts the model-facing max_output_tokens budget
+// into bytes: 1 token ~ 4 bytes, the same fixed approximation OpenAI
+// Codex applies internally to its shell tool's output budget — no
 // tokenizer is involved on either side.
 const ApproxBytesPerToken int64 = 4
 
-// OutputTokensToBytes folds a max_output_tokens alias value into a byte
-// budget clamped to [minBytes, maxBytes]. The multiply saturates: a tokens
+// OutputTokensToBytes folds a max_output_tokens value into a byte budget
+// clamped to [minBytes, maxBytes]. The multiply saturates: a tokens
 // value at or beyond the ceiling maps to maxBytes, and anything below the
 // floor (including negative input) maps to minBytes.
 func OutputTokensToBytes(tokens, minBytes, maxBytes int64) int64 {

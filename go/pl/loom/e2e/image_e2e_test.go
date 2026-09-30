@@ -48,7 +48,8 @@ import (
 // The suite needs a vision-capable chat model. The gateway catalog declares
 // no modalities, so the test patches an isolated config copy to mark the
 // probe model "text+image" (LOOM_E2E_VISION_MODEL overrides the default
-// aigc-openai/kimi-k3, probed to accept image input and answer correctly).
+// aigc-anthropic/kimi-k3, probed to accept image input and answer
+// correctly).
 //
 // Acceptance coverage:
 //  1. attachment ingress: a base64 image submitted with the prompt is
@@ -67,11 +68,16 @@ import (
 //     error instead of failing deep inside the provider call.
 func TestServeRealModelImageE2E(t *testing.T) {
 	ctx := context.Background()
+	// Gate BEFORE reading the user's config: the modality patch below
+	// fails hard when the probe model is absent from the catalog, and
+	// without the gate an ungated `go test ./...` would surface that as a
+	// FAILURE (leaking real-config details) instead of a clean skip.
+	harness.SkipUnlessRealModel(t)
 	configRaw := harness.ReadRealUserConfig(t)
 
 	visionRef := os.Getenv("LOOM_E2E_VISION_MODEL")
 	if visionRef == "" {
-		visionRef = "aigc-openai/kimi-k3"
+		visionRef = "aigc-anthropic/kimi-k3"
 	}
 	patched := patchConfigModalities(t, configRaw, visionRef)
 
@@ -245,7 +251,8 @@ func patchConfigModalities(t *testing.T, raw []byte, ref string) []byte {
 		}
 	}
 	if !patched {
-		t.Fatalf("vision model %q not found in the config catalog", ref)
+		t.Fatalf("vision model %q not found in the config catalog "+
+			"(set LOOM_E2E_VISION_MODEL to a vision-capable model declared in your config)", ref)
 	}
 	out, err := yaml.Marshal(doc)
 	if err != nil {

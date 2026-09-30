@@ -215,9 +215,13 @@ type updateGoalArgs struct {
 	TokenBudget int64  `json:"token_budget"`
 	Status      string `json:"status"`
 	// IgnoredFields records plan-owned fields the model mixed into a goal
-	// call; they were stripped during normalization and are disclosed in
-	// the tool result (see stripCrossActionFields). It rides the canonical
-	// arguments so Execute can report what Prepare dropped.
+	// call; they were stripped during normalization (see
+	// stripCrossActionFields). Prepare moves them onto the prepared call
+	// (domain.PreparedCall.IgnoredFields) before signing the canonical
+	// arguments — the canonical form carries schema fields only, so a
+	// schema-projected replay re-Prepares identically (freshness check).
+	// The field stays decodable so pre-fix canonical arguments replayed
+	// from an older session's transcript still parse.
 	IgnoredFields []string `json:"ignored_fields,omitempty"`
 }
 

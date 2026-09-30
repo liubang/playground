@@ -44,21 +44,23 @@ const (
 	maxOutputBytes              int64 = 1 << 20
 	defaultModelOutputBytes           = 64 * 1024
 	maxWritablePaths                  = 8
+	// The model-facing budget unit is tokens (1 token ~ 4 bytes,
+	// toolkit.ApproxBytesPerToken); the canonical arguments carry
+	// tokens, the byte budget is derived at the execution boundary.
+	maxOutputTokens     int64 = maxOutputBytes / toolkit.ApproxBytesPerToken
+	defaultOutputTokens int64 = defaultMaxOutputBytes / toolkit.ApproxBytesPerToken
 )
 
 type rawRunCmdArgs struct {
-	Command        *string            `json:"command"`
-	WorkingDir     *string            `json:"working_dir"`
-	Env            *map[string]string `json:"env"`
-	TimeoutMs      *int64             `json:"timeout_ms"`
-	MaxOutputBytes *int64             `json:"max_output_bytes"`
-	// MaxOutputTokens is the Codex-style alias models keep emitting from
-	// training priors; validateArgs folds it into the byte budget. It is
-	// deliberately ABSENT from the model-visible InputSchema: two fields
-	// for one budget made weaker models mirror both (then hallucinate
-	// suffixed variants — sess_23234e5b6235ccceb04652b13cfbf732). The
-	// decoder keeps accepting the alias; the schema just stops
-	// advertising it.
+	Command    *string            `json:"command"`
+	WorkingDir *string            `json:"working_dir"`
+	Env        *map[string]string `json:"env"`
+	TimeoutMs  *int64             `json:"timeout_ms"`
+	// MaxOutputTokens is the single model-facing output budget, named
+	// the way mainstream agents (Codex & co.) name it — that is the
+	// name models emit from training priors, so advertising anything
+	// else just buys prepare failures. validateArgs folds it into the
+	// internal byte budget; the canonical arguments carry bytes only.
 	MaxOutputTokens    *int64    `json:"max_output_tokens"`
 	SandboxPermissions *string   `json:"sandbox_permissions"`
 	NeedsNetwork       *bool     `json:"needs_network"`
@@ -72,7 +74,7 @@ type runCmdArgs struct {
 	WorkingDir         string            `json:"working_dir"`
 	Env                map[string]string `json:"env"`
 	TimeoutMs          int64             `json:"timeout_ms"`
-	MaxOutputBytes     int64             `json:"max_output_bytes"`
+	MaxOutputTokens    int64             `json:"max_output_tokens"`
 	SandboxPermissions string            `json:"sandbox_permissions"`
 	NeedsNetwork       bool              `json:"needs_network,omitempty"`
 	NeedsGUIOpen       bool              `json:"needs_gui_open,omitempty"`
@@ -159,14 +161,14 @@ func NewRunCmdToolWithArtifacts(
 			"Runs via 'sh -c' — pipes, redirection, '&&' chaining, globs and quoting all work " +
 			"(e.g. {\"command\":\"go test ./...\"} · {\"command\":\"curl -sI https://example.com\",\"needs_network\":true}). " +
 			"Set working_dir instead of prefixing the command with 'cd ... &&'. " +
-			"Output beyond max_output_bytes is stored as a readable artifact with a head/tail preview. " +
+			"Output beyond max_output_tokens is stored as a readable artifact with a head/tail preview. " +
 			"env entries are filtered by a security allowlist; dropped keys are reported in the result's note field. " +
 			"The sandbox denies outbound network/DNS, GUI opens, and writes outside the workspace and temp dir: " +
 			"when a command needs one of these, set the matching scoped flag — needs_network, needs_gui_open or writable_paths " +
 			"(each a lightweight, rememberable approval) — and reserve sandbox_permissions='require_escalated' " +
 			"(with a justification; runs OUTSIDE the sandbox with the full user environment) for failures none of them explain. " +
 			"Never hand a sandbox-blocked command to the user before offering the matching approval.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string","minLength":1,"maxLength":32768,"description":"The shell command, exactly as typed in a terminal."},"working_dir":{"type":"string","minLength":1,"maxLength":4096,"default":".","description":"Run directory, relative to the workspace root."},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192},"description":"Extra environment variables."},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000,"default":120000,"description":"Kill the command after this many milliseconds."},"max_output_bytes":{"type":"integer","minimum":1,"maximum":1048576,"default":65536,"description":"Maximum stdout/stderr bytes returned inline."},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"],"default":"use_default","description":"'require_escalated' runs OUTSIDE the sandbox after explicit approval; requires justification; never combine with the scoped flags."},"needs_network":{"type":"boolean","description":"Grant outbound network/DNS inside the sandbox after a lightweight approval (credentials stay unreadable)."},"needs_gui_open":{"type":"boolean","description":"Allow opening URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval."},"writable_paths":{"type":"array","maxItems":8,"items":{"type":"string","minLength":1,"maxLength":4096},"description":"Extra absolute directories ('~/' expands) writable inside the sandbox after a lightweight approval; only for write targets the command cannot state literally (shell variables, command substitution) that come back denied; never credential locations."},"justification":{"type":"string","minLength":1,"maxLength":240,"description":"Short note shown at approval time; required with require_escalated, informational otherwise."}},"required":["command"]}`),
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string","minLength":1,"maxLength":32768,"description":"The shell command, exactly as typed in a terminal."},"working_dir":{"type":"string","minLength":1,"maxLength":4096,"default":".","description":"Run directory, relative to the workspace root."},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192},"description":"Extra environment variables."},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000,"default":120000,"description":"Kill the command after this many milliseconds."},"max_output_tokens":{"type":"integer","minimum":1,"maximum":262144,"default":16384,"description":"Maximum stdout/stderr tokens returned inline (1 token is roughly 4 bytes)."},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"],"default":"use_default","description":"'require_escalated' runs OUTSIDE the sandbox after explicit approval; requires justification; never combine with the scoped flags."},"needs_network":{"type":"boolean","description":"Grant outbound network/DNS inside the sandbox after a lightweight approval (credentials stay unreadable)."},"needs_gui_open":{"type":"boolean","description":"Allow opening URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval."},"writable_paths":{"type":"array","maxItems":8,"items":{"type":"string","minLength":1,"maxLength":4096},"description":"Extra absolute directories ('~/' expands) writable inside the sandbox after a lightweight approval; only for write targets the command cannot state literally (shell variables, command substitution) that come back denied; never credential locations."},"justification":{"type":"string","minLength":1,"maxLength":240,"description":"Short note shown at approval time; required with require_escalated, informational otherwise."}},"required":["command"]}`),
 		Capabilities: []domain.Capability{domain.CapProcessExec},
 		Source:       domain.ToolSourceBuiltin,
 	}
@@ -277,7 +279,7 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 	if stderrStage != nil {
 		defer stderrStage.Abort()
 	}
-	previewLimit := args.MaxOutputBytes
+	previewLimit := toolkit.OutputTokensToBytes(args.MaxOutputTokens, 1, maxOutputBytes)
 	if previewLimit > int64(t.modelOutputBytes) {
 		previewLimit = int64(t.modelOutputBytes)
 	}
@@ -403,10 +405,10 @@ func validateArgs(
 	}
 
 	args := runCmdArgs{
-		Command:        strings.TrimSpace(*raw.Command),
-		Env:            map[string]string{},
-		TimeoutMs:      defaultTimeoutMs,
-		MaxOutputBytes: defaultMaxOutputBytes,
+		Command:         strings.TrimSpace(*raw.Command),
+		Env:             map[string]string{},
+		TimeoutMs:       defaultTimeoutMs,
+		MaxOutputTokens: defaultOutputTokens,
 	}
 	permissions, err := toolkit.ParseSandboxPermissions(raw.SandboxPermissions)
 	if err != nil {
@@ -429,13 +431,14 @@ func validateArgs(
 	if raw.TimeoutMs != nil {
 		args.TimeoutMs = *raw.TimeoutMs
 	}
-	if raw.MaxOutputBytes != nil {
-		args.MaxOutputBytes = *raw.MaxOutputBytes
-	} else if raw.MaxOutputTokens != nil {
-		// Fold the Codex-style alias into the byte budget: the canonical
-		// arguments carry max_output_bytes only, so the HMAC-signed shape
-		// is identical no matter which name the model used.
-		args.MaxOutputBytes = toolkit.OutputTokensToBytes(*raw.MaxOutputTokens, 1, maxOutputBytes)
+	if raw.MaxOutputTokens != nil {
+		// The canonical arguments carry the model-facing token budget
+		// verbatim (saturated at the bounds, Codex semantics): the
+		// transcript rewrite projects canonical arguments onto the
+		// schema by field name, so a canonical-only unit (bytes) would
+		// be dropped there and break the freshness re-Prepare
+		// (sess_2e5c16c02e285ee4e608d0b136e7d4e9).
+		args.MaxOutputTokens = min(max(*raw.MaxOutputTokens, 1), maxOutputTokens)
 	}
 
 	if raw.WorkingDir != nil {
@@ -462,8 +465,8 @@ func validateCanonicalArgs(
 	if args.TimeoutMs < minTimeoutMs || args.TimeoutMs > maxTimeoutMs {
 		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("timeout_ms must be between %d and %d", minTimeoutMs, maxTimeoutMs))
 	}
-	if args.MaxOutputBytes < 1 || args.MaxOutputBytes > maxOutputBytes {
-		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("max_output_bytes must be between 1 and %d", maxOutputBytes))
+	if args.MaxOutputTokens < 1 || args.MaxOutputTokens > maxOutputTokens {
+		return runCmdArgs{}, resolvedWorkingDir{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("max_output_tokens must be between 1 and %d", maxOutputTokens))
 	}
 	if err := toolkit.ValidateEnv(args.Env); err != nil {
 		return runCmdArgs{}, resolvedWorkingDir{}, err

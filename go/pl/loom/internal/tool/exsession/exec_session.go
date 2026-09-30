@@ -35,28 +35,67 @@ const (
 	actionKill  = "kill"
 )
 
-// sessionArgs is the model-visible schema of the unified exec_session
+// rawSessionArgs is the model-visible shape of the unified exec_session
 // tool: action selects the operation, the remaining fields are per-action
 // (command/env/working_dir for start, session_id/chars for the rest).
+// Like run_cmd, the output budget is max_output_tokens — the name
+// mainstream agents use and models emit from training priors; Prepare
+// folds it into the internal byte budget.
+type rawSessionArgs struct {
+	Action             string            `json:"action,omitempty"`
+	Command            string            `json:"command,omitempty"`
+	SessionID          string            `json:"session_id,omitempty"`
+	Chars              string            `json:"chars,omitempty"`
+	WorkingDir         string            `json:"working_dir,omitempty"`
+	Env                map[string]string `json:"env,omitempty"`
+	YieldTimeMs        int64             `json:"yield_time_ms,omitempty"`
+	MaxOutputTokens    *int64            `json:"max_output_tokens,omitempty"`
+	SandboxPermissions string            `json:"sandbox_permissions,omitempty"`
+	NeedsGUIOpen       bool              `json:"needs_gui_open,omitempty"`
+	Justification      string            `json:"justification,omitempty"`
+}
+
+// canonicalArgs converts the model-facing arguments into the signed
+// canonical shape. The token budget crosses verbatim (saturated at the
+// bounds, Codex semantics): the transcript rewrite projects canonical
+// arguments onto the schema by field name, so a canonical-only unit
+// (bytes) would be dropped there and break the freshness re-Prepare
+// (sess_2e5c16c02e285ee4e608d0b136e7d4e9). The byte budget is derived
+// at the execution boundary.
+func (a rawSessionArgs) canonicalArgs() sessionArgs {
+	out := sessionArgs{
+		Action:             a.Action,
+		Command:            a.Command,
+		SessionID:          a.SessionID,
+		Chars:              a.Chars,
+		WorkingDir:         a.WorkingDir,
+		Env:                a.Env,
+		YieldTimeMs:        a.YieldTimeMs,
+		SandboxPermissions: a.SandboxPermissions,
+		NeedsGUIOpen:       a.NeedsGUIOpen,
+		Justification:      a.Justification,
+	}
+	if a.MaxOutputTokens != nil {
+		out.MaxOutputTokens = min(max(*a.MaxOutputTokens, 0), maxMaxOutputTokens)
+	}
+	return out
+}
+
+// sessionArgs is the signed canonical shape: identical fields, with the
+// output budget in the model-facing token unit. Execute decodes this
+// form and derives bytes at the drain boundary.
 type sessionArgs struct {
-	Action         string            `json:"action,omitempty"`
-	Command        string            `json:"command,omitempty"`
-	SessionID      string            `json:"session_id,omitempty"`
-	Chars          string            `json:"chars,omitempty"`
-	WorkingDir     string            `json:"working_dir,omitempty"`
-	Env            map[string]string `json:"env,omitempty"`
-	YieldTimeMs    int64             `json:"yield_time_ms,omitempty"`
-	MaxOutputBytes int64             `json:"max_output_bytes,omitempty"`
-	// MaxOutputTokens is the Codex-style alias models keep emitting from
-	// training priors; Prepare folds it into the byte budget and drops it
-	// so the signed canonical arguments carry max_output_bytes only. Like
-	// run_cmd, the alias is decoder-only and absent from the model-visible
-	// schema (advertising both budgets invited null-mirroring and
-	// hallucinated variants — sess_23234e5b6235ccceb04652b13cfbf732).
-	MaxOutputTokens    *int64 `json:"max_output_tokens,omitempty"`
-	SandboxPermissions string `json:"sandbox_permissions,omitempty"`
-	NeedsGUIOpen       bool   `json:"needs_gui_open,omitempty"`
-	Justification      string `json:"justification,omitempty"`
+	Action             string            `json:"action,omitempty"`
+	Command            string            `json:"command,omitempty"`
+	SessionID          string            `json:"session_id,omitempty"`
+	Chars              string            `json:"chars,omitempty"`
+	WorkingDir         string            `json:"working_dir,omitempty"`
+	Env                map[string]string `json:"env,omitempty"`
+	YieldTimeMs        int64             `json:"yield_time_ms,omitempty"`
+	MaxOutputTokens    int64             `json:"max_output_tokens,omitempty"`
+	SandboxPermissions string            `json:"sandbox_permissions,omitempty"`
+	NeedsGUIOpen       bool              `json:"needs_gui_open,omitempty"`
+	Justification      string            `json:"justification,omitempty"`
 }
 
 // commandSpec extracts the start-action command fields into the shared
@@ -67,7 +106,7 @@ func (a sessionArgs) commandSpec() commandArgs {
 		WorkingDir:         a.WorkingDir,
 		Env:                a.Env,
 		YieldTimeMs:        a.YieldTimeMs,
-		MaxOutputBytes:     a.MaxOutputBytes,
+		MaxOutputTokens:    a.MaxOutputTokens,
 		SandboxPermissions: a.SandboxPermissions,
 		NeedsGUIOpen:       a.NeedsGUIOpen,
 		Justification:      a.Justification,
@@ -111,7 +150,7 @@ func NewExecSessionTool(validator *workspacepkg.PathValidator, manager *Manager)
 			"('running', 'exited', or 'killed') and the exit code once finished. Keep polling a session you started " +
 			"until it exits or kill it when no longer needed — sessions are killed automatically after 30 minutes " +
 			"without interaction.",
-		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"action":{"type":"string","enum":["start","write","poll","kill"],"description":"The session operation (default: inferred — command present means start, session_id with chars means write, session_id alone means poll)."},"command":{"type":"string","minLength":1,"maxLength":32768,"description":"The shell command to run as a session, via 'sh -c' (required for start)."},"session_id":{"type":"string","minLength":1,"maxLength":64,"description":"The session to drive (required for write/poll/kill)."},"chars":{"type":"string","maxLength":8192,"description":"Input to write to the session's stdin (write only)."},"working_dir":{"type":"string","minLength":1,"maxLength":4096,"default":".","description":"Run directory, relative to the workspace root (start only)."},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192},"description":"Extra environment variables (sandbox-filtered allowlist; start only)."},"yield_time_ms":{"type":"integer","minimum":0,"maximum":300000,"description":"Milliseconds to wait for output before returning (start default 1000, write 250, poll 5000)."},"max_output_bytes":{"type":"integer","minimum":0,"maximum":65536,"default":16384,"description":"Maximum bytes of merged output returned."},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"],"default":"use_default","description":"'require_escalated' runs the session OUTSIDE the sandbox after explicit approval; requires justification (start only)."},"needs_gui_open":{"type":"boolean","description":"Allow the session to open URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval (start only)."},"justification":{"type":"string","minLength":1,"maxLength":240,"description":"Short note shown at approval time; required with require_escalated."}},"required":[]}`),
+		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"action":{"type":"string","enum":["start","write","poll","kill"],"description":"The session operation (default: inferred — command present means start, session_id with chars means write, session_id alone means poll)."},"command":{"type":"string","minLength":1,"maxLength":32768,"description":"The shell command to run as a session, via 'sh -c' (required for start)."},"session_id":{"type":"string","minLength":1,"maxLength":64,"description":"The session to drive (required for write/poll/kill)."},"chars":{"type":"string","maxLength":8192,"description":"Input to write to the session's stdin (write only)."},"working_dir":{"type":"string","minLength":1,"maxLength":4096,"default":".","description":"Run directory, relative to the workspace root (start only)."},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192},"description":"Extra environment variables (sandbox-filtered allowlist; start only)."},"yield_time_ms":{"type":"integer","minimum":0,"maximum":300000,"description":"Milliseconds to wait for output before returning (start default 1000, write 250, poll 5000)."},"max_output_tokens":{"type":"integer","minimum":0,"maximum":16384,"default":4096,"description":"Maximum tokens of merged output returned (1 token is roughly 4 bytes)."},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"],"default":"use_default","description":"'require_escalated' runs the session OUTSIDE the sandbox after explicit approval; requires justification (start only)."},"needs_gui_open":{"type":"boolean","description":"Allow the session to open URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval (start only)."},"justification":{"type":"string","minLength":1,"maxLength":240,"description":"Short note shown at approval time; required with require_escalated."}},"required":[]}`),
 		// Deliberately capability-free (static R0): risk is graded PER
 		// ACTION in Prepare (start is R2, R3 when escalated; write/poll/kill
 		// are R1) — and the loop's execution-time drift guard rejects a
@@ -166,8 +205,8 @@ func resolveAction(args *sessionArgs) error {
 		if args.YieldTimeMs < 0 || args.YieldTimeMs > maxYieldMs {
 			return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("yield_time_ms must be between 0 and %d", maxYieldMs))
 		}
-		if args.MaxOutputBytes < 0 || args.MaxOutputBytes > maxMaxOutputBytes {
-			return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("max_output_bytes must be between 0 and %d", maxMaxOutputBytes))
+		if args.MaxOutputTokens < 0 || args.MaxOutputTokens > maxMaxOutputTokens {
+			return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("max_output_tokens must be between 0 and %d", maxMaxOutputTokens))
 		}
 	default:
 		return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("unknown action %q (want start|write|poll|kill)", args.Action))
@@ -186,17 +225,13 @@ func riskForArgs(args sessionArgs) domain.RiskLevel {
 }
 
 func (t *ExecSessionTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
-	args, err := toolkit.DecodeLenient[sessionArgs](call.Arguments)
+	raw, err := toolkit.DecodeLenient[rawSessionArgs](call.Arguments)
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
-	// Fold the Codex-style max_output_tokens alias into the byte budget
-	// when the canonical field is absent, then drop it: the signed
-	// canonical arguments carry max_output_bytes only.
-	if args.MaxOutputBytes == 0 && args.MaxOutputTokens != nil {
-		args.MaxOutputBytes = toolkit.OutputTokensToBytes(*args.MaxOutputTokens, 0, maxMaxOutputBytes)
-	}
-	args.MaxOutputTokens = nil
+	// The token budget crosses into the signed canonical arguments
+	// verbatim; the byte budget derives at the drain boundary.
+	args := raw.canonicalArgs()
 	if err := resolveAction(&args); err != nil {
 		return domain.PreparedCall{}, err
 	}
@@ -311,7 +346,7 @@ func (t *ExecSessionTool) executeStart(ctx context.Context, prepared domain.Prep
 	}
 
 	awaitYield(ctx, entry, yieldMs)
-	output := drainSession(ctx, t.manager, entry, args.MaxOutputBytes)
+	output := drainSession(ctx, t.manager, entry, outputBytesFor(args))
 	return toolkit.SuccessResult(prepared.Call.ID, startedAt, output)
 }
 
@@ -337,7 +372,7 @@ func (t *ExecSessionTool) executeDrive(ctx context.Context, prepared domain.Prep
 		}
 	}
 	awaitYield(ctx, entry, yieldMs)
-	output := drainSession(ctx, t.manager, entry, args.MaxOutputBytes)
+	output := drainSession(ctx, t.manager, entry, outputBytesFor(args))
 	return toolkit.SuccessResult(prepared.Call.ID, startedAt, output)
 }
 
@@ -353,8 +388,14 @@ func (t *ExecSessionTool) executeKill(ctx context.Context, prepared domain.Prepa
 		yieldMs = defaultStartYieldMs
 	}
 	awaitYield(ctx, entry, yieldMs)
-	output := drainSession(ctx, t.manager, entry, args.MaxOutputBytes)
+	output := drainSession(ctx, t.manager, entry, outputBytesFor(args))
 	return toolkit.SuccessResult(prepared.Call.ID, startedAt, output)
+}
+
+// outputBytesFor derives the byte budget from the model-facing token
+// budget at the drain boundary; 0 keeps the drain's default.
+func outputBytesFor(args sessionArgs) int64 {
+	return toolkit.OutputTokensToBytes(args.MaxOutputTokens, 0, maxMaxOutputBytes)
 }
 
 func unknownSessionError(sessionID string) error {

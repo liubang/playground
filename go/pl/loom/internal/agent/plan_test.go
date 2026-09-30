@@ -240,9 +240,31 @@ func TestUpdatePlanPrepareToleratesGoalFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare with goal fields error: %v", err)
 	}
-	// The canonical arguments record the stripped fields for audit.
-	if !strings.Contains(string(prepared.Call.Arguments), `"ignored_fields":["objective","token_budget","status"]`) {
-		t.Fatalf("canonical arguments missing ignored_fields record: %s", prepared.Call.Arguments)
+	// The stripped fields ride the prepared call for disclosure; the
+	// canonical arguments carry the schema shape only — an internal field
+	// there is dropped by the transcript rewrite's schema projection, and
+	// the freshness re-Prepare then mismatches the signed form
+	// (sess_eb40ddfc64b734371efe224695f6beeb).
+	if strings.Contains(string(prepared.Call.Arguments), "ignored_fields") {
+		t.Fatalf("canonical arguments must not carry ignored_fields: %s", prepared.Call.Arguments)
+	}
+	if len(prepared.IgnoredFields) != 3 || prepared.IgnoredFields[0] != "objective" ||
+		prepared.IgnoredFields[1] != "token_budget" || prepared.IgnoredFields[2] != "status" {
+		t.Fatalf("prepared.IgnoredFields = %v, want [objective token_budget status]", prepared.IgnoredFields)
+	}
+	// The freshness contract: the schema-projected replay (what the
+	// transcript rewrite leaves behind) re-Prepares to the signed
+	// canonical form byte-for-byte.
+	projected := modelFacingCanonicalArgs(prepared)
+	fresh, err := tool.Prepare(context.Background(), domain.ToolCall{
+		ID: prepared.Call.ID, Name: "update_task", Arguments: projected,
+	})
+	if err != nil {
+		t.Fatalf("freshness re-Prepare of projected arguments error: %v", err)
+	}
+	matched, err := canonicalJSONEqual(fresh.Call.Arguments, prepared.Call.Arguments)
+	if err != nil || !matched {
+		t.Fatalf("freshness replay diverges: fresh=%s signed=%s", fresh.Call.Arguments, prepared.Call.Arguments)
 	}
 	result := tool.Execute(context.Background(), prepared)
 	if result.Status != domain.ToolStatusSuccess {
@@ -268,6 +290,117 @@ func TestUpdatePlanPrepareToleratesGoalFields(t *testing.T) {
 	plan, ok := cell.Take()
 	if !ok || len(plan.Items) != 2 {
 		t.Fatalf("plan cell = %+v (ok=%v), want 2-item snapshot", plan, ok)
+	}
+}
+
+// The goal action mirrors the plan action's contract: a stray plan-owned
+// field (title) is stripped and disclosed via the prepared call, never
+// the canonical arguments, so the schema-projected replay re-Prepares
+// identically under the freshness check (sess_eb40ddfc64b734371efe224695f6beeb).
+func TestUpdateGoalPrepareToleratesPlanFields(t *testing.T) {
+	tool, _ := newPlanTool(t)
+	prepared, err := tool.Prepare(context.Background(), planCall(t,
+		`{"action":"goal","objective":"ship it","title":"stray title"}`))
+	if err != nil {
+		t.Fatalf("Prepare with plan fields error: %v", err)
+	}
+	if strings.Contains(string(prepared.Call.Arguments), "ignored_fields") {
+		t.Fatalf("canonical arguments must not carry ignored_fields: %s", prepared.Call.Arguments)
+	}
+	if len(prepared.IgnoredFields) != 1 || prepared.IgnoredFields[0] != "title" {
+		t.Fatalf("prepared.IgnoredFields = %v, want [title]", prepared.IgnoredFields)
+	}
+	projected := modelFacingCanonicalArgs(prepared)
+	fresh, err := tool.Prepare(context.Background(), domain.ToolCall{
+		ID: prepared.Call.ID, Name: "update_task", Arguments: projected,
+	})
+	if err != nil {
+		t.Fatalf("freshness re-Prepare of projected arguments error: %v", err)
+	}
+	matched, err := canonicalJSONEqual(fresh.Call.Arguments, prepared.Call.Arguments)
+	if err != nil || !matched {
+		t.Fatalf("freshness replay diverges: fresh=%s signed=%s", fresh.Call.Arguments, prepared.Call.Arguments)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute status = %s, want success: %+v", result.Status, result.Error)
+	}
+	var payload struct {
+		Applied       bool     `json:"applied"`
+		IgnoredFields []string `json:"ignored_fields"`
+	}
+	if err := json.Unmarshal([]byte(result.Content[0].Text), &payload); err != nil {
+		t.Fatalf("result payload undecodable: %v", err)
+	}
+	if !payload.Applied || len(payload.IgnoredFields) != 1 || payload.IgnoredFields[0] != "title" {
+		t.Fatalf("result payload = %+v, want applied with ignored_fields [title]", payload)
+	}
+}
+
+// Models also hoist item-level properties to the top level while
+// mirroring the schema (sess_5fb89a53cf2ed7ae37ac02d3a52eb3c1: a
+// top-level "evidence": null bounced two prepare retries). The hoisted
+// field is stripped like a cross-action stray — silently when null, with
+// disclosure when it carried a real value — and the canonical arguments
+// stay schema-shaped so the freshness replay is idempotent.
+func TestUpdatePlanPrepareToleratesHoistedItemFields(t *testing.T) {
+	tool, cell := newPlanTool(t)
+
+	// A null hoist is dropped silently, exactly like null cross-action
+	// mirrors.
+	prepared, err := tool.Prepare(context.Background(), planCall(t,
+		`{"action":"plan","evidence":null,`+
+			`"plan":[{"goal":"a","status":"in_progress","evidence":["did a"]},{"goal":"b","status":"pending"}]}`))
+	if err != nil {
+		t.Fatalf("Prepare with hoisted null evidence error: %v", err)
+	}
+	var topLevel map[string]json.RawMessage
+	if err := json.Unmarshal(prepared.Call.Arguments, &topLevel); err != nil {
+		t.Fatalf("canonical arguments undecodable: %v", err)
+	}
+	if _, ok := topLevel["evidence"]; ok {
+		t.Fatalf("hoisted evidence must not survive into canonical arguments: %s", prepared.Call.Arguments)
+	}
+	if len(prepared.IgnoredFields) != 0 {
+		t.Fatalf("null hoist must be silent, prepared.IgnoredFields = %v", prepared.IgnoredFields)
+	}
+	// The item-level evidence inside the plan survives untouched.
+	if !strings.Contains(string(prepared.Call.Arguments), `"evidence":["did a"]`) {
+		t.Fatalf("item-level evidence lost: %s", prepared.Call.Arguments)
+	}
+	projected := modelFacingCanonicalArgs(prepared)
+	fresh, err := tool.Prepare(context.Background(), domain.ToolCall{
+		ID: prepared.Call.ID, Name: "update_task", Arguments: projected,
+	})
+	if err != nil {
+		t.Fatalf("freshness re-Prepare of projected arguments error: %v", err)
+	}
+	if matched, err := canonicalJSONEqual(fresh.Call.Arguments, prepared.Call.Arguments); err != nil || !matched {
+		t.Fatalf("freshness replay diverges: fresh=%s signed=%s", fresh.Call.Arguments, prepared.Call.Arguments)
+	}
+	if result := tool.Execute(context.Background(), prepared); result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute status = %s, want success: %+v", result.Status, result.Error)
+	}
+	if _, ok := cell.Take(); !ok {
+		t.Fatal("plan cell empty after Execute")
+	}
+
+	// A hoist carrying a real value is stripped with disclosure.
+	prepared, err = tool.Prepare(context.Background(), planCall(t,
+		`{"action":"plan","evidence":["top-level stray"],`+
+			`"plan":[{"goal":"a","status":"in_progress"},{"goal":"b","status":"pending"}]}`))
+	if err != nil {
+		t.Fatalf("Prepare with hoisted evidence value error: %v", err)
+	}
+	if len(prepared.IgnoredFields) != 1 || prepared.IgnoredFields[0] != "evidence" {
+		t.Fatalf("prepared.IgnoredFields = %v, want [evidence]", prepared.IgnoredFields)
+	}
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
+		t.Fatalf("Execute status = %s, want success: %+v", result.Status, result.Error)
+	}
+	if !strings.Contains(result.Content[0].Text, `"ignored_fields":["evidence"]`) {
+		t.Fatalf("result must disclose the hoisted field: %s", result.Content[0].Text)
 	}
 }
 
@@ -349,8 +482,11 @@ func TestUpdateTaskInferPrefersPlanOnAmbiguousPayload(t *testing.T) {
 	if !strings.Contains(canonical, `"action":"plan"`) {
 		t.Fatalf("ambiguous payload must infer the plan action: %s", canonical)
 	}
-	if !strings.Contains(canonical, `"ignored_fields":["objective"]`) {
-		t.Fatalf("stray objective must be disclosed via ignored_fields: %s", canonical)
+	if strings.Contains(canonical, "ignored_fields") {
+		t.Fatalf("canonical arguments must not carry ignored_fields: %s", canonical)
+	}
+	if len(prepared.IgnoredFields) != 1 || prepared.IgnoredFields[0] != "objective" {
+		t.Fatalf("prepared.IgnoredFields = %v, want [objective]", prepared.IgnoredFields)
 	}
 	if result := tool.Execute(context.Background(), prepared); result.Status != domain.ToolStatusSuccess {
 		t.Fatalf("Execute status = %s, want success: %+v", result.Status, result.Error)

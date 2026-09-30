@@ -39,6 +39,14 @@ const maxWriteBytes = 1 << 20
 type writeArgs struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
+	// Created and OldHash are tolerated on decode only: the signed
+	// canonical form carries them (writeCanonical below), and the agent
+	// loop's freshness re-Prepare of a repaired call replays that
+	// canonical form — rejecting the fields here would bounce every
+	// repaired write. Their values are never read; Prepare always
+	// re-derives them from the live file state (the read_skill pattern).
+	Created bool   `json:"created,omitempty"`
+	OldHash string `json:"old_hash,omitempty"`
 }
 
 // writeCanonical is the signed canonical form carried by the PreparedCall.

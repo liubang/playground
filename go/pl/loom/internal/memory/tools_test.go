@@ -112,7 +112,10 @@ func TestMemoryToolPrepareValidation(t *testing.T) {
 
 // add_note accepts a bare slug (or no filename at all) and prepends the
 // current UTC timestamp itself, so the model never burns a run_cmd date
-// call to satisfy the filename convention.
+// call to satisfy the filename convention. The timestamp lands at
+// Execute time: baking it into the signed canonical arguments would
+// break the agent loop's freshness re-Prepare, which re-runs Prepare
+// after approval — at a later second — and would mint a different name.
 func TestMemoryToolAddNoteAutoTimestamp(t *testing.T) {
 	s := newTestStore(t)
 	tool, _ := NewMemoryTool(s)
@@ -122,14 +125,28 @@ func TestMemoryToolAddNoteAutoTimestamp(t *testing.T) {
 	if err := json.Unmarshal(prepared.Call.Arguments, &args); err != nil {
 		t.Fatalf("canonical args undecodable: %v", err)
 	}
-	if !noteFilePattern.MatchString(args.Filename) {
-		t.Fatalf("auto-timestamped filename %q does not match the canonical pattern", args.Filename)
+	// The canonical arguments keep the bare slug — stable across the
+	// freshness re-Prepare.
+	if args.Filename != "prefer-go.md" {
+		t.Fatalf("canonical filename = %q, want the bare slug", args.Filename)
 	}
-	if !strings.HasSuffix(args.Filename, "-prefer-go.md") {
-		t.Fatalf("slug lost in filename %q", args.Filename)
-	}
-	if result := tool.Execute(context.Background(), prepared); result.Status != domain.ToolStatusSuccess {
+	result := tool.Execute(context.Background(), prepared)
+	if result.Status != domain.ToolStatusSuccess {
 		t.Fatalf("Execute status = %s: %+v", result.Status, result.Error)
+	}
+	// The timestamp is prepended at Execute time.
+	var payload struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal([]byte(result.Content[0].Text), &payload); err != nil {
+		t.Fatalf("result payload undecodable: %v", err)
+	}
+	finalName := strings.TrimPrefix(payload.Path, NotesDir+"/")
+	if !noteFilePattern.MatchString(finalName) {
+		t.Fatalf("executed filename %q does not match the timestamped pattern", finalName)
+	}
+	if !strings.HasSuffix(finalName, "-prefer-go.md") {
+		t.Fatalf("slug lost in executed filename %q", finalName)
 	}
 
 	// No filename at all falls back to the default slug.
@@ -137,8 +154,8 @@ func TestMemoryToolAddNoteAutoTimestamp(t *testing.T) {
 	if err := json.Unmarshal(prepared.Call.Arguments, &args); err != nil {
 		t.Fatalf("canonical args undecodable: %v", err)
 	}
-	if !strings.HasSuffix(args.Filename, "-note.md") {
-		t.Fatalf("default filename = %q, want *-note.md", args.Filename)
+	if args.Filename != "note.md" {
+		t.Fatalf("default canonical filename = %q, want note.md", args.Filename)
 	}
 
 	// A fully timestamped name passes through untouched.
@@ -148,6 +165,27 @@ func TestMemoryToolAddNoteAutoTimestamp(t *testing.T) {
 	}
 	if args.Filename != "2026-08-02T12-00-00-x.md" {
 		t.Fatalf("timestamped filename rewritten: %q", args.Filename)
+	}
+}
+
+// The freshness contract: a slug-form add_note re-Prepares to the
+// identical canonical form no matter how much time passes between the
+// two Prepares — before the fix, the auto-timestamped filename made
+// every approved add_note fail closed as a security error.
+func TestMemoryToolAddNoteFreshnessReplay(t *testing.T) {
+	s := newTestStore(t)
+	tool, _ := NewMemoryTool(s)
+
+	for _, args := range []string{
+		`{"action":"add_note","filename":"prefer-go.md","note":"User prefers Go"}`,
+		`{"action":"add_note","note":"no filename at all"}`,
+		`{"action":"add_note","filename":"2026-08-02T12-00-00-x.md","note":"fully timestamped"}`,
+	} {
+		first := prepareMemory(t, tool, args)
+		second := prepareMemory(t, tool, string(first.Call.Arguments))
+		if string(first.Call.Arguments) != string(second.Call.Arguments) {
+			t.Fatalf("%s: canonical drift across re-Prepare: %s vs %s", args, first.Call.Arguments, second.Call.Arguments)
+		}
 	}
 }
 

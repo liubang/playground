@@ -406,10 +406,10 @@
                       "minLength": 1,
                       "type": "string"
                     },
-                    "max_output_bytes": {
-                      "default": 16384,
-                      "description": "Maximum bytes of merged output returned.",
-                      "maximum": 65536,
+                    "max_output_tokens": {
+                      "default": 4096,
+                      "description": "Maximum tokens of merged output returned (1 token is roughly 4 bytes).",
+                      "maximum": 16384,
                       "minimum": 0,
                       "type": "integer"
                     },
@@ -774,7 +774,7 @@
                 "capabilities": [
                   "process.exec"
                 ],
-                "description": "Execute a shell command inside a sandbox and return stdout, stderr, exit code and timing. Runs via 'sh -c' — pipes, redirection, '\u0026\u0026' chaining, globs and quoting all work (e.g. {\"command\":\"go test ./...\"} · {\"command\":\"curl -sI https://example.com\",\"needs_network\":true}). Set working_dir instead of prefixing the command with 'cd ... \u0026\u0026'. Output beyond max_output_bytes is stored as a readable artifact with a head/tail preview. env entries are filtered by a security allowlist; dropped keys are reported in the result's note field. The sandbox denies outbound network/DNS, GUI opens, and writes outside the workspace and temp dir: when a command needs one of these, set the matching scoped flag — needs_network, needs_gui_open or writable_paths (each a lightweight, rememberable approval) — and reserve sandbox_permissions='require_escalated' (with a justification; runs OUTSIDE the sandbox with the full user environment) for failures none of them explain. Never hand a sandbox-blocked command to the user before offering the matching approval.",
+                "description": "Execute a shell command inside a sandbox and return stdout, stderr, exit code and timing. Runs via 'sh -c' — pipes, redirection, '\u0026\u0026' chaining, globs and quoting all work (e.g. {\"command\":\"go test ./...\"} · {\"command\":\"curl -sI https://example.com\",\"needs_network\":true}). Set working_dir instead of prefixing the command with 'cd ... \u0026\u0026'. Output beyond max_output_tokens is stored as a readable artifact with a head/tail preview. env entries are filtered by a security allowlist; dropped keys are reported in the result's note field. The sandbox denies outbound network/DNS, GUI opens, and writes outside the workspace and temp dir: when a command needs one of these, set the matching scoped flag — needs_network, needs_gui_open or writable_paths (each a lightweight, rememberable approval) — and reserve sandbox_permissions='require_escalated' (with a justification; runs OUTSIDE the sandbox with the full user environment) for failures none of them explain. Never hand a sandbox-blocked command to the user before offering the matching approval.",
                 "input_schema": {
                   "additionalProperties": false,
                   "properties": {
@@ -799,10 +799,10 @@
                       "minLength": 1,
                       "type": "string"
                     },
-                    "max_output_bytes": {
-                      "default": 65536,
-                      "description": "Maximum stdout/stderr bytes returned inline.",
-                      "maximum": 1048576,
+                    "max_output_tokens": {
+                      "default": 16384,
+                      "description": "Maximum stdout/stderr tokens returned inline (1 token is roughly 4 bytes).",
+                      "maximum": 262144,
                       "minimum": 1,
                       "type": "integer"
                     },

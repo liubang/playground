@@ -150,16 +150,15 @@ type updatePlanArgsItem struct {
 
 // updatePlanArgs is the canonical wire form of an update_task call with
 // action "plan". The Action field pins the canonical arguments to the plan
-// action.
+// action. It carries schema fields only: the stripped cross-action fields
+// ride the prepared call (domain.PreparedCall.IgnoredFields) — an internal
+// field here is dropped by the transcript rewrite's schema projection, and
+// the freshness re-Prepare then mismatches the signed canonical form
+// (sess_eb40ddfc64b734371efe224695f6beeb).
 type updatePlanArgs struct {
 	Action string               `json:"action"`
 	Title  string               `json:"title"`
 	Plan   []updatePlanArgsItem `json:"plan"`
-	// IgnoredFields records goal-owned fields the model mixed into a plan
-	// call; they were stripped during normalization and are disclosed in
-	// the tool result (see stripCrossActionFields). It rides the canonical
-	// arguments so Execute can report what Prepare dropped.
-	IgnoredFields []string `json:"ignored_fields,omitempty"`
 }
 
 // updatePlanArgsRawItem is the decoding form of a plan step: Evidence stays
@@ -176,8 +175,8 @@ type updatePlanArgsRawItem struct {
 // updatePlanArgsRaw is the decoding form of a plan-action call: the Action
 // field is decoded so the strict decoder rejects the goal action's fields
 // as unknown; it is validated against taskActionPlan. IgnoredFields is
-// accepted so canonical arguments (which carry it) round-trip through the
-// strict decoder at Execute time.
+// accepted so pre-fix canonical arguments (which carried it) still decode
+// when replayed from an older session's transcript.
 type updatePlanArgsRaw struct {
 	Action        string                  `json:"action"`
 	Title         string                  `json:"title"`
@@ -210,8 +209,9 @@ func decodePlanItemEvidence(raw json.RawMessage) ([]string, error) {
 // unknown fields are rejected, indexes are assigned in array order, and the
 // result must satisfy Plan.Validate (at most one in_progress). Goal-owned
 // fields mixed into the call are stripped first and reported via ignored
-// (see stripCrossActionFields); when the input is an already-canonical
-// payload (Execute), the recorded ignored_fields are reported instead.
+// (see stripCrossActionFields); the returned canonical arguments carry the
+// schema shape only, so a schema-projected replay re-Prepares to the
+// identical form (freshness check).
 func decodeUpdatePlanArgs(raw json.RawMessage) (domain.Plan, json.RawMessage, []string, error) {
 	clean, stripped := stripCrossActionFields(raw, taskActionPlan)
 	var args updatePlanArgsRaw
@@ -238,14 +238,14 @@ func decodeUpdatePlanArgs(raw json.RawMessage) (domain.Plan, json.RawMessage, []
 	if titleRunes := []rune(title); len(titleRunes) > 120 {
 		title = string(titleRunes[:120])
 	}
-	// Freshly stripped fields win; an already-canonical payload (Execute
-	// re-decode) reports the ones recorded at Prepare time.
+	// Freshly stripped fields win; a pre-fix canonical payload (which still
+	// carries ignored_fields) reports the recorded ones instead.
 	ignored := stripped
 	if len(ignored) == 0 {
 		ignored = args.IgnoredFields
 	}
 	items := make([]domain.PlanItem, 0, len(args.Plan))
-	canonicalArgs := updatePlanArgs{Action: args.Action, Title: args.Title, Plan: make([]updatePlanArgsItem, 0, len(args.Plan)), IgnoredFields: ignored}
+	canonicalArgs := updatePlanArgs{Action: args.Action, Title: args.Title, Plan: make([]updatePlanArgsItem, 0, len(args.Plan))}
 	for i, raw := range args.Plan {
 		goal := strings.TrimSpace(raw.Goal)
 		if goal == "" {
@@ -273,12 +273,18 @@ func decodeUpdatePlanArgs(raw json.RawMessage) (domain.Plan, json.RawMessage, []
 			}
 		}
 		items = append(items, item)
-		canonicalArgs.Plan = append(canonicalArgs.Plan, updatePlanArgsItem{Goal: raw.Goal, Status: string(item.Status), Evidence: evidence})
+		// The canonical item mirrors the normalized domain item (trimmed
+		// goal, canonical status, filtered evidence) so the transcript
+		// replay shows the values that actually took effect; the
+		// normalization is idempotent, so the freshness re-Prepare
+		// reproduces the same form.
+		canonicalArgs.Plan = append(canonicalArgs.Plan, updatePlanArgsItem{Goal: goal, Status: string(item.Status), Evidence: item.Evidence})
 	}
 	plan := domain.Plan{Title: title, Items: items}
 	if err := plan.Validate(); err != nil {
 		return domain.Plan{}, nil, nil, domain.NewError(domain.ErrInvalidInput, "invalid plan snapshot", domain.WithCause(err))
 	}
+	canonicalArgs.Title = title
 	canonical, err := json.Marshal(canonicalArgs)
 	if err != nil {
 		return domain.Plan{}, nil, nil, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))

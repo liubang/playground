@@ -282,14 +282,24 @@ func (e *Env) SyncTap(t *testing.T) {
 
 // --- config setup ---
 
+// SkipUnlessRealModel skips the test unless LOOM_E2E_LLM=1. NewEnv
+// enforces this gate before touching the user's config; suites that must
+// read or patch the config BEFORE NewEnv (the image suite injects
+// modalities) call this first so an ungated `go test ./...` never opens
+// the real config at all.
+func SkipUnlessRealModel(t *testing.T) {
+	t.Helper()
+	if os.Getenv("LOOM_E2E_LLM") != "1" {
+		t.Skip("set LOOM_E2E_LLM=1 to run the real-model acceptance suite")
+	}
+}
+
 // setupRealConfig loads the user's own config (or the WithConfigRaw
 // override) from a temp loom home. Real-model suites are gated on
 // LOOM_E2E_LLM=1 so CI never pays for or depends on a live model.
 func (e *Env) setupRealConfig(t *testing.T, cfg *envConfig) {
 	t.Helper()
-	if os.Getenv("LOOM_E2E_LLM") != "1" {
-		t.Skip("set LOOM_E2E_LLM=1 to run the real-model acceptance suite")
-	}
+	SkipUnlessRealModel(t)
 	raw := cfg.configRaw
 	if raw == nil {
 		raw = ReadRealUserConfig(t)

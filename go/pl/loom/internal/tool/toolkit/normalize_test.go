@@ -217,21 +217,21 @@ func TestDecodeLenientStillRejectsUnknownShapes(t *testing.T) {
 
 func TestDecodeStrictUnknownFieldSuggestsClosestMatch(t *testing.T) {
 	// The cross-toolkit inheritance case from live transcripts: another
-	// toolkit's max_output_tokens for our max_output_bytes.
+	// toolkit's max_output_bytes for our max_output_tokens.
 	type runCmdLike struct {
-		Command        string `json:"command"`
-		MaxOutputBytes int    `json:"max_output_bytes"`
-		TimeoutMs      int    `json:"timeout_ms"`
+		Command         string `json:"command"`
+		MaxOutputTokens int    `json:"max_output_tokens"`
+		TimeoutMs       int    `json:"timeout_ms"`
 	}
-	_, err := DecodeStrict[runCmdLike](json.RawMessage(`{"command":"ls","max_output_tokens":4096}`))
+	_, err := DecodeStrict[runCmdLike](json.RawMessage(`{"command":"ls","max_output_bytes":16384}`))
 	if err == nil {
 		t.Fatal("DecodeStrict accepted an unknown field")
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, `did you mean "max_output_bytes"?`) {
+	if !strings.Contains(msg, `did you mean "max_output_tokens"?`) {
 		t.Fatalf("error lacks the did-you-mean hint: %s", msg)
 	}
-	if !strings.Contains(msg, "Valid fields: command, max_output_bytes, timeout_ms") {
+	if !strings.Contains(msg, "Valid fields: command, max_output_tokens, timeout_ms") {
 		t.Fatalf("error lacks the valid field list: %s", msg)
 	}
 }

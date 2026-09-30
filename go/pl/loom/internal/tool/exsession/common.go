@@ -32,6 +32,9 @@ const (
 
 	defaultMaxOutputBytes int64 = 16384
 	maxMaxOutputBytes     int64 = 65536
+	// The model-facing budget unit is tokens (1 token ~ 4 bytes); the
+	// byte budget is derived at the drain boundary.
+	maxMaxOutputTokens int64 = maxMaxOutputBytes / toolkit.ApproxBytesPerToken
 
 	maxCharsBytes = 8192
 )
@@ -42,7 +45,7 @@ type commandArgs struct {
 	WorkingDir         string            `json:"working_dir,omitempty"`
 	Env                map[string]string `json:"env,omitempty"`
 	YieldTimeMs        int64             `json:"yield_time_ms,omitempty"`
-	MaxOutputBytes     int64             `json:"max_output_bytes,omitempty"`
+	MaxOutputTokens    int64             `json:"max_output_tokens,omitempty"`
 	SandboxPermissions string            `json:"sandbox_permissions,omitempty"`
 	NeedsGUIOpen       bool              `json:"needs_gui_open,omitempty"`
 	Justification      string            `json:"justification,omitempty"`
@@ -88,8 +91,8 @@ func validateCommandArgs(validator *workspacepkg.PathValidator, args *commandArg
 	if args.YieldTimeMs < 0 || args.YieldTimeMs > maxYieldMs {
 		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("yield_time_ms must be between 0 and %d", maxYieldMs))
 	}
-	if args.MaxOutputBytes < 0 || args.MaxOutputBytes > maxMaxOutputBytes {
-		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("max_output_bytes must be between 0 and %d", maxMaxOutputBytes))
+	if args.MaxOutputTokens < 0 || args.MaxOutputTokens > maxMaxOutputTokens {
+		return "", domain.NewError(domain.ErrInvalidInput, fmt.Sprintf("max_output_tokens must be between 0 and %d", maxMaxOutputTokens))
 	}
 	return absoluteDir, nil
 }

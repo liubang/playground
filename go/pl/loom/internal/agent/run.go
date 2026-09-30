@@ -2360,7 +2360,7 @@ func actionablePrepareError(tc domain.ToolCall, err error) string {
 			"reference absolute paths outside the workspace (sandboxed; may require user approval)."
 	}
 	return err.Error() + "; the built-in file tools are restricted to the workspace root and the system temp dirs ($TMPDIR, /tmp). " +
-		"If the target likely lives inside the workspace, locate it with glob/search first. " +
+		"If the target likely lives inside the workspace, locate it with glob/grep first. " +
 		"For scratch files, write under the system temp dirs. To inspect other paths outside the workspace, use run_cmd instead (sandboxed; may require user approval)."
 }
 

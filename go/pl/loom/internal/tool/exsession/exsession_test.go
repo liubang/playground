@@ -378,24 +378,32 @@ func TestValidateCommandArgsMissingCommandError(t *testing.T) {
 	}
 }
 
-// Like run_cmd, the model-visible schema must not advertise the
-// max_output_tokens alias (decoder-only); advertising both budgets
-// invited null-mirroring and hallucinated variants
+// Like run_cmd, the model-visible schema advertises exactly one output
+// budget: max_output_tokens, the name mainstream agents use and models
+// emit from training priors. Advertising max_output_bytes instead bought
+// prepare failures on every Codex-shaped call; advertising both invited
+// null-mirroring and hallucinated variants
 // (sess_23234e5b6235ccceb04652b13cfbf732).
-func TestExecSessionSchemaOmitsMaxOutputTokensAlias(t *testing.T) {
+func TestExecSessionSchemaAdvertisesMaxOutputTokens(t *testing.T) {
 	validator, _ := newValidator(t)
 	manager := newManager(t, validator)
 	execTool := newExecSessionTool(t, validator, manager)
-	if strings.Contains(string(execTool.Definition().InputSchema), "max_output_tokens") {
-		t.Fatalf("model-visible schema still advertises the alias: %s", execTool.Definition().InputSchema)
+	schema := string(execTool.Definition().InputSchema)
+	if !strings.Contains(schema, "max_output_tokens") {
+		t.Fatalf("model-visible schema does not advertise max_output_tokens: %s", schema)
+	}
+	if strings.Contains(schema, "max_output_bytes") {
+		t.Fatalf("model-visible schema still advertises the byte budget: %s", schema)
 	}
 }
 
-// The Codex-style max_output_tokens alias (the field models keep emitting
-// from OpenAI training priors) folds into the byte budget at Prepare time;
-// the signed canonical arguments carry max_output_bytes only, and the
-// canonical field wins when both are present.
-func TestExecSessionMaxOutputTokensAlias(t *testing.T) {
+// The model-facing max_output_tokens budget crosses Prepare verbatim:
+// the signed canonical arguments carry max_output_tokens, never the byte
+// field. The transcript rewrite projects canonical arguments onto the
+// schema by field name, so a canonical-only unit would be dropped there
+// and break the freshness re-Prepare
+// (sess_2e5c16c02e285ee4e608d0b136e7d4e9).
+func TestExecSessionMaxOutputTokensBudget(t *testing.T) {
 	validator, root := newValidator(t)
 	manager := newManager(t, validator)
 	execTool := newExecSessionTool(t, validator, manager)
@@ -409,24 +417,25 @@ func TestExecSessionMaxOutputTokensAlias(t *testing.T) {
 	if err := json.Unmarshal(prepared.Call.Arguments, &canonical); err != nil {
 		t.Fatalf("decode canonical arguments: %v", err)
 	}
-	if canonical.MaxOutputBytes != 4000 {
-		t.Fatalf("MaxOutputBytes = %d, want 4000 (1000 tokens x 4)", canonical.MaxOutputBytes)
+	if canonical.MaxOutputTokens != 1000 {
+		t.Fatalf("MaxOutputTokens = %d, want 1000", canonical.MaxOutputTokens)
 	}
-	if strings.Contains(string(prepared.Call.Arguments), "max_output_tokens") {
-		t.Fatalf("canonical arguments still carry the alias: %s", prepared.Call.Arguments)
+	if strings.Contains(string(prepared.Call.Arguments), "max_output_bytes") {
+		t.Fatalf("canonical arguments still carry the byte field: %s", prepared.Call.Arguments)
 	}
 
+	// An out-of-range token budget saturates at the byte ceiling instead of
+	// failing (Codex semantics).
 	prepared = prepareCall(t, execTool, "exec_session", map[string]any{
 		"command":           "echo hi",
 		"working_dir":       root,
-		"max_output_bytes":  2048,
-		"max_output_tokens": 1000,
+		"max_output_tokens": 1 << 40,
 	})
 	if err := json.Unmarshal(prepared.Call.Arguments, &canonical); err != nil {
 		t.Fatalf("decode canonical arguments: %v", err)
 	}
-	if canonical.MaxOutputBytes != 2048 {
-		t.Fatalf("MaxOutputBytes = %d, want the canonical 2048 to win over the alias", canonical.MaxOutputBytes)
+	if canonical.MaxOutputTokens != maxMaxOutputTokens {
+		t.Fatalf("MaxOutputTokens = %d, want saturation at %d", canonical.MaxOutputTokens, maxMaxOutputTokens)
 	}
 }
 
