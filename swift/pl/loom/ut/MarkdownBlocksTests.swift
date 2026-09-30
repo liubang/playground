@@ -133,6 +133,60 @@ final class MarkdownBlocksTests: XCTestCase {
         ])
     }
 
+    // MARK: Thematic breaks (---, ***, ___)
+
+    func testThematicBreakBetweenParagraphs() {
+        XCTAssertEqual(MarkdownText.splitBlocks("前言。\n\n---\n\n**标题**"), [
+            .prose("前言。"),
+            .rule,
+            .prose("**标题**"),
+        ])
+        XCTAssertEqual(MarkdownText.splitBlocks("\n---\n"), [.rule])
+        // Longer runs, other markers, up to 3 leading spaces.
+        XCTAssertEqual(MarkdownText.splitBlocks("-----"), [.rule])
+        XCTAssertEqual(MarkdownText.splitBlocks("***"), [.rule])
+        XCTAssertEqual(MarkdownText.splitBlocks("  ___"), [.rule])
+        // NOT breaks: too short, mixed markers, 4-space indent (code).
+        XCTAssertEqual(MarkdownText.splitBlocks("--"), [.prose("--")])
+        XCTAssertEqual(MarkdownText.splitBlocks("---x"), [.prose("---x")])
+        XCTAssertEqual(MarkdownText.splitBlocks("---*"), [.prose("---*")])
+        XCTAssertEqual(MarkdownText.splitBlocks("    ---"), [.prose("---")])
+    }
+
+    /// A solid "-" run right after a paragraph line is a setext
+    /// heading underline, NOT a rule (the inline parse styles it).
+    /// "*"/"_" runs and spaced-out "- - -" interrupt unconditionally.
+    func testThematicBreakVsSetextUnderline() {
+        XCTAssertEqual(MarkdownText.splitBlocks("标题\n---"), [.prose("标题\n---")])
+        XCTAssertEqual(MarkdownText.splitBlocks("标题  \n  ---  "), [.prose("标题  \n  ---")])
+        XCTAssertEqual(MarkdownText.splitBlocks("a\n***\nb"), [.prose("a"), .rule, .prose("b")])
+        XCTAssertEqual(MarkdownText.splitBlocks("a\n- - -\nb"), [.prose("a"), .rule, .prose("b")])
+        // A rule can also end a list (no open paragraph).
+        XCTAssertEqual(MarkdownText.splitBlocks("- a\n---"), [
+            .list([MarkdownText.ListItem(ordinal: nil, indent: 0, checkbox: nil, text: "a")]),
+            .rule,
+        ])
+    }
+
+    /// A fence swallows rule-like lines; tables own dashed rows.
+    func testThematicBreakDoesNotInvadeCodeOrTables() {
+        XCTAssertEqual(MarkdownText.splitBlocks("```\n---\n```"), [
+            .code(language: nil, code: "---"),
+        ])
+        XCTAssertEqual(MarkdownText.splitBlocks("| a |\n| --- |\n| 1 |"), [
+            .table(header: ["a"], rows: [["1"]]),
+        ])
+    }
+
+    func testLiveThematicBreakStream() {
+        assertIncrementalMatchesWhole([
+            "前言\n", "\n", "-", "-", "-\n", "\n", "标题",
+        ])
+        assertIncrementalMatchesWhole([
+            "a\n", "***", "\nb",
+        ])
+    }
+
     // MARK: Inline Markdown numeric ranges
 
     func testNumericRangesDoNotBecomeStrikethrough() {

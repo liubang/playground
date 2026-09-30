@@ -150,6 +150,10 @@ struct MarkdownText: View {
         /// GFM pipe table: header row + body rows (the dashed separator
         /// row is consumed by the parser).
         case table(header: [String], rows: [[String]])
+        /// Thematic break (---, ***, ___): rendered as a full-width
+        /// hairline (the WebUI's .md hr). Left in prose, Apple's inline
+        /// parser would reduce it to a single ⸻ glyph — NOT a divider.
+        case rule
 
         var isProse: Bool {
             if case .prose = self {
@@ -184,6 +188,13 @@ struct MarkdownText: View {
                     CodeBlockView(language: language, code: code, deferHighlight: live)
                 case let .table(header, rows):
                     MarkdownTableView(header: header, rows: rows)
+                case .rule:
+                    // .md hr: 1px --bg2 full-width line, 14px margins
+                    // (block spacing 10 + vertical padding 4 each side).
+                    Rectangle()
+                        .fill(Theme.bg2)
+                        .frame(height: 1)
+                        .padding(.vertical, 4)
                 }
             }
             // A non-prose tail (a growing code block) can't carry the
@@ -222,6 +233,8 @@ struct MarkdownText: View {
             case let .code(language, code): total + (language?.utf8.count ?? 0) + code.utf8.count
             case let .table(header, rows):
                 total + (header + rows.flatMap(\.self)).reduce(0) { $0 + $1.utf8.count }
+            case .rule:
+                total
             }
         }
         if cost <= 32 * 1024 * 1024 {
@@ -230,16 +243,18 @@ struct MarkdownText: View {
         return blocks
     }
 
-    /// Splits on ``` fences, GFM table blocks, and block-level line
-    /// structure (headings, list items, blank-line paragraph breaks).
-    /// An unterminated fence — the common case mid-stream — treats the
-    /// rest of the input as code, so streaming code blocks render as
-    /// code from the first line. Two renderer gaps force this to be
-    /// real view structure: AttributedString's inline parser has no
-    /// table support, and SwiftUI's Text ignores block-level
-    /// presentationIntent entirely (verified empirically on macOS 26 —
-    /// paragraph breaks, headers and lists all collapse into one
-    /// run-on paragraph; only inline attributes apply).
+    /// Splits on ``` fences, GFM table blocks, thematic breaks and
+    /// block-level line structure (headings, list items, blank-line
+    /// paragraph breaks). An unterminated fence — the common case
+    /// mid-stream — treats the rest of the input as code, so streaming
+    /// code blocks render as code from the first line. Three renderer
+    /// gaps force this to be real view structure: AttributedString's
+    /// inline parser has no table support, SwiftUI's Text ignores
+    /// block-level presentationIntent entirely (verified empirically on
+    /// macOS 26 — paragraph breaks, headers and lists all collapse into
+    /// one run-on paragraph; only inline attributes apply), and a
+    /// thematic break reaches Text as the bare "⸻" glyph its intent
+    /// carries, not the WebUI's full-width .md hr.
     static func splitBlocks(_ source: String) -> [Block] {
         var blocks: [Block] = []
         var paragraph: [String] = []
@@ -313,6 +328,15 @@ struct MarkdownText: View {
             } else if let heading = parseHeading(line) {
                 flushProse()
                 blocks.append(heading)
+            } else if let rule = parseThematicBreak(line),
+                      rule.marker != "-" || !rule.solid || paragraph.isEmpty
+            {
+                // A solid "-" run also reads as a setext heading
+                // underline: it only breaks when no paragraph is open
+                // (CommonMark). "*"/"_" rules, and spaced-out "- - -"
+                // (never a setext underline), interrupt unconditionally.
+                flushProse()
+                blocks.append(.rule)
             } else if let item = parseListItem(line) {
                 flushParagraph()
                 listItems.append(item)
@@ -389,6 +413,39 @@ struct MarkdownText: View {
             text = String(text.dropFirst(3)).trimmingCharacters(in: .whitespaces)
         }
         return ListItem(ordinal: ordinal, indent: spaces / 2, checkbox: checkbox, text: text)
+    }
+
+    /// Thematic break line (CommonMark): up to 3 leading spaces, then
+    /// 3+ of the same -, * or _ marker (spaces/tabs allowed between
+    /// them). Returns the marker plus whether the run is solid (no
+    /// internal whitespace — only a solid "-" run doubles as a setext
+    /// heading underline), or nil for anything else. Whether a solid
+    /// "-" break is a rule or a setext underline depends on an open
+    /// paragraph, so the caller makes that call.
+    private static func parseThematicBreak(_ line: String) -> (marker: Character, solid: Bool)? {
+        var rest = Substring(line)
+        var leading = 0
+        while rest.first == " ", leading < 3 {
+            rest = rest.dropFirst()
+            leading += 1
+        }
+        // 4+ leading spaces = indented code, never a rule.
+        guard let marker = rest.first, marker != " ", marker != "\t",
+              marker == "-" || marker == "*" || marker == "_" else { return nil }
+        var count = 0
+        var solid = true
+        var seenSpace = false
+        for char in rest {
+            if char == marker {
+                if seenSpace { solid = false } // marker after a gap
+                count += 1
+            } else if char == " " || char == "\t" {
+                if count > 0 { seenSpace = true }
+            } else {
+                return nil
+            }
+        }
+        return count >= 3 ? (marker, solid) : nil
     }
 
     /// A line holding at least two pipes (or one leading pipe) — a

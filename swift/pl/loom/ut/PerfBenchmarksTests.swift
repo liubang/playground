@@ -694,7 +694,7 @@ final class PerfBenchmarksTests: XCTestCase {
                             _ = renderInlineMarkdown(item.text)
                         }
                     case let .code(language, code): codeBlocks.append((language ?? "plaintext", code))
-                    case .table: break
+                    case .table, .rule: break
                     }
                 }
             }
