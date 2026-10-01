@@ -437,10 +437,14 @@ struct MarkdownText: View {
         var seenSpace = false
         for char in rest {
             if char == marker {
-                if seenSpace { solid = false } // marker after a gap
+                if seenSpace {
+                    solid = false
+                } // marker after a gap
                 count += 1
             } else if char == " " || char == "\t" {
-                if count > 0 { seenSpace = true }
+                if count > 0 {
+                    seenSpace = true
+                }
             } else {
                 return nil
             }

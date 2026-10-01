@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import AppKit
 import SwiftUI
 
 /// Message composer, after the WebUI's composer.css: the plan panel
@@ -33,7 +32,10 @@ struct ComposerView: View {
     /// Model catalog for the picker (from SessionListStore).
     var models: [MetaModels.ModelInfo] = []
 
-    @FocusState private var focused: Bool
+    @State private var editorFocused = false
+    /// Increment to focus the editor (appear, composerFocusRequest) —
+    /// see ComposerTextView.focusRequest for why this isn't a FocusState.
+    @State private var focusToken = 0
     @ScaledMetric(relativeTo: .body) private var inputFontSize: CGFloat = 14
     /// The ctx-gauge's instant hover card (system tooltips lag 1–2s,
     /// which reads as "no hover feedback at all").
@@ -86,51 +88,32 @@ struct ComposerView: View {
                         .padding(.horizontal, -6)
                 }
 
-                // Textarea (composer.css .composer textarea): the
-                // placeholder rides in the editor's own background so it
-                // shares the frame — only the editor's internal text
-                // inset (~5pt) separates them, keeping the caret and the
-                // hint aligned. Caret takes the foreground color (WebUI
-                // inherits --fg), not the system accent blue.
-                TextEditor(text: $store.composerDraft)
-                    .font(.system(size: inputFontSize))
-                    // Match the app's text color: the default .primary is pure white
-                    // in dark mode and read as bold-ish next to the beige transcript.
-                    .foregroundStyle(Theme.fg)
-                    .lineSpacing(5) // ≈ the WebUI's 1.55 line-height at 14px
-                    .scrollContentBackground(.hidden)
-                    .tint(Theme.fg)
-                    .focused($focused)
-                    .accessibilityLabel("Message")
-                    .accessibilityHint("Return to send, Shift-Return for a new line")
-                    .frame(minHeight: 44, maxHeight: 200)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .padding(.top, 6)
-                    .background(alignment: .topLeading) {
-                        if store.composerDraft.isEmpty {
-                            // Match the editor's internal text inset
-                            // (~5pt leading, ~6pt top) so the caret and
-                            // the hint sit on the same first line.
-                            Text(placeholder)
-                                .foregroundStyle(Theme.muted.opacity(0.7))
-                                .font(.system(size: inputFontSize))
-                                .lineSpacing(5)
-                                .padding(.leading, 5)
-                                .padding(.top, 6)
-                                .allowsHitTesting(false)
-                        }
-                    }
-                    .onKeyPress(keys: [.return], phases: .down) { press in
-                        // Bare Return only: ⇧Return inserts a newline;
-                        // ⌘/⌥ Return fall through to the send button's
-                        // and the approval card's keyboard shortcuts.
-                        guard press.modifiers.isEmpty, !imeComposing, canSend
-                        else { return .ignored }
+                // Textarea (composer.css .composer textarea): a
+                // hand-rolled NSTextView — caret, placeholder, and typed
+                // text share one coordinate space (the TextEditor's
+                // overlay placeholder was hand-aligned and the default
+                // caret sliced through its first glyph). Bare Return
+                // submits, ⇧Return inserts a newline, ⌘Return submits
+                // too — see ComposerNSTextView.keyDown.
+                ComposerTextView(
+                    text: $store.composerDraft,
+                    fontSize: inputFontSize,
+                    placeholder: placeholder,
+                    focusRequest: focusToken,
+                    onFocusChange: { editorFocused = $0 },
+                    onSubmit: {
+                        guard canSend else { return false }
                         send()
-                        return .handled
-                    }
+                        return true
+                    },
+                )
+                .frame(minHeight: 44, maxHeight: 200)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .padding(.top, 6)
+                .accessibilityLabel("Message")
+                .accessibilityHint("Return to send, Shift-Return for a new line")
 
                 // composer-bar: hairline-separated button row; negative
                 // horizontal margins stretch the divider to the box's
@@ -189,20 +172,20 @@ struct ComposerView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.radiusXl)
                     .strokeBorder(
-                        focused ? Theme.primary.opacity(0.5) : Theme.bg2,
+                        editorFocused ? Theme.primary.opacity(0.5) : Theme.bg2,
                         lineWidth: 1,
                     ),
             )
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.radiusXl + 1.5)
-                    .strokeBorder(Theme.primary.opacity(focused ? 0.12 : 0), lineWidth: 3)
+                    .strokeBorder(Theme.primary.opacity(editorFocused ? 0.12 : 0), lineWidth: 3)
                     .padding(-1.5),
             )
             .shadow(
-                color: focused ? Theme.primary.opacity(0.08) : .clear,
-                radius: focused ? 10 : 0,
+                color: editorFocused ? Theme.primary.opacity(0.08) : .clear,
+                radius: editorFocused ? 10 : 0,
             )
-            .animation(.easeInOut(duration: 0.18), value: focused)
+            .animation(.easeInOut(duration: 0.18), value: editorFocused)
             // composer.css .composer-box: max-width --content-width, margin
             // 0 auto — the box shares the transcript's column clamp.
             .frame(maxWidth: Theme.contentWidth)
@@ -233,8 +216,8 @@ struct ComposerView: View {
             }
         }
         .animation(.easeInOut(duration: 0.12), value: gaugeCardShown)
-        .onAppear { focused = true }
-        .onChange(of: store.composerFocusRequest) { _, _ in focused = true }
+        .onAppear { focusToken += 1 }
+        .onChange(of: store.composerFocusRequest) { _, _ in focusToken += 1 }
         .onChange(of: store.pendingSteers.isEmpty) { _, empty in
             if empty {
                 steerQueueExpanded = false
@@ -527,15 +510,6 @@ struct ComposerView: View {
             && !store.composerDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && store.state != .closed
             && store.state != .booting
-    }
-
-    /// True while an IME composition (Chinese/Japanese input) is in
-    /// progress: the Return that CONFIRMS a candidate must not send
-    /// the message. The marked-text state lives on the first responder
-    /// (the TextEditor's NSTextView), not on the input context.
-    private var imeComposing: Bool {
-        guard let view = NSApp.keyWindow?.firstResponder as? NSTextView else { return false }
-        return view.hasMarkedText()
     }
 
     private func send() {

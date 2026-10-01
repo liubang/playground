@@ -122,7 +122,14 @@ private func mixHex(_ a: UInt32, _ b: UInt32, by t: Double) -> UInt32 {
 /// so flipping `loom.theme` repaints every surface without touching the
 /// views (the WebUI's [data-theme] swap).
 private func adaptive(dark: UInt32, light: UInt32) -> Color {
-    Color(nsColor: NSColor(name: nil) { appearance in
+    Color(nsColor: adaptiveNS(dark: dark, light: light))
+}
+
+/// The NSColor twin of `adaptive(dark:light:)`, for the AppKit-side
+/// drawing SwiftUI Color can't reach (the composer editor's caret,
+/// selection, and placeholder — see ComposerTextView).
+private func adaptiveNS(dark: UInt32, light: UInt32) -> NSColor {
+    NSColor(name: nil) { appearance in
         let hex = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
         return NSColor(
             red: CGFloat((hex >> 16) & 0xFF) / 255,
@@ -130,7 +137,16 @@ private func adaptive(dark: UInt32, light: UInt32) -> Color {
             blue: CGFloat(hex & 0xFF) / 255,
             alpha: 1,
         )
-    })
+    }
+}
+
+extension Theme {
+    /// Appearance-adaptive NSColor twins of the text tokens — same hex
+    /// pairs as the Color tokens above.
+    enum AppKit {
+        static let fg = adaptiveNS(dark: fgHex.dark, light: fgHex.light)
+        static let muted = adaptiveNS(dark: mutedHex.dark, light: mutedHex.light)
+    }
 }
 
 /// Compact relative timestamps for the sidebar meta line ("now" /
