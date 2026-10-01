@@ -29,9 +29,8 @@ struct ChatView: View {
     /// Model catalog for the composer picker (SessionListStore.models).
     var models: [MetaModels.ModelInfo] = []
     @State private var viewMode: SessionViewMode = .chat
-    @State private var locateTurn: Int?
+    @State private var locateRequest: LocateRequest?
     @State private var traceTurn: Int?
-    @State private var locateCallId: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -65,14 +64,13 @@ struct ChatView: View {
 
             ZStack {
                 // Keep the transcript mounted so switching tabs preserve its scroll position.
-                TranscriptView(store: store, locateTurn: $locateTurn, locateCallId: $locateCallId)
+                TranscriptView(store: store, locateRequest: $locateRequest)
                     .opacity(viewMode == .chat ? 1 : 0)
                     .allowsHitTesting(viewMode == .chat)
                     .accessibilityHidden(viewMode != .chat)
                 if viewMode == .trace {
                     SessionTraceView(store: store, locateInChat: { turn, callId in
-                        locateTurn = turn
-                        locateCallId = callId
+                        locateRequest = LocateRequest(turn: turn, callId: callId)
                         viewMode = .chat
                     }, targetTurn: $traceTurn)
                 } else if viewMode == .maze {
@@ -99,6 +97,13 @@ private enum SessionViewMode: String, CaseIterable, Identifiable {
     var id: String {
         rawValue
     }
+}
+
+/// A trace-side "Locate in conversation" request: the tool call's row
+/// when the trace row has a callId, else the turn's user-message anchor.
+private struct LocateRequest: Equatable {
+    let turn: Int
+    let callId: String?
 }
 
 // MARK: - Header (mac toolbar idiom)
@@ -432,8 +437,7 @@ private struct StatusPill: View {
 
 private struct TranscriptView: View {
     let store: SessionStore
-    @Binding var locateTurn: Int?
-    @Binding var locateCallId: String?
+    @Binding var locateRequest: LocateRequest?
 
     /// Tracks the bottom sentinel's visibility: scrolling up reveals
     /// the jump-to-bottom button; returning hides it. Measured
@@ -677,28 +681,10 @@ private struct TranscriptView: View {
                 }
             }
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: awayFromBottom)
-            .onChange(of: locateTurn) { _, turn in
-                guard let turn else { return }
-                guard let messageId = turnAnchors[turn] else { locateTurn = nil; return }
-                proxy.scrollTo("chat-turn-\(messageId)", anchor: .top)
-                locateTurn = nil
-            }
-            .onChange(of: locateCallId) { _, callId in
-                guard let callId else { return }
-                if let row = store.transcript.rows.first(where: { row in
-                    if case let .message(model) = row {
-                        return model.items.contains { item in
-                            if case let .tool(tool) = item {
-                                return tool.callId == callId
-                            }
-                            return false
-                        }
-                    }
-                    return false
-                }) {
-                    proxy.scrollTo("chat-row-\(row.id)", anchor: .center)
-                }
-                locateCallId = nil
+            .onChange(of: locateRequest) { _, request in
+                guard let request else { return }
+                locateRequest = nil
+                locate(request, proxy: proxy)
             }
         }
     }
@@ -713,6 +699,65 @@ private struct TranscriptView: View {
             }
         }
         return result
+    }
+
+    /// Trace "Locate in conversation": scroll the tool call's row into
+    /// view (falling back to the turn's user-message anchor when the
+    /// callId resolves to no rendered row). Two wrinkles, both observed
+    /// in the wild:
+    ///
+    /// 1. The target can sit OUTSIDE the rendered tail window while the
+    ///    history backfill is gated — the anchor id then names no view
+    ///    and scrollTo silently no-ops. Expand the window to cover it.
+    /// 2. The transcript is bottom-pinned via .defaultScrollAnchor; when
+    ///    the pre-locate position is at the bottom, the tab switch's
+    ///    layout upheaval (composer mount) lets the anchor system
+    ///    re-assert the bottom AFTER the scroll lands — the located row
+    ///    centered, then got yanked back within 2ms. Retry past the
+    ///    settle window; the last write sticks because the position is
+    ///    no longer at the bottom. (The WebUI's jump.ts polls for up
+    ///    to 4s for the same class of race.)
+    private func locate(_ request: LocateRequest, proxy: ScrollViewProxy) {
+        let rows = store.transcript.rows
+        var targetId: String?
+        var targetRowId: String?
+        var anchor: UnitPoint = .center
+        if let callId = request.callId,
+           let row = rows.first(where: { row in
+               if case let .message(model) = row {
+                   return model.items.contains { item in
+                       if case let .tool(tool) = item {
+                           return tool.callId == callId
+                       }
+                       return false
+                   }
+               }
+               return false
+           })
+        {
+            targetId = "chat-row-\(row.id)"
+            targetRowId = row.id
+        } else if let messageId = turnAnchors[request.turn] {
+            targetId = "chat-turn-\(messageId)"
+            targetRowId = messageId
+            anchor = .top
+        }
+        guard let targetId, let targetRowId else { return }
+
+        if backfilling,
+           let index = rows.firstIndex(where: { $0.id == targetRowId }),
+           index < rows.count - tailWindow
+        {
+            tailWindow = rows.count
+        }
+
+        proxy.scrollTo(targetId, anchor: anchor)
+        Task { @MainActor in
+            for delay in [80, 240] {
+                try? await Task.sleep(for: .milliseconds(delay))
+                proxy.scrollTo(targetId, anchor: anchor)
+            }
+        }
     }
 
     private func scrollFade(fromTop: Bool) -> some View {
