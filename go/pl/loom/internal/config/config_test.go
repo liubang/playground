@@ -413,6 +413,46 @@ providers:
 	}
 }
 
+func TestReasoningAutoValidatesAndResolves(t *testing.T) {
+	cfg := loadFile(t, `
+providers:
+  - name: o
+    type: openai
+    base_url: https://example.com/v1
+    api_key: sk-test
+    models:
+      - name: plain
+      - name: adaptive
+        reasoning: {effort: auto}
+      - name: planner
+        reasoning: {effort: high}
+`, envWith(map[string]string{}))
+
+	// Unset effort stays empty; the loop's auto policy treats empty as
+	// auto, so the zero config needs no normalization here.
+	meta, ok := cfg.ModelMeta(ProviderModelRef{Provider: "o", Model: "plain"})
+	if !ok {
+		t.Fatal("plain meta missing")
+	}
+	if spec := meta.Reasoning.DomainSpec(); spec.Effort != "" {
+		t.Fatalf("plain effort = %q, want empty (auto)", spec.Effort)
+	}
+	meta, ok = cfg.ModelMeta(ProviderModelRef{Provider: "o", Model: "adaptive"})
+	if !ok {
+		t.Fatal("adaptive meta missing")
+	}
+	if spec := meta.Reasoning.DomainSpec(); spec.Effort != "auto" {
+		t.Fatalf("adaptive effort = %q, want auto", spec.Effort)
+	}
+	meta, ok = cfg.ModelMeta(ProviderModelRef{Provider: "o", Model: "planner"})
+	if !ok {
+		t.Fatal("planner meta missing")
+	}
+	if spec := meta.Reasoning.DomainSpec(); spec.Effort != "high" {
+		t.Fatalf("planner effort = %q, want high", spec.Effort)
+	}
+}
+
 func TestResolveRef(t *testing.T) {
 	cfg := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk-env"}))
 

@@ -67,6 +67,7 @@ struct RuntimeEvent: Decodable, Sendable {
         case usageUpdated = "usage.updated"
         case contextUsage = "context.usage"
         case planUpdated = "plan.updated"
+        case reasoningChanged = "reasoning.changed"
         case steerQueued = "steer.queued"
         case steerInjected = "steer.injected"
         case subagentStarted = "subagent.started"
@@ -84,6 +85,15 @@ struct RuntimeEvent: Decodable, Sendable {
 }
 
 // MARK: - Per-kind payloads (json tags from event.go)
+
+struct ReasoningChangedPayload: Decodable, Sendable {
+    let effective: Effective?
+    let overridden: Bool?
+
+    struct Effective: Decodable, Sendable {
+        let effort: String?
+    }
+}
 
 struct TurnStartedPayload: Decodable, Sendable {
     let turnIndex: Int?

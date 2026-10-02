@@ -1764,10 +1764,11 @@ func TestReasoningPickerFlow(t *testing.T) {
 	ctrl := newTestController(t)
 	m := NewModel(ctrl, "test/model-a", "/ws")
 
-	// Open the picker and move the cursor from "default" down to "high".
+	// Open the picker and move the cursor from "default" down to "high"
+	// (default → auto → off → low → medium → high).
 	updated, _ := m.handleSlashCommand("/reasoning")
 	m = updated.(Model)
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 5; i++ {
 		updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 		m = updatedModel.(Model)
 	}

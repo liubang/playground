@@ -4948,6 +4948,67 @@ func TestSegmentBatchSplitsOnSafety(t *testing.T) {
 	}
 }
 
+// perCallSafeTool opts into concurrency PER CALL (domain.CallConcurrentSafely):
+// only calls whose arguments carry the marker are eligible. It stands in
+// for run_cmd's read_only mode, where eligibility is a property of the
+// screened command, not of the tool.
+type perCallSafeTool struct {
+	def domain.ToolDefinition
+}
+
+func (t *perCallSafeTool) Definition() domain.ToolDefinition { return t.def }
+
+func (t *perCallSafeTool) Prepare(_ context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
+	sum := sha256.Sum256(call.Arguments)
+	return domain.PreparedCall{
+		Call: call, Definition: t.def, Risk: domain.R1,
+		ArgsHash: hex.EncodeToString(sum[:])[:16],
+	}, nil
+}
+
+func (t *perCallSafeTool) Execute(context.Context, domain.PreparedCall) domain.ToolResult {
+	return domain.ToolResult{}
+}
+
+func (t *perCallSafeTool) CallConcurrentSafe(prepared domain.PreparedCall) bool {
+	return strings.Contains(string(prepared.Call.Arguments), `"read_only":true`)
+}
+
+func TestSegmentBatchHonorsPerCallConcurrencyOptIn(t *testing.T) {
+	tool := &perCallSafeTool{def: newTestToolDefinition("run_cmd", []domain.Capability{domain.CapProcessExec})}
+	exec := func(args string) preparedExec {
+		sum := sha256.Sum256([]byte(args))
+		return preparedExec{
+			prepared: domain.PreparedCall{
+				Call:       domain.ToolCall{ID: domain.NewToolCallID(), Name: "run_cmd", Arguments: json.RawMessage(args)},
+				Definition: tool.def, Risk: domain.R1,
+				ArgsHash: hex.EncodeToString(sum[:])[:16],
+			},
+			tool: tool,
+		}
+	}
+	segments := segmentBatch([]preparedExec{
+		exec(`{"command":"ls"}`),
+		exec(`{"command":"ls","read_only":true}`),
+		exec(`{"command":"pwd","read_only":true}`),
+		exec(`{"command":"rm x","read_only":false}`),
+		exec(`{"command":"date","read_only":true}`),
+	})
+	var sizes []int
+	for _, seg := range segments {
+		sizes = append(sizes, len(seg))
+	}
+	want := []int{1, 2, 1, 1}
+	if len(sizes) != len(want) {
+		t.Fatalf("segments = %v, want %v", sizes, want)
+	}
+	for i := range want {
+		if sizes[i] != want[i] {
+			t.Fatalf("segments = %v, want %v", sizes, want)
+		}
+	}
+}
+
 func TestLoopExecutesConcurrentSafeBatchInParallel(t *testing.T) {
 	toolA := &slowSafeTool{def: newTestToolDefinition("read_file", []domain.Capability{domain.CapFSRead}), delay: 200 * time.Millisecond}
 	toolB := &slowSafeTool{def: newTestToolDefinition("glob", []domain.Capability{domain.CapFSRead}), delay: 200 * time.Millisecond}
@@ -5562,6 +5623,145 @@ func TestAppendEarlyRejectionEventsIncludesArgsSummary(t *testing.T) {
 	}
 	if _, ok := payload.ArgsSummary["content"]; ok {
 		t.Fatalf("content must not be persisted: %v", payload.ArgsSummary)
+	}
+}
+
+// reasoningCaptureModel wraps a scripted model and records the reasoning
+// spec of every request, so tests can assert per-call effort allocation.
+type reasoningCaptureModel struct {
+	inner domain.Model
+	specs []domain.ReasoningSpec
+}
+
+func (m *reasoningCaptureModel) Stream(ctx context.Context, req domain.ModelRequest) (domain.ModelStream, error) {
+	m.specs = append(m.specs, req.Reasoning)
+	return m.inner.Stream(ctx, req)
+}
+
+func TestEffectiveReasoningAutoPolicy(t *testing.T) {
+	user := domain.Message{Role: domain.RoleUser}
+	// Tool results persist as assistant-role messages (RecordToolResult).
+	toolResult := domain.Message{Role: domain.RoleAssistant, Parts: []domain.ContentPart{{Kind: domain.PartToolResult}}}
+	auto := domain.ReasoningSpec{Effort: domain.ReasoningEffortAuto}
+	high := domain.ReasoningSpec{Effort: domain.ReasoningEffortHigh}
+	low := domain.ReasoningSpec{Effort: domain.ReasoningEffortLow}
+	cases := []struct {
+		name     string
+		spec     domain.ReasoningSpec
+		messages []domain.Message
+		failures int
+		want     domain.ReasoningSpec
+	}{
+		{"auto plans high on the first call", auto, []domain.Message{user}, 0, high},
+		{"empty spec acts as auto", domain.ReasoningSpec{}, []domain.Message{user}, 0, high},
+		{"auto continuations run low", auto, []domain.Message{user, toolResult}, 0, low},
+		{"auto escalates after a failure streak", auto, []domain.Message{user, toolResult}, autoEscalateFailures, high},
+		{"below the streak stays low", auto, []domain.Message{user, toolResult}, autoEscalateFailures - 1, low},
+		{"auto keeps an explicit budget", domain.ReasoningSpec{Effort: domain.ReasoningEffortAuto, BudgetTokens: 8000}, []domain.Message{user, toolResult}, 0, domain.ReasoningSpec{Effort: domain.ReasoningEffortLow, BudgetTokens: 8000}},
+		{"pinned high passes through", high, []domain.Message{user, toolResult}, 0, high},
+		{"pinned low passes through", low, []domain.Message{user}, 0, low},
+		{"pinned off ignores the streak", domain.ReasoningSpec{Effort: domain.ReasoningEffortOff}, []domain.Message{user, toolResult}, autoEscalateFailures, domain.ReasoningSpec{Effort: domain.ReasoningEffortOff}},
+	}
+	for _, tc := range cases {
+		loop := &Loop{Reasoning: tc.spec, Run: &Run{Messages: tc.messages}}
+		loop.runaway.consecutiveExecFailures = tc.failures
+		if got := loop.effectiveReasoning(); got != tc.want {
+			t.Fatalf("%s: effectiveReasoning() = %+v, want %+v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestTurnContinuation(t *testing.T) {
+	user := domain.Message{Role: domain.RoleUser}
+	assistant := domain.Message{Role: domain.RoleAssistant}
+	// Tool results persist as assistant-role messages (RecordToolResult).
+	toolResult := domain.Message{Role: domain.RoleAssistant, Parts: []domain.ContentPart{{Kind: domain.PartToolResult}}}
+	cases := []struct {
+		name     string
+		messages []domain.Message
+		want     bool
+	}{
+		{"empty", nil, false},
+		{"user only", []domain.Message{user}, false},
+		{"user then assistant", []domain.Message{user, assistant}, true},
+		{"tool loop mid-flight", []domain.Message{user, assistant, toolResult}, true},
+		{"fresh user message after reply", []domain.Message{user, assistant, toolResult, user}, false},
+	}
+	for _, tc := range cases {
+		if got := turnContinuation(tc.messages); got != tc.want {
+			t.Fatalf("%s: turnContinuation = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestLoopAutoReasoningAllocatesPerPhase(t *testing.T) {
+	call := domain.ToolCall{ID: domain.NewToolCallID(), Name: "echo", Arguments: json.RawMessage(`{"text":"x"}`)}
+	model := &reasoningCaptureModel{inner: fakes.NewFakeModel(
+		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{call}, StopReason: domain.StopToolUse, UsageIn: 10, UsageOut: 5},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn, UsageIn: 10, UsageOut: 5},
+	)}
+	registry := NewToolRegistry()
+	if err := registry.Register(fakes.EchoTool()); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
+	run.AddUserMessage(domain.Message{
+		ID:        domain.NewMessageID(),
+		Role:      domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "work"}},
+		CreatedAt: time.Now(),
+	})
+	loop := &Loop{
+		Run: run, Model: model, Registry: registry, Logger: slog.Default(),
+		Approver:  fakes.NewFakeApprover(domain.DecisionAllow),
+		Reasoning: domain.ReasoningSpec{Effort: domain.ReasoningEffortAuto},
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(model.specs) != 2 {
+		t.Fatalf("model calls = %d, want 2", len(model.specs))
+	}
+	if model.specs[0].Effort != domain.ReasoningEffortHigh {
+		t.Fatalf("first call effort = %q, want high (auto plans at high)", model.specs[0].Effort)
+	}
+	if model.specs[1].Effort != domain.ReasoningEffortLow {
+		t.Fatalf("continuation effort = %q, want low (auto acts at low)", model.specs[1].Effort)
+	}
+}
+
+func TestLoopPinnedReasoningKeepsEffort(t *testing.T) {
+	call := domain.ToolCall{ID: domain.NewToolCallID(), Name: "echo", Arguments: json.RawMessage(`{"text":"x"}`)}
+	model := &reasoningCaptureModel{inner: fakes.NewFakeModel(
+		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{call}, StopReason: domain.StopToolUse, UsageIn: 10, UsageOut: 5},
+		fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn, UsageIn: 10, UsageOut: 5},
+	)}
+	registry := NewToolRegistry()
+	if err := registry.Register(fakes.EchoTool()); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	run := newTestRun(domain.Limits{MaxOutputTokens: 4096})
+	run.AddUserMessage(domain.Message{
+		ID:        domain.NewMessageID(),
+		Role:      domain.RoleUser,
+		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "work"}},
+		CreatedAt: time.Now(),
+	})
+	loop := &Loop{
+		Run: run, Model: model, Registry: registry, Logger: slog.Default(),
+		Approver:  fakes.NewFakeApprover(domain.DecisionAllow),
+		Reasoning: domain.ReasoningSpec{Effort: domain.ReasoningEffortHigh},
+	}
+	if err := loop.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(model.specs) != 2 {
+		t.Fatalf("model calls = %d, want 2", len(model.specs))
+	}
+	for i, spec := range model.specs {
+		if spec.Effort != domain.ReasoningEffortHigh {
+			t.Fatalf("call %d effort = %q, want high (pinned level)", i, spec.Effort)
+		}
 	}
 }
 

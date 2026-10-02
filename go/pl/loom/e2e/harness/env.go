@@ -162,6 +162,14 @@ func NewEnv(t *testing.T, opts ...Option) *Env {
 	if cfg.replayDir != "" {
 		env.installReplay(t, cfg.replayDir, scrubPaths)
 	}
+	// Anchor $HOME to an isolated temp dir before the stack boots: the
+	// cross-tool ~/.agents/skills discovery root (app.skillUserRoots) and
+	// any other os.UserHomeDir-based runtime lookup must not leak the
+	// developer machine's state into runs and goldens — a machine with
+	// ~/.agents/skills populated otherwise renders a skills catalog ref
+	// that a clean CI machine never produces (config loading above
+	// already resolved the real user config, so repointing is safe).
+	t.Setenv("HOME", t.TempDir())
 	env.StartStack(t)
 	return env
 }

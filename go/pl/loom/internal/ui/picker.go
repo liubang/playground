@@ -168,13 +168,15 @@ type ReasoningLevel struct {
 }
 
 // ReasoningLevels is the fixed dial catalog in display order: the config
-// fallback first, then the four override levels from least to most thinking.
+// fallback first, then the adaptive policy, then the four pinned levels
+// from least to most thinking.
 var ReasoningLevels = []ReasoningLevel{
 	{Arg: "default", Label: "default", Desc: "follow the model's configured reasoning"},
+	{Arg: "auto", Label: "auto", Desc: "plan at high, act at low; failure streaks escalate"},
 	{Arg: "off", Label: "off", Desc: "no thinking; fastest and cheapest"},
-	{Arg: "low", Label: "low", Desc: "light thinking (≈1/8 of the output budget on Anthropic)"},
-	{Arg: "medium", Label: "medium", Desc: "moderate thinking (≈1/3 of the output budget)"},
-	{Arg: "high", Label: "high", Desc: "deep thinking (≈2/3 of the output budget)"},
+	{Arg: "low", Label: "low", Desc: "pinned light thinking (≈1/8 of the output budget on Anthropic)"},
+	{Arg: "medium", Label: "medium", Desc: "pinned moderate thinking (≈1/3 of the output budget)"},
+	{Arg: "high", Label: "high", Desc: "pinned deep thinking (≈2/3 of the output budget)"},
 }
 
 // NewReasoningFinder creates the /reasoning picker with the cursor on the

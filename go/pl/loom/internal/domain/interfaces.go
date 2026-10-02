@@ -53,6 +53,30 @@ func ToolConcurrentSafe(t Tool) bool {
 	return ok && cs.ConcurrentSafe()
 }
 
+// CallConcurrentSafely is an optional opt-in interface for tools whose
+// concurrency eligibility is decided PER CALL at Prepare time rather
+// than per implementation (e.g. run_cmd: arbitrary shell commands are
+// serial by default, but a read_only-declared command that survived the
+// tool's static screen may run alongside other read-only calls). The
+// answer must be a pure function of the signed prepared call — never of
+// mutable tool state — because the batch segmenter and the executor
+// consult it independently.
+type CallConcurrentSafely interface {
+	CallConcurrentSafe(prepared PreparedCall) bool
+}
+
+// PreparedCallConcurrentSafe reports whether THIS prepared call may run
+// concurrently with other eligible calls in its batch: tool-level opt-in
+// wins, otherwise the tool's per-call verdict applies. Missing opt-in on
+// both levels means serial — the safe default.
+func PreparedCallConcurrentSafe(t Tool, prepared PreparedCall) bool {
+	if ToolConcurrentSafe(t) {
+		return true
+	}
+	cs, ok := t.(CallConcurrentSafely)
+	return ok && cs.CallConcurrentSafe(prepared)
+}
+
 // --- Model interface (§7) ---
 
 // ReasoningEffort expresses how much reasoning ("thinking") the model should
@@ -68,13 +92,20 @@ const (
 	ReasoningEffortLow    ReasoningEffort = "low"
 	ReasoningEffortMedium ReasoningEffort = "medium"
 	ReasoningEffortHigh   ReasoningEffort = "high"
+	// ReasoningEffortAuto delegates per-call effort allocation to the agent
+	// loop's phase-aware policy (planning calls run high, observe-act
+	// continuations low, tool-failure streaks escalate). It is resolved
+	// before the provider layer and must never appear on the wire; provider
+	// mappings treat unknown values as "no opinion" as a safety net.
+	ReasoningEffortAuto ReasoningEffort = "auto"
 )
 
 // ReasoningSpec is the vendor-neutral reasoning request carried by every
 // model call. Each provider maps it onto its own wire representation:
 // Anthropic derives thinking.budget_tokens from Effort (BudgetTokens wins
 // when explicit); OpenAI-compatible providers map Effort onto
-// reasoning_effort and ignore BudgetTokens.
+// reasoning_effort and ignore BudgetTokens. Effort "auto" is not a wire
+// value: the agent loop resolves it into a concrete level per call.
 type ReasoningSpec struct {
 	Effort       ReasoningEffort `json:"effort,omitempty"`
 	BudgetTokens int64           `json:"budget_tokens,omitempty"`

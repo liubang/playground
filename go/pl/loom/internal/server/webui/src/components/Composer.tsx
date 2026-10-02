@@ -45,6 +45,7 @@ interface Attachment {
 
 const REASONING_OPTIONS = [
   { value: 'default', label: 'Default (follow model)' },
+  { value: 'auto', label: 'Auto (plan high, act low)' },
   { value: 'off', label: 'Off' },
   { value: 'low', label: 'Low' },
   { value: 'medium', label: 'Medium' },

@@ -918,6 +918,11 @@ final class SessionStore {
         state = snap.state
         modelName = snap.modelName
         providerName = snap.providerName ?? ""
+        // The reasoning dial rides the snapshot (WebUI applySnapshotMeta): the
+        // server seeds every new session from the persisted process-level
+        // preference, so without this the composer capsule always fell back to
+        // the "default" label while the session actually ran the seeded dial.
+        reasoningEffort = snap.reasoningEffort.flatMap { $0.isEmpty ? nil : $0 } ?? "default"
         turnSummaries = snap.turnSummaries ?? []
         messages = snap.messages ?? []
         applyingSnapshot = false
@@ -1411,6 +1416,14 @@ final class SessionStore {
 
         case .planUpdated:
             setPlan(tryDecode(PlanPayload.self, from: event))
+
+        case .reasoningChanged:
+            // The dial moved in another attached client (/reasoning or a picker)
+            // — mirror it live (WebUI reasoning.changed); an empty effort
+            // renders as "default".
+            if let payload = tryDecode(ReasoningChangedPayload.self, from: event) {
+                reasoningEffort = payload.effective?.effort.flatMap { $0.isEmpty ? nil : $0 } ?? "default"
+            }
 
         case .steerQueued:
             if let payload = tryDecode(SteerQueuedPayload.self, from: event) {

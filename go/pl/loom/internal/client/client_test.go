@@ -35,6 +35,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/fakes"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
@@ -123,6 +124,44 @@ func TestClientTypesAreJSONSerializable(t *testing.T) {
 				t.Fatalf("roundtrip mismatch:\nfirst:  %s\nsecond: %s", data, again)
 			}
 		})
+	}
+}
+
+// TestInProcSetReasoningPersistsForNewSessions (regression): the in-process
+// client must route SetModel/SetReasoning through the SessionService like
+// the HTTP transport — the old direct-controller path silently skipped
+// persisting the process-level preference, so the next session fell back
+// to the configured default while the web frontends remembered the pick.
+func TestInProcSetReasoningPersistsForNewSessions(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	bootstrap, _ := testBootstrapForContract(t, fakes.NewFakeModel())
+	broker := runtimeevent.NewBroker(runtimeevent.WithDurableQueue(4096))
+	t.Cleanup(broker.Close)
+	svc := app.NewSingletonWorkspaceService(bootstrap, broker, app.SessionServiceConfig{})
+	t.Cleanup(func() { _ = svc.Shutdown(context.Background()) })
+
+	c := NewInProc(svc)
+	if err := c.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	if _, err := c.SetReasoning(ctx, "low"); err != nil {
+		t.Fatalf("SetReasoning(low): %v", err)
+	}
+
+	// A session created after the pick must inherit the persisted
+	// preference as its session-level override.
+	h2, err := svc.CreateSession(ctx, domain.WorkspaceID{})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	snap, err := svc.Snapshot(ctx, h2.ID)
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	if snap.ReasoningEffort != "low" || !snap.ReasoningOverridden {
+		t.Fatalf("new session reasoning = %q (overridden=%v), want the persisted low/override",
+			snap.ReasoningEffort, snap.ReasoningOverridden)
 	}
 }
 

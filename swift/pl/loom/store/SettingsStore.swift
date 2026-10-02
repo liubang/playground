@@ -173,7 +173,8 @@ final class SettingsStore {
         }
     }
 
-    private static func buildDraft(from config: [String: JSONValue]) -> SettingsDraft {
+    /// Internal (not private) so the convert tests can pin the card fill.
+    static func buildDraft(from config: [String: JSONValue]) -> SettingsDraft {
         var draft = SettingsDraft()
         for spec in globalFieldSpecs() {
             draft.globals[spec.key] = fillValue(spec, getPath(config, spec.key))
@@ -182,8 +183,11 @@ final class SettingsStore {
             draft.providers = providers.compactMap { value in
                 guard case let .object(p) = value else { return nil }
                 var fields: [String: ControlState] = [:]
+                // Dotted keys (reasoning.effort/...) must resolve through
+                // the nested object — a literal subscript never finds them
+                // and the next save would drop the configured values.
                 for spec in providerAllFields {
-                    fields[spec.key] = fillValue(spec, p[spec.key])
+                    fields[spec.key] = fillValue(spec, getPath(p, spec.key))
                 }
                 var models: [CardDraft] = []
                 if case let .array(items) = p["models"] {
@@ -191,7 +195,7 @@ final class SettingsStore {
                         guard case let .object(m) = item else { return nil }
                         var mf: [String: ControlState] = [:]
                         for spec in modelFields {
-                            mf[spec.key] = fillValue(spec, m[spec.key])
+                            mf[spec.key] = fillValue(spec, getPath(m, spec.key))
                         }
                         return CardDraft(fields: mf)
                     }

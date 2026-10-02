@@ -1595,3 +1595,179 @@ func TestRunCmdToolClassifySignalStillSuccess(t *testing.T) {
 		t.Fatal("expected signal information")
 	}
 }
+
+// The read_only screen: conservative by design, so the table pins both
+// directions — everyday query shapes must pass (parallelism would
+// otherwise never trigger in practice), anything remotely mutating must
+// fall back to serial.
+func TestClassifyReadOnlyCommand(t *testing.T) {
+	allowed := []string{
+		"pandora spark info application_123 --format json",
+		"pandora spark jobs application_123 --status failed --format json 2>&1 | head -40",
+		"pandora spark logs application_123 2>/dev/null | grep -iE 'OOM|Exception' | head -20",
+		"ls -la",
+		"cat foo.go | head -50",
+		"grep -rn pattern ./src 2>/dev/null",
+		"find . -name '*.go' | head",
+		"sed -n '1,60p' file.log",
+		"FOO=bar pandora spark env application_123",
+		"env FOO=bar pandora spark info application_123",
+		"echo done",
+		"wc -l tmp/a.log && head -5 tmp/a.log",
+		"gitless status 2>&1 >/dev/null",
+		"time pandora spark info application_123",
+	}
+	for _, cmd := range allowed {
+		if err := classifyReadOnlyCommand(cmd); err != nil {
+			t.Fatalf("classifyReadOnlyCommand(%q) = %v, want read-only", cmd, err)
+		}
+	}
+
+	denied := []string{
+		"rm -rf tmp/x",
+		"mkdir -p tmp && pandora spark env application_123 --all > tmp/env.txt",
+		"echo hi > out.txt",
+		"echo hi >> out.txt",
+		"pandora spark env x 2> err.log",
+		"echo $(date)",
+		"echo `date`",
+		"python3 -c 'import json'",
+		"python3 - <<'EOF'",
+		"sed -i 's/a/b/' file",
+		"sed -ni '1p' file",
+		"sed --in-place 's/a/b/' file",
+		"find . -delete",
+		"find . -exec rm {} ;",
+		"git status",
+		"curl -sI https://example.com",
+		"cat list | xargs rm",
+		"sh -c 'ls'",
+		"bash script.sh",
+		"kill -9 1234",
+		"sqlite3 db.sqlite 'select 1'",
+		"make build",
+		"sudo ls",
+		"eval 'ls'",
+		"cat <(ls)",
+		"tee out.txt",
+		"defaults read com.apple.x",
+	}
+	for _, cmd := range denied {
+		if err := classifyReadOnlyCommand(cmd); err == nil {
+			t.Fatalf("classifyReadOnlyCommand(%q) = nil, want rejection", cmd)
+		}
+	}
+}
+
+// read_only survives Prepare only for commands that pass the static
+// screen; anything mutating is silently downgraded to serial execution.
+func TestRunCmdPrepareScreensReadOnly(t *testing.T) {
+	validator, root := newValidator(t)
+	runner := newRunner(t, validator, process.RunnerOptions{
+		Sandbox:  process.ExplicitTestSandbox{},
+		LookPath: exec.LookPath,
+	})
+	tool := newTool(t, validator, runner)
+
+	prepare := func(t *testing.T, command string, readOnly bool) runCmdArgs {
+		t.Helper()
+		prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+			Command:    stringPtr(command),
+			WorkingDir: stringPtr(root),
+			ReadOnly:   boolPtr(readOnly),
+		}))
+		if err != nil {
+			t.Fatalf("Prepare(%q) error = %v", command, err)
+		}
+		var canonical runCmdArgs
+		if err := json.Unmarshal(prepared.Call.Arguments, &canonical); err != nil {
+			t.Fatalf("decode canonical arguments: %v", err)
+		}
+		return canonical
+	}
+
+	if got := prepare(t, "pandora spark info application_123 --format json", true); !got.ReadOnly {
+		t.Fatal("read_only query must keep ReadOnly after Prepare")
+	}
+	if got := prepare(t, "rm -rf tmp/x", true); got.ReadOnly {
+		t.Fatal("mutating command must lose ReadOnly after Prepare")
+	}
+	if got := prepare(t, "ls -la > out.txt", true); got.ReadOnly {
+		t.Fatal("redirecting command must lose ReadOnly after Prepare")
+	}
+	if got := prepare(t, "ls -la", false); got.ReadOnly {
+		t.Fatal("read_only=false must stay false")
+	}
+}
+
+// CallConcurrentSafe is true exactly for prepared calls whose read_only
+// declaration survived the screen — everything else stays serial.
+func TestRunCmdCallConcurrentSafe(t *testing.T) {
+	validator, root := newValidator(t)
+	runner := newRunner(t, validator, process.RunnerOptions{
+		Sandbox:  process.ExplicitTestSandbox{},
+		LookPath: exec.LookPath,
+	})
+	tool := newTool(t, validator, runner)
+
+	prepare := func(t *testing.T, command string, readOnly bool) domain.PreparedCall {
+		t.Helper()
+		prepared, err := tool.Prepare(context.Background(), newToolCall(t, rawRunCmdArgs{
+			Command:    stringPtr(command),
+			WorkingDir: stringPtr(root),
+			ReadOnly:   boolPtr(readOnly),
+		}))
+		if err != nil {
+			t.Fatalf("Prepare(%q) error = %v", command, err)
+		}
+		return prepared
+	}
+
+	if !tool.CallConcurrentSafe(prepare(t, "ls -la", true)) {
+		t.Fatal("screened read_only call must be concurrent-safe")
+	}
+	if tool.CallConcurrentSafe(prepare(t, "ls -la", false)) {
+		t.Fatal("plain call must stay serial")
+	}
+	if tool.CallConcurrentSafe(prepare(t, "rm -rf tmp/x", true)) {
+		t.Fatal("screened-out mutating call must stay serial")
+	}
+	if domain.ToolConcurrentSafe(tool) {
+		t.Fatal("run_cmd must NOT opt into tool-level concurrency")
+	}
+}
+
+// The inline output budget defaults: 8192 tokens (~32KB) — large outputs
+// belong in artifacts with targeted extraction, not in the model
+// context on every subsequent call.
+func TestRunCmdDefaultOutputBudget(t *testing.T) {
+	if defaultOutputTokens != 8192 {
+		t.Fatalf("defaultOutputTokens = %d, want 8192", defaultOutputTokens)
+	}
+	if defaultModelOutputBytes != 32*1024 {
+		t.Fatalf("defaultModelOutputBytes = %d, want 32768", defaultModelOutputBytes)
+	}
+	validator, _ := newValidator(t)
+	runner := newRunner(t, validator, process.RunnerOptions{Sandbox: process.ExplicitTestSandbox{}, LookPath: exec.LookPath})
+	if !strings.Contains(string(newTool(t, validator, runner).Definition().InputSchema), `"default":8192`) {
+		t.Fatal("schema must advertise 8192 as the max_output_tokens default")
+	}
+}
+
+// A truncated preview must point the model at the full-output artifact
+// with extraction guidance; no truncation means no note.
+func TestTruncationGuidanceNote(t *testing.T) {
+	if note := truncationGuidanceNote(false, false, "", ""); note != "" {
+		t.Fatalf("note = %q, want empty", note)
+	}
+	note := truncationGuidanceNote(true, false, "/tmp/artifacts/stdout", "")
+	if !strings.Contains(note, "/tmp/artifacts/stdout") || !strings.Contains(note, "grep") {
+		t.Fatalf("note must carry the artifact path and extraction guidance: %q", note)
+	}
+	if note := truncationGuidanceNote(true, false, "", ""); note != "" {
+		t.Fatalf("note without an artifact path = %q, want empty", note)
+	}
+	if note := truncationGuidanceNote(false, true, "", "/tmp/artifacts/stderr"); !strings.Contains(note, "/tmp/artifacts/stderr") {
+		t.Fatalf("stderr truncation must cite the stderr artifact: %q", note)
+	}
+}

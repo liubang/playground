@@ -84,6 +84,10 @@ func TestRequestHeaderLoggedOnceWithInitialReason(t *testing.T) {
 		Run: run, Model: model, Store: store,
 		Approver: fakes.NewFakeApprover(domain.DecisionAllow),
 		Registry: registry, Logger: slog.Default(),
+		// A pinned level keeps the header constant across the tool loop so
+		// this test isolates dedup; the auto policy's per-call re-resolution
+		// (which legitimately re-logs on change) is covered separately.
+		Reasoning: domain.ReasoningSpec{Effort: domain.ReasoningEffortLow},
 	}
 	if err := loop.Execute(context.Background()); err != nil {
 		t.Fatalf("Execute: %v", err)

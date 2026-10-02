@@ -50,11 +50,12 @@ export const SKILLS_EMPTY_HINT =
   '未发现任何 skill。目录约定：工作区 .loom/skills/、.agents/skills/，用户级 ~/.loom/skills/、~/.agents/skills/。'
 
 const EFFORT_OPTS: [string, string][] = [
-  ['', '默认（provider 决定）'],
+  ['', '默认（auto：规划 high / 执行 low）'],
+  ['auto', 'auto（规划 high / 执行 low，连败自动升级）'],
   ['off', 'off'],
-  ['low', 'low'],
-  ['medium', 'medium'],
-  ['high', 'high'],
+  ['low', 'low（固定）'],
+  ['medium', 'medium（固定）'],
+  ['high', 'high（固定）'],
 ]
 
 export const REASONING_FIELDS: FieldSpec[] = [

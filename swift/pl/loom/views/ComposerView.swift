@@ -548,6 +548,7 @@ private struct ReasoningOption {
 
     static let all = [
         ReasoningOption(value: "default", label: "Default (follow model)"),
+        ReasoningOption(value: "auto", label: "Auto (plan high, act low)"),
         ReasoningOption(value: "off", label: "Off"),
         ReasoningOption(value: "low", label: "Low"),
         ReasoningOption(value: "medium", label: "Medium"),

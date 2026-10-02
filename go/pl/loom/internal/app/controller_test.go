@@ -1249,6 +1249,31 @@ func TestControllerSetModelAppliesFromNextTurn(t *testing.T) {
 	}
 }
 
+// waitReasoningChanged drains the broker stream until the reasoning.changed
+// mirror arrives and asserts its payload (frontends apply it verbatim).
+func waitReasoningChanged(t *testing.T, events <-chan runtimeevent.RuntimeEvent, effort domain.ReasoningEffort, overridden bool) {
+	t.Helper()
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case evt := <-events:
+			if evt.Kind != runtimeevent.KindReasoningChanged {
+				continue
+			}
+			var payload runtimeevent.ReasoningChangedPayload
+			if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+				t.Fatalf("unmarshal reasoning.changed payload: %v", err)
+			}
+			if payload.Effective.Effort != effort || payload.Overridden != overridden {
+				t.Fatalf("reasoning.changed payload = %+v, want effort=%q overridden=%v", payload, effort, overridden)
+			}
+			return
+		case <-deadline:
+			t.Fatal("timed out waiting for reasoning.changed")
+		}
+	}
+}
+
 func TestControllerSetReasoning(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1278,18 +1303,26 @@ func TestControllerSetReasoning(t *testing.T) {
 		Store:   store,
 	}
 	proc.SwapResolved(resolved)
+	broker := runtimeevent.NewBroker()
+	events, unsubscribe := broker.Subscribe()
+	defer unsubscribe()
 	controller := NewController(ControllerConfig{
 		Bootstrap: &Bootstrap{
 			ProcessRuntime: proc,
 			Registry:       agent.NewToolRegistry(),
 			SteerCell:      agent.NewSteerCell(),
 		},
-		Broker:   runtimeevent.NewBroker(),
+		Broker:   broker,
 		Approver: NewChannelApprover(),
 		Clock:    domain.RealClock{},
 	})
 	go controller.Run(ctx)
 	defer controller.Shutdown(context.Background())
+	// The reasoning.changed mirror is a session-scoped event, so the
+	// controller needs a live session for the publish to validate.
+	if err := controller.NewSession(ctx); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
 
 	// Before any override the model's configured default is in effect.
 	snapshot, err := controller.RequestSnapshot(ctx)
@@ -1307,6 +1340,9 @@ func TestControllerSetReasoning(t *testing.T) {
 	if result.Effective.Effort != domain.ReasoningEffortHigh || !result.Overridden {
 		t.Fatalf("SetReasoning(high) = %+v, want high/override", result)
 	}
+	// The dial switch is mirrored live to every attached frontend, so a
+	// pick in one client shows up in the others without a snapshot.
+	waitReasoningChanged(t, events, domain.ReasoningEffortHigh, true)
 
 	// The override is per-task intent: a model switch must not clear it.
 	if _, err := controller.SetModel(ctx, "new-model"); err != nil {
@@ -1508,8 +1544,10 @@ func TestControllerSetReasoningAppliesFromNextTurn(t *testing.T) {
 	if len(calls) != 2 {
 		t.Fatalf("model calls = %d, want 2", len(calls))
 	}
-	if !calls[0].Reasoning.IsZero() {
-		t.Errorf("turn 1 reasoning = %+v, want zero (no override yet)", calls[0].Reasoning)
+	// No override: the model's unset effort falls to the auto policy,
+	// which plans the turn's first call at high.
+	if calls[0].Reasoning.Effort != domain.ReasoningEffortHigh {
+		t.Errorf("turn 1 reasoning = %+v, want high (auto policy, no override yet)", calls[0].Reasoning)
 	}
 	if calls[1].Reasoning.Effort != domain.ReasoningEffortLow {
 		t.Errorf("turn 2 reasoning = %+v, want low (override)", calls[1].Reasoning)

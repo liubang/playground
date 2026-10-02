@@ -408,6 +408,31 @@ final class SettingsConvertTests: XCTestCase {
         XCTAssertNotNil(invalidInput(floats, .text("0.6,,0.8")))
     }
 
+    // MARK: Card fill
+
+    func testBuildDraftResolvesDottedProviderAndModelKeys() async {
+        // reasoning.* is nested under the card object; filling with a
+        // literal subscript (p["reasoning.effort"]) never finds it and
+        // the next save would silently drop the configured values.
+        let provider: [String: JSONValue] = [
+            "name": .string("gw"),
+            "base_url": .string("https://example.com"),
+            "reasoning": .object(["effort": .string("high"), "budget_tokens": .int(8192)]),
+            "models": .array([.object([
+                "name": .string("m"),
+                "reasoning": .object(["effort": .string("low"), "budget_tokens": .int(4096)]),
+            ])]),
+        ]
+        let draft = await MainActor.run {
+            SettingsStore.buildDraft(from: ["providers": .array([.object(provider)])])
+        }
+        let card = draft.providers[0]
+        XCTAssertEqual(card.fields["reasoning.effort"], .text("high"))
+        XCTAssertEqual(card.fields["reasoning.budget_tokens"], .text("8192"))
+        XCTAssertEqual(card.models[0].fields["reasoning.effort"], .text("low"))
+        XCTAssertEqual(card.models[0].fields["reasoning.budget_tokens"], .text("4096"))
+    }
+
     // MARK: Round trip
 
     func testRoundTrip() {

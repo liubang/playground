@@ -72,10 +72,10 @@ type Snapshot struct {
 	// plus the per-request overhead captured at turn build), on the same
 	// scale as ContextUsagePayload.OccupancyTokens.
 	Occupancy int64 `json:"occupancy,omitempty"`
-	// ReasoningEffort is the effective reasoning dial ("off"/"low"/... or
-	// "budget:N"); empty means the provider decides. ReasoningOverridden
-	// marks that it comes from the session override rather than the model's
-	// configuration.
+	// ReasoningEffort is the effective reasoning dial ("auto"/"off"/
+	// "low"/... or "budget:N"); empty follows the model's configuration.
+	// ReasoningOverridden marks that it comes from the session override
+	// rather than the model's configuration.
 	ReasoningEffort     string           `json:"reasoning_effort,omitempty"`
 	ReasoningOverridden bool             `json:"reasoning_overridden,omitempty"`
 	WorkspaceRoot       string           `json:"workspace_root"`
@@ -677,10 +677,11 @@ type SetReasoningResult struct {
 }
 
 // SetReasoning sets or clears the session-scoped reasoning override. The
-// argument is one of "off", "low", "medium", "high" (set an override) or
-// "default" (clear it and fall back to the selected model's configured
-// reasoning). Like /model, the override is in-memory session state: it
-// applies from the next turn on and never touches the config file.
+// argument is one of "auto", "off", "low", "medium", "high" (set an
+// override) or "default" (clear it and fall back to the selected model's
+// configured reasoning). Like /model, the override is in-memory session
+// state: it applies from the next turn on and never touches the config
+// file.
 func (c *Controller) SetReasoning(ctx context.Context, arg string) (SetReasoningResult, error) {
 	resultCh := make(chan controllerResult, 1)
 	select {
@@ -1906,11 +1907,11 @@ func (c *Controller) handleSetReasoning(cmd controllerCommand) {
 	switch strings.TrimSpace(cmd.Reasoning) {
 	case "default":
 		// nil: clear the override, fall back to the model's configuration.
-	case "off", "low", "medium", "high":
+	case "auto", "off", "low", "medium", "high":
 		effort := domain.ReasoningEffort(strings.TrimSpace(cmd.Reasoning))
 		override = &domain.ReasoningSpec{Effort: effort}
 	default:
-		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("reasoning must be off, low, medium, high, or default, got %q", cmd.Reasoning)}
+		cmd.ResultCh <- controllerResult{Err: fmt.Errorf("reasoning must be auto, off, low, medium, high, or default, got %q", cmd.Reasoning)}
 		return
 	}
 	c.mu.Lock()
@@ -1919,6 +1920,12 @@ func (c *Controller) handleSetReasoning(cmd controllerCommand) {
 	effective, overridden := c.reasoningLocked(current)
 	c.mu.Unlock()
 	c.logger.Info("reasoning updated", "override", cmd.Reasoning, "effective", effective.Label())
+	// Mirror the new dial to every attached frontend, so a pick in one
+	// client shows up in the others without waiting for a snapshot.
+	c.publishEphemeral(c.sessionID, c.runID, c.turnCounter, runtimeevent.KindReasoningChanged, runtimeevent.ReasoningChangedPayload{
+		Effective:  effective,
+		Overridden: overridden,
+	})
 	cmd.ResultCh <- controllerResult{Value: SetReasoningResult{Effective: effective, Overridden: overridden}}
 }
 

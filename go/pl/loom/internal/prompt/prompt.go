@@ -366,7 +366,9 @@ func builtinSections() []promptSection {
 - Iterate in small steps: prefer minimal, verifiable changes; finish one step, verify it, then move on.
 - Close the verification loop: after changing code, verify with builds, tests, or static checks whenever possible; if you cannot verify, say so explicitly.
 - For complex tasks, plan first and keep the plan updated; when blocked or facing ambiguity, state your most reasonable inference or ask the user — do not stall.
-- Fire independent tool calls in parallel; run dependent ones strictly in order; after the same call fails twice, change strategy instead of retrying mechanically.
+- Batch independent tool calls in ONE reply: when several calls have no data dependency (multiple read-only queries, file reads, status checks), emit them all at once instead of one call per turn — every extra model round-trip costs seconds of wall time. Mark read-only run_cmd queries with read_only=true so they execute concurrently.
+- Run dependent calls strictly in order; after the same call fails twice, change strategy instead of retrying mechanically.
+- Keep command output small: filter at the source (head/tail/grep/--filter/--limit) so only the lines you need enter context; never pull full logs or large dumps into context, and never stage them into scratch files for re-reading — query precisely instead.
 - Narrate before acting: before a tool call, say in 1-2 short sentences what you are about to do (group related actions into one announcement; skip narration for trivial reads like a single file); during long tasks, report progress and the next step at reasonable intervals in one sentence.
 - After a successful edit/write, do not re-read the file to confirm — tool success means the change took effect; only handle errors.
 - When adding tests for your changes, follow the location and style of adjacent existing tests; do not introduce tests into codebases that have none.`,

@@ -110,6 +110,7 @@ func TestAllRuntimeEventKindsValidate(t *testing.T) {
 		KindApprovalRequested, KindApprovalResolved,
 		KindToolPrepared, KindToolStarted, KindToolCompleted, KindToolProgress,
 		KindBudgetUpdated, KindUsageUpdated,
+		KindReasoningChanged,
 		KindRunCancelRequested, KindRunCancelled, KindRunCompleted,
 		KindRuntimeWarning, KindRuntimeFatal,
 	}

@@ -596,6 +596,12 @@ struct Snapshot: Decodable, Sendable {
     let sessionId: String
     let modelName: String
     let providerName: String?
+    /// The session's reasoning dial (WebUI reasoning_effort / _overridden):
+    /// every new session starts from the persisted process-level preference,
+    /// so the composer capsule must read it here — otherwise it always falls
+    /// back to the "default" label while the session runs the seeded dial.
+    let reasoningEffort: String?
+    let reasoningOverridden: Bool?
     let contextWindow: Int?
     let window: ContextWindow?
     let occupancy: Int64?
@@ -628,6 +634,8 @@ struct Snapshot: Decodable, Sendable {
         case sessionId = "session_id"
         case modelName = "model_name"
         case providerName = "provider_name"
+        case reasoningEffort = "reasoning_effort"
+        case reasoningOverridden = "reasoning_overridden"
         case contextWindow = "context_window"
         case window, occupancy
         case workspaceRoot = "workspace_root"

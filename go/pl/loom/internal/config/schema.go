@@ -157,8 +157,11 @@ func (m Model) SupportsImages() bool {
 // vendor-neutral terms; each provider maps it onto its wire representation
 // (Anthropic thinking.budget_tokens, OpenAI reasoning_effort).
 type Reasoning struct {
-	// Effort is "off", "low", "medium", or "high"; empty means the
-	// provider decides.
+	// Effort is "auto", "off", "low", "medium", or "high"; empty means
+	// "auto". "auto" lets the agent loop allocate effort per call: the
+	// turn's first (planning) call runs high, observe-act continuations
+	// run low, and a tool-failure streak escalates back to high. The
+	// fixed levels pin every call to that effort.
 	Effort string `yaml:"effort,omitempty"`
 	// BudgetTokens is an explicit reasoning token budget; it wins over the
 	// effort-derived budget where the wire API supports one.

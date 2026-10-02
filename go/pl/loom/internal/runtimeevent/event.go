@@ -76,6 +76,8 @@ const (
 	KindContextCompacted RuntimeEventKind = "context.compacted"
 	// Plan events
 	KindPlanUpdated RuntimeEventKind = "plan.updated"
+	// Reasoning dial events (session-level /reasoning or frontend picks)
+	KindReasoningChanged RuntimeEventKind = "reasoning.changed"
 	// Steer events (user input submitted while a turn is busy)
 	KindSteerQueued   RuntimeEventKind = "steer.queued"
 	KindSteerInjected RuntimeEventKind = "steer.injected"
@@ -132,6 +134,7 @@ func (e RuntimeEvent) Validate() error {
 		KindQuestionAsked, KindQuestionAnswered,
 		KindToolPrepared, KindToolStarted, KindToolCompleted, KindToolProgress,
 		KindBudgetUpdated, KindUsageUpdated, KindBudgetNotice, KindContextCompacted, KindContextUsage, KindPlanUpdated,
+		KindReasoningChanged,
 		KindSteerQueued, KindSteerInjected,
 		KindSubagentStarted, KindSubagentProgress, KindSubagentFinished,
 		KindRunCancelRequested, KindRunCancelled, KindRunCompleted,
@@ -164,6 +167,14 @@ type TurnStartedPayload struct {
 	// channels can render the attachments with the user message in real time
 	// instead of waiting for a snapshot replay.
 	Images []domain.ArtifactRef `json:"images,omitempty"`
+}
+
+// ReasoningChangedPayload announces a session reasoning-dial switch:
+// the spec now in effect and whether it comes from the session override.
+// Frontends mirror it so several attached clients stay in sync.
+type ReasoningChangedPayload struct {
+	Effective  domain.ReasoningSpec `json:"effective"`
+	Overridden bool                 `json:"overridden"`
 }
 
 // RunPhasePayload describes a phase change.

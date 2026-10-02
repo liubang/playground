@@ -42,8 +42,13 @@ const (
 	minTimeoutMs                int64 = 1
 	maxTimeoutMs                int64 = 10 * 60 * 1000
 	maxOutputBytes              int64 = 1 << 20
-	defaultModelOutputBytes           = 64 * 1024
-	maxWritablePaths                  = 8
+	// The inline preview budget: large outputs belong in artifacts with
+	// targeted follow-up extraction, not in the model context — every
+	// inline KB is re-prefilled on every subsequent model call of the
+	// turn, and long command-and-observe sessions degrade quadratically
+	// as the context grows (sess_315c602765830a0f35dde0a8f75ea21d).
+	defaultModelOutputBytes = 32 * 1024
+	maxWritablePaths        = 8
 	// The model-facing budget unit is tokens (1 token ~ 4 bytes,
 	// toolkit.ApproxBytesPerToken); the canonical arguments carry
 	// tokens, the byte budget is derived at the execution boundary.
@@ -67,6 +72,12 @@ type rawRunCmdArgs struct {
 	NeedsGUIOpen       *bool     `json:"needs_gui_open"`
 	WritablePaths      *[]string `json:"writable_paths"`
 	Justification      *string   `json:"justification"`
+	// ReadOnly is the model's declaration that the command performs no
+	// writes or mutations, local or remote. It is an optimization hint
+	// for parallel batch execution: Prepare keeps it only when the
+	// static screen agrees, so a wrong guess degrades to serial
+	// execution, never to a failure.
+	ReadOnly *bool `json:"read_only"`
 }
 
 type runCmdArgs struct {
@@ -80,6 +91,9 @@ type runCmdArgs struct {
 	NeedsGUIOpen       bool              `json:"needs_gui_open,omitempty"`
 	WritablePaths      []string          `json:"writable_paths,omitempty"`
 	Justification      string            `json:"justification,omitempty"`
+	// ReadOnly survived Prepare's static read-only screen and is signed
+	// into the canonical arguments: CallConcurrentSafe keys off it.
+	ReadOnly bool `json:"read_only,omitempty"`
 }
 
 type runCmdOutput struct {
@@ -168,7 +182,7 @@ func NewRunCmdToolWithArtifacts(
 			"(each a lightweight, rememberable approval) — and reserve sandbox_permissions='require_escalated' " +
 			"(with a justification; runs OUTSIDE the sandbox with the full user environment) for failures none of them explain. " +
 			"Never hand a sandbox-blocked command to the user before offering the matching approval.",
-		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string","minLength":1,"maxLength":32768,"description":"The shell command, exactly as typed in a terminal."},"working_dir":{"type":"string","minLength":1,"maxLength":4096,"default":".","description":"Run directory, relative to the workspace root."},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192},"description":"Extra environment variables."},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000,"default":120000,"description":"Kill the command after this many milliseconds."},"max_output_tokens":{"type":"integer","minimum":1,"maximum":262144,"default":16384,"description":"Maximum stdout/stderr tokens returned inline (1 token is roughly 4 bytes)."},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"],"default":"use_default","description":"'require_escalated' runs OUTSIDE the sandbox after explicit approval; requires justification; never combine with the scoped flags."},"needs_network":{"type":"boolean","description":"Grant outbound network/DNS inside the sandbox after a lightweight approval (credentials stay unreadable)."},"needs_gui_open":{"type":"boolean","description":"Allow opening URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval."},"writable_paths":{"type":"array","maxItems":8,"items":{"type":"string","minLength":1,"maxLength":4096},"description":"Extra absolute directories ('~/' expands) writable inside the sandbox after a lightweight approval; only for write targets the command cannot state literally (shell variables, command substitution) that come back denied; never credential locations."},"justification":{"type":"string","minLength":1,"maxLength":240,"description":"Short note shown at approval time; required with require_escalated, informational otherwise."}},"required":["command"]}`),
+		InputSchema:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string","minLength":1,"maxLength":32768,"description":"The shell command, exactly as typed in a terminal."},"working_dir":{"type":"string","minLength":1,"maxLength":4096,"default":".","description":"Run directory, relative to the workspace root."},"env":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string","maxLength":8192},"description":"Extra environment variables."},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000,"default":120000,"description":"Kill the command after this many milliseconds."},"max_output_tokens":{"type":"integer","minimum":1,"maximum":262144,"default":8192,"description":"Maximum stdout/stderr tokens returned inline (1 token is roughly 4 bytes). Prefer source-side filtering (head/grep/--filter) over raising this: inline output re-enters the model context on every subsequent call."},"sandbox_permissions":{"type":"string","enum":["use_default","require_escalated"],"default":"use_default","description":"'require_escalated' runs OUTSIDE the sandbox after explicit approval; requires justification; never combine with the scoped flags."},"needs_network":{"type":"boolean","description":"Grant outbound network/DNS inside the sandbox after a lightweight approval (credentials stay unreadable)."},"needs_gui_open":{"type":"boolean","description":"Allow opening URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval."},"writable_paths":{"type":"array","maxItems":8,"items":{"type":"string","minLength":1,"maxLength":4096},"description":"Extra absolute directories ('~/' expands) writable inside the sandbox after a lightweight approval; only for write targets the command cannot state literally (shell variables, command substitution) that come back denied; never credential locations."},"justification":{"type":"string","minLength":1,"maxLength":240,"description":"Short note shown at approval time; required with require_escalated, informational otherwise."},"read_only":{"type":"boolean","description":"Declare the command performs NO writes or mutations, local or remote (queries/inspection only). Statically validated; passing calls may execute concurrently with other read-only calls. Set it on independent queries — never on commands with side effects."}},"required":["command"]}`),
 		Capabilities: []domain.Capability{domain.CapProcessExec},
 		Source:       domain.ToolSourceBuiltin,
 	}
@@ -189,6 +203,15 @@ func (t *RunCmdTool) Definition() domain.ToolDefinition {
 	return t.base.Def
 }
 
+// CallConcurrentSafe implements domain.CallConcurrentSafely: arbitrary
+// shell commands stay serial by default; only calls whose read_only
+// declaration survived Prepare's static screen (signed into the
+// canonical arguments) may run concurrently with other eligible calls.
+func (t *RunCmdTool) CallConcurrentSafe(prepared domain.PreparedCall) bool {
+	args, err := toolkit.DecodeStrict[runCmdArgs](prepared.Call.Arguments)
+	return err == nil && args.ReadOnly
+}
+
 func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {
 	rawArgs, err := toolkit.DecodeLenient[rawRunCmdArgs](call.Arguments)
 	if err != nil {
@@ -198,6 +221,12 @@ func (t *RunCmdTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
+	// read_only is a model-declared optimization hint: it survives into
+	// the signed arguments only when the call provably performs no
+	// mutation (static command screen, default sandbox, no write-side
+	// grants). Anything doubtful silently falls back to serial execution
+	// — parallelism is an optimization, never a requirement.
+	args.ReadOnly = args.ReadOnly && readOnlyEligible(args)
 	canonical, err := json.Marshal(args)
 	if err != nil {
 		return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, "failed to encode canonical arguments", domain.WithCause(err))
@@ -339,6 +368,8 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 			domain.WithCause(err),
 		))
 	}
+	stdoutPath := artifactPathFor(t.artifacts, stdoutRef)
+	stderrPath := artifactPathFor(t.artifacts, stderrRef)
 	payload := runCmdOutput{
 		Stdout:                  toolkit.SanitizeUTF8(runnerResult.Stdout),
 		Stderr:                  toolkit.SanitizeUTF8(runnerResult.Stderr),
@@ -350,8 +381,8 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 		StderrArtifactTruncated: stageTruncated(stderrStage),
 		StdoutArtifact:          stdoutRef,
 		StderrArtifact:          stderrRef,
-		StdoutArtifactPath:      artifactPathFor(t.artifacts, stdoutRef),
-		StderrArtifactPath:      artifactPathFor(t.artifacts, stderrRef),
+		StdoutArtifactPath:      stdoutPath,
+		StderrArtifactPath:      stderrPath,
 		ExitCode:                runnerResult.ExitCode,
 		Signal:                  runnerResult.Signal,
 		DurationMs:              durationMilliseconds(runnerResult.Duration),
@@ -362,6 +393,11 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 		ExecutablePath:          runnerResult.ExecutablePath,
 		Hash:                    runnerResult.ExecutableHash,
 		Note: combineNotes(
+			truncationGuidanceNote(
+				runnerResult.StdoutTruncated || stageTruncated(stdoutStage),
+				runnerResult.StderrTruncated || stageTruncated(stderrStage),
+				stdoutPath, stderrPath,
+			),
 			escalationDowngradeNote(args.SandboxPermissions == toolkit.SandboxRequireEscalated, prepared.Grant.Unsandboxed),
 			commandNotFoundNote(
 				string(runnerResult.Stderr),
@@ -393,7 +429,7 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 // run_cmd calls terse (only 'command' is required).
 const (
 	defaultTimeoutMs      int64 = 120000
-	defaultMaxOutputBytes int64 = 64 << 10
+	defaultMaxOutputBytes int64 = 32 << 10
 )
 
 func validateArgs(
@@ -423,6 +459,9 @@ func validateArgs(
 	}
 	if raw.WritablePaths != nil {
 		args.WritablePaths = append([]string(nil), (*raw.WritablePaths)...)
+	}
+	if raw.ReadOnly != nil {
+		args.ReadOnly = *raw.ReadOnly
 	}
 	args.Justification = toolkit.NormalizeJustification(raw.Justification)
 	if raw.Env != nil {
@@ -578,6 +617,28 @@ func droppedEnvNote(dropped []string) string {
 		return ""
 	}
 	return fmt.Sprintf("env keys dropped by the sandbox allowlist: %s", strings.Join(dropped, ", "))
+}
+
+// truncationGuidanceNote steers follow-ups toward targeted extraction
+// when the inline preview was cut: the full stream already sits in a
+// readable artifact file, so the next step should grep/sed/head that
+// file (or re-run with tighter source-side filters) instead of pulling
+// the whole output into context — observed sessions otherwise re-issue
+// the same unfiltered command or stage scratch files to re-read
+// (sess_315c602765830a0f35dde0a8f75ea21d).
+func truncationGuidanceNote(stdoutTrunc, stderrTrunc bool, stdoutPath, stderrPath string) string {
+	var path string
+	switch {
+	case stdoutTrunc && stdoutPath != "":
+		path = stdoutPath
+	case stderrTrunc && stderrPath != "":
+		path = stderrPath
+	}
+	if path == "" {
+		return ""
+	}
+	return "output was truncated in this preview; the full stream is readable at " + path +
+		" — extract exactly what you need with grep/sed/head on that file instead of re-running the command without filters"
 }
 
 // escalationDowngradeNote tells the model when a require_escalated call
@@ -1089,4 +1150,198 @@ func truncateWithMarker(value string, maxBytes int) string {
 		trimmed = trimmed[:len(trimmed)-1]
 	}
 	return trimmed + marker
+}
+
+// --- read_only screening -------------------------------------------------
+//
+// read_only is a model-declared hint that unlocks concurrent execution of
+// independent shell queries (docs: the agent loop runs consecutive
+// concurrent-safe calls in parallel). The screen below is CONSERVATIVE BY
+// DESIGN: a false negative only costs parallelism (the call executes
+// serially, exactly as before), while a false positive would run a
+// mutating command alongside others. When in doubt, reject.
+
+// readOnlyEligible reports whether a read_only-declared call may run
+// concurrently: it must stay inside the default sandbox with no
+// write-side grants and pass the static command screen.
+func readOnlyEligible(args runCmdArgs) bool {
+	if args.SandboxPermissions != toolkit.SandboxUseDefault {
+		return false
+	}
+	if len(args.WritablePaths) > 0 || args.NeedsGUIOpen {
+		return false
+	}
+	return classifyReadOnlyCommand(args.Command) == nil
+}
+
+// readOnlyBenignRedirects are redirection forms that write nothing: fd
+// plumbing (2>&1, >&2, 2>&-) and /dev/null sinks. They are stripped
+// before the output-redirection scan. Order matters — longer, more
+// specific forms come first (strings.NewReplacer prefers the first
+// pattern matching at each position).
+var readOnlyBenignRedirects = strings.NewReplacer(
+	"2>/dev/null", " ",
+	"&>/dev/null", " ",
+	"2>>/dev/null", " ",
+	"&>>/dev/null", " ",
+	">>/dev/null", " ",
+	">/dev/null", " ",
+	"2> /dev/null", " ",
+	"&> /dev/null", " ",
+	"2>> /dev/null", " ",
+	"&>> /dev/null", " ",
+	">> /dev/null", " ",
+	"> /dev/null", " ",
+	"2>&1", " ",
+	"1>&2", " ",
+	"2>&-", " ",
+	"1>&-", " ",
+	">&2", " ",
+	">&1", " ",
+	">&-", " ",
+)
+
+// readOnlyDenyPrograms names programs that can never run as read_only,
+// keyed by basename: anything that mutates local or remote state — or
+// interprets arbitrary code that might. A missing entry costs only
+// parallelism, so the list errs on the side of serial execution.
+var readOnlyDenyPrograms = map[string]string{
+	"rm": "deletes files", "rmdir": "deletes directories", "mv": "moves files", "cp": "copies files",
+	"mkdir": "creates directories", "mktemp": "creates files", "touch": "writes files",
+	"tee": "writes files", "dd": "writes files", "install": "writes files", "truncate": "writes files",
+	"shred": "deletes files", "patch": "modifies files", "chmod": "changes permissions",
+	"chown": "changes ownership", "chgrp": "changes ownership", "ln": "creates links", "xattr": "writes file attributes",
+	"kill": "signals processes", "pkill": "signals processes", "killall": "signals processes",
+	"sudo": "privilege escalation", "su": "privilege escalation",
+	"open": "launches applications", "osascript": "drives applications", "defaults": "writes preferences",
+	"launchctl": "manages services", "brew": "mutates packages",
+	"git": "may write the repository (index refresh, refs, config)",
+	"npm": "mutates packages", "pnpm": "mutates packages", "yarn": "mutates packages", "bun": "mutates packages",
+	"pip": "mutates packages", "pip3": "mutates packages", "gem": "mutates packages", "cargo": "mutates packages",
+	"sh": "interprets arbitrary code", "bash": "interprets arbitrary code", "zsh": "interprets arbitrary code",
+	"dash": "interprets arbitrary code", "ksh": "interprets arbitrary code", "source": "interprets arbitrary code",
+	".": "interprets arbitrary code", "eval": "interprets arbitrary code",
+	"python": "interprets arbitrary code", "python3": "interprets arbitrary code", "perl": "interprets arbitrary code",
+	"ruby": "interprets arbitrary code", "node": "interprets arbitrary code", "deno": "interprets arbitrary code",
+	"php": "interprets arbitrary code", "lua": "interprets arbitrary code", "expect": "interprets arbitrary code",
+	"curl": "may mutate remote state or write files", "wget": "may mutate remote state or write files",
+	"ssh": "remote side effects", "scp": "remote side effects", "rsync": "remote side effects",
+	"docker": "daemon side effects", "kubectl": "cluster side effects", "helm": "cluster side effects",
+	"make": "build side effects", "cmake": "build side effects", "ninja": "build side effects",
+	"bazel": "build side effects", "mvn": "build side effects", "gradle": "build side effects",
+	"sqlite3": "may write the database",
+	"xargs":   "runs arbitrary commands from stdin",
+}
+
+// readOnlyWrapperPrograms are pass-through wrappers: the screened program
+// is the wrapped command, not the wrapper itself.
+var readOnlyWrapperPrograms = map[string]bool{
+	"env": true, "command": true, "builtin": true, "nice": true, "time": true, "timeout": true,
+}
+
+// classifyReadOnlyCommand conservatively screens a shell command for
+// read-only execution, returning a rejection reason or nil. It rejects:
+//   - command substitution $(...) and backticks (arbitrary nested commands)
+//   - process substitution <(...) (arbitrary nested commands)
+//   - heredocs (arbitrary script bodies)
+//   - output redirections other than fd plumbing and /dev/null sinks
+//   - any pipeline segment whose program (or its dangerous flags) mutates
+//     local or remote state
+//
+// Quoting is intentionally not parsed: a '>' or a denied word inside
+// quotes simply rejects the command — a false negative costs only
+// parallelism.
+func classifyReadOnlyCommand(command string) error {
+	if strings.Contains(command, "$(") || strings.ContainsRune(command, '`') {
+		return errors.New("command substitution may embed mutating commands")
+	}
+	if strings.Contains(command, "<(") {
+		return errors.New("process substitution may embed mutating commands")
+	}
+	if strings.Contains(command, "<<") {
+		return errors.New("heredocs may feed arbitrary script bodies")
+	}
+	probe := readOnlyBenignRedirects.Replace(command)
+	if strings.ContainsRune(probe, '>') {
+		return errors.New("output redirection writes to a file")
+	}
+	for _, segment := range strings.FieldsFunc(probe, func(r rune) bool {
+		return r == '|' || r == ';' || r == '&' || r == '\n'
+	}) {
+		program, flags := readOnlySegmentProgram(segment)
+		if program == "" {
+			continue
+		}
+		if reason := readOnlyDenyProgram(program, flags); reason != "" {
+			return fmt.Errorf("%s: %s", program, reason)
+		}
+	}
+	return nil
+}
+
+// readOnlySegmentProgram extracts the screened program (basename) and its
+// remaining tokens from one pipeline segment, skipping leading VAR=value
+// assignments and pass-through wrappers (env, nice, time, ...).
+func readOnlySegmentProgram(segment string) (program string, flags []string) {
+	fields := strings.Fields(segment)
+	for i := 0; i < len(fields); i++ {
+		tok := fields[i]
+		if isEnvAssignment(tok) {
+			continue
+		}
+		base := tok
+		if j := strings.LastIndexByte(base, '/'); j >= 0 {
+			base = base[j+1:]
+		}
+		if readOnlyWrapperPrograms[base] {
+			continue
+		}
+		return base, fields[i+1:]
+	}
+	return "", nil
+}
+
+// readOnlyDenyProgram returns the rejection reason for a screened
+// program, "" when the program (with these flags) is acceptable. sed and
+// find are flag-sensitive: read-only in their common forms, mutating
+// with in-place/exec flags.
+func readOnlyDenyProgram(program string, flags []string) string {
+	switch program {
+	case "sed":
+		for _, f := range flags {
+			if f == "--in-place" || strings.HasPrefix(f, "--in-place=") ||
+				(strings.HasPrefix(f, "-") && !strings.HasPrefix(f, "--") && strings.ContainsRune(f[1:], 'i')) {
+				return "sed -i modifies files in place"
+			}
+		}
+		return ""
+	case "find":
+		for _, f := range flags {
+			switch f {
+			case "-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprintf", "-fls":
+				return "find " + f + " has side effects"
+			}
+		}
+		return ""
+	}
+	return readOnlyDenyPrograms[program]
+}
+
+// isEnvAssignment reports whether tok looks like a leading VAR=value
+// shell assignment.
+func isEnvAssignment(tok string) bool {
+	i := strings.IndexByte(tok, '=')
+	if i <= 0 {
+		return false
+	}
+	for j := 0; j < i; j++ {
+		c := tok[j]
+		switch {
+		case c == '_', 'a' <= c && c <= 'z', 'A' <= c && c <= 'Z':
+		case '0' <= c && c <= '9' && j > 0:
+		default:
+			return false
+		}
+	}
+	return true
 }

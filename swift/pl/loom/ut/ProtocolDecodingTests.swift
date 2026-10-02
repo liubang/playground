@@ -213,6 +213,37 @@ final class ProtocolDecodingTests: XCTestCase {
         XCTAssertEqual(text, "hi")
     }
 
+    func testSnapshotReasoningDial() throws {
+        // The server seeds every new session's dial from the persisted
+        // process-level preference; the composer capsule reads it from here.
+        let snapshot = try decode(Snapshot.self, """
+        {
+        "state": "idle", "session_id": "sess_abc",
+        "model_name": "claude-opus", "provider_name": "anthropic",
+        "reasoning_effort": "auto", "reasoning_overridden": true,
+        "turn_count": 0, "event_seq": 0
+        }
+        """)
+        XCTAssertEqual(snapshot.reasoningEffort, "auto")
+        XCTAssertEqual(snapshot.reasoningOverridden, true)
+    }
+
+    func testReasoningChangedPayload() throws {
+        // Mirrors runtimeevent.ReasoningChangedPayload (effective/overridden),
+        // consumed by SessionStore to sync the dial across attached clients.
+        let payload = try decode(ReasoningChangedPayload.self, """
+        {"effective": {"effort": "high", "budget_tokens": 0}, "overridden": true}
+        """)
+        XCTAssertEqual(payload.effective?.effort, "high")
+        XCTAssertEqual(payload.overridden, true)
+        // An empty effective (dial cleared to the model default) decodes too.
+        let cleared = try decode(ReasoningChangedPayload.self, """
+        {"effective": {}, "overridden": false}
+        """)
+        XCTAssertNil(cleared.effective?.effort)
+        XCTAssertEqual(cleared.overridden, false)
+    }
+
     func testSnapshotCursorAfterTerminalEventAndRejectedReplay() {
         // The server can project idle before publishing turn.finished (seq 42),
         // so a subsequent snapshot with watermark 41 must not replay it.

@@ -1210,9 +1210,9 @@ func resolveAuthType(ctx, pType, raw string) error {
 // resolveReasoning validates a reasoning section (provider or model level).
 func resolveReasoning(ctx string, r Reasoning) error {
 	switch strings.TrimSpace(r.Effort) {
-	case "", "off", "low", "medium", "high":
+	case "", "auto", "off", "low", "medium", "high":
 	default:
-		return fmt.Errorf("config: %s: reasoning.effort must be \"off\", \"low\", \"medium\", or \"high\", got %q", ctx, r.Effort)
+		return fmt.Errorf("config: %s: reasoning.effort must be \"auto\", \"off\", \"low\", \"medium\", or \"high\", got %q", ctx, r.Effort)
 	}
 	if r.BudgetTokens < 0 {
 		return fmt.Errorf("config: %s: reasoning.budget_tokens must be >= 0", ctx)

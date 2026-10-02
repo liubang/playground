@@ -1647,7 +1647,7 @@ func (m Model) handleSlashCommand(cmd string) (tea.Model, tea.Cmd) {
 		return m, m.setModelCmd(fields[1], cmd)
 	case "/reasoning":
 		if len(fields) > 2 {
-			m.setStatus("Usage: /reasoning [off|low|medium|high|default]", true)
+			m.setStatus("Usage: /reasoning [auto|off|low|medium|high|default]", true)
 			return m, nil
 		}
 		if len(fields) == 1 {

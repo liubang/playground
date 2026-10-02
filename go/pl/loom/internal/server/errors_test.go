@@ -67,7 +67,7 @@ func TestMapErrorSessionArchived(t *testing.T) {
 // invalid-input producers still map to 400 via the narrowed phrase set.
 func TestMapErrorInvalidInputFallbackPhrases(t *testing.T) {
 	for _, msg := range []string{
-		`reasoning must be off, low, medium, high, or default, got "x"`,
+		`reasoning must be auto, off, low, medium, high, or default, got "x"`,
 		`unknown model "gpt-9" (have: test/model-a)`,
 		"invalid artifact reference: bad digest",
 	} {

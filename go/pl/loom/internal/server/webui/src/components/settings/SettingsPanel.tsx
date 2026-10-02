@@ -153,15 +153,18 @@ export function SettingsPanel({ controller }: { controller: AppController }) {
     const providers: ProviderDraft[] = ((config.providers as Record<string, unknown>[]) || []).map(
       (p) => {
         const fields: Record<string, ControlState> = {}
+        // Dotted keys (reasoning.effort/...) must resolve through the nested
+        // object — a literal subscript never finds them and the next save
+        // would drop the configured values.
         for (const spec of [...PROVIDER_BASE_FIELDS, ...PROVIDER_ADV_FIELDS, { key: 'name' }]) {
-          fields[spec.key] = fillValue(spec, p[spec.key])
+          fields[spec.key] = fillValue(spec, getPath(p, spec.key))
         }
         return {
           id: draftId(),
           fields,
           models: ((p.models as Record<string, unknown>[]) || []).map((m) => {
             const mf: Record<string, ControlState> = {}
-            for (const spec of MODEL_FIELDS) mf[spec.key] = fillValue(spec, m[spec.key])
+            for (const spec of MODEL_FIELDS) mf[spec.key] = fillValue(spec, getPath(m, spec.key))
             return { id: draftId(), fields: mf }
           }),
         }

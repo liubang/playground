@@ -1221,7 +1221,8 @@ type Loop struct {
 	// domain.DefaultRunawayConfig.
 	Runaway domain.RunawayConfig
 	// Reasoning carries the selected model's reasoning (thinking) intent
-	// into every model call; the zero value lets the provider decide.
+	// into the loop; effectiveReasoning resolves it per model call (fixed
+	// levels pin every call; "auto" runs the phase-aware policy).
 	Reasoning domain.ReasoningSpec
 	// SupportsImages reports whether the active model accepts image input
 	// (config Model.modalities). When false, image references in history
@@ -1686,11 +1687,59 @@ func scrubMalformedArgumentsWire(messages []domain.Message) []domain.Message {
 	return out
 }
 
+// autoEscalateFailures is the consecutive tool-execution failure streak
+// at which the auto reasoning policy escalates the next call back to
+// the planning effort: mechanical low-effort retries are not working,
+// so the model gets to think deeply well before the runaway failure
+// threshold (default 5) terminates the run.
+const autoEscalateFailures = 2
+
+// effectiveReasoning resolves the reasoning spec for THIS model call.
+// Fixed levels (off/low/medium/high) are pins — every call runs at the
+// configured effort. Auto (empty or "auto") is a phase-aware allocation
+// policy: the turn's first call plans at high; observe-act continuations
+// run at low — long command-and-observe sessions otherwise burn most of
+// their wall time on repetitive per-call reasoning
+// (sess_315c602765830a0f35dde0a8f75ea21d: 65% of output tokens were
+// reasoning) — and a tool-failure streak escalates back to high, since
+// surprise is exactly where deep thinking earns its keep. An explicit
+// token budget always passes through untouched (on Anthropic it wins
+// over effort anyway).
+func (l *Loop) effectiveReasoning() domain.ReasoningSpec {
+	spec := l.Reasoning
+	switch spec.Effort {
+	case "", domain.ReasoningEffortAuto:
+		effort := domain.ReasoningEffortLow
+		if !turnContinuation(l.Run.Messages) || l.runaway.consecutiveExecFailures >= autoEscalateFailures {
+			effort = domain.ReasoningEffortHigh
+		}
+		return domain.ReasoningSpec{Effort: effort, BudgetTokens: spec.BudgetTokens}
+	default:
+		return spec
+	}
+}
+
+// turnContinuation reports whether the upcoming model call continues an
+// in-flight tool loop: an assistant reply already follows the most
+// recent user message.
+func turnContinuation(messages []domain.Message) bool {
+	for i := len(messages) - 1; i >= 0; i-- {
+		switch messages[i].Role {
+		case domain.RoleUser:
+			return false
+		case domain.RoleAssistant:
+			return true
+		}
+	}
+	return false
+}
+
 func (l *Loop) callModel(ctx context.Context) error {
 	modelName := l.ModelName
 	if modelName == "" {
 		modelName = "default"
 	}
+	reasoning := l.effectiveReasoning()
 	messages, rules, systemText := l.effectiveMessages(ctx)
 	manifest, err := buildContextManifest(messages, rules)
 	if err != nil {
@@ -1709,7 +1758,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 		Messages:        wireMessages,
 		Tools:           l.wireTools(),
 		MaxTokens:       l.Run.Limits.MaxOutputTokens,
-		Reasoning:       l.Reasoning,
+		Reasoning:       reasoning,
 		ContextManifest: manifest,
 	}
 
@@ -1719,7 +1768,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 	// answers "what exactly did the model see on call N".
 	headerHash := l.logRequestHeader(domain.RequestHeader{
 		ModelName:   modelName,
-		Reasoning:   l.Reasoning,
+		Reasoning:   reasoning,
 		MaxTokens:   l.Run.Limits.MaxOutputTokens,
 		Temperature: req.Temperature,
 		System:      systemText,
@@ -2648,12 +2697,13 @@ func (l *Loop) executeTools(ctx context.Context) error {
 }
 
 // segmentBatch splits the batch into maximal runs of consecutive
-// concurrent-safe calls. Singletons and unsafe runs execute serially.
+// concurrent-safe calls (tool-level or per-call opt-in). Singletons and
+// unsafe runs execute serially.
 func segmentBatch(batch []preparedExec) [][]preparedExec {
 	var segments [][]preparedExec
 	for _, item := range batch {
-		if domain.ToolConcurrentSafe(item.tool) && len(segments) > 0 {
-			if last := segments[len(segments)-1]; domain.ToolConcurrentSafe(last[0].tool) {
+		if domain.PreparedCallConcurrentSafe(item.tool, item.prepared) && len(segments) > 0 {
+			if last := segments[len(segments)-1]; domain.PreparedCallConcurrentSafe(last[0].tool, last[0].prepared) {
 				segments[len(segments)-1] = append(last, item)
 				continue
 			}

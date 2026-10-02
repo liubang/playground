@@ -116,7 +116,7 @@ providers:
     #   stream_idle_timeout: 120s      # 流中沉默上限，任何字节重置（默认 120s）
     #   attempt_timeout: 0             # 单次尝试总时长上限（默认关闭）
     # reasoning:                # provider 级推理意图（可被模型覆盖）
-    #   effort: medium          # off | low | medium | high
+    #   effort: auto            # auto（默认：规划轮 high / 执行轮 low，连败自动升级）| off | low | medium | high（固定档位）
     #   budget_tokens: 0        # 显式推理预算，>0 优先于 effort
     models:
       - name: deepseek-chat

@@ -188,12 +188,17 @@ func (c *inprocClient) SubscribeEvents(ctx context.Context, afterSeq uint64) (<-
 	return ch, err
 }
 
+// SetModel/SetReasoning go through the SessionService like every other
+// mutating operation: the service persists the choice as the
+// process-level preference for future sessions — bypassing it (calling
+// the controller directly) silently made TUI switches non-persistent
+// while the HTTP frontends persisted.
 func (c *inprocClient) SetModel(ctx context.Context, ref string) (SetModelResult, error) {
 	h, err := c.bound()
 	if err != nil {
 		return SetModelResult{}, err
 	}
-	return h.Controller.SetModel(ctx, ref)
+	return c.service.SetModel(ctx, h.ID, ref)
 }
 
 func (c *inprocClient) SetReasoning(ctx context.Context, arg string) (SetReasoningResult, error) {
@@ -201,7 +206,7 @@ func (c *inprocClient) SetReasoning(ctx context.Context, arg string) (SetReasoni
 	if err != nil {
 		return SetReasoningResult{}, err
 	}
-	return h.Controller.SetReasoning(ctx, arg)
+	return c.service.SetReasoning(ctx, h.ID, arg)
 }
 
 func (c *inprocClient) RequestCompaction(ctx context.Context) (RequestCompactionResult, error) {

@@ -429,7 +429,10 @@ func (t *DelegateTaskTool) executeSync(ctx context.Context, prepared domain.Prep
 		Workspace:    t.f.Workspace,
 		Window:       snap.Window,
 		Runaway:      t.f.Runaway,
-		Reasoning:    snap.Reasoning,
+		// Reasoning "auto" is exactly right for the child: it plans its
+		// approach, then runs its command-and-observe cycles at low
+		// effort like the parent loop.
+		Reasoning: snap.Reasoning,
 		// No GoalCell/PlanCell/SteerCell: the child is single-purpose —
 		// it answers the task and stops.
 		CostInputUSDPerMTok:  t.f.CostInputUSDPerMTok,
