@@ -120,7 +120,10 @@ func runAgent(ctx context.Context, userPrompt string, resumeSessionID *domain.Se
 		Window:  agent.NewWindowModel(meta.ContextWindow, resolved.Limits.MaxInputTokens, contextCfg),
 		Runaway: resolved.Runaway, Reasoning: meta.Reasoning.DomainSpec(),
 		GoalCell: bootstrap.GoalCell, PlanCell: bootstrap.PlanCell,
-		CostInputUSDPerMTok: resolved.Tracing.CostInputPerMTok, CostOutputUSDPerMTok: resolved.Tracing.CostOutputPerMTok,
+		CostInputUSDPerMTok:      resolved.Tracing.CostInputPerMTok,
+		CostOutputUSDPerMTok:     resolved.Tracing.CostOutputPerMTok,
+		CostCacheReadUSDPerMTok:  resolved.Tracing.CostCacheReadPerMTok,
+		CostCacheWriteUSDPerMTok: resolved.Tracing.CostCacheWritePerMTok,
 	}
 	fmt.Fprintf(os.Stderr, "loom: session %s\n", run.SessionID)
 	executeErr := loop.Execute(ctx)

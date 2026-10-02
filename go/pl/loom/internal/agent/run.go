@@ -1241,9 +1241,13 @@ type Loop struct {
 	SteerCell *SteerCell
 	// CostInputUSDPerMTok / CostOutputUSDPerMTok price metered token usage
 	// into Usage.CostUSD so the max_estimated_cost_usd budget dimension can
-	// fire. Zero disables cost accounting.
-	CostInputUSDPerMTok  float64
-	CostOutputUSDPerMTok float64
+	// fire. Zero disables cost accounting. CostCacheReadUSDPerMTok /
+	// CostCacheWriteUSDPerMTok price the prompt-cache split; zero derives
+	// the provider-family default (domain.CallCostUSD).
+	CostInputUSDPerMTok      float64
+	CostOutputUSDPerMTok     float64
+	CostCacheReadUSDPerMTok  float64
+	CostCacheWriteUSDPerMTok float64
 	// ParentToolCallID is the delegating delegate_task call for a
 	// sub-agent loop, zero for the root loop. Execute publishes it (with
 	// the session ID) onto the model-call context so the record/replay
@@ -1278,6 +1282,13 @@ type Loop struct {
 	// owned by the loop goroutine like every other field below.
 	notices noticeCenter
 	runaway runawayDetector
+	// externalFolded is the fold ledger backing idempotent external
+	// usage accounting (foldExternalUsage): the cumulative totals
+	// already folded per child session. Lazily rebuilt from the
+	// transcript on first use so idempotency survives prompt
+	// boundaries and process restarts (tool-result metadata persists
+	// with the messages; compaction pruning is the residual gap).
+	externalFolded map[string]externalFoldTotals
 	// Request-header bookkeeping (docs/SURFACE_DESIGN.md §4.8):
 	// sessionFreshAtStart is captured at Execute entry (before the initial
 	// flush) and distinguishes the 'initial' header reason from 'resume';
@@ -1435,6 +1446,14 @@ func runSuccessScore(ctx context.Context, execErr error, outcome domain.Outcome)
 
 // Execute runs the agent loop to completion (or until cancelled).
 func (l *Loop) Execute(ctx context.Context) (execErr error) {
+	// Rebuild the fold ledger eagerly, BEFORE this run appends any tool
+	// results: the transcript now holds exactly what earlier prompts
+	// (or the pre-restart process) folded, so a re-observation of an old
+	// child folds only its growth. Building it here — rather than lazily
+	// at the first fold — frees recordToolOutcome to keep its
+	// record-then-fold order (a just-recorded result would otherwise
+	// seed the ledger with its own totals and zero its own delta).
+	l.rebuildExternalFoldLedger()
 	// Tag the model-call context with this loop's session identity; only
 	// the record/replay test infrastructure consumes it.
 	ctx = replay.WithSessionRef(ctx, l.Run.SessionID, l.ParentToolCallID)
@@ -1926,7 +1945,8 @@ func (l *Loop) callModel(ctx context.Context) error {
 		Input: messages, Output: response, StopReason: string(stop),
 		InputTokens: inputTokens, OutputTokens: outputTokens,
 		CachedInputTokens: agg.CachedInputTokens(), CacheCreationInputTokens: agg.CacheCreationInputTokens(),
-		StartTime: startedAt, EndTime: l.Run.Clock.Now(),
+		ContextTokens: agg.ContextTokens(),
+		StartTime:     startedAt, EndTime: l.Run.Clock.Now(),
 	})
 	// Record the terminal stream facts on the persisted message so that event
 	// consumers (runtime-event bridge, session inspection) can recover the real
@@ -3079,7 +3099,8 @@ func (l *Loop) summarizeForCompaction(ctx context.Context, base []domain.Message
 		Input: messages, Output: response, StopReason: "compaction",
 		InputTokens: inputTokens, OutputTokens: outputTokens,
 		CachedInputTokens: agg.CachedInputTokens(), CacheCreationInputTokens: agg.CacheCreationInputTokens(),
-		StartTime: startedAt, EndTime: l.Run.Clock.Now(),
+		ContextTokens: agg.ContextTokens(),
+		StartTime:     startedAt, EndTime: l.Run.Clock.Now(),
 	})
 	text := strings.Join(response.TextParts(), "")
 	if strings.TrimSpace(text) == "" {
@@ -3091,20 +3112,30 @@ func (l *Loop) summarizeForCompaction(ctx context.Context, base []domain.Message
 // accountUsage folds one model call's metered tokens into the run budget:
 // cumulative token counts, the estimated cost (when rates are configured —
 // without it the cost_usd limit can never fire), the goal meter, and the
-// wall-time window.
+// wall-time window. Cost accrues incrementally per call so the prompt-cache
+// split is priced at call time with provider-family-aware rates
+// (domain.CallCostUSD); a cumulative recompute could not separate the two
+// metering families once their calls interleave in one session.
 func (l *Loop) accountUsage(inputTokens, outputTokens, cachedInputTokens, contextTokens, reasoningTokens int64) {
 	l.Run.Usage.InputTokens += inputTokens
 	l.Run.Usage.OutputTokens += outputTokens
 	l.Run.Usage.CachedInputTokens += cachedInputTokens
 	l.Run.Usage.ContextTokens += contextTokens
 	l.Run.Usage.ReasoningTokens += reasoningTokens
-	if l.CostInputUSDPerMTok > 0 || l.CostOutputUSDPerMTok > 0 {
-		l.Run.Usage.CostUSD = float64(l.Run.Usage.InputTokens)*l.CostInputUSDPerMTok/1e6 +
-			float64(l.Run.Usage.OutputTokens)*l.CostOutputUSDPerMTok/1e6
-	}
+	l.Run.Usage.CostUSD += domain.CallCostUSD(inputTokens, outputTokens, cachedInputTokens, contextTokens, l.costRates())
 	l.Run.touchWallTime()
 	if l.Run.Goal != nil && l.Run.Goal.Status == domain.GoalStatusActive {
 		l.Run.Goal.TokensUsed += inputTokens + outputTokens
+	}
+}
+
+// costRates exposes the loop's configured pricing as the domain value.
+func (l *Loop) costRates() domain.CostRates {
+	return domain.CostRates{
+		InputPerMTok:      l.CostInputUSDPerMTok,
+		OutputPerMTok:     l.CostOutputUSDPerMTok,
+		CacheReadPerMTok:  l.CostCacheReadUSDPerMTok,
+		CacheWritePerMTok: l.CostCacheWriteUSDPerMTok,
 	}
 }
 
@@ -3116,27 +3147,130 @@ func (l *Loop) accountUsage(inputTokens, outputTokens, cachedInputTokens, contex
 // (docs/SUBAGENT_DESIGN.md §5.2). The accounting path is the same one
 // model calls use, so the cost estimate and the goal meter stay
 // consistent.
+// externalFoldTotals is one child session's cumulative usage already
+// folded into this run (the fold ledger entry).
+type externalFoldTotals struct {
+	input     int64
+	output    int64
+	cached    int64
+	context   int64
+	reasoning int64
+}
+
 func (l *Loop) foldExternalUsage(result domain.ToolResult) {
 	if result.Metadata == nil {
 		return
 	}
-	inputTokens, _ := strconv.ParseInt(result.Metadata[domain.ToolMetaExternalInputTokens], 10, 64)
-	outputTokens, _ := strconv.ParseInt(result.Metadata[domain.ToolMetaExternalOutputTokens], 10, 64)
-	cachedInputTokens, _ := strconv.ParseInt(result.Metadata[domain.ToolMetaExternalCachedInputTokens], 10, 64)
-	if inputTokens <= 0 && outputTokens <= 0 {
+	reported := externalFoldTotals{
+		input:     parseTokenCount(result.Metadata[domain.ToolMetaExternalInputTokens]),
+		output:    parseTokenCount(result.Metadata[domain.ToolMetaExternalOutputTokens]),
+		cached:    parseTokenCount(result.Metadata[domain.ToolMetaExternalCachedInputTokens]),
+		context:   parseTokenCount(result.Metadata[domain.ToolMetaExternalContextTokens]),
+		reasoning: parseTokenCount(result.Metadata[domain.ToolMetaExternalReasoningTokens]),
+	}
+	if reported.input <= 0 && reported.output <= 0 {
 		return
 	}
 	// The cache-ratio denominator is the externally metered window
 	// footprint; producers that predate the context key fall back to the
 	// complete input size (exact under OpenAI-style metering, whose input
-	// is already cache-inclusive). The reasoning share is not split
-	// out (0).
-	contextTokens, _ := strconv.ParseInt(result.Metadata[domain.ToolMetaExternalContextTokens], 10, 64)
-	if contextTokens <= 0 {
-		contextTokens = inputTokens
+	// is already cache-inclusive).
+	if reported.context <= 0 {
+		reported.context = reported.input
 	}
-	l.accountUsage(inputTokens, outputTokens, cachedInputTokens, contextTokens, 0)
+	// The reported values are the child run's CUMULATIVE totals; folding
+	// them verbatim on every wait/cancel result would double-count the
+	// child whenever it is observed more than once (repeated wait,
+	// cancel after wait, cancel→resume→wait). Fold only the increment
+	// over the ledger; the child session ID is the dedup key.
+	child := result.Metadata[domain.ToolMetaChildSessionID]
+	if child == "" {
+		// Legacy producers without a fold key cannot be deduplicated;
+		// fold verbatim (the pre-ledger behavior).
+		l.accountUsage(reported.input, reported.output, reported.cached, reported.context, reported.reasoning)
+		l.Run.appendEvent(domain.EventBudgetUpdated, l.Run.Usage)
+		return
+	}
+	if l.externalFolded == nil {
+		// Unit-test paths that never went through Execute build the
+		// ledger on first use; production loops always build it at
+		// Execute entry (see there for why eager matters).
+		l.rebuildExternalFoldLedger()
+	}
+	folded := l.externalFolded[child]
+	delta := externalFoldTotals{
+		input:     max(reported.input-folded.input, 0),
+		output:    max(reported.output-folded.output, 0),
+		cached:    max(reported.cached-folded.cached, 0),
+		context:   max(reported.context-folded.context, 0),
+		reasoning: max(reported.reasoning-folded.reasoning, 0),
+	}
+	if delta.input <= 0 && delta.output <= 0 && delta.cached <= 0 && delta.context <= 0 && delta.reasoning <= 0 {
+		return // already accounted — a repeated observation of the same child
+	}
+	l.externalFolded[child] = externalFoldTotals{
+		input:     max(reported.input, folded.input),
+		output:    max(reported.output, folded.output),
+		cached:    max(reported.cached, folded.cached),
+		context:   max(reported.context, folded.context),
+		reasoning: max(reported.reasoning, folded.reasoning),
+	}
+	l.accountUsage(delta.input, delta.output, delta.cached, delta.context, delta.reasoning)
 	l.Run.appendEvent(domain.EventBudgetUpdated, l.Run.Usage)
+}
+
+// rebuildExternalFoldLedger reconstructs the fold ledger from the
+// transcript: tool-result metadata persists with the messages (event
+// log and checkpoints), so a loop driving a continued or restored run
+// re-derives exactly what its predecessors folded. Compaction is the
+// residual gap — a pruned tool result takes its ledger entry with it,
+// and a later re-observation of that child folds its full totals once
+// more.
+func (l *Loop) rebuildExternalFoldLedger() {
+	l.externalFolded = make(map[string]externalFoldTotals)
+	for _, msg := range l.Run.Messages {
+		for _, part := range msg.Parts {
+			if part.Kind != domain.PartToolResult || part.ToolResult == nil {
+				continue
+			}
+			meta := part.ToolResult.Metadata
+			if meta == nil {
+				continue
+			}
+			child := meta[domain.ToolMetaChildSessionID]
+			if child == "" {
+				continue
+			}
+			reported := externalFoldTotals{
+				input:     parseTokenCount(meta[domain.ToolMetaExternalInputTokens]),
+				output:    parseTokenCount(meta[domain.ToolMetaExternalOutputTokens]),
+				cached:    parseTokenCount(meta[domain.ToolMetaExternalCachedInputTokens]),
+				context:   parseTokenCount(meta[domain.ToolMetaExternalContextTokens]),
+				reasoning: parseTokenCount(meta[domain.ToolMetaExternalReasoningTokens]),
+			}
+			if reported.input <= 0 && reported.output <= 0 {
+				continue
+			}
+			if reported.context <= 0 {
+				reported.context = reported.input
+			}
+			folded := l.externalFolded[child]
+			l.externalFolded[child] = externalFoldTotals{
+				input:     max(reported.input, folded.input),
+				output:    max(reported.output, folded.output),
+				cached:    max(reported.cached, folded.cached),
+				context:   max(reported.context, folded.context),
+				reasoning: max(reported.reasoning, folded.reasoning),
+			}
+		}
+	}
+}
+
+// parseTokenCount reads a metadata token counter (0 when absent or
+// malformed — a bad counter must never break a tool result).
+func parseTokenCount(s string) int64 {
+	n, _ := strconv.ParseInt(s, 10, 64)
+	return n
 }
 
 // closeUnresolvedCalls records an interrupted error result for every tool

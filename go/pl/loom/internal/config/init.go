@@ -224,6 +224,8 @@ providers:
 #   user: ""                      # 空则取 git user.email / $USER
 #   cost_input_usd_per_mtok: 0    # 输入费率 USD/Mtok，0 = 不计成本
 #   cost_output_usd_per_mtok: 0
+#   cost_cache_read_usd_per_mtok: 0   # 缓存读费率，0 = 按 provider 默认折算
+#   cost_cache_write_usd_per_mtok: 0  # 缓存写费率，0 = 按 provider 默认折算
 
 # 局域网分享（loom-desktop；固定端口使链接跨重启存活，只暴露只读页面，保存即热应用）：
 # share:

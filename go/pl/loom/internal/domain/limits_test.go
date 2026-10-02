@@ -96,6 +96,68 @@ func TestUsageCheckCost(t *testing.T) {
 	}
 }
 
+func TestCallCostUSD(t *testing.T) {
+	const approx = 1e-12
+	cases := []struct {
+		name                     string
+		in, out, cached, context int64
+		rates                    CostRates
+		want                     float64
+	}{
+		{
+			name: "disabled without base rates",
+			in:   1_000_000, out: 1_000_000,
+			rates: CostRates{},
+			want:  0,
+		},
+		{
+			name: "plain cache-inclusive call (OpenAI, no cache activity)",
+			in:   1_000_000, out: 500_000, context: 1_000_000,
+			rates: CostRates{InputPerMTok: 2, OutputPerMTok: 8},
+			want:  2 + 4,
+		},
+		{
+			name: "cache-inclusive default prices cached share at full input rate",
+			in:   1_000_000, out: 0, cached: 900_000, context: 1_000_000,
+			rates: CostRates{InputPerMTok: 2, OutputPerMTok: 8},
+			want:  2, // unchanged pre-cache-aware behavior: (1M-0.9M)*2 + 0.9M*2
+		},
+		{
+			name: "cache-inclusive explicit read rate discounts the cached share",
+			in:   1_000_000, out: 0, cached: 900_000, context: 1_000_000,
+			rates: CostRates{InputPerMTok: 2, OutputPerMTok: 8, CacheReadPerMTok: 1},
+			want:  0.1*2 + 0.9*1,
+		},
+		{
+			name: "split metering defaults to Anthropic ephemeral-cache ratios",
+			in:   100_000, out: 10_000, cached: 800_000, context: 1_000_000, // 100k writes
+			rates: CostRates{InputPerMTok: 3, OutputPerMTok: 15},
+			// 0.1M*3 + 0.8M*(0.1*3) + 0.1M*(1.25*3) + 0.01M*15
+			want: 0.3 + 0.24 + 0.375 + 0.15,
+		},
+		{
+			name: "split metering explicit cache rates win over defaults",
+			in:   100_000, out: 0, cached: 800_000, context: 1_000_000,
+			rates: CostRates{InputPerMTok: 3, CacheReadPerMTok: 0.6, CacheWritePerMTok: 6},
+			want:  0.1*3 + 0.8*0.6 + 0.1*6,
+		},
+		{
+			name: "split metering without cache activity bills plain input",
+			in:   1_000_000, out: 1_000_000, context: 1_000_000,
+			rates: CostRates{InputPerMTok: 3, OutputPerMTok: 15},
+			want:  3 + 15,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := CallCostUSD(tc.in, tc.out, tc.cached, tc.context, tc.rates)
+			if diff := got - tc.want; diff > approx || diff < -approx {
+				t.Fatalf("CallCostUSD = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestUsageCheckZeroLimit(t *testing.T) {
 	lim := Limits{} // zero means unlimited on every dimension
 	usage := Usage{InputTokens: 1 << 40, OutputTokens: 1 << 40, CostUSD: 99999}

@@ -182,13 +182,15 @@ func Setup(ctx context.Context, cfg Config) (*Provider, error) {
 	return &Provider{
 		tp: tp,
 		recorder: &otelRecorder{
-			tracer:  tp.Tracer("loom.agent"),
-			content: cfg.IncludeContent,
-			userID:  cfg.UserID,
-			release: cfg.Release,
-			costIn:  cfg.CostInputPerMTok,
-			costOut: cfg.CostOutputPerMTok,
-			scores:  scores,
+			tracer:         tp.Tracer("loom.agent"),
+			content:        cfg.IncludeContent,
+			userID:         cfg.UserID,
+			release:        cfg.Release,
+			costIn:         cfg.CostInputPerMTok,
+			costOut:        cfg.CostOutputPerMTok,
+			costCacheRead:  cfg.CostCacheReadPerMTok,
+			costCacheWrite: cfg.CostCacheWritePerMTok,
+			scores:         scores,
 		},
 		scores:         scores,
 		unregExportErr: unregExportErr,
@@ -217,13 +219,15 @@ func (p *Provider) Shutdown(ctx context.Context) error {
 // created post-hoc with backdated timestamps — the loop reports completed
 // operations, which keeps instrumentation off the hot path.
 type otelRecorder struct {
-	tracer  oteltrace.Tracer
-	content bool
-	userID  string
-	release string
-	costIn  float64
-	costOut float64
-	scores  *scoreClient
+	tracer         oteltrace.Tracer
+	content        bool
+	userID         string
+	release        string
+	costIn         float64
+	costOut        float64
+	costCacheRead  float64
+	costCacheWrite float64
+	scores         *scoreClient
 }
 
 type otelRun struct {
@@ -277,9 +281,19 @@ func (r *otelRecorder) StartRun(ctx context.Context, meta RunMeta) (context.Cont
 // usageDetails builds the Langfuse usage_details map: input/output plus
 // the provider's prompt-cache split when reported. Langfuse recognizes
 // the Anthropic-style cache keys and prices them with the model's cache
-// rates (cache_read at a discount, cache_creation at a premium).
+// rates (cache_read at a discount, cache_creation at a premium) — every
+// key is priced INDEPENDENTLY, so "input" must exclude whatever the
+// cache keys carry. Under split metering (Anthropic) input_tokens
+// already excludes the cache traffic; under cache-inclusive metering
+// (OpenAI, where ContextTokens == InputTokens) the cached share is a
+// subset of input and must be subtracted, or Langfuse prices it twice
+// (full input rate once, cache-read rate again).
 func usageDetails(rec GenerationRecord) map[string]int64 {
-	usage := map[string]int64{"input": rec.InputTokens, "output": rec.OutputTokens}
+	input := rec.InputTokens
+	if rec.CachedInputTokens > 0 && rec.ContextTokens <= rec.InputTokens {
+		input = max(rec.InputTokens-rec.CachedInputTokens, 0)
+	}
+	usage := map[string]int64{"input": input, "output": rec.OutputTokens}
 	if rec.CachedInputTokens > 0 {
 		usage["cache_read_input_tokens"] = rec.CachedInputTokens
 	}
@@ -312,9 +326,22 @@ func (run *otelRun) RecordGeneration(ctx context.Context, rec GenerationRecord) 
 		)
 	}
 	if run.rec.costIn > 0 && run.rec.costOut > 0 && (rec.InputTokens > 0 || rec.OutputTokens > 0) {
+		rates := domain.CostRates{
+			InputPerMTok:      run.rec.costIn,
+			OutputPerMTok:     run.rec.costOut,
+			CacheReadPerMTok:  run.rec.costCacheRead,
+			CacheWritePerMTok: run.rec.costCacheWrite,
+		}
+		// The cache-aware total prices the prompt-cache split at its own
+		// rate (domain.CallCostUSD); "input" carries every input-side
+		// component (fresh input + cache reads + cache writes) so the
+		// input/output split still sums to the total.
+		total := domain.CallCostUSD(rec.InputTokens, rec.OutputTokens, rec.CachedInputTokens, rec.ContextTokens, rates)
+		outputCost := float64(rec.OutputTokens) * run.rec.costOut / 1e6
 		attrs = append(attrs, attribute.String(attrObservationCost, mustJSON(map[string]float64{
-			"input":  float64(rec.InputTokens) * run.rec.costIn / 1e6,
-			"output": float64(rec.OutputTokens) * run.rec.costOut / 1e6,
+			"input":  total - outputCost,
+			"output": outputCost,
+			"total":  total,
 		})))
 	}
 	// The Langfuse observation input/output uses the OpenAI ChatML wire

@@ -696,6 +696,22 @@ export const TABS: TabSpec[] = [
             step: 0.01,
             ph: '0',
           },
+          {
+            key: 'tracing.cost_cache_read_usd_per_mtok',
+            label: '缓存读费率 (USD/Mtok)',
+            type: 'number',
+            step: 0.01,
+            ph: '0',
+            hint: '留空按 provider 默认折算（Anthropic 0.1x 输入价）',
+          },
+          {
+            key: 'tracing.cost_cache_write_usd_per_mtok',
+            label: '缓存写费率 (USD/Mtok)',
+            type: 'number',
+            step: 0.01,
+            ph: '0',
+            hint: '留空按 provider 默认折算（Anthropic 1.25x 输入价）',
+          },
         ],
       ],
       [

@@ -1453,7 +1453,8 @@ func resolveTracing(in Tracing, lookup EnvLookup) (trace.Config, error) {
 	if err != nil {
 		return trace.Config{}, err
 	}
-	if in.CostInputPerMTok < 0 || in.CostOutputPerMTok < 0 {
+	if in.CostInputPerMTok < 0 || in.CostOutputPerMTok < 0 ||
+		in.CostCacheReadPerMTok < 0 || in.CostCacheWritePerMTok < 0 {
 		return trace.Config{}, fmt.Errorf("config: tracing cost rates must be >= 0")
 	}
 	env := in.Environment
@@ -1461,15 +1462,17 @@ func resolveTracing(in Tracing, lookup EnvLookup) (trace.Config, error) {
 		env = "dev"
 	}
 	return trace.Config{
-		Host:              strings.TrimRight(in.Host, "/"),
-		PublicKey:         publicKey,
-		SecretKey:         secretKey,
-		Environment:       env,
-		IncludeContent:    in.IncludeContent == nil || *in.IncludeContent,
-		UserID:            in.User, // empty → trace.Setup derives git email / $USER
-		CostInputPerMTok:  in.CostInputPerMTok,
-		CostOutputPerMTok: in.CostOutputPerMTok,
-		Enabled:           in.Host != "" && publicKey != "" && secretKey != "",
+		Host:                  strings.TrimRight(in.Host, "/"),
+		PublicKey:             publicKey,
+		SecretKey:             secretKey,
+		Environment:           env,
+		IncludeContent:        in.IncludeContent == nil || *in.IncludeContent,
+		UserID:                in.User, // empty → trace.Setup derives git email / $USER
+		CostInputPerMTok:      in.CostInputPerMTok,
+		CostOutputPerMTok:     in.CostOutputPerMTok,
+		CostCacheReadPerMTok:  in.CostCacheReadPerMTok,
+		CostCacheWritePerMTok: in.CostCacheWritePerMTok,
+		Enabled:               in.Host != "" && publicKey != "" && secretKey != "",
 	}, nil
 }
 

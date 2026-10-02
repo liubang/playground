@@ -287,9 +287,12 @@ type Tracing struct {
 	IncludeContent *bool  `yaml:"include_content,omitempty"`
 	User           string `yaml:"user,omitempty"`
 	// Cost rates are USD per million tokens; non-positive disables cost
-	// attribution.
-	CostInputPerMTok  float64 `yaml:"cost_input_usd_per_mtok,omitempty"`
-	CostOutputPerMTok float64 `yaml:"cost_output_usd_per_mtok,omitempty"`
+	// attribution. The cache rates price the prompt-cache split; zero
+	// derives the provider-family default (domain.CallCostUSD).
+	CostInputPerMTok      float64 `yaml:"cost_input_usd_per_mtok,omitempty"`
+	CostOutputPerMTok     float64 `yaml:"cost_output_usd_per_mtok,omitempty"`
+	CostCacheReadPerMTok  float64 `yaml:"cost_cache_read_usd_per_mtok,omitempty"`
+	CostCacheWritePerMTok float64 `yaml:"cost_cache_write_usd_per_mtok,omitempty"`
 }
 
 // Share is the persistent preference for the optional LAN share

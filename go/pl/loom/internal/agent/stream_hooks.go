@@ -79,7 +79,9 @@ type StreamAggregator struct {
 	inputTokens  int64
 	outputTokens int64
 	// cachedInputTokens accumulates provider-reported prompt-cache hits
-	// (observability only; inputTokens already includes them).
+	// (observability only). Provider semantics diverge: OpenAI's
+	// inputTokens INCLUDE the cached share, Anthropic's EXCLUDE it (see
+	// domain.ModelEvent.CachedInputTokens).
 	cachedInputTokens int64
 	// cacheCreationInputTokens accumulates provider-reported prompt-cache
 	// writes (Anthropic only; OpenAI folds them into prompt_tokens).
@@ -350,7 +352,9 @@ func malformedArgumentsPlaceholder(raw string) json.RawMessage {
 
 // CachedInputTokens reports provider-reported prompt-cache hits for the
 // completed call (0 when the provider does not report them). The value is
-// observability-only: inputTokens already includes cached tokens.
+// observability-only; whether inputTokens includes the cached share is
+// provider-dependent (OpenAI: yes, Anthropic: no — see
+// domain.ModelEvent.CachedInputTokens).
 func (a *StreamAggregator) CachedInputTokens() int64 { return a.cachedInputTokens }
 
 // ContextTokens reports the provider-metered context-window footprint of

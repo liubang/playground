@@ -481,6 +481,14 @@ let settingsTabs: [TabSpec] = [
             FieldSpec("tracing.user", label: "归属用户", hint: "留空 = 依次尝试 git user.email、$USER"),
             FieldSpec("tracing.cost_input_usd_per_mtok", label: "输入费率（USD/Mtok）", ph: "0", type: .number),
             FieldSpec("tracing.cost_output_usd_per_mtok", label: "输出费率（USD/Mtok）", ph: "0", type: .number),
+            FieldSpec(
+                "tracing.cost_cache_read_usd_per_mtok", label: "缓存读费率（USD/Mtok）",
+                hint: "留空 = 按 provider 默认折算（Anthropic 0.1x 输入价）", ph: "0", type: .number,
+            ),
+            FieldSpec(
+                "tracing.cost_cache_write_usd_per_mtok", label: "缓存写费率（USD/Mtok）",
+                hint: "留空 = 按 provider 默认折算（Anthropic 1.25x 输入价）", ph: "0", type: .number,
+            ),
         ]),
         ("局域网分享", [
             FieldSpec(

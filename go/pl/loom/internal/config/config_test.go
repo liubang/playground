@@ -1007,6 +1007,8 @@ tracing:
   public_key: pk
   secret_key_env: LF_SECRET
   cost_input_usd_per_mtok: 0.15
+  cost_cache_read_usd_per_mtok: 0.02
+  cost_cache_write_usd_per_mtok: 0.19
 `, envWith(map[string]string{"OPENAI_API_KEY": "sk", "LF_SECRET": "sk-lf"}))
 	tr := cfg.Tracing
 	if !tr.Enabled || tr.Host != "https://langfuse.example.com" || tr.SecretKey != "sk-lf" {
@@ -1017,6 +1019,9 @@ tracing:
 	}
 	if tr.CostInputPerMTok != 0.15 {
 		t.Fatalf("cost rate = %v", tr.CostInputPerMTok)
+	}
+	if tr.CostCacheReadPerMTok != 0.02 || tr.CostCacheWritePerMTok != 0.19 {
+		t.Fatalf("cache cost rates = %v/%v, want 0.02/0.19", tr.CostCacheReadPerMTok, tr.CostCacheWritePerMTok)
 	}
 }
 

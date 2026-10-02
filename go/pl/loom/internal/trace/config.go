@@ -54,9 +54,13 @@ type Config struct {
 	Release string
 	// CostInputPerMTok and CostOutputPerMTok are optional USD-per-million-
 	// -token rates; when both are positive the recorder computes and
-	// attaches cost_details to generations.
-	CostInputPerMTok  float64
-	CostOutputPerMTok float64
+	// attaches cost_details to generations. CostCacheReadPerMTok and
+	// CostCacheWritePerMTok price the prompt-cache split; zero derives
+	// the provider-family default (domain.CallCostUSD).
+	CostInputPerMTok      float64
+	CostOutputPerMTok     float64
+	CostCacheReadPerMTok  float64
+	CostCacheWritePerMTok float64
 	// Logger receives exporter/score/prompt-client failures (OTLP error
 	// handler, score flush, prompt fetch). Nil discards them — pass an
 	// io.Discard logger in the TUI (stderr output would tear the rendering)

@@ -163,8 +163,10 @@ type Factory struct {
 	Models  *ModelSource
 	// Cost rates mirror the parent loop's so the child's own cost
 	// accounting matches what the fold-back adds to the parent.
-	CostInputUSDPerMTok  float64
-	CostOutputUSDPerMTok float64
+	CostInputUSDPerMTok      float64
+	CostOutputUSDPerMTok     float64
+	CostCacheReadUSDPerMTok  float64
+	CostCacheWriteUSDPerMTok float64
 	// Manager is the V2 asynchronous delegation runtime; nil when only
 	// V1 synchronous delegation is configured.
 	Manager *Manager
@@ -435,8 +437,10 @@ func (t *DelegateTaskTool) executeSync(ctx context.Context, prepared domain.Prep
 		Reasoning: snap.Reasoning,
 		// No GoalCell/PlanCell/SteerCell: the child is single-purpose —
 		// it answers the task and stops.
-		CostInputUSDPerMTok:  t.f.CostInputUSDPerMTok,
-		CostOutputUSDPerMTok: t.f.CostOutputUSDPerMTok,
+		CostInputUSDPerMTok:      t.f.CostInputUSDPerMTok,
+		CostOutputUSDPerMTok:     t.f.CostOutputUSDPerMTok,
+		CostCacheReadUSDPerMTok:  t.f.CostCacheReadUSDPerMTok,
+		CostCacheWriteUSDPerMTok: t.f.CostCacheWriteUSDPerMTok,
 		// The delegation edge binds this child's model calls to their own
 		// record/replay fixture shard.
 		ParentToolCallID: prepared.Call.ID,
@@ -518,11 +522,14 @@ func (t *DelegateTaskTool) successResult(callID domain.ToolCallID, startedAt tim
 
 // withExternalUsage records the externally-metered usage fold-back keys
 // (domain.ToolMetaExternalInputTokens/OutputTokens/CachedInputTokens/
-// ContextTokens) on metadata, allocating the map when needed, so the
-// parent loop accounts for the child run's consumption — cache-hit
-// split and context footprint included, keeping the session cache-hit
-// ratio truthful across delegated work. A zero-usage run records
-// nothing.
+// ContextTokens/ReasoningTokens) on metadata, allocating the map when
+// needed, so the parent loop accounts for the child run's consumption —
+// cache-hit split and context footprint included, keeping the session
+// cache-hit ratio truthful across delegated work. The values are the
+// child run's cumulative totals; the parent folds only the increment
+// over its ledger for the child (domain.ToolMetaChildSessionID is the
+// dedup key), so repeated observations never double-count. A
+// zero-usage run records nothing.
 func withExternalUsage(metadata map[string]string, usage domain.Usage) map[string]string {
 	if usage.InputTokens <= 0 && usage.OutputTokens <= 0 {
 		return metadata
@@ -534,6 +541,9 @@ func withExternalUsage(metadata map[string]string, usage domain.Usage) map[strin
 	metadata[domain.ToolMetaExternalOutputTokens] = strconv.FormatInt(usage.OutputTokens, 10)
 	metadata[domain.ToolMetaExternalCachedInputTokens] = strconv.FormatInt(usage.CachedInputTokens, 10)
 	metadata[domain.ToolMetaExternalContextTokens] = strconv.FormatInt(usage.ContextTokens, 10)
+	if usage.ReasoningTokens > 0 {
+		metadata[domain.ToolMetaExternalReasoningTokens] = strconv.FormatInt(usage.ReasoningTokens, 10)
+	}
 	return metadata
 }
 
@@ -544,8 +554,8 @@ func withExternalUsage(metadata map[string]string, usage domain.Usage) map[strin
 // budget (withExternalUsage).
 func resultMetadata(childSessionID domain.SessionID, run *agent.Run) map[string]string {
 	return withExternalUsage(map[string]string{
-		"child_session_id": childSessionID.String(),
-		"child_outcome":    string(run.State.Outcome),
+		domain.ToolMetaChildSessionID: childSessionID.String(),
+		"child_outcome":               string(run.State.Outcome),
 	}, run.Usage)
 }
 

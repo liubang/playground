@@ -151,16 +151,33 @@ func TestEncodeChatMessagesChatML(t *testing.T) {
 
 // TestUsageDetailsCacheSplit locks the Langfuse usage_details shape:
 // input/output always, cache keys only when the provider reported them.
+// Langfuse prices every usage key independently, so "input" must carry
+// only the NON-cached share — the subtraction differs by metering
+// family (see usageDetails).
 func TestUsageDetailsCacheSplit(t *testing.T) {
 	plain := usageDetails(GenerationRecord{InputTokens: 10, OutputTokens: 5})
 	if len(plain) != 2 || plain["input"] != 10 || plain["output"] != 5 {
 		t.Fatalf("usage without cache = %v, want only input/output", plain)
 	}
-	cached := usageDetails(GenerationRecord{
+	// Split metering (Anthropic): input_tokens already excludes cache
+	// reads and writes (ContextTokens = 100+80+20 > InputTokens), so
+	// input passes through unchanged.
+	split := usageDetails(GenerationRecord{
 		InputTokens: 100, OutputTokens: 5, CachedInputTokens: 80, CacheCreationInputTokens: 20,
+		ContextTokens: 200,
 	})
-	if cached["cache_read_input_tokens"] != 80 || cached["cache_creation_input_tokens"] != 20 {
-		t.Fatalf("usage with cache = %v, want cache_read=80 cache_creation=20", cached)
+	if split["input"] != 100 || split["cache_read_input_tokens"] != 80 || split["cache_creation_input_tokens"] != 20 {
+		t.Fatalf("split-metered usage = %v, want input=100 cache_read=80 cache_creation=20", split)
+	}
+	// Cache-inclusive metering (OpenAI): prompt_tokens (ContextTokens ==
+	// InputTokens) CONTAINS the cached share; reporting it under both
+	// "input" and the cache key would price those tokens twice.
+	inclusive := usageDetails(GenerationRecord{
+		InputTokens: 100, OutputTokens: 5, CachedInputTokens: 80,
+		ContextTokens: 100,
+	})
+	if inclusive["input"] != 20 || inclusive["cache_read_input_tokens"] != 80 {
+		t.Fatalf("cache-inclusive usage = %v, want input=20 cache_read=80", inclusive)
 	}
 }
 

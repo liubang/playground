@@ -52,9 +52,16 @@ type GenerationRecord struct {
 	// InputTokens). Zero when the provider does not report them.
 	CachedInputTokens        int64
 	CacheCreationInputTokens int64
-	StartTime                time.Time
-	EndTime                  time.Time
-	Err                      error
+	// ContextTokens is the provider-metered context-window footprint
+	// (cache-inclusive): the usage_details builder compares it against
+	// InputTokens to tell cache-inclusive metering (OpenAI: equal — the
+	// cached share must be split OUT of input to avoid double-pricing)
+	// from split metering (Anthropic: greater — input already excludes
+	// the cache traffic).
+	ContextTokens int64
+	StartTime     time.Time
+	EndTime       time.Time
+	Err           error
 	// PromptName and PromptVersion link the generation to a Langfuse-managed
 	// prompt when the system prompt came from Prompt Management (zero =
 	// not managed).

@@ -187,11 +187,21 @@ type ToolError struct {
 // cached-input split and the context-window footprint ride along so
 // the session cache-hit ratio (CachedInputTokens/ContextTokens) stays
 // exact across delegated work for both provider metering families.
+//
+// The values are the external run's CUMULATIVE totals keyed by
+// ToolMetaChildSessionID, not per-result deltas: the loop folds only
+// the increment over what it already folded for that child, so a
+// repeated wait/cancel on the same sub-agent (or a cancel→resume→wait
+// sequence) can never double-count its consumption.
 const (
 	ToolMetaExternalInputTokens       = "external_input_tokens"
 	ToolMetaExternalOutputTokens      = "external_output_tokens"
 	ToolMetaExternalCachedInputTokens = "external_cached_input_tokens"
 	ToolMetaExternalContextTokens     = "external_context_tokens"
+	ToolMetaExternalReasoningTokens   = "external_reasoning_tokens"
+	// ToolMetaChildSessionID names the external run the usage belongs
+	// to; it is the fold ledger's dedup key.
+	ToolMetaChildSessionID = "child_session_id"
 )
 
 // ToolResult represents the outcome of a tool execution.

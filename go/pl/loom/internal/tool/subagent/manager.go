@@ -274,8 +274,10 @@ func (m *Manager) drive(ctx context.Context, cancel context.CancelFunc, mr *mana
 		Runaway:      m.factory.Runaway,
 		Reasoning:    snap.Reasoning,
 		// No GoalCell/PlanCell/SteerCell: the child is single-purpose.
-		CostInputUSDPerMTok:  m.factory.CostInputUSDPerMTok,
-		CostOutputUSDPerMTok: m.factory.CostOutputUSDPerMTok,
+		CostInputUSDPerMTok:      m.factory.CostInputUSDPerMTok,
+		CostOutputUSDPerMTok:     m.factory.CostOutputUSDPerMTok,
+		CostCacheReadUSDPerMTok:  m.factory.CostCacheReadUSDPerMTok,
+		CostCacheWriteUSDPerMTok: m.factory.CostCacheWriteUSDPerMTok,
 		// The delegation edge binds this child's model calls to their own
 		// record/replay fixture shard.
 		ParentToolCallID: callID,

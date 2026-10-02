@@ -418,19 +418,21 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		}
 
 		factory := &subagent.Factory{
-			Store:                proc.Store,
-			Artifacts:            proc.Artifact,
-			Recorder:             proc.Recorder,
-			Logger:               logger,
-			Registry:             researcherRegistry,
-			Prompt:               researcherPrompt,
-			Workspace:            cfg.WorkspaceRoot,
-			WorkspaceID:          cfg.WorkspaceID,
-			Limits:               childLimits,
-			Runaway:              resolved.Runaway,
-			Models:               subagentModels,
-			CostInputUSDPerMTok:  resolved.Tracing.CostInputPerMTok,
-			CostOutputUSDPerMTok: resolved.Tracing.CostOutputPerMTok,
+			Store:                    proc.Store,
+			Artifacts:                proc.Artifact,
+			Recorder:                 proc.Recorder,
+			Logger:                   logger,
+			Registry:                 researcherRegistry,
+			Prompt:                   researcherPrompt,
+			Workspace:                cfg.WorkspaceRoot,
+			WorkspaceID:              cfg.WorkspaceID,
+			Limits:                   childLimits,
+			Runaway:                  resolved.Runaway,
+			Models:                   subagentModels,
+			CostInputUSDPerMTok:      resolved.Tracing.CostInputPerMTok,
+			CostOutputUSDPerMTok:     resolved.Tracing.CostOutputPerMTok,
+			CostCacheReadUSDPerMTok:  resolved.Tracing.CostCacheReadPerMTok,
+			CostCacheWriteUSDPerMTok: resolved.Tracing.CostCacheWritePerMTok,
 		}
 
 		// V2 Manager: async spawn/wait/resume for both roles.

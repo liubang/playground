@@ -1542,8 +1542,12 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, imageRefs []dom
 		SteerCell:      c.runtime.SteerCell,
 		// Reuse the tracing cost rates for the cost budget; zero when the
 		// user never configured pricing, which disables cost accounting.
-		CostInputUSDPerMTok:  c.bootstrap.Resolved().Tracing.CostInputPerMTok,
-		CostOutputUSDPerMTok: c.bootstrap.Resolved().Tracing.CostOutputPerMTok,
+		// The cache rates price the prompt-cache split; zero derives the
+		// provider-family default (domain.CallCostUSD).
+		CostInputUSDPerMTok:      c.bootstrap.Resolved().Tracing.CostInputPerMTok,
+		CostOutputUSDPerMTok:     c.bootstrap.Resolved().Tracing.CostOutputPerMTok,
+		CostCacheReadUSDPerMTok:  c.bootstrap.Resolved().Tracing.CostCacheReadPerMTok,
+		CostCacheWriteUSDPerMTok: c.bootstrap.Resolved().Tracing.CostCacheWritePerMTok,
 		StreamHooks: agent.StreamHooks{
 			OnContextUsage: func(occupancyTokens int64) {
 				c.publishDurable(c.sessionID, run.ID, turnCounter, runtimeevent.KindContextUsage, runtimeevent.ContextUsagePayload{

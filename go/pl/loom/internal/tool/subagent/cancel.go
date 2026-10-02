@@ -146,8 +146,14 @@ func (t *CancelSubagentTool) Execute(ctx context.Context, prepared domain.Prepar
 		},
 	}
 	tr := marshalWaitResult(prepared.Call.ID, startedAt, payload)
-	// Fold external usage into metadata so the parent loop accounts for it.
-	tr.Metadata = withExternalUsage(tr.Metadata, result.Usage)
+	// Fold external usage into metadata so the parent loop accounts for
+	// it. The child session ID is the fold ledger's dedup key: the usage
+	// is the child's cumulative total, so an already_done cancel after a
+	// completed wait (or a resume's wait after this cancel) folds only
+	// the increment and never double-counts the child.
+	tr.Metadata = withExternalUsage(map[string]string{
+		domain.ToolMetaChildSessionID: result.SessionID.String(),
+	}, result.Usage)
 	return tr
 }
 

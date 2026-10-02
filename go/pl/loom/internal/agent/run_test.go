@@ -30,6 +30,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -5366,6 +5367,111 @@ func TestLoopFoldsExternalToolUsageIntoBudget(t *testing.T) {
 	if run.Usage.CachedInputTokens != 480 || run.Usage.ContextTokens != 620 {
 		t.Fatalf("cache/context = %d/%d, want 480/620 (model + folded external)",
 			run.Usage.CachedInputTokens, run.Usage.ContextTokens)
+	}
+}
+
+// Regression: the fold-back values are the child run's CUMULATIVE totals,
+// and every terminal observation of the child carries them (wait_subagent,
+// cancel_subagent's already_done report, delegate_task). Folding them
+// verbatim double-counted the child on any repeated observation — a
+// second wait, a cancel after the wait, or the wait following a
+// cancel→resume. The loop must fold only the increment over its ledger
+// (domain.ToolMetaChildSessionID is the dedup key).
+func TestLoopFoldExternalUsageIdempotent(t *testing.T) {
+	run := newTestRun(domain.Limits{})
+	loop := &Loop{Run: run, Logger: slog.Default()}
+	result := func(in, out, cached, context, reasoning int64) domain.ToolResult {
+		return domain.ToolResult{
+			Status: domain.ToolStatusSuccess,
+			Metadata: map[string]string{
+				domain.ToolMetaChildSessionID:            "sess_child1",
+				domain.ToolMetaExternalInputTokens:       strconv.FormatInt(in, 10),
+				domain.ToolMetaExternalOutputTokens:      strconv.FormatInt(out, 10),
+				domain.ToolMetaExternalCachedInputTokens: strconv.FormatInt(cached, 10),
+				domain.ToolMetaExternalContextTokens:     strconv.FormatInt(context, 10),
+				domain.ToolMetaExternalReasoningTokens:   strconv.FormatInt(reasoning, 10),
+			},
+		}
+	}
+	// First observation (cancel at 500/120) folds the full totals.
+	loop.foldExternalUsage(result(500, 120, 400, 520, 60))
+	// already_done cancel after the wait: identical totals, no increment.
+	loop.foldExternalUsage(result(500, 120, 400, 520, 60))
+	// The wait after resume: the child grew — only the delta folds.
+	loop.foldExternalUsage(result(700, 180, 500, 740, 90))
+	if run.Usage.InputTokens != 700 || run.Usage.OutputTokens != 180 {
+		t.Fatalf("usage = %d/%d, want 700/180 (folded once, then delta)",
+			run.Usage.InputTokens, run.Usage.OutputTokens)
+	}
+	if run.Usage.CachedInputTokens != 500 || run.Usage.ContextTokens != 740 {
+		t.Fatalf("cache/context = %d/%d, want 500/740 (folded once, then delta)",
+			run.Usage.CachedInputTokens, run.Usage.ContextTokens)
+	}
+	if run.Usage.ReasoningTokens != 90 {
+		t.Fatalf("reasoning = %d, want 90 (folded once, then delta)", run.Usage.ReasoningTokens)
+	}
+}
+
+// Regression: the fold ledger must survive loop reconstruction — the
+// controller builds a fresh Loop per prompt over a run restored from
+// the checkpoint, and a re-observation of an old child in a later
+// prompt must not fold its totals again. The ledger is rebuilt from
+// the transcript (tool-result metadata persists with the messages).
+func TestLoopFoldExternalUsageLedgerRebuiltFromTranscript(t *testing.T) {
+	run := newTestRun(domain.Limits{})
+	first := &Loop{Run: run, Logger: slog.Default()}
+	result := domain.ToolResult{
+		Status: domain.ToolStatusSuccess,
+		Metadata: map[string]string{
+			domain.ToolMetaChildSessionID:            "sess_child1",
+			domain.ToolMetaExternalInputTokens:       "500",
+			domain.ToolMetaExternalOutputTokens:      "120",
+			domain.ToolMetaExternalCachedInputTokens: "400",
+			domain.ToolMetaExternalContextTokens:     "520",
+		},
+	}
+	first.foldExternalUsage(result)
+	run.RecordToolResult(result) // persist into the transcript like the live path
+	if run.Usage.InputTokens != 500 {
+		t.Fatalf("setup: usage = %d, want 500 after first fold", run.Usage.InputTokens)
+	}
+	// A fresh loop over the same transcript (the next prompt's loop)
+	// re-observes the child: no ledger in memory, no refold.
+	second := &Loop{Run: run, Logger: slog.Default()}
+	second.foldExternalUsage(result)
+	if run.Usage.InputTokens != 500 || run.Usage.OutputTokens != 120 {
+		t.Fatalf("usage = %d/%d, want 500/120 (rebuilt ledger blocks the refold)",
+			run.Usage.InputTokens, run.Usage.OutputTokens)
+	}
+}
+
+// accountUsage prices the prompt-cache split per call with
+// provider-family-aware defaults (domain.CallCostUSD): Anthropic-style
+// split metering bills cache reads at 0.1x and writes at 1.25x the
+// input rate instead of dropping them entirely; OpenAI-style
+// cache-inclusive metering keeps the cached share at the full input
+// rate unless an explicit cache-read rate discounts it.
+func TestLoopAccountUsagePricesCacheSplit(t *testing.T) {
+	run := newTestRun(domain.Limits{})
+	loop := &Loop{
+		Run:                  run,
+		Logger:               slog.Default(),
+		CostInputUSDPerMTok:  3.0,
+		CostOutputUSDPerMTok: 15.0,
+	}
+	// Anthropic-style: input 100k excludes 800k reads + 100k writes.
+	loop.accountUsage(100_000, 10_000, 800_000, 1_000_000, 0)
+	// 0.1M*3 + 0.8M*0.3 + 0.1M*3.75 + 0.01M*15 = 1.065
+	want := 0.3 + 0.24 + 0.375 + 0.15
+	if diff := run.Usage.CostUSD - want; diff > 1e-12 || diff < -1e-12 {
+		t.Fatalf("cost = %v, want %v (cache split priced at Anthropic defaults)", run.Usage.CostUSD, want)
+	}
+	// OpenAI-style: input 1M contains 900k cached, billed at full price
+	// by default → 1M*3 + 0.1M*15.
+	loop.accountUsage(1_000_000, 100_000, 900_000, 1_000_000, 0)
+	want += 3 + 1.5
+	if diff := run.Usage.CostUSD - want; diff > 1e-12 || diff < -1e-12 {
+		t.Fatalf("cost = %v, want %v (cache-inclusive input at full rate by default)", run.Usage.CostUSD, want)
 	}
 }
 

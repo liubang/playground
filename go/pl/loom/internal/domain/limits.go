@@ -81,9 +81,14 @@ type Limits struct {
 	MaxOutputTokens     int64   `json:"max_output_tokens"`
 	MaxEstimatedCostUSD float64 `json:"max_estimated_cost_usd"`
 	// MaxTokens budgets the session-cumulative metered tokens
-	// (input + output) across every model call in the session. Zero
-	// means unlimited: long-horizon tasks are undisturbed unless the
-	// user explicitly opts into a resource ceiling.
+	// (input + output) across every model call in the session. Note
+	// the metered-input caveat on Usage.CachedInputTokens: under
+	// Anthropic-style split metering the cached share is NOT part of
+	// InputTokens, so a cache-heavy session's actual window traffic
+	// can far exceed this budget — price-sensitive ceilings should
+	// use MaxEstimatedCostUSD, which is cache-aware. Zero means
+	// unlimited: long-horizon tasks are undisturbed unless the user
+	// explicitly opts into a resource ceiling.
 	MaxTokens          int64 `json:"max_tokens"`
 	MaxToolOutputBytes int64 `json:"max_tool_output_bytes"`
 	MaxArtifactBytes   int64 `json:"max_artifact_bytes"`
@@ -138,6 +143,77 @@ type Usage struct {
 	ReasoningTokens int64         `json:"reasoning_tokens"`
 	CostUSD         float64       `json:"cost_usd"`
 	WallTime        time.Duration `json:"wall_time_ns"`
+}
+
+// CostRates prices metered token usage into Usage.CostUSD (USD per
+// million tokens). CacheRead/CacheWrite price the prompt-cache split;
+// zero means "derive the provider-family default" (see CallCostUSD).
+type CostRates struct {
+	InputPerMTok      float64
+	OutputPerMTok     float64
+	CacheReadPerMTok  float64
+	CacheWritePerMTok float64
+}
+
+// Enabled reports whether cost accounting is on at all (any base rate).
+func (r CostRates) Enabled() bool { return r.InputPerMTok > 0 || r.OutputPerMTok > 0 }
+
+// CallCostUSD estimates the USD cost of ONE model call from its metered
+// usage. The provider metering families diverge on what InputTokens
+// contains (see Usage.CachedInputTokens), and the cache-inclusive test
+// tells them apart:
+//
+//   - cache-inclusive metering (OpenAI: contextTokens == inputTokens):
+//     the cached share is billed at the cache-read rate, the remainder
+//     at the full input rate. CacheRead default: the full input rate —
+//     OpenAI-family discounts vary by model (0.1x–1x), so the safe
+//     default reproduces the pre-cache-aware accounting.
+//   - split metering (Anthropic: contextTokens > inputTokens, with the
+//     excess being cache reads + writes that inputTokens EXCLUDES):
+//     reads price at the read rate, writes (the remaining excess) at
+//     the write rate. Defaults follow Anthropic's published ephemeral
+//     cache pricing structure: reads 0.1x, writes 1.25x the base input
+//     rate — leaving them unpriced (the old behavior) under-reports a
+//     cache-heavy session's cost by up to an order of magnitude.
+//
+// Explicit CacheRead/CacheWrite rates always win over the defaults.
+func CallCostUSD(inputTokens, outputTokens, cachedInputTokens, contextTokens int64, r CostRates) float64 {
+	if !r.Enabled() {
+		return 0
+	}
+	perMTok := 1e6
+	cost := float64(outputTokens) * r.OutputPerMTok / perMTok
+	if contextTokens > inputTokens {
+		// Split metering: input excludes cache reads and writes.
+		readRate := r.CacheReadPerMTok
+		if readRate <= 0 {
+			readRate = 0.1 * r.InputPerMTok
+		}
+		writeRate := r.CacheWritePerMTok
+		if writeRate <= 0 {
+			writeRate = 1.25 * r.InputPerMTok
+		}
+		writes := contextTokens - inputTokens - cachedInputTokens
+		if writes < 0 {
+			writes = 0
+		}
+		cost += float64(inputTokens)*r.InputPerMTok/perMTok +
+			float64(cachedInputTokens)*readRate/perMTok +
+			float64(writes)*writeRate/perMTok
+		return cost
+	}
+	// Cache-inclusive metering: the cached share is a subset of input.
+	readRate := r.CacheReadPerMTok
+	if readRate <= 0 {
+		readRate = r.InputPerMTok
+	}
+	billable := inputTokens - cachedInputTokens
+	if billable < 0 {
+		billable = 0
+	}
+	cost += float64(billable)*r.InputPerMTok/perMTok +
+		float64(cachedInputTokens)*readRate/perMTok
+	return cost
 }
 
 // CheckResult reports soft/hard threshold breaches.

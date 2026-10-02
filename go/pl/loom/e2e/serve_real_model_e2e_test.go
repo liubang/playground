@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -30,6 +31,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/e2e/harness"
 	"github.com/liubang/playground/go/pl/loom/internal/app"
 	"github.com/liubang/playground/go/pl/loom/internal/client"
+	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
@@ -675,6 +677,200 @@ func TestServeRealModelOrphanRecoveryE2E(t *testing.T) {
 		t.Fatal("run.interrupted is pure audit and must be ignorable")
 	}
 	t.Log("ACCEPTANCE PASS: crash-orphaned run marked interrupted, session recovered with a real turn")
+}
+
+// TestServeRealModelUsageAccountingE2E is the real-model acceptance for
+// token-usage accounting: delegated work folds into the parent session
+// budget EXACTLY ONCE, no matter how many times the child is observed
+// (wait_subagent after delegate_task, here driven across a prompt
+// boundary so the fold ledger rebuilds from the persisted transcript),
+// and the cache-metering counters stay consistent
+// (0 <= cached <= context).
+//
+// The reconciliation is fully deterministic: the final budget.updated
+// counters must equal the parent's own metered model calls (summed
+// from model.response_completed per-request usage) plus each child's
+// cumulative totals taken once — a double fold (the pre-fix behavior
+// on a repeated wait) overshoots by exactly the child's usage.
+//
+// Skipped unless LOOM_E2E_LLM=1 (real provider via the user's own config).
+func TestServeRealModelUsageAccountingE2E(t *testing.T) {
+	ctx := context.Background()
+	// Price tokens so the cost-accounting assertion is unconditional
+	// (the user's own tracing config may leave rates unset); the cache
+	// split then prices at the provider-family defaults.
+	env := harness.NewEnv(t, harness.WithAdjust(func(resolved *config.ResolvedConfig) {
+		resolved.Tracing.CostInputPerMTok = 3.0
+		resolved.Tracing.CostOutputPerMTok = 15.0
+	}))
+	workspace := env.Workspace
+	const codeWord = "loom-e2e-usage-quokka-77"
+	if err := os.WriteFile(filepath.Join(workspace, "marker.txt"), []byte("口令是："+codeWord+"\n"), 0o600); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+
+	c := env.NewClient(t)
+	sessionID := c.SessionID()
+	collector := harness.NewCollector(t.Context(), c, env.Subscribe(t, c))
+	go collector.Run()
+
+	// --- turn 1: delegate the file read to a sub-agent, wait for it ---
+	prompt := fmt.Sprintf("调用 delegate_task 委托一个子代理完成任务：用 read_file 读取 %s 并返回文件里的口令。"+
+		"然后调用 wait_subagent 等待它完成（如果 delegate_task 同步返回了结论就不用再等）。"+
+		"最后只回答口令本身。", filepath.Join(workspace, "marker.txt"))
+	turns := collector.TurnsDone()
+	if _, err := c.SubmitPrompt(ctx, prompt, nil); err != nil {
+		t.Fatalf("SubmitPrompt(turn1): %v", err)
+	}
+	collector.WaitTurn(t, turns+1, 5*time.Minute)
+
+	snap, err := c.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot(turn1): %v", err)
+	}
+	if !strings.Contains(lastAssistantText(snap.Messages), codeWord) {
+		t.Fatalf("turn1 answer does not contain the code word (delegation broken?): %q", lastAssistantText(snap.Messages))
+	}
+	childID, childUsage, observations := childObservations(snap.Messages)
+	if childID == "" {
+		t.Fatal("turn1 produced no delegated child with folded usage metadata")
+	}
+	t.Logf("turn1 ok: child %s folded %d input tokens over %d observation(s)", childID, childUsage, observations)
+
+	// --- turn 2: re-observe the SAME child across a prompt boundary ---
+	// The fresh per-prompt loop rebuilds its fold ledger from the
+	// persisted transcript; folding the child's cumulative totals again
+	// would double-count it (the pre-fix behavior).
+	prompt2 := fmt.Sprintf("必须调用一次 wait_subagent 工具，参数 child_session_id 原样填 %q。"+
+		"把它的结论原样复述给我，不要调用其他工具。", childID)
+	turns = collector.TurnsDone()
+	if _, err := c.SubmitPrompt(ctx, prompt2, nil); err != nil {
+		t.Fatalf("SubmitPrompt(turn2): %v", err)
+	}
+	collector.WaitTurn(t, turns+1, 3*time.Minute)
+
+	snap, err = c.RequestSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("RequestSnapshot(turn2): %v", err)
+	}
+	_, childUsageAfter, observationsAfter := childObservations(snap.Messages)
+	if observationsAfter < 2 {
+		t.Fatalf("the child was observed %d time(s), want >= 2 (the model must re-wait the same child)", observationsAfter)
+	}
+	if childUsageAfter != childUsage {
+		t.Fatalf("child cumulative usage changed between observations: %d → %d", childUsage, childUsageAfter)
+	}
+
+	// --- reconciliation from the durable event log ---
+	store := env.OpenStoreReadOnly(t)
+	persisted, err := store.LoadEvents(ctx, sessionID, 0)
+	if err != nil {
+		t.Fatalf("LoadEvents: %v", err)
+	}
+	var parentModelInput int64
+	var compacted bool
+	var finalUsage domain.Usage
+	var sawBudget bool
+	for _, evt := range persisted {
+		switch evt.Type {
+		case domain.EventModelResponseCompleted:
+			var payload domain.ResponseCompletedPayload
+			if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+				t.Fatalf("unmarshal response_completed: %v", err)
+			}
+			if payload.Usage != nil {
+				parentModelInput += payload.Usage.InputTokens
+			}
+		case domain.EventContextMasked, domain.EventContextCompacted:
+			compacted = true
+		case domain.EventBudgetUpdated:
+			if err := json.Unmarshal(evt.Payload, &finalUsage); err != nil {
+				t.Fatalf("unmarshal budget.updated: %v", err)
+			}
+			sawBudget = true
+		}
+	}
+	if !sawBudget {
+		t.Fatal("no budget.updated event persisted")
+	}
+	foldedTotal := finalUsage.InputTokens - parentModelInput
+	if compacted {
+		// Compaction model calls meter into the session counters without
+		// a response_completed transcript event, so the strict equality
+		// cannot attribute them — verify the weaker bound instead: the
+		// folded share still must not EXCEED the children's totals plus
+		// the compaction traffic (a double fold overshoots by the full
+		// child usage, which dominates any compaction call here).
+		t.Logf("session compacted; strict reconciliation relaxed (folded=%d child=%d)", foldedTotal, childUsage)
+		if foldedTotal > childUsage+parentModelInput {
+			t.Fatalf("folded external usage %d wildly exceeds the child's %d (double fold?)", foldedTotal, childUsage)
+		}
+	} else if foldedTotal != childUsage {
+		t.Fatalf("folded external usage = %d, want exactly the child's cumulative %d observed %d times (double fold on repeated wait)",
+			foldedTotal, childUsage, observationsAfter)
+	}
+	t.Logf("fold reconciliation ok: parent final input %d = model calls %d + child %d (observed %d times, folded once)",
+		finalUsage.InputTokens, parentModelInput, childUsage, observationsAfter)
+
+	// --- cache-metering consistency: 0 <= cached <= context ---
+	if finalUsage.CachedInputTokens < 0 || finalUsage.CachedInputTokens > finalUsage.ContextTokens {
+		t.Fatalf("cache counters inconsistent: cached=%d context=%d, want 0 <= cached <= context",
+			finalUsage.CachedInputTokens, finalUsage.ContextTokens)
+	}
+	if finalUsage.ContextTokens > 0 {
+		t.Logf("session cache-hit ratio: %d/%d = %d%%",
+			finalUsage.CachedInputTokens, finalUsage.ContextTokens,
+			finalUsage.CachedInputTokens*100/finalUsage.ContextTokens)
+	}
+
+	// --- cost accounting: positive, and bounded by the most expensive
+	// possible reading of the metered traffic (every input-side token —
+	// the full context footprint — billed at the cache-WRITE premium of
+	// 1.25x the input rate). The cache-aware pricing must land below
+	// that ceiling; the pre-fix accounting landed even lower (the cache
+	// split was never priced at all), so the bound alone cannot prove
+	// the split is priced — but together with the unit-level coverage
+	// (TestLoopAccountUsagePricesCacheSplit) it guards the wiring.
+	if finalUsage.CostUSD <= 0 {
+		t.Fatalf("cost accounting configured but CostUSD = %v", finalUsage.CostUSD)
+	}
+	costCeiling := float64(finalUsage.ContextTokens)*3.0*1.25/1e6 + float64(finalUsage.OutputTokens)*15.0/1e6
+	if finalUsage.CostUSD > costCeiling {
+		t.Fatalf("CostUSD = %v exceeds the most expensive reading %v of the metered traffic", finalUsage.CostUSD, costCeiling)
+	}
+	t.Logf("cost accounting ok: $%.6f for %d in / %d out / %d cached / %d context tokens (ceiling $%.6f)",
+		finalUsage.CostUSD, finalUsage.InputTokens, finalUsage.OutputTokens, finalUsage.CachedInputTokens, finalUsage.ContextTokens, costCeiling)
+
+	t.Log("ACCEPTANCE PASS: usage accounting idempotent across repeated sub-agent observations, cache counters consistent")
+}
+
+// childObservations scans the transcript for tool results carrying
+// externally-metered usage (delegate_task / wait_subagent /
+// cancel_subagent): it returns the child session ID, the child's
+// cumulative input tokens (identical across observations of the same
+// finished child), and how many times the child was observed with
+// non-zero usage.
+func childObservations(messages []domain.Message) (childID string, inputTokens int64, observations int) {
+	for _, msg := range messages {
+		for _, part := range msg.Parts {
+			if part.Kind != domain.PartToolResult || part.ToolResult == nil || part.ToolResult.Metadata == nil {
+				continue
+			}
+			meta := part.ToolResult.Metadata
+			id := meta[domain.ToolMetaChildSessionID]
+			if id == "" {
+				continue
+			}
+			in, _ := strconv.ParseInt(meta[domain.ToolMetaExternalInputTokens], 10, 64)
+			if in <= 0 {
+				continue
+			}
+			childID = id
+			inputTokens = in
+			observations++
+		}
+	}
+	return childID, inputTokens, observations
 }
 
 func waitForAnyEvent(t *testing.T, ch <-chan runtimeevent.RuntimeEvent, want domain.SessionID, timeout time.Duration) {
