@@ -669,6 +669,23 @@ func (b *syncLogBuffer) String() string {
 	return b.buf.String()
 }
 
+// waitForLog polls buf until want appears. Timing-sensitive tests must key
+// on the mechanism's own evidence rather than a wall-clock window: under a
+// fully parallel bazel run the starved event pump can go seconds without a
+// P while sysmon still fires test deadlines on time, so a fixed deadline
+// fails without anything being broken (observed in the wild: the pump
+// delivered 0 of 50 buffered events within 5s on a saturated machine).
+func waitForLog(t *testing.T, buf *syncLogBuffer, want string) {
+	t.Helper()
+	deadline := time.Now().Add(60 * time.Second)
+	for !strings.Contains(buf.String(), want) {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for log %q:\n%s", want, buf.String())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // TestSessionServiceSlowSubscriberDropped locks the dispatch contract behind
 // the desktop flicker incident: a subscriber that stops draining fills the
 // bounded queue and is disconnected (it must resync via its cursor), losing
@@ -706,10 +723,15 @@ func TestSessionServiceSlowSubscriberDropped(t *testing.T) {
 			t.Fatalf("PublishDurable: %v", err)
 		}
 	}
+	// Wait for the drop's own evidence: the warning is logged inside
+	// dispatch BEFORE the subscriber channels are closed, so once it
+	// appears the close is a handful of instructions away (see waitForLog
+	// for why a fixed window here flakes under load).
+	waitForLog(t, &logBuf, "dropping slow event subscriber")
 	// Reading resumes after the flood: only the small buffered head is
 	// delivered, then the channel must be closed by the drop.
 	received := 0
-	deadline := time.After(5 * time.Second)
+	deadline := time.After(30 * time.Second)
 	for {
 		select {
 		case _, ok := <-ch:
@@ -718,15 +740,12 @@ func TestSessionServiceSlowSubscriberDropped(t *testing.T) {
 			}
 			received++
 		case <-deadline:
-			t.Fatalf("slow subscriber channel was not closed (received %d events)", received)
+			t.Fatalf("subscriber channel not closed after the drop was logged (received %d events)", received)
 		}
 	}
 closed:
 	if received >= total {
 		t.Fatalf("received %d/%d events; the drop must lose the backlog", received, total)
-	}
-	if !strings.Contains(logBuf.String(), "dropping slow event subscriber") {
-		t.Fatalf("slow-subscriber drop was not logged:\n%s", logBuf.String())
 	}
 }
 
