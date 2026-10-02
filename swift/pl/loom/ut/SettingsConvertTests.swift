@@ -433,6 +433,23 @@ final class SettingsConvertTests: XCTestCase {
         XCTAssertEqual(card.models[0].fields["reasoning.budget_tokens"], .text("4096"))
     }
 
+    // MARK: Spec coverage
+
+    func testSpecCoversApprovalTrustAndProviderLivenessKeys() {
+        // Regression: approval.trust_user_urls and the provider liveness
+        // timeouts existed in the config schema but in no field spec —
+        // "unprovided key = removed from the file" meant a settings save
+        // silently dropped them.
+        let approvalKeys = (settingsTabs.first { $0.id == "permission" }?.sections ?? [])
+            .flatMap(\.1)
+            .map(\.key)
+        XCTAssertTrue(approvalKeys.contains("approval.trust_user_urls"))
+        let providerKeys = providerAllFields.map(\.key)
+        for key in ["response_header_timeout", "stream_idle_timeout", "attempt_timeout"] {
+            XCTAssertTrue(providerKeys.contains(key), "provider spec missing \(key)")
+        }
+    }
+
     // MARK: Round trip
 
     func testRoundTrip() {

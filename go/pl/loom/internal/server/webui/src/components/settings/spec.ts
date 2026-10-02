@@ -133,6 +133,24 @@ export const PROVIDER_ADV_FIELDS: FieldSpec[] = [
     hint: '仅 anthropic 类型；留空取内置版本',
   },
   { key: 'max_retries', label: '失败重试次数', type: 'number', ph: '2' },
+  {
+    key: 'response_header_timeout',
+    label: '响应头超时',
+    ph: '60s',
+    hint: 'Go duration 语法；等待响应头的上限，0 = 关闭',
+  },
+  {
+    key: 'stream_idle_timeout',
+    label: '流式静默超时',
+    ph: '120s',
+    hint: 'Go duration 语法；流中沉默上限（任何字节都会重置），0 = 关闭',
+  },
+  {
+    key: 'attempt_timeout',
+    label: '单次尝试总超时',
+    ph: '0',
+    hint: 'Go duration 语法；单次模型调用的总时长上限，默认关闭',
+  },
   ...REASONING_FIELDS,
 ]
 
@@ -376,6 +394,13 @@ export const TABS: TabSpec[] = [
               never:
                 'auto（无人值守）：沙箱内放行，提权、越界写入与破坏性/共享状态操作直接拒绝，永不阻塞等待审批',
             },
+          },
+          {
+            key: 'approval.trust_user_urls',
+            label: '信任用户提供的 URL',
+            type: 'tristate',
+            def: '开',
+            hint: '自动放行用户在对话中提到的站点（web_fetch、浏览器导航）；规则层的 deny 仍然优先',
           },
         ],
       ],

@@ -171,6 +171,21 @@ let providerAdvFields: [FieldSpec] = [
     ),
     FieldSpec("api_version", label: "API 版本头", hint: "仅 anthropic 类型；留空 = 内置版本"),
     FieldSpec("max_retries", label: "最大重试次数", ph: "2", type: .number),
+    FieldSpec(
+        "response_header_timeout", label: "响应头超时",
+        hint: "Go duration 语法；等待响应头的上限，0 = 关闭",
+        ph: "60s",
+    ),
+    FieldSpec(
+        "stream_idle_timeout", label: "流式静默超时",
+        hint: "Go duration 语法；流中沉默上限（任何字节都会重置），0 = 关闭",
+        ph: "120s",
+    ),
+    FieldSpec(
+        "attempt_timeout", label: "单次尝试总超时",
+        hint: "Go duration 语法；单次模型调用的总时长上限，默认关闭",
+        ph: "0",
+    ),
 ] + reasoningFields
 
 /// Every field of a provider card (base + advanced + name), the full
@@ -307,6 +322,12 @@ let settingsTabs: [TabSpec] = [
                     "danger-only": "dev：仅明确危险的操作弹窗：危险站点拒绝列表、危险模式（curl|sh、凭证/启动文件写入等）、破坏性或有共享状态后果的操作（删除关键目标、git push 等）；开发命令、普通站点/API 以及沙盒提权自动允许",
                     "never": "auto（无人值守）：沙盒内允许；提权、工作区外写入、破坏性/共享状态操作直接拒绝——永远不会阻塞等待审批",
                 ],
+            ),
+            FieldSpec(
+                "approval.trust_user_urls", label: "信任用户提供的 URL",
+                hint: "自动放行用户在对话中提到的站点（web_fetch、浏览器导航）；规则层的拒绝规则仍然优先",
+                type: .tristate,
+                def: "开",
             ),
         ]),
         ("规则分层", [
