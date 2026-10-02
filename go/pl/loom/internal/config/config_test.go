@@ -1048,36 +1048,80 @@ func TestWriteTemplate(t *testing.T) {
 
 // TestTemplateCoversSchemaSections is the M35 regression lock: the init
 // template doubles as the user-facing configuration reference, so every
-// top-level schema section must appear in it (memory/image/logging/
-// workspaces and subagent.max_output_tokens had drifted out). It also
-// verifies the template's concrete values resolve to the defaults its
+// schema key must be documented in it (memory/image/logging/workspaces
+// and subagent.max_output_tokens had drifted out). The template is two
+// layers: only default/providers are active — an uncommented key must be
+// a deliberate override — and everything else ships commented, so the
+// resolved config must equal the built-in defaults the reference
 // comments document.
 func TestTemplateCoversSchemaSections(t *testing.T) {
 	var raw map[string]any
 	if err := yaml.Unmarshal([]byte(template), &raw); err != nil {
 		t.Fatalf("template is not valid YAML: %v", err)
 	}
-	// Mirror of File's top-level yaml keys (schema.go).
-	for _, section := range []string{
-		"default", "providers", "limits", "context", "runaway", "prompt",
-		"skills", "rules", "approval", "tracing", "share", "logging",
-		"ui", "subagent", "memory", "image", "mcp_servers", "workspaces",
-	} {
-		if _, ok := raw[section]; !ok {
-			t.Fatalf("template missing top-level section %q", section)
+	// The active layer is minimal: every other section belongs to the
+	// commented reference layer, never to the user's effective config.
+	for key := range raw {
+		if key != "default" && key != "providers" {
+			t.Fatalf("template section %q must stay commented (reference only), not active", key)
 		}
 	}
-	sub, _ := raw["subagent"].(map[string]any)
-	if _, ok := sub["max_output_tokens"]; !ok {
-		t.Fatal("template subagent section missing max_output_tokens")
+	// Every File yaml key must head some template line (active or
+	// commented) — substring matching would let prose accidentally
+	// satisfy a short key like "ui". Reflecting over the schema struct
+	// keeps this lock in sync automatically: a new section fails here
+	// until the template documents it.
+	schema := reflect.TypeOf(File{})
+	for i := 0; i < schema.NumField(); i++ {
+		tag := strings.Split(schema.Field(i).Tag.Get("yaml"), ",")[0]
+		if tag == "" || tag == "-" {
+			continue
+		}
+		documented := false
+		for line := range strings.Lines(template) {
+			text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "#"))
+			if strings.HasPrefix(text, tag+":") {
+				documented = true
+				break
+			}
+		}
+		if !documented {
+			t.Fatalf("template does not document schema key %q", tag)
+		}
 	}
 
-	// The template's concrete values must resolve to the documented
-	// defaults.
-	content := strings.Replace(template, "#   api_key: <your-api-key>", "api_key: sk-real", 1)
-	cfg, err := Load(writeConfig(t, content), LoadOptions{RequireProviders: true}, noEnv)
+	// The template loads as shipped (the api_key stays a comment) and
+	// every resolved value equals the built-in default its reference
+	// comment documents.
+	cfg, err := Load(writeConfig(t, template), LoadOptions{RequireProviders: true}, noEnv)
 	if err != nil {
 		t.Fatalf("template does not load: %v", err)
+	}
+	if cfg.Limits != domain.DefaultLimits() {
+		t.Fatalf("limits = %+v, want %+v", cfg.Limits, domain.DefaultLimits())
+	}
+	if !reflect.DeepEqual(cfg.Context, domain.DefaultContextConfig()) {
+		t.Fatalf("context = %+v, want %+v", cfg.Context, domain.DefaultContextConfig())
+	}
+	if cfg.Runaway != domain.DefaultRunawayConfig() {
+		t.Fatalf("runaway = %+v, want %+v", cfg.Runaway, domain.DefaultRunawayConfig())
+	}
+	if want := (ResolvedRules{Enabled: true, Builtin: true, Project: true, PersistRemembered: true}); cfg.Rules != want {
+		t.Fatalf("rules = %+v, want %+v", cfg.Rules, want)
+	}
+	if cfg.Approval.Mode != "on-request" || !cfg.Approval.TrustUserURLs {
+		t.Fatalf("approval = %+v, want on-request with trust_user_urls", cfg.Approval)
+	}
+	if cfg.Share.Enabled || cfg.Share.Listen != DefaultShareListen {
+		t.Fatalf("share = %+v, want disabled with %q", cfg.Share, DefaultShareListen)
+	}
+	if cfg.Logging.MaxFileBytes != logging.DefaultMaxFileBytes ||
+		cfg.Logging.MaxTotalBytes != logging.DefaultMaxTotalBytes {
+		t.Fatalf("logging defaults = %+v", cfg.Logging)
+	}
+	if !cfg.Subagent.Enabled || cfg.Subagent.MaxTokens != 0 ||
+		cfg.Subagent.MaxOutputTokens != 8192 || cfg.Subagent.Model != nil {
+		t.Fatalf("subagent defaults = %+v", cfg.Subagent)
 	}
 	if !cfg.Memory.Enabled || cfg.Memory.MaxJobsPerRun != 8 ||
 		cfg.Memory.RunInterval != 30*time.Minute ||
@@ -1085,15 +1129,20 @@ func TestTemplateCoversSchemaSections(t *testing.T) {
 		cfg.Memory.MaxSessionAge != 30*24*time.Hour {
 		t.Fatalf("memory defaults = %+v", cfg.Memory)
 	}
-	if cfg.Logging.MaxFileBytes != logging.DefaultMaxFileBytes ||
-		cfg.Logging.MaxTotalBytes != logging.DefaultMaxTotalBytes {
-		t.Fatalf("logging defaults = %+v", cfg.Logging)
-	}
-	if cfg.Subagent.MaxOutputTokens != 8192 {
-		t.Fatalf("subagent.max_output_tokens = %d, want 8192", cfg.Subagent.MaxOutputTokens)
+	if cfg.Sessions.AutoArchiveAfter != 0 || cfg.Sessions.GCArchivedAfter != 0 {
+		t.Fatalf("sessions defaults = %+v, want disabled", cfg.Sessions)
 	}
 	if cfg.Image.Enabled {
 		t.Fatalf("image must stay disabled with empty provider/model: %+v", cfg.Image)
+	}
+	if want := (ResolvedBrowser{
+		Enabled: true, IdleTTL: 5 * time.Minute, NavTimeout: 30 * time.Second,
+		ScreenshotQual: 80, ViewportW: 1280, ViewportH: 720,
+	}); cfg.Browser != want {
+		t.Fatalf("browser defaults = %+v, want %+v", cfg.Browser, want)
+	}
+	if cfg.KnowledgeBase.Enabled {
+		t.Fatalf("knowledge_base must stay disabled when unconfigured: %+v", cfg.KnowledgeBase)
 	}
 	if len(cfg.Workspaces) != 0 {
 		t.Fatalf("workspaces = %+v, want empty", cfg.Workspaces)
