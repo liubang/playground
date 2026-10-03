@@ -1,0 +1,409 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - config/go/pl/loom/internal/config/init.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../index.html">top level</a> - <a href="index.html">config/go/pl/loom/internal/config</a> - init.go<span style="font-size: 80%;"> (source / <a href="init.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryLo">60.0&nbsp;%</td>
+            <td class="headerCovTableEntry">30</td>
+            <td class="headerCovTableEntry">18</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-10-03 13:17:48</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/07/26</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : package config</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : import (</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             :         &quot;fmt&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             :         &quot;os&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             :         &quot;path/filepath&quot;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : )</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : </span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : // FileName is the config file name within the loom data directory.</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : const FileName = &quot;config.yaml&quot;</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : </span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : // WriteTemplate writes the annotated starter config (0600) at path,</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : // creating its parent directory (0700) when missing. An existing file is</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : // never overwritten — the user edits it by hand or removes it first.</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : func WriteTemplate(path string) error {</span>
+<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC tlaBgGNC">           4 :         if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {</span></span>
+<span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return fmt.Errorf(&quot;create config directory: %w&quot;, err)</span></span>
+<span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC tlaBgGNC">           4 :         if _, err := os.Stat(path); err == nil {</span></span>
+<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">           1 :                 return fmt.Errorf(&quot;config file already exists: %s (edit it directly, or remove it and re-run init)&quot;, path)</span></span>
+<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">           3 :         } else if !os.IsNotExist(err) {</span></span>
+<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return fmt.Errorf(&quot;inspect config file: %w&quot;, err)</span></span>
+<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         if err := os.WriteFile(path, []byte(template), 0o600); err != nil {</span></span>
+<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return fmt.Errorf(&quot;write config file: %w&quot;, err)</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         return nil</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :             : }</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             : </span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : // EnsureFirstRunConfig writes the starter template at &lt;home&gt;/config.yaml</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : // when home is the DEFAULT loom home and the file is missing, creating</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : // the parent directory (0700) and the file (0600). An explicit LOOM_HOME</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             : // directory is never bootstrapped: it names a place that should already</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             : // be set up — a user error to surface, never a state to paper over with</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             : // a generated file. An existing file is never overwritten. When the</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             : // default home cannot be resolved (e.g. HOME is unset) the directory is</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             : // treated as non-default: no file is created and the caller keeps its</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             : // original error. Returns created=true when a fresh template was written</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : // so the caller can route the first-run experience: the CLI prints the</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : // path and exits non-zero, the desktop keeps booting into the settings</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : // UI where the API key is collected.</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             : func EnsureFirstRunConfig(home string) (bool, error) {</span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">           5 :         abs, err := filepath.Abs(home)</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">           5 :         if err != nil {</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return false, fmt.Errorf(&quot;config: resolve loom home: %w&quot;, err)</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC tlaBgGNC">           5 :         def, err := DefaultHomeDir()</span></span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">           5 :         if err != nil || abs != def {</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">           2 :                 return false, nil</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">           3 :         path := ConfigPathForHome(abs)</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">           3 :         if _, err := os.Stat(path); err == nil {</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">           1 :                 return false, nil</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">           2 :         } else if !os.IsNotExist(err) {</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return false, fmt.Errorf(&quot;inspect config file: %w&quot;, err)</span></span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC tlaBgGNC">           2 :         if err := WriteTemplate(path); err != nil {</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return false, err</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC tlaBgGNC">           2 :         return true, nil</span></span>
+<span id="L78"><span class="lineNum">      78</span>                 :             : }</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             : </span>
+<span id="L80"><span class="lineNum">      80</span>                 :             : // minimalExample is embedded in fail-fast error messages so a user without</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : // any config can copy-paste their way to a working setup (§9). The key</span>
+<span id="L82"><span class="lineNum">      82</span>                 :             : // placeholder is intentionally non-secret-looking: it must be replaced.</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             : const minimalExample = `default: deepseek/deepseek-chat</span>
+<span id="L84"><span class="lineNum">      84</span>                 :             : providers:</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             :   - name: deepseek</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             :     type: openai</span>
+<span id="L87"><span class="lineNum">      87</span>                 :             :     base_url: https://api.deepseek.com/v1</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             :     api_key: &lt;your-api-key&gt;       # 必填：换成你的真实密钥，或用 api_key_env: DEEPSEEK_API_KEY</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             :     models:</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             :       - name: deepseek-chat</span>
+<span id="L91"><span class="lineNum">      91</span>                 :             :         context_window: 65536`</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             : </span>
+<span id="L93"><span class="lineNum">      93</span>                 :             : // template is the starter config written by `loom config init`. It is</span>
+<span id="L94"><span class="lineNum">      94</span>                 :             : // two layers: an active minimal layer (default + providers, the only</span>
+<span id="L95"><span class="lineNum">      95</span>                 :             : // required section) and a commented reference layer documenting every</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             : // remaining section with its built-in defaults — an uncommented key is</span>
+<span id="L97"><span class="lineNum">      97</span>                 :             : // always a deliberate override, never template noise. The reference</span>
+<span id="L98"><span class="lineNum">      98</span>                 :             : // layer doubles as the user-facing configuration reference; keep it in</span>
+<span id="L99"><span class="lineNum">      99</span>                 :             : // sync with schema.go (TestTemplateCoversSchemaSections locks this).</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             : const template = `# loom 配置文件 — 位置: &lt;loom home&gt;/config.yaml（默认 ~/.loom，可用 LOOM_HOME 指定）</span>
+<span id="L101"><span class="lineNum">     101</span>                 :             : # 仅 providers 必填。下方注释区是全部可选配置的参考，省略即取标注的</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             : # 内置默认值——只有需要覆盖默认值的键才取消注释。含明文密钥时建议 chmod 600。</span>
+<span id="L103"><span class="lineNum">     103</span>                 :             : </span>
+<span id="L104"><span class="lineNum">     104</span>                 :             : # 默认模型: provider/model（推荐）| 裸模型名（须全局唯一）| 裸 provider 名（取其第一个</span>
+<span id="L105"><span class="lineNum">     105</span>                 :             : # 模型）。省略时取 providers[0] 的第一个模型；运行中用 /model 切换。</span>
+<span id="L106"><span class="lineNum">     106</span>                 :             : default: deepseek/deepseek-chat</span>
+<span id="L107"><span class="lineNum">     107</span>                 :             : </span>
+<span id="L108"><span class="lineNum">     108</span>                 :             : # 模型提供方（必填，至少一个）。</span>
+<span id="L109"><span class="lineNum">     109</span>                 :             : providers:</span>
+<span id="L110"><span class="lineNum">     110</span>                 :             :   - name: deepseek</span>
+<span id="L111"><span class="lineNum">     111</span>                 :             :     type: openai                # openai（兼容网关，默认）| anthropic（Messages API）</span>
+<span id="L112"><span class="lineNum">     112</span>                 :             :     base_url: https://api.deepseek.com/v1</span>
+<span id="L113"><span class="lineNum">     113</span>                 :             :     # 密钥二选一（互斥）: api_key 明文书写 | api_key_env 引用环境变量名</span>
+<span id="L114"><span class="lineNum">     114</span>                 :             :     #   api_key: &lt;your-api-key&gt;</span>
+<span id="L115"><span class="lineNum">     115</span>                 :             :     #   api_key_env: DEEPSEEK_API_KEY</span>
+<span id="L116"><span class="lineNum">     116</span>                 :             :     models:</span>
+<span id="L117"><span class="lineNum">     117</span>                 :             :       - name: deepseek-chat</span>
+<span id="L118"><span class="lineNum">     118</span>                 :             :         context_window: 65536</span>
+<span id="L119"><span class="lineNum">     119</span>                 :             :         max_output_tokens: 8192</span>
+<span id="L120"><span class="lineNum">     120</span>                 :             :       - name: deepseek-reasoner</span>
+<span id="L121"><span class="lineNum">     121</span>                 :             :         context_window: 65536</span>
+<span id="L122"><span class="lineNum">     122</span>                 :             : </span>
+<span id="L123"><span class="lineNum">     123</span>                 :             :   # 更多 provider 示例：</span>
+<span id="L124"><span class="lineNum">     124</span>                 :             :   # - name: openai</span>
+<span id="L125"><span class="lineNum">     125</span>                 :             :   #   type: openai</span>
+<span id="L126"><span class="lineNum">     126</span>                 :             :   #   base_url: https://api.openai.com/v1</span>
+<span id="L127"><span class="lineNum">     127</span>                 :             :   #   api_key_env: OPENAI_API_KEY</span>
+<span id="L128"><span class="lineNum">     128</span>                 :             :   #   models:</span>
+<span id="L129"><span class="lineNum">     129</span>                 :             :   #     - name: gpt-5</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             :   #       context_window: 400000</span>
+<span id="L131"><span class="lineNum">     131</span>                 :             :   # - name: anthropic</span>
+<span id="L132"><span class="lineNum">     132</span>                 :             :   #   type: anthropic</span>
+<span id="L133"><span class="lineNum">     133</span>                 :             :   #   base_url: https://api.anthropic.com</span>
+<span id="L134"><span class="lineNum">     134</span>                 :             :   #   api_key_env: ANTHROPIC_API_KEY</span>
+<span id="L135"><span class="lineNum">     135</span>                 :             :   #   # auth_type: bearer       # 仅 anthropic：网关用 bearer，官方 x-api-key（默认）</span>
+<span id="L136"><span class="lineNum">     136</span>                 :             :   #   # api_version: &quot;&quot;         # 仅 anthropic：协议版本头，空 = 内置固定版本</span>
+<span id="L137"><span class="lineNum">     137</span>                 :             :   #   models:</span>
+<span id="L138"><span class="lineNum">     138</span>                 :             :   #     - name: claude-sonnet-4-6</span>
+<span id="L139"><span class="lineNum">     139</span>                 :             :   #       context_window: 200000</span>
+<span id="L140"><span class="lineNum">     140</span>                 :             :   #       max_output_tokens: 64000</span>
+<span id="L141"><span class="lineNum">     141</span>                 :             :   #       reasoning: {effort: high}</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             : </span>
+<span id="L143"><span class="lineNum">     143</span>                 :             : # ═══════════════════ 可选配置参考（省略 = 取标注的内置默认值）═══════════════════</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             : </span>
+<span id="L145"><span class="lineNum">     145</span>                 :             : # provider 级可选键（写在 provider 条目内）：</span>
+<span id="L146"><span class="lineNum">     146</span>                 :             : #   wire_api: chat                 # openai: chat（默认）| responses；anthropic 固定 messages</span>
+<span id="L147"><span class="lineNum">     147</span>                 :             : #   max_retries: 2                 # 默认 2</span>
+<span id="L148"><span class="lineNum">     148</span>                 :             : #   response_header_timeout: 60s   # 等响应头上限（默认 60s，&quot;0&quot; 关闭）</span>
+<span id="L149"><span class="lineNum">     149</span>                 :             : #   stream_idle_timeout: 120s      # 流中沉默上限，任何字节重置（默认 120s，&quot;0&quot; 关闭）</span>
+<span id="L150"><span class="lineNum">     150</span>                 :             : #   attempt_timeout: 0             # 单次尝试总时长上限（默认关闭）</span>
+<span id="L151"><span class="lineNum">     151</span>                 :             : #   reasoning:                     # 推理意图（模型级可覆盖）</span>
+<span id="L152"><span class="lineNum">     152</span>                 :             : #     effort: auto                 # auto（默认：规划轮 high / 执行轮 low，连败升级）| off | low | medium | high</span>
+<span id="L153"><span class="lineNum">     153</span>                 :             : #     budget_tokens: 0             # 显式推理预算，&gt;0 优先于 effort</span>
+<span id="L154"><span class="lineNum">     154</span>                 :             : #</span>
+<span id="L155"><span class="lineNum">     155</span>                 :             : # model 级可选键（写在 models 条目内）：</span>
+<span id="L156"><span class="lineNum">     156</span>                 :             : #     max_output_tokens: 0      # 单次响应能力上限（请求参数），0 = 不设（预算护栏在 limits.max_output_tokens）</span>
+<span id="L157"><span class="lineNum">     157</span>                 :             : #     wire_api: &quot;&quot;              # 覆盖 provider 级协议</span>
+<span id="L158"><span class="lineNum">     158</span>                 :             : #     modalities: [text]        # 加入 &quot;image&quot; 才允许图片输入，如 [text, image]</span>
+<span id="L159"><span class="lineNum">     159</span>                 :             : #     window_utilization: 0     # 覆盖 context.utilization（网关虚报窗口时用），(0, 1]</span>
+<span id="L160"><span class="lineNum">     160</span>                 :             : #     reasoning: {}             # 同 provider 级，覆盖之</span>
+<span id="L161"><span class="lineNum">     161</span>                 :             : </span>
+<span id="L162"><span class="lineNum">     162</span>                 :             : # 运行预算（0 = 不限；超限先收尾再中止当前 run）：</span>
+<span id="L163"><span class="lineNum">     163</span>                 :             : # limits:</span>
+<span id="L164"><span class="lineNum">     164</span>                 :             : #   max_input_tokens: 200000      # 默认 200000，模型未声明 context_window 时的回退窗口</span>
+<span id="L165"><span class="lineNum">     165</span>                 :             : #   max_output_tokens: 16384      # 默认 16384，单次输出上限</span>
+<span id="L166"><span class="lineNum">     166</span>                 :             : #   max_cost_usd: 5.0             # 默认 5.0，会话级成本上限 USD（需配置 tracing 费率）</span>
+<span id="L167"><span class="lineNum">     167</span>                 :             : #   max_tokens: 0                 # 默认 0，会话级累计 token 预算</span>
+<span id="L168"><span class="lineNum">     168</span>                 :             : #   max_tool_output_bytes: 49152  # 默认 49152，单条工具结果保留字节（超出转存 artifact）</span>
+<span id="L169"><span class="lineNum">     169</span>                 :             : #   max_artifact_bytes: 104857600 # 默认 100MiB，单个 artifact 最大字节</span>
+<span id="L170"><span class="lineNum">     170</span>                 :             : </span>
+<span id="L171"><span class="lineNum">     171</span>                 :             : # 上下文压缩（比例随模型窗口自动伸缩）：</span>
+<span id="L172"><span class="lineNum">     172</span>                 :             : # context:</span>
+<span id="L173"><span class="lineNum">     173</span>                 :             : #   utilization: 0.95             # 默认 0.95，有效窗口 = context_window × utilization</span>
+<span id="L174"><span class="lineNum">     174</span>                 :             : #   compact_trigger_ratio: 0.80   # 默认 0.80，自动压缩触发线</span>
+<span id="L175"><span class="lineNum">     175</span>                 :             : #   compact_target_ratio: 0.50    # 默认 0.50，压缩目标（须 &lt; trigger）</span>
+<span id="L176"><span class="lineNum">     176</span>                 :             : #   notice_levels: [0.60, 0.75]   # 默认 [0.60, 0.75]，占用提醒档位（升序且 &lt; trigger）</span>
+<span id="L177"><span class="lineNum">     177</span>                 :             : </span>
+<span id="L178"><span class="lineNum">     178</span>                 :             : # 失控检测（检测死循环/停滞，不限工作量）：</span>
+<span id="L179"><span class="lineNum">     179</span>                 :             : # runaway:</span>
+<span id="L180"><span class="lineNum">     180</span>                 :             : #   max_repeated_calls: 3         # 默认 3，同一 (工具, 参数) 连续重复上限</span>
+<span id="L181"><span class="lineNum">     181</span>                 :             : #   max_consecutive_failures: 5   # 默认 5，连续工具失败上限</span>
+<span id="L182"><span class="lineNum">     182</span>                 :             : #   stall_warn_turns: 10          # 默认 10，无进展回合数达此值注入提醒；0 关闭</span>
+<span id="L183"><span class="lineNum">     183</span>                 :             : #   stall_timeout: 15m            # 默认 15m，停滞看门狗；0 关闭（审批等待不计入）</span>
+<span id="L184"><span class="lineNum">     184</span>                 :             : </span>
+<span id="L185"><span class="lineNum">     185</span>                 :             : # 系统提示词：</span>
+<span id="L186"><span class="lineNum">     186</span>                 :             : # prompt:</span>
+<span id="L187"><span class="lineNum">     187</span>                 :             : #   extra: |                      # 追加到内置提示词之后</span>
+<span id="L188"><span class="lineNum">     188</span>                 :             : #     Your custom instructions here.</span>
+<span id="L189"><span class="lineNum">     189</span>                 :             : #   disable_builtin: false        # 默认 false；true = 只用 extra，不用内置提示词</span>
+<span id="L190"><span class="lineNum">     190</span>                 :             : #   managed:                      # Langfuse 托管提示词（需配置 tracing）</span>
+<span id="L191"><span class="lineNum">     191</span>                 :             : #     name: &quot;&quot;</span>
+<span id="L192"><span class="lineNum">     192</span>                 :             : #     label: production</span>
+<span id="L193"><span class="lineNum">     193</span>                 :             : </span>
+<span id="L194"><span class="lineNum">     194</span>                 :             : # Skills：</span>
+<span id="L195"><span class="lineNum">     195</span>                 :             : # skills:</span>
+<span id="L196"><span class="lineNum">     196</span>                 :             : #   enabled: true                 # 默认 true</span>
+<span id="L197"><span class="lineNum">     197</span>                 :             : #   extra_roots: []               # 额外技能搜索目录，支持 ~/ 前缀</span>
+<span id="L198"><span class="lineNum">     198</span>                 :             : #   disabled: []                  # 按名禁用（加载期剔除，跨所有作用域）</span>
+<span id="L199"><span class="lineNum">     199</span>                 :             : </span>
+<span id="L200"><span class="lineNum">     200</span>                 :             : # 开发工具链：</span>
+<span id="L201"><span class="lineNum">     201</span>                 :             : # tools:</span>
+<span id="L202"><span class="lineNum">     202</span>                 :             : #   path_extra: []                # 补充内置 PATH 候选之外的目录，支持 ~/，保存即热应用</span>
+<span id="L203"><span class="lineNum">     203</span>                 :             : </span>
+<span id="L204"><span class="lineNum">     204</span>                 :             : # 权限规则（argv 前缀作用于 run_cmd，domains 作用于 web_fetch，paths 作用于工作区外写）：</span>
+<span id="L205"><span class="lineNum">     205</span>                 :             : # rules:</span>
+<span id="L206"><span class="lineNum">     206</span>                 :             : #   enabled: true                 # 默认 true</span>
+<span id="L207"><span class="lineNum">     207</span>                 :             : #   builtin: true                 # 默认 true，内置只读命令集</span>
+<span id="L208"><span class="lineNum">     208</span>                 :             : #   project: true                 # 默认 true，项目层 &lt;workspace&gt;/.loom/rules</span>
+<span id="L209"><span class="lineNum">     209</span>                 :             : #   project_allow: false          # 默认 false，不可信仓库只能收紧策略</span>
+<span id="L210"><span class="lineNum">     210</span>                 :             : #   persist_remembered: true      # 默认 true，&quot;始终允许&quot;写入用户层规则文件</span>
+<span id="L211"><span class="lineNum">     211</span>                 :             : </span>
+<span id="L212"><span class="lineNum">     212</span>                 :             : # 审批基线（无规则/记忆命中时的决策策略）：</span>
+<span id="L213"><span class="lineNum">     213</span>                 :             : # approval:</span>
+<span id="L214"><span class="lineNum">     214</span>                 :             : #   mode: on-request              # on-request（默认）| danger-only | never</span>
+<span id="L215"><span class="lineNum">     215</span>                 :             : #   trust_user_urls: true         # 默认 true，自动放行用户在对话中提到的 host</span>
+<span id="L216"><span class="lineNum">     216</span>                 :             : </span>
+<span id="L217"><span class="lineNum">     217</span>                 :             : # 沙箱网络姿态（仅 macOS 生效；Linux 沙箱一律 fail-closed）：</span>
+<span id="L218"><span class="lineNum">     218</span>                 :             : # sandbox:</span>
+<span id="L219"><span class="lineNum">     219</span>                 :             : #   network: off                  # off（默认：default-deny + needs_network 声明流）| proxy（egress 代理：</span>
+<span id="L220"><span class="lineNum">     220</span>                 :             : #                                 # 直连仍拒绝，代理连接按域名过滤并逐条记录）| full（放开网络，无策略无日志）</span>
+<span id="L221"><span class="lineNum">     221</span>                 :             : #   proxy:</span>
+<span id="L222"><span class="lineNum">     222</span>                 :             : #     unmatched: allow            # allow（默认：无规则覆盖的目的地放行，拒绝列表在连接时强制，全部记录）</span>
+<span id="L223"><span class="lineNum">     223</span>                 :             : #                                 # | deny（白名单姿态，适合敏感工作区）</span>
+<span id="L224"><span class="lineNum">     224</span>                 :             : </span>
+<span id="L225"><span class="lineNum">     225</span>                 :             : # Langfuse 追踪（host 与两个 key 都填写才启用；key 也支持 *_env 引用环境变量）：</span>
+<span id="L226"><span class="lineNum">     226</span>                 :             : # tracing:</span>
+<span id="L227"><span class="lineNum">     227</span>                 :             : #   host: &quot;&quot;</span>
+<span id="L228"><span class="lineNum">     228</span>                 :             : #   public_key: &quot;&quot;</span>
+<span id="L229"><span class="lineNum">     229</span>                 :             : #   secret_key: &quot;&quot;</span>
+<span id="L230"><span class="lineNum">     230</span>                 :             : #   environment: dev              # 默认 dev</span>
+<span id="L231"><span class="lineNum">     231</span>                 :             : #   include_content: true         # 默认 true；false 不上送对话原文</span>
+<span id="L232"><span class="lineNum">     232</span>                 :             : #   user: &quot;&quot;                      # 空则取 git user.email / $USER</span>
+<span id="L233"><span class="lineNum">     233</span>                 :             : #   cost_input_usd_per_mtok: 0    # 输入费率 USD/Mtok，0 = 不计成本</span>
+<span id="L234"><span class="lineNum">     234</span>                 :             : #   cost_output_usd_per_mtok: 0</span>
+<span id="L235"><span class="lineNum">     235</span>                 :             : #   cost_cache_read_usd_per_mtok: 0   # 缓存读费率，0 = 按 provider 默认折算</span>
+<span id="L236"><span class="lineNum">     236</span>                 :             : #   cost_cache_write_usd_per_mtok: 0  # 缓存写费率，0 = 按 provider 默认折算</span>
+<span id="L237"><span class="lineNum">     237</span>                 :             : </span>
+<span id="L238"><span class="lineNum">     238</span>                 :             : # 局域网分享（loom-desktop；固定端口使链接跨重启存活，只暴露只读页面，保存即热应用）：</span>
+<span id="L239"><span class="lineNum">     239</span>                 :             : # share:</span>
+<span id="L240"><span class="lineNum">     240</span>                 :             : #   enabled: false                # 默认 false</span>
+<span id="L241"><span class="lineNum">     241</span>                 :             : #   listen: 0.0.0.0:7681          # 默认 0.0.0.0:7681</span>
+<span id="L242"><span class="lineNum">     242</span>                 :             : </span>
+<span id="L243"><span class="lineNum">     243</span>                 :             : # 文件日志配额（&lt;loom home&gt;/logs 下按日文件）：</span>
+<span id="L244"><span class="lineNum">     244</span>                 :             : # logging:</span>
+<span id="L245"><span class="lineNum">     245</span>                 :             : #   max_file_mb: 0                # 0 = 内置 2048；负数关闭</span>
+<span id="L246"><span class="lineNum">     246</span>                 :             : #   max_total_mb: 0               # 0 = 内置 10240；负数关闭</span>
+<span id="L247"><span class="lineNum">     247</span>                 :             : </span>
+<span id="L248"><span class="lineNum">     248</span>                 :             : # 终端界面：</span>
+<span id="L249"><span class="lineNum">     249</span>                 :             : # ui:</span>
+<span id="L250"><span class="lineNum">     250</span>                 :             : #   icons: nerd                   # nerd（默认，Nerd Font）| plain</span>
+<span id="L251"><span class="lineNum">     251</span>                 :             : #   alt_screen: false             # 默认 false</span>
+<span id="L252"><span class="lineNum">     252</span>                 :             : #   keymap:                       # 快捷键覆盖: 上下文 → 动作 → 键</span>
+<span id="L253"><span class="lineNum">     253</span>                 :             : #     chat:</span>
+<span id="L254"><span class="lineNum">     254</span>                 :             : #       search_transcript: &quot;ctrl+s&quot;</span>
+<span id="L255"><span class="lineNum">     255</span>                 :             : </span>
+<span id="L256"><span class="lineNum">     256</span>                 :             : # 子代理（delegate_task 工具）：</span>
+<span id="L257"><span class="lineNum">     257</span>                 :             : # subagent:</span>
+<span id="L258"><span class="lineNum">     258</span>                 :             : #   enabled: true                 # 默认 true</span>
+<span id="L259"><span class="lineNum">     259</span>                 :             : #   max_tokens: 0                 # 默认 0 = 继承 limits.max_tokens</span>
+<span id="L260"><span class="lineNum">     260</span>                 :             : #   max_output_tokens: 8192       # 默认 8192；显式 0 = 继承 limits.max_output_tokens</span>
+<span id="L261"><span class="lineNum">     261</span>                 :             : #   model: &quot;&quot;                     # 空 = 跟随当前轮次模型</span>
+<span id="L262"><span class="lineNum">     262</span>                 :             : </span>
+<span id="L263"><span class="lineNum">     263</span>                 :             : # 长期记忆（后台提取/归纳流水线，启动时运行一次，之后每 run_interval 运行）：</span>
+<span id="L264"><span class="lineNum">     264</span>                 :             : # memory:</span>
+<span id="L265"><span class="lineNum">     265</span>                 :             : #   enabled: true                 # 默认 true</span>
+<span id="L266"><span class="lineNum">     266</span>                 :             : #   extract_model: &quot;&quot;             # 空 = 跟随默认模型，建议用便宜模型</span>
+<span id="L267"><span class="lineNum">     267</span>                 :             : #   consolidation_model: &quot;&quot;       # 空 = 跟随默认模型</span>
+<span id="L268"><span class="lineNum">     268</span>                 :             : #   max_jobs_per_run: 8           # 默认 8（1-128）</span>
+<span id="L269"><span class="lineNum">     269</span>                 :             : #   run_interval: 30m             # 默认 30m；0 = 只在启动时运行一次</span>
+<span id="L270"><span class="lineNum">     270</span>                 :             : #   min_session_idle: 1h          # 默认 1h，跳过近期活跃会话</span>
+<span id="L271"><span class="lineNum">     271</span>                 :             : #   max_session_age: 720h         # 默认 720h（30 天），跳过过旧会话</span>
+<span id="L272"><span class="lineNum">     272</span>                 :             : </span>
+<span id="L273"><span class="lineNum">     273</span>                 :             : # 会话生命周期（默认都关闭）：</span>
+<span id="L274"><span class="lineNum">     274</span>                 :             : # sessions:</span>
+<span id="L275"><span class="lineNum">     275</span>                 :             : #   auto_archive_after: &quot;0&quot;       # 如 &quot;720h&quot;：超龄未活跃会话自动归档（隐藏且只读）</span>
+<span id="L276"><span class="lineNum">     276</span>                 :             : #   gc_archived_after: &quot;0&quot;        # 如 &quot;720h&quot;：归档超龄后永久删除（含事件/检查点/历史）</span>
+<span id="L277"><span class="lineNum">     277</span>                 :             : </span>
+<span id="L278"><span class="lineNum">     278</span>                 :             : # 文生图（generate_image；provider 与 model 都设置即启用，复用 openai 类型 provider 凭据）：</span>
+<span id="L279"><span class="lineNum">     279</span>                 :             : # image:</span>
+<span id="L280"><span class="lineNum">     280</span>                 :             : #   provider: &quot;&quot;</span>
+<span id="L281"><span class="lineNum">     281</span>                 :             : #   model: &quot;&quot;</span>
+<span id="L282"><span class="lineNum">     282</span>                 :             : #   size: &quot;&quot;                      # 1024x1024 等；空 = auto</span>
+<span id="L283"><span class="lineNum">     283</span>                 :             : #   quality: &quot;&quot;                   # low | medium | high；空 = auto</span>
+<span id="L284"><span class="lineNum">     284</span>                 :             : </span>
+<span id="L285"><span class="lineNum">     285</span>                 :             : # 无头浏览器（默认启用，本地启动 Chrome）：</span>
+<span id="L286"><span class="lineNum">     286</span>                 :             : # browser:</span>
+<span id="L287"><span class="lineNum">     287</span>                 :             : #   enabled: true                 # 默认 true</span>
+<span id="L288"><span class="lineNum">     288</span>                 :             : #   chrome_path: &quot;&quot;               # 空 = 自动探测</span>
+<span id="L289"><span class="lineNum">     289</span>                 :             : #   cdp_url: &quot;&quot;                   # 设置后连接远程 Chrome（ws:// 或 http://），不再本地启动</span>
+<span id="L290"><span class="lineNum">     290</span>                 :             : #   idle_ttl: 5m                  # 默认 5m，空闲回收</span>
+<span id="L291"><span class="lineNum">     291</span>                 :             : #   nav_timeout_ms: 30000         # 默认 30000（5000-120000）</span>
+<span id="L292"><span class="lineNum">     292</span>                 :             : #   screenshot_quality: 80        # 默认 80（10-100）</span>
+<span id="L293"><span class="lineNum">     293</span>                 :             : #   viewport_width: 1280          # 默认 1280（320-4096）</span>
+<span id="L294"><span class="lineNum">     294</span>                 :             : #   viewport_height: 720          # 默认 720（320-4096）</span>
+<span id="L295"><span class="lineNum">     295</span>                 :             : </span>
+<span id="L296"><span class="lineNum">     296</span>                 :             : # MCP 服务器（command = stdio / url = streamable HTTP，二选一）：</span>
+<span id="L297"><span class="lineNum">     297</span>                 :             : # mcp_servers:</span>
+<span id="L298"><span class="lineNum">     298</span>                 :             : #   filesystem:</span>
+<span id="L299"><span class="lineNum">     299</span>                 :             : #     command: npx</span>
+<span id="L300"><span class="lineNum">     300</span>                 :             : #     args: [&quot;-y&quot;, &quot;@modelcontextprotocol/server-filesystem&quot;, &quot;/tmp&quot;]</span>
+<span id="L301"><span class="lineNum">     301</span>                 :             : #     # startup_timeout_sec: 30</span>
+<span id="L302"><span class="lineNum">     302</span>                 :             : #     # tool_timeout_sec: 300</span>
+<span id="L303"><span class="lineNum">     303</span>                 :             : #   remote:</span>
+<span id="L304"><span class="lineNum">     304</span>                 :             : #     url: https://mcp.example.com/mcp</span>
+<span id="L305"><span class="lineNum">     305</span>                 :             : #     headers:</span>
+<span id="L306"><span class="lineNum">     306</span>                 :             : #       Authorization: Bearer ${MCP_TOKEN}   # ${VAR} 加载时展开</span>
+<span id="L307"><span class="lineNum">     307</span>                 :             : </span>
+<span id="L308"><span class="lineNum">     308</span>                 :             : # 知识库（kb_search / kb_read；连接 minisearch 服务，opt-in，只读消费）：</span>
+<span id="L309"><span class="lineNum">     309</span>                 :             : # knowledge_base:</span>
+<span id="L310"><span class="lineNum">     310</span>                 :             : #   enabled: true</span>
+<span id="L311"><span class="lineNum">     311</span>                 :             : #   base_url: http://127.0.0.1:8200</span>
+<span id="L312"><span class="lineNum">     312</span>                 :             : #   api_key: msk_xxxxxxxxxxxxxxxx     # --auth=off 时留空</span>
+<span id="L313"><span class="lineNum">     313</span>                 :             : #   timeout_ms: 10000                 # 默认 10000（1000-60000）</span>
+<span id="L314"><span class="lineNum">     314</span>                 :             : #   default_top_k: 5                  # 默认 5（1-20）</span>
+<span id="L315"><span class="lineNum">     315</span>                 :             : #   default_collection: loom-kb       # 省略取 collections 第一项</span>
+<span id="L316"><span class="lineNum">     316</span>                 :             : #   collections:                      # 至少一个；description 帮助模型路由</span>
+<span id="L317"><span class="lineNum">     317</span>                 :             : #     - name: loom-kb</span>
+<span id="L318"><span class="lineNum">     318</span>                 :             : #       description: Loom 设计文档与使用手册</span>
+<span id="L319"><span class="lineNum">     319</span>                 :             : </span>
+<span id="L320"><span class="lineNum">     320</span>                 :             : # 预注册工作区（启动目录始终注册为默认工作区；root 支持 ~ 前缀）：</span>
+<span id="L321"><span class="lineNum">     321</span>                 :             : # workspaces:</span>
+<span id="L322"><span class="lineNum">     322</span>                 :             : #   - name: playground</span>
+<span id="L323"><span class="lineNum">     323</span>                 :             : #     root: ~/workspace/playground</span>
+<span id="L324"><span class="lineNum">     324</span>                 :             : `</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

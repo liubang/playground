@@ -1,0 +1,453 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - coverage_filtered.dat - process/egress/go/pl/loom/internal/process/egress/guard.go</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../../../index.html">top level</a> - <a href="index.html">process/egress/go/pl/loom/internal/process/egress</a> - guard.go<span style="font-size: 80%;"> (source / <a href="guard.go.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">coverage_filtered.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryMed">81.2&nbsp;%</td>
+            <td class="headerCovTableEntry">170</td>
+            <td class="headerCovTableEntry">138</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-10-03 13:17:48</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/10/03</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : package egress</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : import (</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             :         &quot;context&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             :         &quot;errors&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             :         &quot;fmt&quot;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             :         &quot;net&quot;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             :         &quot;net/netip&quot;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             :         &quot;strings&quot;</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             :         &quot;sync&quot;</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             :         &quot;time&quot;</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : )</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : </span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : // addressGuard implements the resolved-address guard: the domain policy</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : // decides by name, but whoever controls a permitted name's DNS decides</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : // what it resolves to — so every resolved address is checked against</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : // the denied classes below before the proxy dials it. Exemption is only</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             : // ever earned by an explicit allow rule's literal (Decision.ExemptLiterals);</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             : // decoding an embedded IPv4 form only ever ADDS denials, never one.</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : type addressGuard struct {</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :         lookupIP   func(ctx context.Context, host string) ([]netip.Addr, error)</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :         dial       func(ctx context.Context, addr netip.AddrPort) (net.Conn, error)</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :         localAddrs func() ([]netip.Addr, error)</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :         selfPort   int</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             : </span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :         localMu     sync.Mutex</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :         localCached []netip.Addr</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :         localExpiry time.Time</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             : }</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : </span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : // localAddrsTTL bounds how long a host-address snapshot is reused.</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : // InterfaceAddrs costs ~45µs (a getifaddrs probe) and resolve() would</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             : // pay it on EVERY connection; interface changes (VPN up/down, DHCP</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             : // renewals) are far slower than this TTL. The denied classes are</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             : // re-checked per connection regardless — only a host address ADDED</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             : // within the window can briefly slip the &quot;host's own addresses&quot; class.</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             : const localAddrsTTL = 5 * time.Second</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             : </span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : // local returns this host's interface addresses, cached for</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : // localAddrsTTL. A probe failure reuses the previous snapshot (possibly</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : // nil) instead of failing the connection — the same posture the callers</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             : // had when they ignored the error.</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             : func (g *addressGuard) local() []netip.Addr {</span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC tlaBgGNC">          21 :         g.localMu.Lock()</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">          21 :         defer g.localMu.Unlock()</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">          21 :         if time.Now().Before(g.localExpiry) {</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">           3 :                 return g.localCached</span></span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">           3 :         }</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">          18 :         if addrs, err := g.localAddrs(); err == nil {</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">          18 :                 g.localCached = addrs</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">          18 :         }</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">          18 :         g.localExpiry = time.Now().Add(localAddrsTTL)</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">          18 :         return g.localCached</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :             : }</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             : </span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : // deniedClass is a named set of prefixes a resolved address must not</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : // fall into. The name is the only detail a refusal reports — the</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             : // sandboxed client must not learn internal topology from a denial.</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             : type deniedClass struct {</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :         reason   string</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             :         prefixes []netip.Prefix</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             : }</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             : </span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : // cloudMetadata are instance-metadata / platform endpoints outside</span>
+<span id="L82"><span class="lineNum">      82</span>                 :             : // link-local space (169.254.0.0/16 already covers the common ones).</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             : var cloudMetadata = []string{</span>
+<span id="L84"><span class="lineNum">      84</span>                 :             :         &quot;100.100.100.200&quot;,    // Alibaba Cloud</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             :         &quot;168.63.129.16&quot;,      // Azure WireServer / host agent</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             :         &quot;192.0.0.192&quot;,        // Oracle Cloud Infrastructure Classic</span>
+<span id="L87"><span class="lineNum">      87</span>                 :             :         &quot;fd00:ec2::/32&quot;,      // AWS IPv6 service block (IMDS, EKS Pod Identity, DNS, NTP)</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             :         &quot;fd20:ce::254&quot;,       // Google Cloud IPv6-only instances</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             :         &quot;fd00:c1::a9fe:a9fe&quot;, // Oracle Cloud Infrastructure IPv6</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             :         &quot;fd00:42::42&quot;,        // Scaleway IPv6</span>
+<span id="L91"><span class="lineNum">      91</span>                 :             :         &quot;fd00:a9fe:a9fe::1&quot;,  // Akamai / Linode IPv6</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             :         &quot;fd00:100::100:200&quot;,  // Alibaba Cloud IPv6</span>
+<span id="L93"><span class="lineNum">      93</span>                 :             : }</span>
+<span id="L94"><span class="lineNum">      94</span>                 :             : </span>
+<span id="L95"><span class="lineNum">      95</span>                 :             : var deniedClasses = []deniedClass{</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             :         {&quot;a loopback address&quot;, mustPrefixes(&quot;127.0.0.0/8&quot;, &quot;::1/128&quot;)},</span>
+<span id="L97"><span class="lineNum">      97</span>                 :             :         {&quot;an unspecified address&quot;, mustPrefixes(&quot;0.0.0.0/8&quot;, &quot;::/128&quot;)},</span>
+<span id="L98"><span class="lineNum">      98</span>                 :             :         {&quot;a link-local address&quot;, mustPrefixes(&quot;169.254.0.0/16&quot;, &quot;fe80::/10&quot;)},</span>
+<span id="L99"><span class="lineNum">      99</span>                 :             :         {&quot;a multicast address&quot;, mustPrefixes(&quot;224.0.0.0/4&quot;, &quot;ff00::/8&quot;)},</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             :         {&quot;the broadcast address&quot;, mustPrefixes(&quot;255.255.255.255/32&quot;)},</span>
+<span id="L101"><span class="lineNum">     101</span>                 :             :         {&quot;a cloud metadata address&quot;, mustPrefixes(cloudMetadata...)},</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             : }</span>
+<span id="L103"><span class="lineNum">     103</span>                 :             : </span>
+<span id="L104"><span class="lineNum">     104</span>                 :             : // errTargetIsProxy refuses connections aimed at the proxy's own</span>
+<span id="L105"><span class="lineNum">     105</span>                 :             : // listener: an exempt loopback literal must never let the proxy</span>
+<span id="L106"><span class="lineNum">     106</span>                 :             : // connect to itself and build a recursive tunnel.</span>
+<span id="L107"><span class="lineNum">     107</span>                 :             : var errTargetIsProxy = errors.New(&quot;target is the egress proxy itself&quot;)</span>
+<span id="L108"><span class="lineNum">     108</span>                 :             : </span>
+<span id="L109"><span class="lineNum">     109</span>                 :             : // guardDeniedError marks refusals by the guard (403 to the client),</span>
+<span id="L110"><span class="lineNum">     110</span>                 :             : // distinguished from resolution/dial failures (502).</span>
+<span id="L111"><span class="lineNum">     111</span>                 :             : type guardDeniedError struct {</span>
+<span id="L112"><span class="lineNum">     112</span>                 :             :         host   string</span>
+<span id="L113"><span class="lineNum">     113</span>                 :             :         reason string</span>
+<span id="L114"><span class="lineNum">     114</span>                 :             : }</span>
+<span id="L115"><span class="lineNum">     115</span>                 :             : </span>
+<span id="L116"><span class="lineNum">     116</span>                 :             : func (e *guardDeniedError) Error() string {</span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">           6 :         return fmt.Sprintf(&quot;connection to %s blocked: resolved to %s&quot;, e.host, e.reason)</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">           6 : }</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :             : </span>
+<span id="L120"><span class="lineNum">     120</span>                 :             : func newAddressGuard(cfg Config) *addressGuard {</span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">          25 :         g := &amp;addressGuard{</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">          25 :                 lookupIP:   cfg.LookupIP,</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">          25 :                 dial:       cfg.Dial,</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">          25 :                 localAddrs: cfg.LocalAddrs,</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">          25 :         }</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">          25 :         if g.lookupIP == nil {</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 g.lookupIP = defaultLookupIP</span></span>
+<span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC tlaBgGNC">          25 :         if g.dial == nil {</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">          25 :                 g.dial = defaultDial</span></span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">          25 :         }</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">          25 :         if g.localAddrs == nil {</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 g.localAddrs = defaultLocalAddrs</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC tlaBgGNC">          25 :         return g</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :             : }</span>
+<span id="L137"><span class="lineNum">     137</span>                 :             : </span>
+<span id="L138"><span class="lineNum">     138</span>                 :             : func defaultLookupIP(ctx context.Context, host string) ([]netip.Addr, error) {</span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         ips, err := net.DefaultResolver.LookupIP(ctx, &quot;ip&quot;, host)</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaUNC">           0 :         if err != nil {</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaUNC">           0 :                 return nil, err</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaUNC">           0 :         addrs := make([]netip.Addr, 0, len(ips))</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaUNC">           0 :         for _, ip := range ips {</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaUNC">           0 :                 if addr, ok := netip.AddrFromSlice(ip); ok {</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaUNC">           0 :                         addrs = append(addrs, addr)</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :             :         }</span>
+<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaUNC">           0 :         return addrs, nil</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :             : }</span>
+<span id="L151"><span class="lineNum">     151</span>                 :             : </span>
+<span id="L152"><span class="lineNum">     152</span>                 :             : func defaultDial(ctx context.Context, addr netip.AddrPort) (net.Conn, error) {</span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC tlaBgGNC">          14 :         dialer := &amp;net.Dialer{Timeout: dialTimeout}</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">          14 :         return dialer.DialContext(ctx, &quot;tcp&quot;, addr.String())</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">          14 : }</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :             : </span>
+<span id="L157"><span class="lineNum">     157</span>                 :             : func defaultLocalAddrs() ([]netip.Addr, error) {</span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         ifaces, err := net.InterfaceAddrs()</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaUNC">           0 :         if err != nil {</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaUNC">           0 :                 return nil, err</span></span>
+<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaUNC">           0 :         addrs := make([]netip.Addr, 0, len(ifaces))</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaUNC">           0 :         for _, iface := range ifaces {</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaUNC">           0 :                 ipNet, ok := iface.(*net.IPNet)</span></span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaUNC">           0 :                 if !ok {</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaUNC">           0 :                         continue</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :             :                 }</span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaUNC">           0 :                 if addr, ok := netip.AddrFromSlice(ipNet.IP); ok {</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaUNC">           0 :                         addrs = append(addrs, addr.WithZone(&quot;&quot;))</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :             :         }</span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaUNC">           0 :         return addrs, nil</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :             : }</span>
+<span id="L174"><span class="lineNum">     174</span>                 :             : </span>
+<span id="L175"><span class="lineNum">     175</span>                 :             : func mustPrefixes(cidrs ...string) []netip.Prefix {</span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC tlaBgGNC">          90 :         prefixes := make([]netip.Prefix, 0, len(cidrs))</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">          90 :         for _, cidr := range cidrs {</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">         270 :                 if strings.Contains(cidr, &quot;/&quot;) {</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">         150 :                         prefixes = append(prefixes, netip.MustParsePrefix(cidr))</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">         150 :                         continue</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :             :                 }</span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">         120 :                 addr := netip.MustParseAddr(cidr)</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">         120 :                 prefixes = append(prefixes, netip.PrefixFrom(addr, addr.BitLen()))</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :             :         }</span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">          90 :         return prefixes</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :             : }</span>
+<span id="L187"><span class="lineNum">     187</span>                 :             : </span>
+<span id="L188"><span class="lineNum">     188</span>                 :             : // embeddedIPv4 decodes the IPv4 address an IPv6 answer actually</span>
+<span id="L189"><span class="lineNum">     189</span>                 :             : // delivers to: IPv4-mapped, the deprecated IPv4-compatible form, NAT64</span>
+<span id="L190"><span class="lineNum">     190</span>                 :             : // (64:ff9b::/96), and 6to4 (2002::/16). Decoding only ever adds</span>
+<span id="L191"><span class="lineNum">     191</span>                 :             : // denials — the caller must never let the decoded form earn an</span>
+<span id="L192"><span class="lineNum">     192</span>                 :             : // exemption the original spelling did not have.</span>
+<span id="L193"><span class="lineNum">     193</span>                 :             : func embeddedIPv4(addr netip.Addr) (netip.Addr, bool) {</span>
+<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">          27 :         if addr.Is4() {</span></span>
+<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">          14 :                 return netip.Addr{}, false</span></span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">          14 :         }</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">          13 :         if addr.Is4In6() {</span></span>
+<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC">           2 :                 return addr.Unmap(), true</span></span>
+<span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaGNC">          11 :         b := addr.As16()</span></span>
+<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC">          11 :         v4 := func(from int) netip.Addr { return netip.AddrFrom4([4]byte{b[from], b[from+1], b[from+2], b[from+3]}) }</span></span>
+<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">          11 :         allZero := func(to int) bool {</span></span>
+<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">           7 :                 for i := 0; i &lt; to; i++ {</span></span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">          51 :                         if b[i] != 0 {</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">           3 :                                 return false</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">           3 :                         }</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :             :                 }</span>
+<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">           4 :                 return true</span></span>
+<span id="L209"><span class="lineNum">     209</span>                 :             :         }</span>
+<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaGNC">          11 :         switch {</span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :             :         // NAT64 well-known prefix 64:ff9b::/96.</span>
+<span id="L212"><span class="lineNum">     212</span>                 :             :         case b[0] == 0x00 &amp;&amp; b[1] == 0x64 &amp;&amp; b[2] == 0xff &amp;&amp; b[3] == 0x9b &amp;&amp; b[4] == 0 &amp;&amp; b[5] == 0 &amp;&amp;</span>
+<span id="L213"><span class="lineNum">     213</span>                 :             :                 b[6] == 0 &amp;&amp; b[7] == 0 &amp;&amp; b[8] == 0 &amp;&amp; b[9] == 0 &amp;&amp; b[10] == 0 &amp;&amp; b[11] == 0:</span>
+<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">           2 :                 return v4(12), true</span></span>
+<span id="L215"><span class="lineNum">     215</span>                 :             :         // 6to4 2002::/16 embeds the IPv4 in bytes 2..6.</span>
+<span id="L216"><span class="lineNum">     216</span>                 :             :         case b[0] == 0x20 &amp;&amp; b[1] == 0x02:</span>
+<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">           2 :                 return v4(2), true</span></span>
+<span id="L218"><span class="lineNum">     218</span>                 :             :         // IPv4-compatible ::a.b.c.d (first 96 bits zero).</span>
+<span id="L219"><span class="lineNum">     219</span>                 :             :         case allZero(12):</span>
+<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC">           4 :                 return v4(12), true</span></span>
+<span id="L221"><span class="lineNum">     221</span>                 :             :         }</span>
+<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">           3 :         return netip.Addr{}, false</span></span>
+<span id="L223"><span class="lineNum">     223</span>                 :             : }</span>
+<span id="L224"><span class="lineNum">     224</span>                 :             : </span>
+<span id="L225"><span class="lineNum">     225</span>                 :             : func inExempt(addr netip.Addr, exempt []netip.Addr) bool {</span>
+<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC">          39 :         for _, e := range exempt {</span></span>
+<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">          20 :                 if addr == e || addr.Unmap() == e {</span></span>
+<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">          16 :                         return true</span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">          16 :                 }</span></span>
+<span id="L230"><span class="lineNum">     230</span>                 :             :         }</span>
+<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">          23 :         return false</span></span>
+<span id="L232"><span class="lineNum">     232</span>                 :             : }</span>
+<span id="L233"><span class="lineNum">     233</span>                 :             : </span>
+<span id="L234"><span class="lineNum">     234</span>                 :             : // checkAddr returns the denial reason for one resolved address, or &quot;&quot;</span>
+<span id="L235"><span class="lineNum">     235</span>                 :             : // if it may be dialed. Exemption is checked first and only against the</span>
+<span id="L236"><span class="lineNum">     236</span>                 :             : // original spelling; every denied class is then applied to both the</span>
+<span id="L237"><span class="lineNum">     237</span>                 :             : // address and its embedded IPv4 form, as are this host's own interface</span>
+<span id="L238"><span class="lineNum">     238</span>                 :             : // addresses (a service bound to 0.0.0.0 answers on those exactly as on</span>
+<span id="L239"><span class="lineNum">     239</span>                 :             : // loopback).</span>
+<span id="L240"><span class="lineNum">     240</span>                 :             : func (g *addressGuard) checkAddr(addr netip.Addr, exempt []netip.Addr, local []netip.Addr) string {</span>
+<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">          37 :         addr = addr.WithZone(&quot;&quot;)</span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">          37 :         if inExempt(addr, exempt) {</span></span>
+<span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaGNC">          16 :                 return &quot;&quot;</span></span>
+<span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaGNC">          16 :         }</span></span>
+<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">          21 :         v4, hasV4 := embeddedIPv4(addr)</span></span>
+<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">          21 :         matches := func(prefixes []netip.Prefix) bool {</span></span>
+<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC">          71 :                 for _, p := range prefixes {</span></span>
+<span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaGNC">         147 :                         if p.Contains(addr) || (hasV4 &amp;&amp; p.Contains(v4)) {</span></span>
+<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">          18 :                                 return true</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">          18 :                         }</span></span>
+<span id="L251"><span class="lineNum">     251</span>                 :             :                 }</span>
+<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">          53 :                 return false</span></span>
+<span id="L253"><span class="lineNum">     253</span>                 :             :         }</span>
+<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">          21 :         for _, class := range deniedClasses {</span></span>
+<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC">          71 :                 if matches(class.prefixes) {</span></span>
+<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">          18 :                         return class.reason</span></span>
+<span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaGNC">          18 :                 }</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :             :         }</span>
+<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">           3 :         for _, l := range local {</span></span>
+<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaGNC">           2 :                 if addr == l || (hasV4 &amp;&amp; v4 == l) {</span></span>
+<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">           1 :                         return &quot;one of this host's addresses&quot;</span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L263"><span class="lineNum">     263</span>                 :             :         }</span>
+<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">           2 :         return &quot;&quot;</span></span>
+<span id="L265"><span class="lineNum">     265</span>                 :             : }</span>
+<span id="L266"><span class="lineNum">     266</span>                 :             : </span>
+<span id="L267"><span class="lineNum">     267</span>                 :             : // resolve applies the guard to a hostname target and returns the</span>
+<span id="L268"><span class="lineNum">     268</span>                 :             : // surviving addresses. A name with no surviving address fails with</span>
+<span id="L269"><span class="lineNum">     269</span>                 :             : // guardDeniedError; a name with no answer at all fails like the</span>
+<span id="L270"><span class="lineNum">     270</span>                 :             : // resolver did.</span>
+<span id="L271"><span class="lineNum">     271</span>                 :             : func (g *addressGuard) resolve(ctx context.Context, host string, exempt []netip.Addr) ([]netip.Addr, error) {</span>
+<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">          17 :         addrs, err := g.lookupIP(ctx, host)</span></span>
+<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">          17 :         if err != nil {</span></span>
+<span id="L274"><span class="lineNum">     274</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
+<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L276"><span class="lineNum">     276</span>                 :<span class="tlaGNC tlaBgGNC">          17 :         local := g.local()</span></span>
+<span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaGNC">          17 :         loopbackName := isLoopbackName(host)</span></span>
+<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaGNC">          17 :         var kept []netip.Addr</span></span>
+<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">          17 :         reasons := map[string]struct{}{}</span></span>
+<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC">          17 :         for _, addr := range addrs {</span></span>
+<span id="L281"><span class="lineNum">     281</span>                 :<span class="tlaGNC">          18 :                 addr = addr.WithZone(&quot;&quot;)</span></span>
+<span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaGNC">          18 :                 // RFC 6761 names resolve to loopback (or an exempt literal) and</span></span>
+<span id="L283"><span class="lineNum">     283</span>                 :             :                 // nothing else.</span>
+<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">          18 :                 if loopbackName &amp;&amp; !addr.IsLoopback() &amp;&amp; !inExempt(addr, exempt) {</span></span>
+<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaGNC">           2 :                         reasons[&quot;a non-loopback address&quot;] = struct{}{}</span></span>
+<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaGNC">           2 :                         continue</span></span>
+<span id="L287"><span class="lineNum">     287</span>                 :             :                 }</span>
+<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC">          16 :                 if reason := g.checkAddr(addr, exempt, local); reason != &quot;&quot; {</span></span>
+<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">           2 :                         reasons[reason] = struct{}{}</span></span>
+<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC">           2 :                         continue</span></span>
+<span id="L291"><span class="lineNum">     291</span>                 :             :                 }</span>
+<span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaGNC">          14 :                 kept = append(kept, addr)</span></span>
+<span id="L293"><span class="lineNum">     293</span>                 :             :         }</span>
+<span id="L294"><span class="lineNum">     294</span>                 :<span class="tlaGNC">          17 :         if len(kept) &gt; 0 {</span></span>
+<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">          14 :                 return kept, nil</span></span>
+<span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaGNC">          14 :         }</span></span>
+<span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaGNC">           3 :         if len(reasons) &gt; 0 {</span></span>
+<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaGNC">           3 :                 classes := make([]string, 0, len(reasons))</span></span>
+<span id="L299"><span class="lineNum">     299</span>                 :<span class="tlaGNC">           3 :                 for r := range reasons {</span></span>
+<span id="L300"><span class="lineNum">     300</span>                 :<span class="tlaGNC">           3 :                         classes = append(classes, r)</span></span>
+<span id="L301"><span class="lineNum">     301</span>                 :<span class="tlaGNC">           3 :                 }</span></span>
+<span id="L302"><span class="lineNum">     302</span>                 :<span class="tlaGNC">           3 :                 return nil, &amp;guardDeniedError{host: host, reason: strings.Join(classes, &quot; / &quot;)}</span></span>
+<span id="L303"><span class="lineNum">     303</span>                 :             :         }</span>
+<span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return nil, fmt.Errorf(&quot;no addresses for %s&quot;, host)</span></span>
+<span id="L305"><span class="lineNum">     305</span>                 :             : }</span>
+<span id="L306"><span class="lineNum">     306</span>                 :             : </span>
+<span id="L307"><span class="lineNum">     307</span>                 :             : // checkLiteral applies the guard to an IP-literal target. Literals</span>
+<span id="L308"><span class="lineNum">     308</span>                 :             : // matched by an explicit allow rule (the policy said Matched &amp;&amp; Allow)</span>
+<span id="L309"><span class="lineNum">     309</span>                 :             : // are exempt; every other literal faces the denied classes — the</span>
+<span id="L310"><span class="lineNum">     310</span>                 :             : // unmatched-allow posture must never let 169.254.169.254 ride through.</span>
+<span id="L311"><span class="lineNum">     311</span>                 :             : func (g *addressGuard) checkLiteral(addr netip.Addr, dec Decision) error {</span>
+<span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         if dec.Matched &amp;&amp; dec.Allow {</span></span>
+<span id="L313"><span class="lineNum">     313</span>                 :<span class="tlaGNC">           5 :                 return nil</span></span>
+<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">           5 :         }</span></span>
+<span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaGNC">           4 :         local := g.local()</span></span>
+<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaGNC">           4 :         if reason := g.checkAddr(addr, nil, local); reason != &quot;&quot; {</span></span>
+<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaGNC">           3 :                 return &amp;guardDeniedError{host: addr.String(), reason: reason}</span></span>
+<span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaGNC">           3 :         }</span></span>
+<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">           1 :         return nil</span></span>
+<span id="L320"><span class="lineNum">     320</span>                 :             : }</span>
+<span id="L321"><span class="lineNum">     321</span>                 :             : </span>
+<span id="L322"><span class="lineNum">     322</span>                 :             : // dialGuarded resolves (when needed), filters, and dials the first</span>
+<span id="L323"><span class="lineNum">     323</span>                 :             : // reachable surviving address — resolution and dial are one step, with</span>
+<span id="L324"><span class="lineNum">     324</span>                 :             : // no second lookup in between (rebinding TOCTOU). It returns the dialed</span>
+<span id="L325"><span class="lineNum">     325</span>                 :             : // connection and the address actually used.</span>
+<span id="L326"><span class="lineNum">     326</span>                 :             : func (g *addressGuard) dialGuarded(ctx context.Context, dec Decision, host string, port int) (net.Conn, string, error) {</span>
+<span id="L327"><span class="lineNum">     327</span>                 :<span class="tlaGNC">          22 :         var candidates []netip.Addr</span></span>
+<span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaGNC">          22 :         if literal, err := netip.ParseAddr(host); err == nil {</span></span>
+<span id="L329"><span class="lineNum">     329</span>                 :<span class="tlaGNC">           9 :                 if err := g.checkLiteral(literal, dec); err != nil {</span></span>
+<span id="L330"><span class="lineNum">     330</span>                 :<span class="tlaGNC">           3 :                         return nil, &quot;&quot;, err</span></span>
+<span id="L331"><span class="lineNum">     331</span>                 :<span class="tlaGNC">           3 :                 }</span></span>
+<span id="L332"><span class="lineNum">     332</span>                 :<span class="tlaGNC">           6 :                 candidates = []netip.Addr{literal.WithZone(&quot;&quot;)}</span></span>
+<span id="L333"><span class="lineNum">     333</span>                 :             :         } else {</span>
+<span id="L334"><span class="lineNum">     334</span>                 :<span class="tlaGNC">          13 :                 surviving, err := g.resolve(ctx, host, dec.ExemptLiterals)</span></span>
+<span id="L335"><span class="lineNum">     335</span>                 :<span class="tlaGNC">          13 :                 if err != nil {</span></span>
+<span id="L336"><span class="lineNum">     336</span>                 :<span class="tlaGNC">           1 :                         return nil, &quot;&quot;, err</span></span>
+<span id="L337"><span class="lineNum">     337</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L338"><span class="lineNum">     338</span>                 :<span class="tlaGNC">          12 :                 candidates = surviving</span></span>
+<span id="L339"><span class="lineNum">     339</span>                 :             :         }</span>
+<span id="L340"><span class="lineNum">     340</span>                 :<span class="tlaGNC">          18 :         var lastErr error</span></span>
+<span id="L341"><span class="lineNum">     341</span>                 :<span class="tlaGNC">          18 :         for _, addr := range candidates {</span></span>
+<span id="L342"><span class="lineNum">     342</span>                 :<span class="tlaGNC">          18 :                 addrPort := netip.AddrPortFrom(addr, uint16(port))</span></span>
+<span id="L343"><span class="lineNum">     343</span>                 :<span class="tlaGNC">          18 :                 if g.isSelf(addrPort) {</span></span>
+<span id="L344"><span class="lineNum">     344</span>                 :<span class="tlaGNC">           2 :                         lastErr = errTargetIsProxy</span></span>
+<span id="L345"><span class="lineNum">     345</span>                 :<span class="tlaGNC">           2 :                         continue</span></span>
+<span id="L346"><span class="lineNum">     346</span>                 :             :                 }</span>
+<span id="L347"><span class="lineNum">     347</span>                 :<span class="tlaGNC">          16 :                 conn, err := g.dial(ctx, addrPort)</span></span>
+<span id="L348"><span class="lineNum">     348</span>                 :<span class="tlaGNC">          16 :                 if err != nil {</span></span>
+<span id="L349"><span class="lineNum">     349</span>                 :<span class="tlaGNC">           2 :                         lastErr = err</span></span>
+<span id="L350"><span class="lineNum">     350</span>                 :<span class="tlaGNC">           2 :                         continue</span></span>
+<span id="L351"><span class="lineNum">     351</span>                 :             :                 }</span>
+<span id="L352"><span class="lineNum">     352</span>                 :<span class="tlaGNC">          14 :                 return conn, addr.String(), nil</span></span>
+<span id="L353"><span class="lineNum">     353</span>                 :             :         }</span>
+<span id="L354"><span class="lineNum">     354</span>                 :<span class="tlaGNC">           4 :         if lastErr == nil {</span></span>
+<span id="L355"><span class="lineNum">     355</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 lastErr = fmt.Errorf(&quot;no usable address for %s&quot;, host)</span></span>
+<span id="L356"><span class="lineNum">     356</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L357"><span class="lineNum">     357</span>                 :<span class="tlaGNC tlaBgGNC">           4 :         return nil, &quot;&quot;, lastErr</span></span>
+<span id="L358"><span class="lineNum">     358</span>                 :             : }</span>
+<span id="L359"><span class="lineNum">     359</span>                 :             : </span>
+<span id="L360"><span class="lineNum">     360</span>                 :             : // setSelfPort wires the listener port for the self-connect refusal</span>
+<span id="L361"><span class="lineNum">     361</span>                 :             : // (NewServer binds :0, so the port is unknown at guard construction).</span>
+<span id="L362"><span class="lineNum">     362</span>                 :<span class="tlaGNC">          25 : func (g *addressGuard) setSelfPort(port int) { g.selfPort = port }</span></span>
+<span id="L363"><span class="lineNum">     363</span>                 :             : </span>
+<span id="L364"><span class="lineNum">     364</span>                 :             : // isSelf reports whether addrPort is this proxy's own listener —</span>
+<span id="L365"><span class="lineNum">     365</span>                 :             : // loopback on our port, since we only ever bind 127.0.0.1.</span>
+<span id="L366"><span class="lineNum">     366</span>                 :             : func (g *addressGuard) isSelf(addrPort netip.AddrPort) bool {</span>
+<span id="L367"><span class="lineNum">     367</span>                 :<span class="tlaGNC">          18 :         return g.selfPort != 0 &amp;&amp; addrPort.Addr().IsLoopback() &amp;&amp; int(addrPort.Port()) == g.selfPort</span></span>
+<span id="L368"><span class="lineNum">     368</span>                 :<span class="tlaGNC">          18 : }</span></span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>
