@@ -16,15 +16,18 @@ import AppKit
 import SwiftUI
 
 /// Sidebar (shell.css, tuned for native): a bg1 column holding the
-/// WORKSPACES bar, per-workspace session groups (caret + name + count
-/// badge; new/delete fade into a fixed trailing slot on hover; a faint
-/// hierarchy guide is always on; collapse state persists), compact
-/// single-line session rows (a fixed leading slot keeps every title on
-/// the same axis; the trailing timestamp swaps for actions on hover),
-/// and a footer with the Archive toggle and ghost buttons. The active
-/// row reads at a glance: bg3 fill + primary accent bar + medium
-/// title, versus hover's faint bg2 wash. ⌘-click marks rows for the
-/// batch bar (archive/delete) pinned above the footer.
+/// WORKSPACES bar, the New session / filter pair (⌘F focuses the
+/// filter; filtering hides empty groups and force-expands collapsed
+/// ones), per-workspace session groups (caret + name + count badge —
+/// hidden at zero; new/delete fade into a fixed trailing slot on
+/// hover; a faint hierarchy guide is always on; collapse state
+/// persists), compact single-line session rows (a fixed leading slot
+/// keeps every title on the same axis; the trailing timestamp swaps
+/// for actions on hover), and a footer with the Archive toggle and
+/// ghost buttons. The active row reads at a glance: bg3 fill +
+/// primary accent bar + medium title, versus hover's faint bg2 wash.
+/// ⌘-click marks rows for the batch bar (archive/delete) pinned above
+/// the footer.
 struct SidebarView: View {
     @Bindable var list: SessionListStore
     @Binding var selection: String?
@@ -39,7 +42,36 @@ struct SidebarView: View {
     /// footer acts on the set). Sidebar-local: `selection` stays the
     /// single session shown in the main column.
     @State private var markedSessions: Set<String> = []
+    /// Session filter (title / id substring), focused with ⌘F.
+    @State private var filter = ""
+    @FocusState private var filterFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var filterQuery: String {
+        filter.trimmingCharacters(in: .whitespaces)
+    }
+
+    private var filtering: Bool {
+        !filterQuery.isEmpty
+    }
+
+    private func matchesFilter(_ session: SessionSummary) -> Bool {
+        (session.title ?? "").localizedCaseInsensitiveContains(filterQuery)
+            || session.id.localizedCaseInsensitiveContains(filterQuery)
+    }
+
+    /// The workspace's sessions, narrowed by the filter.
+    private func visibleSessions(for workspaceId: String) -> [SessionSummary] {
+        let sessions = list.sessions(for: workspaceId)
+        guard filtering else { return sessions }
+        return sessions.filter(matchesFilter)
+    }
+
+    /// Any session anywhere survives the filter (drives the empty hint).
+    private var anyMatch: Bool {
+        list.workspaces.contains { !visibleSessions(for: $0.id).isEmpty }
+            || orphanGroups.contains { !$0.sessions.isEmpty }
+    }
 
     private var collapsedGroups: Set<String> {
         (try? JSONDecoder().decode(Set<String>.self, from: Data(collapsedGroupsJSON.utf8))) ?? []
@@ -53,9 +85,22 @@ struct SidebarView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 4)
 
+            // New session and the filter read as a pair: same insets,
+            // same height, 8pt apart.
             newSessionButton
                 .padding(.horizontal, 10)
-                .padding(.bottom, 10)
+                .padding(.bottom, 8)
+
+            MiniSearchField(
+                placeholder: "Filter sessions",
+                text: $filter,
+                width: nil,
+                prominent: true,
+                trailingHint: "⌘F",
+                externalFocus: $filterFocused,
+            )
+            .padding(.horizontal, 10)
+            .padding(.bottom, 10)
 
             Hairline(axis: .horizontal)
 
@@ -68,6 +113,14 @@ struct SidebarView: View {
             footBar
         }
         .background(Theme.bg1)
+        .background {
+            // ⌘F focuses the filter; a zero-frame button carries the
+            // shortcut (ConfirmDialogView's Esc pattern).
+            Button("Filter") { filterFocused = true }
+                .keyboardShortcut("f", modifiers: .command)
+                .opacity(0)
+                .frame(width: 0, height: 0)
+        }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: markedSessions.isEmpty)
         // Prune marks for sessions that vanished (deleted elsewhere,
         // archived out of the listing); switching views clears them.
@@ -186,7 +239,7 @@ struct SidebarView: View {
             }
             .foregroundStyle(Theme.fg)
             .padding(.horizontal, 12)
-            .padding(.vertical, 9) // .new-session: 9px 12px, radius-md
+            .padding(.vertical, 7) // matches the filter row's height
             .background(Theme.bg2, in: RoundedRectangle(cornerRadius: Theme.radiusMd))
             .contentShape(Rectangle())
         }
@@ -214,7 +267,11 @@ struct SidebarView: View {
                         .padding(.vertical, 20)
                 }
                 ForEach(list.workspaces) { workspace in
-                    workspaceGroup(for: workspace)
+                    let sessions = visibleSessions(for: workspace.id)
+                    // Filtering hides groups with no matches outright.
+                    if !filtering || !sessions.isEmpty {
+                        workspaceGroup(for: workspace, sessions: sessions)
+                    }
                 }
                 // Dangling sessions whose workspace was deleted render
                 // under "Deleted workspace" groups, one per orphaned
@@ -222,6 +279,13 @@ struct SidebarView: View {
                 // ++ orphan buckets; no new/delete actions there).
                 ForEach(orphanGroups, id: \.id) { group in
                     orphanGroup(group)
+                }
+                if filtering, !anyMatch {
+                    Text("No sessions match the filter")
+                        .font(.system(size: Theme.textXs))
+                        .foregroundStyle(Theme.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
                 }
             }
             .padding(.horizontal, 10)
@@ -231,12 +295,14 @@ struct SidebarView: View {
 
     /// A registered workspace's group (broken out of the tree builder —
     /// the full call-site expression blew the type-checker's budget).
-    private func workspaceGroup(for workspace: Workspace) -> some View {
+    private func workspaceGroup(for workspace: Workspace, sessions: [SessionSummary]) -> some View {
         WorkspaceGroup(
             name: workspace.name,
-            sessions: list.sessions(for: workspace.id),
+            sessions: sessions,
             selection: $selection,
-            isCollapsed: collapsedGroups.contains(workspace.id),
+            // Filtering force-expands: collapsed groups would swallow
+            // their own matches.
+            isCollapsed: collapsedGroups.contains(workspace.id) && !filtering,
             onToggle: { toggleGroup(workspace.id) },
             onNewSession: {
                 Task {
@@ -253,7 +319,7 @@ struct SidebarView: View {
             onDeleteSession: { confirmDelete($0) },
             marked: markedSessions,
             onToggleMark: toggleMark,
-            onMarkAll: { mark in markAll(list.sessions(for: workspace.id), mark) },
+            onMarkAll: { mark in markAll(sessions, mark) },
             onClearMarks: { markedSessions.removeAll() },
         )
     }
@@ -286,6 +352,9 @@ struct SidebarView: View {
         for session in list.sessions {
             let key = session.workspaceId ?? ""
             guard !known.contains(key), !key.isEmpty else { continue }
+            if filtering, !matchesFilter(session) {
+                continue
+            }
             if buckets[key] == nil {
                 order.append(key)
             }
@@ -678,12 +747,16 @@ private struct WorkspaceGroup: View {
 
             // Count as a capsule (macOS sidebar idiom); it steps up a
             // shade while the header itself is hover-highlighted.
-            Text("\(sessions.count)")
-                .font(.system(size: Theme.textXs).monospacedDigit())
-                .foregroundStyle(Theme.muted)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 1)
-                .background(hovered ? Theme.bg3 : Theme.bg2, in: Capsule())
+            // Zero-count groups stay quiet — the badge's only job is
+            // "there's something here".
+            if !sessions.isEmpty {
+                Text("\(sessions.count)")
+                    .font(.system(size: Theme.textXs).monospacedDigit())
+                    .foregroundStyle(Theme.muted)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(hovered ? Theme.bg3 : Theme.bg2, in: Capsule())
+            }
 
             Spacer(minLength: 2)
         }

@@ -893,7 +893,9 @@ private struct MarkdownListView: View {
 
 /// GFM pipe table, styled after blocks.css: bordered cells (1px --bg2,
 /// 5px 12px padding), the header row on --bg1 at weight 600, and a
-/// horizontal scroll for tables wider than the column.
+/// horizontal scroll for tables wider than the column. Columns whose
+/// body cells are all numeric get the data-table idiom — right
+/// alignment plus tabular figures — so magnitudes compare at a glance.
 private struct MarkdownTableView: View {
     let header: [String]
     let rows: [[String]]
@@ -902,18 +904,53 @@ private struct MarkdownTableView: View {
         max(header.count, rows.map(\.count).max() ?? 0)
     }
 
+    /// One flag per column: every non-empty body cell is numeric-ish.
+    /// Missing-data placeholders ("—", "无数据", …) don't disqualify
+    /// a column, but at least one real value must exist.
+    private var numericColumns: [Bool] {
+        (0 ..< columnCount).map { col in
+            var sawValue = false
+            for row in rows where col < row.count {
+                let cell = row[col].trimmingCharacters(in: .whitespaces)
+                if cell.isEmpty || Self.missingMarkers.contains(cell) {
+                    continue
+                }
+                guard Self.isNumericCell(cell) else { return false }
+                sawValue = true
+            }
+            return sawValue
+        }
+    }
+
+    private static let missingMarkers: Set<String> = [
+        "—", "–", "-", "N/A", "n/a", "无数据", "暂无", "未知",
+    ]
+
+    /// A leading digit or sign, then only digits, separators, units
+    /// and ASCII letters: "24.0 / 11.9", "10%", "116", "10°C+".
+    private static func isNumericCell(_ text: String) -> Bool {
+        guard let first = text.first else { return false }
+        guard first.isNumber || "-+~−".contains(first) else { return false }
+        return text.allSatisfy {
+            $0.isNumber || ".,/ %°~:+-−()".contains($0) || ($0.isASCII && $0.isLetter)
+        }
+    }
+
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        let numeric = numericColumns
+        return ScrollView(.horizontal, showsIndicators: false) {
             Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
                 GridRow {
                     ForEach(0 ..< columnCount, id: \.self) { col in
-                        cell(text: col < header.count ? header[col] : "", isHeader: true)
+                        cell(text: col < header.count ? header[col] : "", isHeader: true,
+                             numeric: numeric[col])
                     }
                 }
                 ForEach(rows.indices, id: \.self) { row in
                     GridRow {
                         ForEach(0 ..< columnCount, id: \.self) { col in
-                            cell(text: col < rows[row].count ? rows[row][col] : "", isHeader: false)
+                            cell(text: col < rows[row].count ? rows[row][col] : "", isHeader: false,
+                                 numeric: numeric[col])
                         }
                     }
                 }
@@ -922,15 +959,17 @@ private struct MarkdownTableView: View {
         .padding(.vertical, 2) // .md table margin: 10px 0 (block spacing adds the rest)
     }
 
-    private func cell(text: String, isHeader: Bool) -> some View {
+    private func cell(text: String, isHeader: Bool, numeric: Bool) -> some View {
         Text(renderInlineMarkdown(text, size: Theme.textMd))
-            .font(.system(size: Theme.textMd, weight: isHeader ? .semibold : .light))
+            .font(.system(size: Theme.textMd, weight: isHeader ? .semibold : .light)
+                .monospacedDigit())
             .foregroundStyle(Theme.fg)
             .lineSpacing(5.5) // .md table inherits the body's 1.65 line-height at 13px
+            .multilineTextAlignment(numeric ? .trailing : .leading)
             .textSelection(.enabled)
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: numeric ? .trailing : .leading)
             .background(isHeader ? Theme.bg1 : Color.clear)
             // Cell borders double up between neighbours, reading as a
             // single 1px line (border-collapse).

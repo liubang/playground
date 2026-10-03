@@ -464,10 +464,12 @@ struct ComposerView: View {
     }
 
     /// Approval baseline: the default (standard) shows only the shield
-    /// icon; non-default modes expand a short name with an amber tint.
+    /// icon; non-default modes expand a short name with an amber tint —
+    /// a deliberate "guardrails changed" signal, with the shield glyph
+    /// spelling out HOW (full / half / slashed for ask-more to ask-never).
     private var approvalPicker: some View {
         PickerCapsule(
-            icon: "shield",
+            icon: ApprovalOption(rawValue: store.approvalMode)?.icon ?? "shield",
             label: store.approvalMode == "on-request"
                 ? nil
                 : (ApprovalOption(rawValue: store.approvalMode)?.short ?? store.approvalMode),
@@ -568,6 +570,15 @@ private enum ApprovalOption: String, CaseIterable {
         case .onRequest: "standard"
         case .dangerOnly: "dev"
         case .never: "auto"
+        }
+    }
+
+    /// The capsule's shield state mirrors how much the mode asks.
+    var icon: String {
+        switch self {
+        case .onRequest: "shield"
+        case .dangerOnly: "shield.lefthalf.filled"
+        case .never: "shield.slash"
         }
     }
 

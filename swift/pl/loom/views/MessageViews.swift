@@ -1471,20 +1471,27 @@ struct TurnSummaryView: View {
                 Image(systemName: open ? "chevron.down" : "chevron.right")
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(Theme.muted)
-                Text("Turn changes \(changes.count) \(changes.count == 1 ? "file" : "files")")
+                Text("本轮改动 \(changes.count) 个文件")
                     .font(.system(size: Theme.textMd, weight: .semibold))
                     .foregroundStyle(Theme.fg)
                 if let totals {
-                    (Text("+\(totals.added)").foregroundStyle(Theme.success)
-                        + Text("  ")
-                        + Text("−\(totals.removed)").foregroundStyle(Theme.error))
-                        .font(.system(size: 12, design: .monospaced))
+                    // A zero count hides: red/green 0 reads as noise,
+                    // not as information.
+                    HStack(spacing: 6) {
+                        if totals.added > 0 {
+                            Text("+\(totals.added)").foregroundStyle(Theme.success)
+                        }
+                        if totals.removed > 0 {
+                            Text("−\(totals.removed)").foregroundStyle(Theme.error)
+                        }
+                    }
+                    .font(.system(size: 12, design: .monospaced))
                 }
                 if summary.cancelled == true {
-                    tag("Cancelled", icon: "nosign", tint: Theme.muted, border: Theme.fg.opacity(0.18))
+                    tag("已取消", icon: "nosign", tint: Theme.muted, border: Theme.fg.opacity(0.18))
                 }
                 if summary.failed == true {
-                    tag("Failed", icon: "exclamationmark.triangle",
+                    tag("失败", icon: "exclamationmark.triangle",
                         tint: Theme.warning, border: Theme.warning.opacity(0.40))
                 }
                 Spacer(minLength: 0)
@@ -1573,11 +1580,10 @@ struct TurnSummaryView: View {
     }
 
     private var footnote: String {
-        var text =
-            "Only loom write-tool edits are counted; files written inside run_cmd (e.g. sed) are not."
+        var text = "仅统计 loom 写入工具的改动；run_cmd 内写出的文件（如 sed）不计入。"
         text += expandable
-            ? " Click a file row to expand its workspace diff."
-            : " Inline diffs are unavailable for this turn."
+            ? " 点击文件行可展开对应的工作区 diff。"
+            : " 本轮改动无法展开内联 diff。"
         return text
     }
 
@@ -1585,7 +1591,7 @@ struct TurnSummaryView: View {
     /// owned by TurnSummaryButtonStyle (one stroke, not two).
     private var revertButton: some View {
         Button(action: confirmRevert) {
-            Label(reverting ? "Reverting…" : "Revert this turn", systemImage: "arrow.counterclockwise")
+            Label(reverting ? "撤销中…" : "撤销本轮改动", systemImage: "arrow.counterclockwise")
                 .font(.system(size: 12))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 3)
@@ -1594,10 +1600,7 @@ struct TurnSummaryView: View {
         .buttonStyle(TurnSummaryButtonStyle())
         .disabled(reverting)
         .opacity(reverting ? 0.55 : 1)
-        .help(
-            "Restore files written this turn to their pre-turn contents "
-                + "(external changes made after the turn are overwritten and reported)",
-        )
+        .help("将本轮写入的文件恢复到改动前的内容（本轮之后的外部修改会被覆盖并报告）")
     }
 
     /// The WebUI confirms each externally-modified file one by one;
@@ -1606,13 +1609,13 @@ struct TurnSummaryView: View {
     private func confirmRevert() {
         guard !reverting, let runId, let reverter else { return }
         let alert = NSAlert()
-        alert.messageText = "Revert this turn"
+        alert.messageText = "撤销本轮改动"
         alert.informativeText =
-            "Restore files written this turn to their pre-turn contents. "
-                + "External changes made after the turn will be overwritten and reported."
+            "将本轮写入的文件恢复到改动前的内容。"
+                + "本轮之后产生的外部修改将被覆盖并报告。"
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Revert")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "撤销")
+        alert.addButton(withTitle: "取消")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         reverting = true
         Task {
@@ -1745,17 +1748,22 @@ private struct TurnSummaryFileRow: View {
     private var right: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             if deleted {
-                Text("Deleted")
+                Text("已删除")
                     .foregroundStyle(Theme.error)
             }
             if edits > 1 {
-                Text("\(edits) edits")
+                Text("\(edits) 次修改")
             }
             if let stat, (stat.notComparable ?? "").isEmpty, stat.added > 0 || stat.removed > 0 {
-                Text("+\(stat.added)")
-                    .foregroundStyle(Theme.success)
-                Text("−\(stat.removed)")
-                    .foregroundStyle(Theme.error)
+                // Zero halves hide (same "no noise" rule as the head).
+                if stat.added > 0 {
+                    Text("+\(stat.added)")
+                        .foregroundStyle(Theme.success)
+                }
+                if stat.removed > 0 {
+                    Text("−\(stat.removed)")
+                        .foregroundStyle(Theme.error)
+                }
             }
             if expandable {
                 Image(systemName: isOpen ? "chevron.down" : "chevron.right")
@@ -1772,23 +1780,20 @@ private struct TurnSummaryFileRow: View {
     @ViewBuilder
     private var diffRegion: some View {
         if !statsReady {
-            note("Loading…")
+            note("加载中…")
         } else if let notComparable = stat?.notComparable, !notComparable.isEmpty {
             note(notComparable)
         } else if let diff = stat?.diff, !diff.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 if stat?.diffTruncated == true {
-                    note("Diff truncated; stats cover only the head of the file")
+                    note("diff 已截断，统计仅覆盖文件开头部分")
                 }
                 TurnSummaryInlineDiff(path: change.path, diffText: diff)
             }
         } else if stat != nil {
-            note(
-                "Current content matches the pre-turn state "
-                    + "(the changes may have been reverted by later operations)",
-            )
+            note("当前内容与改动前一致（改动可能已被后续操作还原）")
         } else {
-            note("No ledger record for this file in this turn; diff unavailable")
+            note("本轮没有该文件的修改记录，无法展示 diff")
         }
     }
 

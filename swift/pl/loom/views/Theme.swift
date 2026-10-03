@@ -198,12 +198,13 @@ func formatDuration(_ ms: Int64) -> String {
     return String(format: "%dm %02ds", minutes, rest)
 }
 
-/// WebUI fmtMsgTime: short "Aug 6 14:34" label under a message.
+/// Message-row timestamp: "10月3日 21:50" — the shell's message
+/// chrome speaks Chinese, matching the settings panel.
 /// The formatter is created once — DateFormatter allocation is
 /// surprisingly expensive and this runs per visible message row.
 private let messageTimeFormatter: DateFormatter = {
     let formatter = DateFormatter()
-    formatter.dateFormat = "MMM d HH:mm"
+    formatter.dateFormat = "M月d日 HH:mm"
     return formatter
 }()
 
@@ -331,7 +332,15 @@ struct MazeButton: View {
 struct MiniSearchField: View {
     let placeholder: String
     @Binding var text: String
-    var width: CGFloat = 180
+    /// Fixed cap for toolbars (the 180 default); nil = fill the
+    /// container (the sidebar filter).
+    var width: CGFloat? = 180
+    /// The first-class variant (the sidebar filter): taller, textSm,
+    /// a bg0 fill one shade below the sidebar so the box reads at a
+    /// glance. Off keeps the dense toolbar look (maze / trace).
+    var prominent = false
+    /// A trailing shortcut hint ("⌘F"), shown muted at the right edge.
+    var trailingHint: String?
     /// Hosts that drive focus themselves (e.g. a keyboard shortcut)
     /// pass their own FocusState binding; otherwise the field uses an
     /// internal one.
@@ -345,18 +354,26 @@ struct MiniSearchField: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 10))
+                .font(.system(size: prominent ? 11 : 10))
                 .foregroundStyle(Theme.muted)
             TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
-                .font(.system(size: Theme.textXs))
+                .font(.system(size: prominent ? Theme.textSm : Theme.textXs))
                 .foregroundStyle(Theme.fg)
                 .focused(externalFocus ?? $focused)
+            if let trailingHint {
+                Text(trailingHint)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.muted.opacity(0.8))
+            }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .frame(width: width)
-        .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
+        .padding(.horizontal, prominent ? 10 : 8)
+        .padding(.vertical, prominent ? 7 : 3)
+        .frame(maxWidth: width ?? .infinity, alignment: .leading)
+        .background(
+            prominent ? Theme.bg0 : Theme.bg1,
+            in: RoundedRectangle(cornerRadius: Theme.radiusSm),
+        )
         .overlay(RoundedRectangle(cornerRadius: Theme.radiusSm)
             .strokeBorder(isFocused ? Theme.primary : Theme.bg2, lineWidth: 1))
     }
