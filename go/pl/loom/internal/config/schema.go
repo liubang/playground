@@ -54,6 +54,7 @@ type File struct {
 	Tools    Tools    `yaml:"tools,omitempty"`
 	Rules    Rules    `yaml:"rules,omitempty"`
 	Approval Approval `yaml:"approval,omitempty"`
+	Sandbox  Sandbox  `yaml:"sandbox,omitempty"`
 	Tracing  Tracing  `yaml:"tracing,omitempty"`
 	Share    Share    `yaml:"share,omitempty"`
 	Logging  Logging  `yaml:"logging,omitempty"`
@@ -273,6 +274,27 @@ type Approval struct {
 	// agent the URL, so asking again is pure friction. Rule-layer denies
 	// still win, and never mode ignores it. Nil means enabled.
 	TrustUserURLs *bool `yaml:"trust_user_urls,omitempty"`
+}
+
+// Sandbox configures the sandboxed commands' network posture. Network
+// selects the posture:
+// "off" (default: default-deny plus the needs_network declaration
+// flow), "proxy" (the egress proxy: direct outbound stays denied,
+// proxied connections are domain-filtered and logged), or "full"
+// (ambient unfiltered network — no policy, no connection log; weaker
+// visibility than proxy). On Linux the values change nothing: the
+// sandbox stays fail-closed.
+type Sandbox struct {
+	Network string       `yaml:"network,omitempty"`
+	Proxy   SandboxProxy `yaml:"proxy,omitempty"`
+}
+
+// SandboxProxy tunes the egress proxy. Unmatched decides what happens
+// to a destination no host rule covers: "allow" (default: ambient
+// network with the deny list enforced at connection time, everything
+// logged) or "deny" (allowlist posture for sensitive workspaces).
+type SandboxProxy struct {
+	Unmatched string `yaml:"unmatched,omitempty"`
 }
 
 // Tracing configures Langfuse observability. Keys follow the same

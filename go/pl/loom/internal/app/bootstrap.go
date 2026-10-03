@@ -35,6 +35,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/memory"
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
+	"github.com/liubang/playground/go/pl/loom/internal/process/egress"
 	"github.com/liubang/playground/go/pl/loom/internal/prompt"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/browser"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/builtin"
@@ -154,6 +155,11 @@ type Bootstrap struct {
 	// tool; nil when the browser tool is disabled (browser.enabled=false
 	// or Chrome is not found). Close drains the instance and reaper.
 	BrowserManager *browser.Manager
+	// egressServer is the workspace's egress proxy (the
+	// sandbox.network=proxy posture only). Close stops its listener and
+	// drains tunnels AFTER the command-owning managers below — a
+	// session/sub-agent command may still hold a tunnel.
+	egressServer *egress.Server
 }
 
 // NewWorkspaceBootstrap assembles the workspace-scoped runtime components
@@ -180,6 +186,34 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		return nil, fmt.Errorf("create path validator: %w", err)
 	}
 
+	// Start the egress proxy when the config selects the proxy network
+	// posture. It must come up BEFORE the runner: the sandbox handed to
+	// the runner carries the proxy endpoint. A start failure is a hard
+	// bootstrap error — silently falling back to the no-network sandbox
+	// would fail every networked command with a message pointing nowhere.
+	egressServer, proxyEnv, err := startEgressProxy(resolved, proc.Packages, cfg.WorkspaceRoot, logger)
+	if err != nil {
+		return nil, err
+	}
+	// Every failure past this point must release the proxy; on success
+	// ownership passes to the returned Bootstrap (like sessionManager
+	// below, M22).
+	defer func() {
+		if retErr != nil && egressServer != nil {
+			_ = egressServer.Close()
+		}
+	}()
+	sandboxOpts := process.PlatformSandboxOptions{Proxy: proxyEnv}
+	if resolved.Sandbox.Network == config.SandboxNetworkFull {
+		sandboxOpts.AllowNetwork = true
+	}
+	// run_cmd's failure guidance follows the network posture: under the
+	// proxy, needs_network is a no-op and escalation bypasses filter+log.
+	var runCmdOpts []command.RunCmdToolOption
+	if resolved.Sandbox.Network == config.SandboxNetworkProxy {
+		runCmdOpts = append(runCmdOpts, command.WithEgressProxy())
+	}
+
 	// Create process runner. The env allowlist additionally permits the Go
 	// toolchain variables as a fallback: the sandbox already allows writes
 	// to the toolchain caches (process.ExtraWritableDirs), but a user-set
@@ -188,7 +222,7 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 	// attribution variables (see process.LoomSessionEnv) into every spawned
 	// command so downstream CLIs can attribute traffic to this session.
 	runner, err := process.NewRunner(validator, process.RunnerOptions{
-		Sandbox: process.NewPlatformSandbox(process.PlatformSandboxOptions{}),
+		Sandbox: process.NewPlatformSandbox(sandboxOpts),
 		EnvAllowlist: []string{
 			"PATH", "LANG", "LC_ALL", "TMPDIR", "HOME",
 			"GOCACHE", "GOPATH", "GOMODCACHE", "GOPROXY", "GOSUMDB", "GOFLAGS",
@@ -236,7 +270,7 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 			sessionManager.Close()
 		}
 	}()
-	if err := registerBuiltinTools(registry, validator, runner, proc.Artifact, resolved.Limits.MaxToolOutputBytes, goalCell, planCell, proc.Questioner, book, sessionManager, resolved.Image); err != nil {
+	if err := registerBuiltinTools(registry, validator, runner, proc.Artifact, resolved.Limits.MaxToolOutputBytes, goalCell, planCell, proc.Questioner, book, sessionManager, resolved.Image, runCmdOpts...); err != nil {
 		return nil, fmt.Errorf("register tools: %w", err)
 	}
 
@@ -389,7 +423,7 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 			Risk:     domain.R1,
 		}
 
-		coderRegistry, err := buildCoderRegistry(validator, runner, proc.Artifact, book, int(resolved.Limits.MaxToolOutputBytes))
+		coderRegistry, err := buildCoderRegistry(validator, runner, proc.Artifact, book, int(resolved.Limits.MaxToolOutputBytes), runCmdOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("build coder registry: %w", err)
 		}
@@ -512,6 +546,7 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		SessionManager:   sessionManager,
 		Skills:           skills,
 		BrowserManager:   browserMgr,
+		egressServer:     egressServer,
 	}
 	b.PromptBuilder = b.buildPrompt(ctx, resolved)
 	return b, nil
@@ -826,7 +861,7 @@ func registerKBTools(registry *agent.ToolRegistry, kb config.ResolvedKnowledgeBa
 	return nil
 }
 
-func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell, questioner domain.Questioner, book *workspace.FileStateBook, sessionManager *exsession.Manager, imageCfg config.ResolvedImage) error {
+func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell, questioner domain.Questioner, book *workspace.FileStateBook, sessionManager *exsession.Manager, imageCfg config.ResolvedImage, runCmdOpts ...command.RunCmdToolOption) error {
 	tools := append(
 		readOnlyToolFactories(validator, runner, artStore, book),
 		toolFactory{"edit", func() (domain.Tool, error) { return edit.NewEditTool(validator, book) }},
@@ -846,7 +881,7 @@ func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.Pat
 		return fmt.Errorf("register present_image: %w", err)
 	}
 	// run_cmd needs artifact store
-	runCmd, err := command.NewRunCmdToolWithArtifacts(validator, runner, artStore, int(maxOutputBytes))
+	runCmd, err := command.NewRunCmdToolWithArtifacts(validator, runner, artStore, int(maxOutputBytes), runCmdOpts...)
 	if err != nil {
 		return fmt.Errorf("run_cmd: %w", err)
 	}
@@ -917,7 +952,7 @@ func buildSubagentRegistry(validator *workspace.PathValidator, runner *process.R
 // design: update_task (parent-run state), ask_user (no one
 // to answer), exec_session (interactive sessions), and
 // delegate_task itself (no recursion).
-func buildCoderRegistry(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook, maxOutputBytes int) (*agent.ToolRegistry, error) {
+func buildCoderRegistry(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook, maxOutputBytes int, runCmdOpts ...command.RunCmdToolOption) (*agent.ToolRegistry, error) {
 	// Start from the researcher (read-only) set and add the writable tools.
 	registry := agent.NewToolRegistry()
 	tools := append(
@@ -929,7 +964,7 @@ func buildCoderRegistry(validator *workspace.PathValidator, runner *process.Runn
 		return nil, err
 	}
 	// run_cmd needs the artifact store for output capture.
-	runCmd, err := command.NewRunCmdToolWithArtifacts(validator, runner, artStore, maxOutputBytes)
+	runCmd, err := command.NewRunCmdToolWithArtifacts(validator, runner, artStore, maxOutputBytes, runCmdOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("run_cmd: %w", err)
 	}
@@ -941,9 +976,11 @@ func buildCoderRegistry(validator *workspace.PathValidator, runner *process.Runn
 
 // Close releases the workspace-scoped resources held by the Bootstrap: it
 // drains in-flight sub-agents (child goroutines hold store references until
-// they persist their final checkpoint) and reclaims surviving background
-// process groups. The embedded ProcessRuntime is closed separately at
-// process teardown (ProcessRuntime.Close), after every workspace Bootstrap.
+// they persist their final checkpoint), reclaims surviving background
+// process groups, and stops the egress proxy (last — command-owning
+// managers may still hold proxy tunnels until they are reclaimed). The
+// embedded ProcessRuntime is closed separately at process teardown
+// (ProcessRuntime.Close), after every workspace Bootstrap.
 func (b *Bootstrap) Close() {
 	if b.SubagentManager != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -955,6 +992,9 @@ func (b *Bootstrap) Close() {
 	}
 	if b.BrowserManager != nil {
 		b.BrowserManager.Close()
+	}
+	if b.egressServer != nil {
+		_ = b.egressServer.Close()
 	}
 }
 

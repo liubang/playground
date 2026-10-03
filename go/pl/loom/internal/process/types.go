@@ -25,6 +25,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/liubang/playground/go/pl/loom/internal/process/egress"
 )
 
 var (
@@ -53,10 +55,15 @@ type isolationMode struct {
 func (m isolationMode) Name() string { return m.name }
 
 var (
-	SeatbeltIsolation     Isolation = isolationMode{name: "seatbelt"}
-	ProcessGroupIsolation Isolation = isolationMode{name: "process_group"}
-	UnsupportedIsolation  Isolation = isolationMode{name: "unsupported"}
-	UnavailableIsolation  Isolation = isolationMode{name: "unavailable"}
+	SeatbeltIsolation Isolation = isolationMode{name: "seatbelt"}
+	// SeatbeltProxyIsolation is the same seatbelt boundary with the
+	// egress proxy wired in (network via the loopback proxy, domain
+	// policy enforced there): audit must tell the two apart because the
+	// sandboxed command's network posture differs materially.
+	SeatbeltProxyIsolation Isolation = isolationMode{name: "seatbelt+proxy"}
+	ProcessGroupIsolation  Isolation = isolationMode{name: "process_group"}
+	UnsupportedIsolation   Isolation = isolationMode{name: "unsupported"}
+	UnavailableIsolation   Isolation = isolationMode{name: "unavailable"}
 )
 
 // CommandSpec describes a single process execution request.
@@ -231,6 +238,11 @@ func (a *AtomicSessionEnv) Get() map[string]string {
 type PlatformSandboxOptions struct {
 	AllowNetwork  bool
 	WritablePaths []string
+	// Proxy, when set, wires the egress proxy into the sandbox (macOS):
+	// the profile keeps direct outbound denied, gains the trustd exception
+	// Go TLS verification needs, and Prepare appends the proxy environment.
+	// Ignored on other platforms.
+	Proxy *egress.ProxyEnv
 }
 
 // DirectSandbox applies no OS isolation beyond the process group: the

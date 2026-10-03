@@ -28,6 +28,7 @@
 package permission
 
 import (
+	"net/netip"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -311,6 +312,73 @@ func (s *PackageSet) Packages() []Package {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return append([]Package(nil), s.packages...)
+}
+
+// DecideEgress resolves host-bound packages for one proxied
+// connection. Deny wins over allow regardless of order
+// (strictest-wins, same as Decide), and the allow rules' IP
+// literals are snapshotted for the resolved-address guard's exemption —
+// everything under ONE read lock, so a ruleset mutation mid-connection
+// (session remember/forget, rules hot-reload) cannot make the guard
+// disagree with the decision it accompanies.
+//
+// globalOnly restricts the evaluation to untagged (global-scope)
+// packages: the SOCKS5 leg's conservative posture, since an
+// unauthenticated client cannot be attributed to a workspace and must
+// not ride another workspace's project/session rules.
+//
+// matched=false means no host-bound rule fired; the caller applies the
+// configured unmatched posture. Ports are not matched: host rules carry
+// no :port dimension.
+func (s *PackageSet) DecideEgress(host, workspace string, globalOnly bool) (allow bool, pkg Package, literals []netip.Addr, matched bool) {
+	if s == nil {
+		return false, Package{}, nil, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var denyPkg *Package
+	var allowPkg *Package
+	for i := range s.packages {
+		p := &s.packages[i]
+		if p.Bind.Kind != BindHost || !hostMatchesPattern(p.Bind.Host, host) {
+			continue
+		}
+		if globalOnly {
+			if p.Workspace != "" {
+				continue
+			}
+		} else if !p.visibleTo(workspace) {
+			continue
+		}
+		switch p.Decision {
+		case domain.DecisionDeny:
+			if denyPkg == nil {
+				denyPkg = p
+			}
+		case domain.DecisionAllow:
+			if allowPkg == nil {
+				allowPkg = p
+			}
+			// Allow-listed IP literals form the guard's exemption set.
+			// Collection is host-scoped: only rules matching THIS host
+			// contribute, so an exemption exists only for a connection
+			// whose target is the literal itself (a domain resolving to
+			// a denied-class address is never exempted — dev loopback is
+			// reached directly via NO_PROXY + the seatbelt loopback
+			// allow, not through the proxy). Patterns and names simply
+			// fail to parse and contribute nothing.
+			if literal, err := netip.ParseAddr(strings.Trim(p.Bind.Host, "[]")); err == nil {
+				literals = append(literals, literal)
+			}
+		}
+	}
+	if denyPkg != nil {
+		return false, *denyPkg, nil, true
+	}
+	if allowPkg != nil {
+		return true, *allowPkg, literals, true
+	}
+	return false, Package{}, nil, false
 }
 
 // visibleTo reports whether the package participates in decisions for

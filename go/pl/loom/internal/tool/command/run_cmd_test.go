@@ -978,7 +978,7 @@ func TestSandboxGuidanceNote(t *testing.T) {
 			{"", false},
 		}
 		for _, tc := range cases {
-			note := sandboxGuidanceNote(tc.stderr, false, false)
+			note := sandboxGuidanceNote(tc.stderr, false, false, false)
 			if tc.hit && note == "" {
 				t.Errorf("sandboxGuidanceNote(%q) = %q, want a note", tc.stderr, note)
 			}
@@ -1012,7 +1012,7 @@ func TestSandboxGuidanceNote(t *testing.T) {
 			{"go: downloading github.com/x/y v1.0.0", false},
 		}
 		for _, tc := range cases {
-			note := sandboxGuidanceNote(tc.stderr, false, false)
+			note := sandboxGuidanceNote(tc.stderr, false, false, false)
 			if tc.hit && note == "" {
 				t.Errorf("sandboxGuidanceNote(%q) = %q, want a note", tc.stderr, note)
 			}
@@ -1031,7 +1031,7 @@ func TestSandboxGuidanceNote(t *testing.T) {
 	})
 
 	t.Run("timeout suggests a sandbox network hang", func(t *testing.T) {
-		note := sandboxGuidanceNote("still working...", true, false)
+		note := sandboxGuidanceNote("still working...", true, false, false)
 		if note == "" {
 			t.Fatal("timeout note = empty, want guidance")
 		}
@@ -1041,18 +1041,65 @@ func TestSandboxGuidanceNote(t *testing.T) {
 	})
 
 	t.Run("denial fingerprint wins over timeout", func(t *testing.T) {
-		note := sandboxGuidanceNote("dial tcp: no such host", true, false)
+		note := sandboxGuidanceNote("dial tcp: no such host", true, false, false)
 		if !strings.HasPrefix(note, "outbound network and DNS are denied") {
 			t.Fatalf("note = %q, want the denial variant", note)
 		}
 	})
 
 	t.Run("escalated runs get no note", func(t *testing.T) {
-		if note := sandboxGuidanceNote("dial tcp: no such host", true, true); note != "" {
+		if note := sandboxGuidanceNote("dial tcp: no such host", true, true, false); note != "" {
 			t.Fatalf("escalated note = %q, want empty", note)
 		}
-		if note := sandboxGuidanceNote("", false, true); note != "" {
+		if note := sandboxGuidanceNote("", false, true, true); note != "" {
 			t.Fatalf("escalated note = %q, want empty", note)
+		}
+	})
+
+	t.Run("egress proxy posture", func(t *testing.T) {
+		// A proxy 403 is a policy answer: the note must name the egress
+		// filter, and must NOT recommend needs_network (a no-op in this
+		// posture).
+		for _, stderr := range []string{
+			"blocked by loom egress policy: request capture service",
+			"curl: (56) Received HTTP code 403 from proxy after CONNECT",
+		} {
+			note := sandboxGuidanceNote(stderr, false, false, true)
+			if !strings.Contains(note, "egress proxy denied") {
+				t.Errorf("sandboxGuidanceNote(%q, proxy) = %q, want policy-denial wording", stderr, note)
+			}
+			if strings.Contains(note, "needs_network=true") {
+				t.Errorf("sandboxGuidanceNote(%q, proxy) = %q, must not recommend the no-op needs_network", stderr, note)
+			}
+			if !strings.Contains(note, "connection log") {
+				t.Errorf("sandboxGuidanceNote(%q, proxy) = %q, want the escalation bypass warning", stderr, note)
+			}
+		}
+		// A hand-rolled proxy request without the token gets the 407 hint.
+		if note := sandboxGuidanceNote("Received HTTP code 407 from proxy after CONNECT", false, false, true); !strings.Contains(note, "credentials") {
+			t.Errorf("407 note = %q, want the embedded-credentials hint", note)
+		}
+		// A direct-connection failure is reframed as "the tool bypassed
+		// the injected proxy env", never as a needs_network grant case.
+		note := sandboxGuidanceNote("dial tcp: lookup api.example.com: no such host", false, false, true)
+		if !strings.Contains(note, "bypassed the proxy environment") {
+			t.Errorf("proxy network note = %q, want the bypass explanation", note)
+		}
+		if strings.Contains(note, "needs_network=true") {
+			t.Errorf("proxy network note = %q, must not recommend the no-op needs_network", note)
+		}
+		// writable_paths advice survives the posture switch.
+		if !strings.Contains(note, "writable_paths") {
+			t.Errorf("proxy network note = %q, want the writable_paths branch kept", note)
+		}
+		// Timeout under the proxy names the proxy-env bypass hang.
+		timeoutNote := sandboxGuidanceNote("still working...", true, false, true)
+		if !strings.Contains(timeoutNote, "egress proxy") || strings.Contains(timeoutNote, "needs_network=true") {
+			t.Errorf("proxy timeout note = %q, want proxy wording without needs_network", timeoutNote)
+		}
+		// Off posture is untouched by the flag plumbing.
+		if offNote := sandboxGuidanceNote("dial tcp: no such host", false, false, false); !strings.Contains(offNote, "needs_network=true") {
+			t.Errorf("off-posture note = %q, want the classic needs_network advice", offNote)
 		}
 	})
 }

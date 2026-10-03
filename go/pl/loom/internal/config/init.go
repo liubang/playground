@@ -214,6 +214,14 @@ providers:
 #   mode: on-request              # on-request（默认）| danger-only | never
 #   trust_user_urls: true         # 默认 true，自动放行用户在对话中提到的 host
 
+# 沙箱网络姿态（仅 macOS 生效；Linux 沙箱一律 fail-closed）：
+# sandbox:
+#   network: off                  # off（默认：default-deny + needs_network 声明流）| proxy（egress 代理：
+#                                 # 直连仍拒绝，代理连接按域名过滤并逐条记录）| full（放开网络，无策略无日志）
+#   proxy:
+#     unmatched: allow            # allow（默认：无规则覆盖的目的地放行，拒绝列表在连接时强制，全部记录）
+#                                 # | deny（白名单姿态，适合敏感工作区）
+
 # Langfuse 追踪（host 与两个 key 都填写才启用；key 也支持 *_env 引用环境变量）：
 # tracing:
 #   host: ""

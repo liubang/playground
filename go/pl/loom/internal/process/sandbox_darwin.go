@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/liubang/playground/go/pl/loom/internal/process/egress"
 	workspacepkg "github.com/liubang/playground/go/pl/loom/internal/workspace"
 )
 
@@ -39,6 +40,7 @@ func NewPlatformSandbox(opts PlatformSandboxOptions) Sandbox {
 	return SeatbeltSandbox{
 		allowNetwork:  opts.AllowNetwork,
 		writablePaths: append([]string(nil), opts.WritablePaths...),
+		proxy:         opts.Proxy,
 	}
 }
 
@@ -47,10 +49,23 @@ type SeatbeltSandbox struct {
 	allowNetwork  bool
 	allowGUIOpen  bool
 	writablePaths []string
+	// proxy, when set, is the egress proxy wired into this sandbox: the
+	// profile keeps direct outbound denied, grants the trustd exception
+	// Go TLS verification needs, and Prepare appends the proxy
+	// environment. The proxy URL carries the session token; only
+	// sandboxed children ever see it.
+	proxy *egress.ProxyEnv
 }
 
-// Isolation reports the active seatbelt isolation mode.
-func (s SeatbeltSandbox) Isolation() Isolation { return SeatbeltIsolation }
+// Isolation reports the active seatbelt isolation mode: seatbelt+proxy
+// when the egress proxy is wired in, so audit and UI can tell the two
+// network postures apart.
+func (s SeatbeltSandbox) Isolation() Isolation {
+	if s.proxy != nil {
+		return SeatbeltProxyIsolation
+	}
+	return SeatbeltIsolation
+}
 
 // widenSandbox clones the seatbelt sandbox with additional capabilities
 // (docs/PERMISSION_DESIGN.md §3.2). Other sandbox types are returned
@@ -60,10 +75,15 @@ func widenSandbox(base Sandbox, grant Grant) Sandbox {
 	if !ok {
 		return base
 	}
+	// The proxy field rides the copy untouched (a dropped proxy would
+	// silently produce a sandbox with neither proxy env nor network).
+	// NetworkFull is a no-op under the proxy: the proxy IS the network
+	// answer, and a full allow would route around its policy and logs.
 	return SeatbeltSandbox{
-		allowNetwork:  s.allowNetwork || grant.NetworkFull,
+		allowNetwork:  s.allowNetwork || (grant.NetworkFull && s.proxy == nil),
 		allowGUIOpen:  s.allowGUIOpen || grant.GUIOpen,
 		writablePaths: uniqueCleanPaths(append(append([]string(nil), s.writablePaths...), grant.WritablePaths...)),
+		proxy:         s.proxy,
 	}
 }
 
@@ -114,10 +134,17 @@ func (s SeatbeltSandbox) Prepare(spec SandboxSpec) (SandboxLaunch, error) {
 	}
 	args := []string{"-f", profileFile.Name(), spec.ExecutablePath}
 	args = append(args, spec.Args...)
+	env := append([]string(nil), spec.Env...)
+	if s.proxy != nil {
+		// Appended last: exec dedupes environment keys last-wins, and the
+		// model's own env never carries these keys (they are outside the
+		// runner allowlist), so the proxy assignment always stands.
+		env = append(env, s.proxy.EnvVars()...)
+	}
 	return SandboxLaunch{
 		Program: sandboxExecPath,
 		Args:    args,
-		Env:     append([]string(nil), spec.Env...),
+		Env:     env,
 		Cleanup: func() error { return os.Remove(profileFile.Name()) },
 	}, nil
 }
@@ -197,6 +224,15 @@ func (s SeatbeltSandbox) profile(spec SandboxSpec) (string, error) {
 	}
 	if s.allowNetwork {
 		lines = append(lines, "(allow network*)")
+	}
+	if s.proxy != nil {
+		// trustd performs TLS trust evaluation for anything linked against
+		// the Security framework — including every Go binary verifying a
+		// certificate through the CONNECT tunnel. Without this lookup,
+		// sandboxed Go programs cannot complete any TLS handshake. The
+		// trade (trustd is a potential, if awkward, exfiltration channel)
+		// is a deliberate, accepted exception.
+		lines = append(lines, `(allow mach-lookup (global-name "com.apple.trustd.agent"))`)
 	}
 	if s.allowGUIOpen {
 		lines = append(lines, guiOpenAllowRules...)

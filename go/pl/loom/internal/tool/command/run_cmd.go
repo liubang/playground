@@ -139,6 +139,21 @@ type RunCmdTool struct {
 	runner           *process.Runner
 	artifacts        domain.ArtifactStore
 	modelOutputBytes int
+	// egressProxy reframes the sandbox guidance notes for the
+	// sandbox.network=proxy posture: network failures mean "the tool
+	// bypassed the injected proxy env", not "grant needs_network" (a
+	// no-op in this posture).
+	egressProxy bool
+}
+
+// RunCmdToolOption tunes optional tool behavior at construction.
+type RunCmdToolOption func(*RunCmdTool)
+
+// WithEgressProxy marks the sandbox.network=proxy posture: outbound
+// traffic rides the injected egress proxy (per-domain filtered, every
+// connection logged), and the failure guidance is worded accordingly.
+func WithEgressProxy() RunCmdToolOption {
+	return func(t *RunCmdTool) { t.egressProxy = true }
 }
 
 // NewRunCmdTool creates a run_cmd tool bound to a workspace validator and process runner.
@@ -156,6 +171,7 @@ func NewRunCmdToolWithArtifacts(
 	runner *process.Runner,
 	artifacts domain.ArtifactStore,
 	modelOutputBytes int,
+	opts ...RunCmdToolOption,
 ) (*RunCmdTool, error) {
 	if validator == nil {
 		return nil, domain.NewError(domain.ErrInvalidInput, "path validator is required")
@@ -190,13 +206,17 @@ func NewRunCmdToolWithArtifacts(
 	if err != nil {
 		return nil, err
 	}
-	return &RunCmdTool{
+	tool := &RunCmdTool{
 		base:             base,
 		validator:        validator,
 		runner:           runner,
 		artifacts:        artifacts,
 		modelOutputBytes: modelOutputBytes,
-	}, nil
+	}
+	for _, opt := range opts {
+		opt(tool)
+	}
+	return tool, nil
 }
 
 func (t *RunCmdTool) Definition() domain.ToolDefinition {
@@ -409,6 +429,7 @@ func (t *RunCmdTool) Execute(ctx context.Context, prepared domain.PreparedCall) 
 				string(runnerResult.Stderr),
 				runnerResult.TimedOut,
 				args.SandboxPermissions == toolkit.SandboxRequireEscalated,
+				t.egressProxy,
 			),
 			droppedEnvNote(runnerResult.DroppedEnvKeys),
 		),
@@ -693,7 +714,7 @@ func combineNotes(notes ...string) string {
 	return strings.Join(parts, "; ")
 }
 
-func sandboxGuidanceNote(stderr string, timedOut, escalated bool) string {
+func sandboxGuidanceNote(stderr string, timedOut, escalated, egressProxy bool) string {
 	if escalated {
 		return ""
 	}
@@ -704,6 +725,21 @@ func sandboxGuidanceNote(stderr string, timedOut, escalated bool) string {
 		"Only when neither scoped flag explains the failure (TTY, credential files like SSO tokens the sandbox hides), " +
 		"retry with sandbox_permissions='require_escalated' and a short justification — after approval it runs OUTSIDE the sandbox with the full user environment. " +
 		"Do not give up or ask the user to run it themselves before offering the matching approval."
+	// proxyAdvice replaces networkAdvice under sandbox.network=proxy:
+	// needs_network is a no-op in that posture (the proxy IS the network
+	// answer), and escalation must be flagged as bypassing both the
+	// egress filter and its log.
+	const proxyAdvice = "Outbound traffic in this posture rides the injected loom egress proxy " +
+		"(HTTP_PROXY/HTTPS_PROXY/ALL_PROXY are already set), which filters every connection by domain rules and logs it — needs_network is a no-op here. " +
+		"If this failure is caused by a denied WRITE OUTSIDE the workspace/temp dir (a tool dropping logs, config or state in its own directory), " +
+		"PREFER retrying the SAME command with writable_paths=[that directory] — after a lightweight approval it runs INSIDE the sandbox with exactly those directories writable. " +
+		"Only when neither that nor a proxy-env explanation covers the failure (TTY, credential files like SSO tokens the sandbox hides), " +
+		"retry with sandbox_permissions='require_escalated' and a short justification — after approval it runs OUTSIDE the sandbox with the full user environment, bypassing the egress filter AND its connection log. " +
+		"Do not give up or ask the user to run it themselves before offering the matching approval."
+	advice := networkAdvice
+	if egressProxy {
+		advice = proxyAdvice
+	}
 	lower := strings.ToLower(stderr)
 	// GUI-denial signatures must be checked FIRST: Apple Event rejections
 	// typically surface as "operation not permitted", which the generic
@@ -747,6 +783,28 @@ func sandboxGuidanceNote(stderr string, timedOut, escalated bool) string {
 				"Alternatively, for trusted high-frequency commands (go mod download, pip install, gh api), the user can enable the matching rule pack in Settings → 权限与审批 → 规则包, which pre-authorizes them without per-run approval."
 		}
 	}
+	// Egress-proxy refusal fingerprints (proxy posture only): a 403 from
+	// the proxy is a POLICY answer, not a network failure — recommending
+	// needs_network would be wrong twice over (it is a no-op here, and
+	// the denial is by rule, not by sandbox).
+	if egressProxy {
+		proxyDenyPatterns := []string{
+			"blocked by loom egress policy",     // the proxy's own 403 body, echoed to the client
+			"received http code 403 from proxy", // curl's CONNECT-refusal rendering
+		}
+		for _, p := range proxyDenyPatterns {
+			if strings.Contains(lower, p) {
+				return "the loom egress proxy denied this destination by domain policy (a deny rule, or the address-class guard: " +
+					"loopback/link-local/cloud-metadata targets are refused unless an explicit allow rule names the IP literal); the attempt is logged. " +
+					"If the destination is legitimate, ask the user to allow the host with a domain rule. " +
+					"Otherwise retry the SAME command with sandbox_permissions='require_escalated' and a short justification only when bypassing the egress filter AND its connection log is acceptable."
+			}
+		}
+		if strings.Contains(lower, "received http code 407 from proxy") {
+			return "the loom egress proxy requires the credentials embedded in the injected proxy URL; this tool hand-built its proxy request without them. " +
+				"PREFER re-issuing through the process's HTTP_PROXY/HTTPS_PROXY environment (curl and most HTTP libraries honor it) instead of constructing the proxy URL manually."
+		}
+	}
 	networkPatterns := []string{
 		"no such host", "nodename nor servname", "name or service not known", // DNS resolution
 		"could not resolve", "temporary failure in name resolution",
@@ -754,7 +812,12 @@ func sandboxGuidanceNote(stderr string, timedOut, escalated bool) string {
 	}
 	for _, p := range networkPatterns {
 		if strings.Contains(lower, p) {
-			return "outbound network and DNS are denied by the sandbox (loopback networking on localhost is allowed). " + networkAdvice
+			if egressProxy {
+				return "direct outbound network/DNS stays denied in this posture: connections must ride the injected loom egress proxy " +
+					"(HTTP_PROXY/HTTPS_PROXY/ALL_PROXY are already set), which filters per domain and logs every attempt. " +
+					"This failure means the tool bypassed the proxy environment or resolved DNS itself — PREFER a proxy-aware invocation (curl honors the env). " + advice
+			}
+			return "outbound network and DNS are denied by the sandbox (loopback networking on localhost is allowed). " + advice
 		}
 	}
 	otherPatterns := []string{
@@ -763,12 +826,16 @@ func sandboxGuidanceNote(stderr string, timedOut, escalated bool) string {
 	}
 	for _, p := range otherPatterns {
 		if strings.Contains(lower, p) {
-			return "the sandbox restricts networking to loopback and writes to the workspace and temp dir. " + networkAdvice
+			return "the sandbox restricts networking to loopback and writes to the workspace and temp dir. " + advice
 		}
 	}
 	if timedOut {
+		if egressProxy {
+			return "the command was killed by the timeout while running inside the sandbox. Network access rides the injected loom egress proxy, " +
+				"so a network-dependent command that bypasses the proxy environment usually hangs on its denied direct connection until the timeout instead of failing fast. " + advice
+		}
 		return "the command was killed by the timeout while running inside the sandbox. Sandboxed commands have no outbound network or DNS (loopback only), " +
-			"so network-dependent commands (SSO/OAuth, HTTP APIs, package downloads) usually hang until the timeout instead of failing fast. " + networkAdvice
+			"so network-dependent commands (SSO/OAuth, HTTP APIs, package downloads) usually hang until the timeout instead of failing fast. " + advice
 	}
 	return ""
 }

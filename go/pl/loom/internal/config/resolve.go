@@ -112,6 +112,7 @@ type ResolvedConfig struct {
 	Skills        ResolvedSkills
 	Rules         ResolvedRules
 	Approval      ResolvedApproval
+	Sandbox       ResolvedSandbox
 	Tools         ResolvedTools
 	Tracing       trace.Config
 	Storage       ResolvedStorage
@@ -507,6 +508,48 @@ type ResolvedApproval struct {
 	TrustUserURLs bool
 }
 
+// SandboxNetwork is the sandboxed commands' network posture.
+type SandboxNetwork string
+
+const (
+	// SandboxNetworkOff is the default: default-deny plus needs_network.
+	SandboxNetworkOff SandboxNetwork = "off"
+	// SandboxNetworkProxy wires the egress proxy into the sandbox.
+	SandboxNetworkProxy SandboxNetwork = "proxy"
+	// SandboxNetworkFull allows ambient, unfiltered network.
+	SandboxNetworkFull SandboxNetwork = "full"
+)
+
+// ResolvedSandbox is the sandbox section with defaults applied.
+type ResolvedSandbox struct {
+	Network SandboxNetwork
+	// ProxyUnmatchedAllow is the proxy's posture for destinations no host
+	// rule covers: true = allow (and log), false = allowlist posture.
+	ProxyUnmatchedAllow bool
+}
+
+// resolveSandbox validates the sandbox section and applies defaults.
+func resolveSandbox(s Sandbox) (ResolvedSandbox, error) {
+	resolved := ResolvedSandbox{Network: SandboxNetworkOff, ProxyUnmatchedAllow: true}
+	switch s.Network {
+	case "", string(SandboxNetworkOff):
+	case string(SandboxNetworkProxy):
+		resolved.Network = SandboxNetworkProxy
+	case string(SandboxNetworkFull):
+		resolved.Network = SandboxNetworkFull
+	default:
+		return ResolvedSandbox{}, fmt.Errorf("config: sandbox.network must be one of off|proxy|full, got %q", s.Network)
+	}
+	switch s.Proxy.Unmatched {
+	case "", "allow":
+	case "deny":
+		resolved.ProxyUnmatchedAllow = false
+	default:
+		return ResolvedSandbox{}, fmt.Errorf("config: sandbox.proxy.unmatched must be allow or deny, got %q", s.Proxy.Unmatched)
+	}
+	return resolved, nil
+}
+
 // ProviderByName returns the named provider, or nil.
 func (c *ResolvedConfig) ProviderByName(name string) *ResolvedProvider {
 	for i := range c.Providers {
@@ -642,6 +685,10 @@ func resolve(f *File, baseDir string, lookup EnvLookup) (*ResolvedConfig, error)
 		Mode:          mode,
 		TrustUserURLs: f.Approval.TrustUserURLs == nil || *f.Approval.TrustUserURLs,
 	}
+	sandbox, err := resolveSandbox(f.Sandbox)
+	if err != nil {
+		return nil, err
+	}
 	share, err := resolveShare(f.Share)
 	if err != nil {
 		return nil, err
@@ -663,6 +710,7 @@ func resolve(f *File, baseDir string, lookup EnvLookup) (*ResolvedConfig, error)
 		Skills:    skills,
 		Rules:     resolveRules(f.Rules),
 		Approval:  approval,
+		Sandbox:   sandbox,
 		Tracing:   tracing,
 		Storage:   ResolvedStorage{BaseDir: baseDir},
 		Share:     share,

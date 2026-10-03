@@ -41,6 +41,7 @@ go_library(
     importpath = "github.com/liubang/playground/go/pl/loom/internal/process",
     visibility = ["//visibility:public"],
     deps = [
+        "//go/pl/loom/internal/process/egress:egress_lib",
         "//go/pl/loom/internal/workspace:workspace_lib",
         "@cc_mvdan_sh_v3//syntax",
     ] + select({
@@ -58,12 +59,14 @@ go_test(
         "runner_seatbelt_test.go",
         "runner_test.go",
         "sandbox_grant_test.go",
+        "sandbox_proxy_test.go",
         "session_test.go",
         "shell_analyze_test.go",
         "shellprobe_test.go",
     ],
     embed = [":process_lib"],
     deps = [
+        "//go/pl/loom/internal/process/egress:egress_lib",
         "//go/pl/loom/internal/workspace:workspace_lib",
     ],
 )

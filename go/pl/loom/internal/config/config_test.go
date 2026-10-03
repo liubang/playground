@@ -1117,6 +1117,9 @@ func TestTemplateCoversSchemaSections(t *testing.T) {
 	if cfg.Approval.Mode != "on-request" || !cfg.Approval.TrustUserURLs {
 		t.Fatalf("approval = %+v, want on-request with trust_user_urls", cfg.Approval)
 	}
+	if want := (ResolvedSandbox{Network: SandboxNetworkOff, ProxyUnmatchedAllow: true}); cfg.Sandbox != want {
+		t.Fatalf("sandbox defaults = %+v, want %+v", cfg.Sandbox, want)
+	}
 	if cfg.Share.Enabled || cfg.Share.Listen != DefaultShareListen {
 		t.Fatalf("share = %+v, want disabled with %q", cfg.Share, DefaultShareListen)
 	}
