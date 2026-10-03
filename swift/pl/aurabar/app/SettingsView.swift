@@ -58,7 +58,7 @@ struct SettingsView: View {
             Divider().overlay(theme.cardBorder)
             content
         }
-        .frame(width: 640, height: 440)
+        .frame(width: 640, height: 520)
         .background(theme.background)
         .foregroundStyle(theme.textPrimary)
         .environment(\.theme, theme)
@@ -190,6 +190,46 @@ private struct SettingsRow<Control: View>: View {
     }
 }
 
+/// A themed segmented control. SwiftUI's `.segmented` Picker ignores
+/// tint on macOS and always renders the system accent blue, which
+/// clashes with the active palette — this one follows theme.accent,
+/// matching the sidebar's selection styling.
+private struct ThemedSegmented<Option: Hashable>: View {
+    let options: [Option]
+    let label: (Option) -> String
+    @Binding var selection: Option
+
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(options, id: \.self) { option in
+                Button {
+                    selection = option
+                } label: {
+                    Text(label(option))
+                        .font(.callout)
+                        .foregroundStyle(selection == option ? theme.accent : theme.textPrimary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                        .frame(maxWidth: .infinity)
+                        .background {
+                            if selection == option {
+                                RoundedRectangle(cornerRadius: 5)
+                                    .fill(theme.accent.opacity(0.2))
+                            }
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(2)
+        .background(theme.textPrimary.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+        .animation(.easeInOut(duration: 0.15), value: selection)
+    }
+}
+
 /// Accent-color picker: theme default (empty string), curated presets,
 /// then a free ColorPicker well. Persisted as #RRGGBB in UserDefaults;
 /// ThemePreference.theme(for:) applies it to every popover.
@@ -243,17 +283,32 @@ private struct AccentSwatches: View {
                     accentHex = hex
                 }
             }
-            ColorPicker("", selection: customColor, supportsOpacity: false)
-                .labelsHidden()
-                .frame(width: 20, height: 20)
-                .clipShape(Circle())
-                .overlay {
-                    if isCustom {
-                        selectionRing
-                            .allowsHitTesting(false)
+            // A conic-gradient dot reads as "custom color" at a glance;
+            // the actual ColorPicker well sits on top, nearly invisible
+            // but still hit-testable (opacity must stay > 0).
+            ZStack {
+                Circle()
+                    .fill(
+                        AngularGradient(
+                            colors: isCustom
+                                ? [customColor.wrappedValue, customColor.wrappedValue]
+                                : [.red, .orange, .yellow, .green, .cyan, .blue, .purple, .red],
+                            center: .center,
+                        ),
+                    )
+                    .frame(width: 16, height: 16)
+                    .overlay {
+                        if isCustom {
+                            selectionRing
+                        }
                     }
-                }
-                .help("自定义…")
+                ColorPicker("", selection: customColor, supportsOpacity: false)
+                    .labelsHidden()
+                    .frame(width: 16, height: 16)
+                    .clipped()
+                    .opacity(0.011)
+            }
+            .help("自定义…")
         }
     }
 
@@ -289,9 +344,17 @@ private struct AccentSwatches: View {
 private struct ThemeSwatches: View {
     @AppStorage(ThemeKind.key) private var kindRaw = ThemeKind.everforest.rawValue
     @Environment(\.theme) private var theme
+    @Environment(\.colorScheme) private var colorScheme
 
     private var kind: ThemeKind {
         ThemeKind(rawValue: kindRaw) ?? .everforest
+    }
+
+    /// Preview each palette on the side of the appearance the user is
+    /// actually looking at; palettes without a light variant fall back
+    /// to their dark theme.
+    private func palette(for candidate: ThemeKind) -> Theme {
+        colorScheme == .dark ? candidate.darkTheme : (candidate.lightTheme ?? candidate.darkTheme)
     }
 
     var body: some View {
@@ -307,7 +370,7 @@ private struct ThemeSwatches: View {
     }
 
     private func card(_ candidate: ThemeKind) -> some View {
-        let palette = candidate.darkTheme
+        let palette = palette(for: candidate)
         return Button {
             kindRaw = candidate.rawValue
         } label: {
@@ -317,6 +380,10 @@ private struct ThemeSwatches: View {
                     ForEach(Array(signature.enumerated()), id: \.offset) { _, color in
                         Circle().fill(color).frame(width: 10, height: 10)
                     }
+                    Spacer()
+                    Text("Aa")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(palette.textPrimary.opacity(0.85))
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 7)
@@ -371,22 +438,23 @@ private struct GeneralTab: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             SettingsSection(title: "外观") {
-                SettingsRow(icon: "paintpalette", color: theme.accent, label: "主题") {
-                    Picker("主题", selection: $themePreference) {
-                        ForEach(ThemePreference.allCases, id: \.rawValue) { preference in
-                            Text(preference.label).tag(preference.rawValue)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .frame(width: 200)
+                SettingsRow(icon: "paintpalette", color: theme.accent, label: "外观") {
+                    ThemedSegmented(
+                        options: ThemePreference.allCases,
+                        label: { $0.label },
+                        selection: Binding(
+                            get: { ThemePreference(rawValue: themePreference) ?? .system },
+                            set: { themePreference = $0.rawValue },
+                        ),
+                    )
+                    .frame(width: 220)
                 }
                 RowDivider()
-                SettingsRow(icon: "paintbrush.fill", color: theme.accent, label: "强调色") {
+                SettingsRow(icon: "paintbrush.fill", color: theme.orange, label: "强调色") {
                     AccentSwatches()
                 }
             }
-            SettingsSection(title: "配色") {
+            SettingsSection(title: "主题配色") {
                 ThemeSwatches()
             }
             SettingsSection(title: "菜单栏模块") {
@@ -532,16 +600,14 @@ private struct WeatherTab: View {
             if let store = AppRegistry.weather {
                 SettingsSection(title: "数据源") {
                     SettingsRow(icon: "cloud.sun", color: theme.warning, label: "数据源") {
-                        Picker("数据源", selection: Binding(
-                            get: { store.providerKind },
-                            set: { store.providerKind = $0 },
-                        )) {
-                            ForEach(WeatherProviderKind.allCases, id: \.rawValue) { kind in
-                                Text(kind.label).tag(kind)
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.segmented)
+                        ThemedSegmented(
+                            options: WeatherProviderKind.allCases,
+                            label: { $0.label },
+                            selection: Binding(
+                                get: { store.providerKind },
+                                set: { store.providerKind = $0 },
+                            ),
+                        )
                         .frame(width: 280)
                     }
                     if store.providerKind == .apple {
