@@ -18,6 +18,7 @@
 package permission
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -193,5 +194,28 @@ func TestParseConsequence(t *testing.T) {
 	}
 	if _, err := ParseConsequence("bogus"); err == nil {
 		t.Error("bogus consequence must fail")
+	}
+}
+
+// BenchmarkDecideEgress measures the per-connection policy decision as
+// the ruleset grows — every proxied connection pays it.
+func BenchmarkDecideEgress(b *testing.B) {
+	for _, rules := range []int{0, 100, 1000} {
+		b.Run(fmt.Sprintf("rules=%d", rules), func(b *testing.B) {
+			set := NewPackageSet()
+			pkgs := make([]Package, 0, rules)
+			for i := range rules {
+				pkgs = append(pkgs, Package{
+					Bind:     Binding{Kind: BindHost, Host: fmt.Sprintf("host-%d.example.com", i)},
+					Decision: domain.DecisionAllow,
+					Scope:    ScopeUser,
+				})
+			}
+			set.Add(pkgs...)
+			b.ResetTimer()
+			for b.Loop() {
+				_, _, _, _ = set.DecideEgress("api.example.com", "/ws", false)
+			}
+		})
 	}
 }

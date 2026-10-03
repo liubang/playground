@@ -34,6 +34,7 @@ go_library(
 go_test(
     name = "egress_test",
     srcs = [
+        "bench_test.go",
         "egress_test.go",
         "guard_test.go",
         "http_test.go",

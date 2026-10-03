@@ -24,20 +24,50 @@ import (
 	"net"
 	"net/netip"
 	"strings"
+	"sync"
+	"time"
 )
 
 // addressGuard implements the resolved-address guard: the domain policy
 // decides by name, but whoever controls a permitted name's DNS decides
 // what it resolves to — so every resolved address is checked against
 // the denied classes below before the proxy dials it. Exemption is only
-// ever
-// earned by an explicit allow rule's literal (Decision.ExemptLiterals);
+// ever earned by an explicit allow rule's literal (Decision.ExemptLiterals);
 // decoding an embedded IPv4 form only ever ADDS denials, never one.
 type addressGuard struct {
 	lookupIP   func(ctx context.Context, host string) ([]netip.Addr, error)
 	dial       func(ctx context.Context, addr netip.AddrPort) (net.Conn, error)
 	localAddrs func() ([]netip.Addr, error)
 	selfPort   int
+
+	localMu     sync.Mutex
+	localCached []netip.Addr
+	localExpiry time.Time
+}
+
+// localAddrsTTL bounds how long a host-address snapshot is reused.
+// InterfaceAddrs costs ~45µs (a getifaddrs probe) and resolve() would
+// pay it on EVERY connection; interface changes (VPN up/down, DHCP
+// renewals) are far slower than this TTL. The denied classes are
+// re-checked per connection regardless — only a host address ADDED
+// within the window can briefly slip the "host's own addresses" class.
+const localAddrsTTL = 5 * time.Second
+
+// local returns this host's interface addresses, cached for
+// localAddrsTTL. A probe failure reuses the previous snapshot (possibly
+// nil) instead of failing the connection — the same posture the callers
+// had when they ignored the error.
+func (g *addressGuard) local() []netip.Addr {
+	g.localMu.Lock()
+	defer g.localMu.Unlock()
+	if time.Now().Before(g.localExpiry) {
+		return g.localCached
+	}
+	if addrs, err := g.localAddrs(); err == nil {
+		g.localCached = addrs
+	}
+	g.localExpiry = time.Now().Add(localAddrsTTL)
+	return g.localCached
 }
 
 // deniedClass is a named set of prefixes a resolved address must not
@@ -243,7 +273,7 @@ func (g *addressGuard) resolve(ctx context.Context, host string, exempt []netip.
 	if err != nil {
 		return nil, err
 	}
-	local, _ := g.localAddrs()
+	local := g.local()
 	loopbackName := isLoopbackName(host)
 	var kept []netip.Addr
 	reasons := map[string]struct{}{}
@@ -282,7 +312,7 @@ func (g *addressGuard) checkLiteral(addr netip.Addr, dec Decision) error {
 	if dec.Matched && dec.Allow {
 		return nil
 	}
-	local, _ := g.localAddrs()
+	local := g.local()
 	if reason := g.checkAddr(addr, nil, local); reason != "" {
 		return &guardDeniedError{host: addr.String(), reason: reason}
 	}
