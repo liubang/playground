@@ -18,7 +18,6 @@
 package main
 
 import (
-	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -30,15 +29,6 @@ import (
 
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 )
-
-// TestLastActiveWorkspaceRootNoHistory: with no session store there is
-// nothing to derive from — the caller must get "" so it can ask once.
-func TestLastActiveWorkspaceRootNoHistory(t *testing.T) {
-	resolved := &config.ResolvedConfig{Storage: config.ResolvedStorage{BaseDir: t.TempDir()}}
-	if got := lastActiveWorkspaceRoot(context.Background(), resolved); got != "" {
-		t.Fatalf("lastActiveWorkspaceRoot without store = %q, want empty", got)
-	}
-}
 
 // TestBootstrapHandler locks the desktop start page contract
 // (docs/DESKTOP_DESIGN.md §2.3): a meta-refresh redirect to the loopback UI

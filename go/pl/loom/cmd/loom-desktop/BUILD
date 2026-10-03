@@ -62,11 +62,9 @@ go_library(
     deps = [
         "//go/pl/loom/internal/app",
         "//go/pl/loom/internal/config:config_lib",
-        "//go/pl/loom/internal/domain:domain_lib",
         "//go/pl/loom/internal/logging",
         "//go/pl/loom/internal/runtimeevent",
         "//go/pl/loom/internal/server",
-        "//go/pl/loom/internal/session:session_lib",
         "//go/pl/loom/internal/version",
         "@com_github_wailsapp_wails_v2//:wails",
         "@com_github_wailsapp_wails_v2//pkg/options",

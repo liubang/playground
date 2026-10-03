@@ -109,6 +109,23 @@ func runServe(ctx context.Context, args []string) error {
 	}
 
 	logger := newFileLogger(resolved, slog.New(logging.NewGlogHandler(os.Stderr, nil)))
+
+	// A desktop-app child (--parent-stdin) inherits a cwd that never names
+	// a real project: LaunchServices starts the wrapper in "/" and the
+	// bundled Swift wrapper picks the home directory merely to escape "/"
+	// (swift/pl/loom ServerManager). Persisting either as the default
+	// workspace on every launch is wrong — home additionally shadows the
+	// user-scope skill roots — so reopen the most recently active
+	// workspace from session history instead, like loom-desktop does. An
+	// explicit BUILD_WORKSPACE_DIRECTORY always wins; with no usable
+	// history the cwd stands (first launch).
+	if parentStdin && strings.TrimSpace(os.Getenv("BUILD_WORKSPACE_DIRECTORY")) == "" && app.IsLauncherRoot(root) {
+		if recent := app.LastActiveWorkspaceRoot(ctx, resolved); recent != "" {
+			logger.Info("desktop launch: reopening last active workspace", "root", recent, "ignored_cwd", root)
+			root = recent
+		}
+	}
+
 	proc, registry, bootstrap, err := assembleRuntime(ctx, resolved, root, logger)
 	if err != nil {
 		return err
