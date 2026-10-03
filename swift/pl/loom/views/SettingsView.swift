@@ -46,8 +46,12 @@ struct SettingsView: View {
             Hairline(axis: .horizontal)
             footer
         }
-        .frame(minWidth: 720, idealWidth: 860, maxWidth: 960,
-               minHeight: 480, idealHeight: 640, maxHeight: 800)
+        // Wider-than-tall settings chrome: roomy enough for provider
+        // meta lines (type · URL · N 个模型) without truncation. The
+        // form column itself is capped below, so the extra width lands
+        // as margins rather than over-stretched input rows.
+        .frame(minWidth: 760, idealWidth: 1000, maxWidth: 1240,
+               minHeight: 520, idealHeight: 680, maxHeight: 880)
         .background(Theme.bg1)
         // Toasts surface above the sheet (the window-level host sits
         // underneath it). Clears the header row, like the WebUI's
@@ -95,7 +99,9 @@ struct SettingsView: View {
             Text("设置")
                 .font(.system(size: Theme.textLg, weight: .semibold))
                 .foregroundStyle(Theme.fg)
-            Text(store.cfgPath)
+            // Abbreviate the home prefix: ~/.loom/config.yaml reads
+            // better than the raw absolute path (full path in help).
+            Text((store.cfgPath as NSString).abbreviatingWithTildeInPath)
                 .font(Theme.monoXs)
                 .foregroundStyle(Theme.muted)
                 .lineLimit(1)
@@ -129,7 +135,10 @@ struct SettingsView: View {
                 .padding(.vertical, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(width: 132)
+            // Wide enough that 5-char labels (限额与保护) never wrap,
+            // with a faint bg0 wash to separate it from the content.
+            .frame(width: 150)
+            .background(Theme.bg0.opacity(0.3))
 
             Hairline(axis: .vertical)
 
@@ -185,9 +194,13 @@ struct SettingsView: View {
                         }
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // Readable form measure: cap the content column and
+                // center it — past that, extra sheet width becomes side
+                // margins instead of silly-long fields.
+                .frame(maxWidth: 900, alignment: .leading)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
+                .frame(maxWidth: .infinity)
             }
             .id(store.activeTab)
             .onChange(of: store.invalid) { _, fieldId in
@@ -257,8 +270,9 @@ struct SettingsView: View {
     }
 }
 
-/// WebUI .settings-tab: muted by default, fg + bg2 wash on hover,
-/// primary + semibold when active.
+/// WebUI .settings-tab: muted by default, fg + bg2 wash on hover;
+/// active gets primary text over a soft primary tint (more polished
+/// than the flat bg2 block, and it ties the selection to the accent).
 private struct SettingsTabButton: View {
     let tab: TabSpec
     let active: Bool
@@ -274,13 +288,14 @@ private struct SettingsTabButton: View {
                     .opacity(active || hovered ? 1 : 0.85)
                 Text(tab.label)
                     .font(.system(size: Theme.textMd, weight: active ? .semibold : .regular))
+                    .lineLimit(1)
                 Spacer()
             }
             .foregroundStyle(active ? Theme.primary : (hovered ? Theme.fg : Theme.muted))
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(
-                active || hovered ? Theme.bg2 : Color.clear,
+                active ? Theme.primary.opacity(0.12) : (hovered ? Theme.bg2 : Color.clear),
                 in: RoundedRectangle(cornerRadius: Theme.radiusSm),
             )
             .contentShape(Rectangle())
@@ -290,7 +305,8 @@ private struct SettingsTabButton: View {
     }
 }
 
-/// ui.css .btn-secondary: transparent with a muted outline; pressed
+/// ui.css .btn-secondary: transparent with a soft muted outline
+/// (full-strength muted reads heavy on the dark palette); pressed
 /// fills fg at 8%.
 private struct SettingsSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -305,7 +321,7 @@ private struct SettingsSecondaryButtonStyle: ButtonStyle {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.radiusSm)
-                    .strokeBorder(Theme.muted, lineWidth: 1),
+                    .strokeBorder(Theme.muted.opacity(0.5), lineWidth: 1),
             )
     }
 }
@@ -325,7 +341,7 @@ private struct SettingsSmallSecondaryButtonStyle: ButtonStyle {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.radiusSm)
-                    .strokeBorder(Theme.muted, lineWidth: 1),
+                    .strokeBorder(Theme.muted.opacity(0.5), lineWidth: 1),
             )
     }
 }
@@ -565,7 +581,9 @@ struct FieldRow: View {
 // MARK: - Card chrome shared by the custom tabs
 
 /// WebUI .set-input: bg0 field with a bg2 border (radius-sm); the
-/// border flips to primary while focused, is-invalid pins it to error.
+/// border flips to primary while focused, is-invalid pins it to
+/// error. Both states also get the WebUI's soft glow
+/// (--ring-color box-shadow) so focus reads at a glance.
 struct SettingsControlShell<Content: View>: View {
     var invalid = false
     @ViewBuilder var content: Content
@@ -584,6 +602,10 @@ struct SettingsControlShell<Content: View>: View {
                         invalid ? Theme.error : (focused ? Theme.primary : Theme.bg2),
                         lineWidth: 1,
                     ),
+            )
+            .shadow(
+                color: invalid ? Theme.error.opacity(0.3) : (focused ? Theme.ring : .clear),
+                radius: 3,
             )
             .focused($focused)
     }
@@ -656,18 +678,32 @@ struct SettingsCard<Header: View, Content: View>: View {
     @ViewBuilder var header: Header
     @ViewBuilder var content: Content
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var headerHovered = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(headerHovered ? Theme.fg : Theme.muted)
                     .rotationEffect(.degrees(isOpen ? 90 : 0))
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isOpen)
                 header
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .contentShape(Rectangle())
+            // Whisper-quiet hover wash clipped to the card's top
+            // corners, telegraphing that the whole row toggles.
+            .background(
+                UnevenRoundedRectangle(
+                    topLeadingRadius: Theme.radiusMd,
+                    topTrailingRadius: Theme.radiusMd,
+                )
+                .fill(headerHovered ? Theme.fg.opacity(0.035) : .clear),
+            )
+            .onHover { headerHovered = $0 }
             .onTapGesture(perform: onToggle)
 
             if isOpen {

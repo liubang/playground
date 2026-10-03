@@ -540,14 +540,26 @@ struct GhostButton<Label: View>: View {
     let action: () -> Void
     /// Glyph point size — 15 in toolbars, smaller in dense footers.
     var size: CGFloat = 15
+    /// Hover tint — Theme.error for destructive (trash) affordances,
+    /// so the danger is telegraphed before the click.
+    var hoverColor: Color = Theme.fg
+    var hoverBackground: Color = Theme.bg2
     @ViewBuilder let label: Label
 
     @Environment(\.isEnabled) private var isEnabled
     @State private var hovered = false
 
-    init(size: CGFloat = 15, action: @escaping () -> Void, @ViewBuilder label: () -> Label) {
+    init(
+        size: CGFloat = 15,
+        hoverColor: Color = Theme.fg,
+        hoverBackground: Color = Theme.bg2,
+        action: @escaping () -> Void,
+        @ViewBuilder label: () -> Label,
+    ) {
         self.action = action
         self.size = size
+        self.hoverColor = hoverColor
+        self.hoverBackground = hoverBackground
         self.label = label()
     }
 
@@ -556,14 +568,14 @@ struct GhostButton<Label: View>: View {
             label
                 .font(.system(size: size))
                 .foregroundStyle(
-                    isEnabled ? (hovered ? Theme.fg : Theme.muted) : Theme.muted.opacity(0.4),
+                    isEnabled ? (hovered ? hoverColor : Theme.muted) : Theme.muted.opacity(0.4),
                 )
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
                 .frame(minWidth: 32, minHeight: 28)
                 .contentShape(Rectangle())
                 .background(
-                    hovered ? Theme.bg2 : Color.clear,
+                    hovered ? hoverBackground : Color.clear,
                     in: RoundedRectangle(cornerRadius: Theme.radiusSm),
                 )
         }
@@ -594,6 +606,9 @@ struct PrimaryButtonStyle: ButtonStyle {
 }
 
 /// .btn-secondary / .btn-danger: transparent with a colored outline.
+/// The border runs at 55% — a full-strength fg outline reads heavy
+/// against the dark palette; half strength keeps the button crisp
+/// without shouting.
 struct OutlineButtonStyle: ButtonStyle {
     var color: Color = Theme.fg
     @Environment(\.isEnabled) private var isEnabled
@@ -611,7 +626,7 @@ struct OutlineButtonStyle: ButtonStyle {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.radiusSm)
-                    .strokeBorder(color, lineWidth: 1),
+                    .strokeBorder(color.opacity(0.55), lineWidth: 1),
             )
             .opacity(isEnabled ? 1 : 0.5)
     }

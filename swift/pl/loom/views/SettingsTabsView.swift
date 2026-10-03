@@ -30,8 +30,11 @@ struct ProvidersTabView: View {
 
     var body: some View {
         SettingsSection("默认模型") {
+            // Single-field section: the section title already says
+            // "默认模型", so the row drops its (duplicated) label and
+            // the control spans the full card width.
             FieldRow(
-                spec: defaultModelField,
+                spec: defaultModelRowSpec,
                 value: store.draft.globals[defaultModelField.key] ?? .text(""),
                 invalid: store.invalid == defaultModelField.key,
                 onChange: { store.setGlobal(defaultModelField.key, $0) },
@@ -46,6 +49,13 @@ struct ProvidersTabView: View {
             SettingsAddButton(title: "添加 Provider") { store.addProvider() }
                 .id("add-provider")
         }
+    }
+
+    /// defaultModelField minus the label (the section title covers it).
+    private var defaultModelRowSpec: FieldSpec {
+        var spec = defaultModelField
+        spec.label = nil
+        return spec
     }
 
     // MARK: Delete confirmations (ConfirmCenter)
@@ -103,7 +113,10 @@ struct ProvidersTabView: View {
                         .truncationMode(.tail)
                 }
                 Spacer()
-                GhostButton { confirmDeleteProvider(card) } label: {
+                GhostButton(
+                    hoverColor: Theme.error,
+                    hoverBackground: Theme.error.opacity(0.12),
+                ) { confirmDeleteProvider(card) } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
                 }
@@ -203,7 +216,10 @@ struct ProvidersTabView: View {
                 }
                 SettingsCardTag("模型")
                 Spacer()
-                GhostButton { confirmDeleteModel(card, modelId: model.id) } label: {
+                GhostButton(
+                    hoverColor: Theme.error,
+                    hoverBackground: Theme.error.opacity(0.12),
+                ) { confirmDeleteModel(card, modelId: model.id) } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
                 }
@@ -264,7 +280,10 @@ struct McpTabView: View {
                 SettingsCardTag(card.transport.rawValue)
                 statusBadge(status)
                 Spacer()
-                GhostButton { confirmDelete(card) } label: {
+                GhostButton(
+                    hoverColor: Theme.error,
+                    hoverBackground: Theme.error.opacity(0.12),
+                ) { confirmDelete(card) } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
                 }
@@ -482,7 +501,10 @@ struct SkillsTabView: View {
             ))
             .toggleStyle(.checkbox)
             .font(.system(size: Theme.textSm))
-            GhostButton { confirmDelete(skill) } label: {
+            GhostButton(
+                hoverColor: Theme.error,
+                hoverBackground: Theme.error.opacity(0.12),
+            ) { confirmDelete(skill) } label: {
                 Image(systemName: "trash")
                     .font(.system(size: 11))
             }
@@ -702,7 +724,10 @@ struct SystemExtrasView: View {
                     .font(.system(size: Theme.textMd, weight: .semibold))
                     .foregroundStyle(Theme.fg)
                 Spacer()
-                GhostButton { store.deleteWorkspaceCard(card) } label: {
+                GhostButton(
+                    hoverColor: Theme.error,
+                    hoverBackground: Theme.error.opacity(0.12),
+                ) { store.deleteWorkspaceCard(card) } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
                 }
