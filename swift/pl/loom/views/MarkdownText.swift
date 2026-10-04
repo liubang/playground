@@ -960,7 +960,10 @@ private struct MarkdownTableView: View {
     }
 
     private func cell(text: String, isHeader: Bool, numeric: Bool) -> some View {
-        Text(renderInlineMarkdown(text, size: Theme.textMd))
+        // Empty cells render a space: Text("") has zero height, which
+        // would collapse the cell to a short bordered strip floating
+        // inside the row — reading as a doubled border.
+        Text(renderInlineMarkdown(text.isEmpty ? " " : text, size: Theme.textMd))
             .font(.system(size: Theme.textMd, weight: isHeader ? .semibold : .light)
                 .monospacedDigit())
             .foregroundStyle(Theme.fg)
@@ -969,7 +972,8 @@ private struct MarkdownTableView: View {
             .textSelection(.enabled)
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
-            .frame(maxWidth: .infinity, alignment: numeric ? .trailing : .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity,
+                   alignment: numeric ? .trailing : .leading)
             .background(isHeader ? Theme.bg1 : Color.clear)
             // Cell borders double up between neighbours, reading as a
             // single 1px line (border-collapse).
