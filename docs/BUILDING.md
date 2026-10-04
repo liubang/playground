@@ -13,7 +13,7 @@
 | nasm                                               | 2.15+                | 仅 Linux，ISA-L 汇编优化需要                                  |
 | libomp                                             | —                    | OpenMP 支持，macOS 和 Linux 均需要                            |
 | pkg-config                                         | —                    | 仅 macOS                                                      |
-| Docker + Compose                                   | Docker 24+           | 仅容器实验环境及 MiniDFS/Big Data E2E 需要                    |
+| Docker + Compose                                   | Docker 24+           | 仅容器实验环境及 Big Data E2E 需要                            |
 
 ## macOS 安装
 
@@ -69,12 +69,6 @@ REPIN=1 bazel run @maven//:pin
 ```
 
 ## Docker E2E
-
-MiniDFS 可在 Docker 中完成 C++ 单元测试、Linux 镜像构建和三节点集群 E2E：
-
-```bash
-./docker/minidfs/tests/e2e.sh all
-```
 
 Big Data Java 扩展以 Bazel 为主构建系统。Spark 扩展输出 Java 17 bytecode，Trino Plugin 使用 rules_pkg 生成保留插件目录结构的 ZIP：
 

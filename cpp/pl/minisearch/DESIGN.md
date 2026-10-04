@@ -177,7 +177,7 @@ Collection (in-memory)
 
 **M3 完整形态（条件触发，见 §14）**：MemTable → freeze → Immutable Segment（列式布局）→ 后台 merge（LSM 思维）。触发条件：单 collection 文档数 > 50 万，或写入频率使 checkpoint 全量序列化超过秒级。届时：
 
-- **倒排段内布局**：term 字典（FST 或排序数组 + 前缀压缩）+ posting list（docid delta + PFor/SIMD-BP128 压缩，复用 sstv2 block codec 经验）。
+- **倒排段内布局**：term 字典（FST 或排序数组 + 前缀压缩）+ posting list（docid delta + PFor/SIMD-BP128 压缩）。
 - **向量段内布局**：连续 float32/f16 列存，段级 FAISS 子索引，merge 时重建。
 - **docvalues**：filter 字段列存（bitmap 或 sort-based），支持谓词下推。
 - **Manifest**：segment 文件集合 + 创建/删除位 点，checkpoint 原子切换（写临时 manifest + rename）。
@@ -482,7 +482,7 @@ eval/golden/<collection>.jsonl
 
 ## 13. Module Renaming: recall → minisearch
 
-命名对齐家族惯例（minidfs / minitable / minivessel）：`recall` 只描述了向量召回环节，新定位是通用混合检索服务，更名 **`minisearch`**。
+`recall` 只描述了向量召回环节，新定位是通用混合检索服务，更名 **`minisearch`**。
 
 迁移清单（git mv + 全局替换，一个提交完成）：
 

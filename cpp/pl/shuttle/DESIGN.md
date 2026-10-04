@@ -770,5 +770,5 @@ Proto 放在共享 `proto/` 下，便于 Go Loom 与 C++ Shuttle 生成 Stub。�
 4. Query 是否需要 Server Streaming；首版优先 Unary，只有大结果或渐进召回有明确收益时再增加。
 5. Git 历史保留深度、Diff 体积和重复内容策略。
 6. Worktree Overlay 是由 Shuttle 维护，还是由 Loom 在 Context Manager 层合并。
-7. Dense/通用 Segment 元数据格式是自定义、Protobuf framing，还是复用 `sstv2` 的部分通用组件；Sparse 首版已确定为每 Segment 独立只读 FTS5 文件。
+7. Dense/通用 Segment 元数据格式是自定义还是 Protobuf framing；Sparse 首版已确定为每 Segment 独立只读 FTS5 文件。
 8. 远程模型出口审批由 Shuttle 独立执行，还是要求 Loom 签发短期 Capability；默认两侧都校验。

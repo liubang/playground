@@ -23,8 +23,8 @@ bazel build //cpp/... --config=llvm      # Custom LLVM at /opt/app/llvm
 
 # Single test (Bazel label pattern)
 bazel test //cpp/pl/bloom:bloom_filter_test
-bazel test //cpp/pl/sstv2:block_test --test_output=all
-bazel test //cpp/pl/sstv2/...            # all tests under a package
+bazel test //cpp/pl/sst/ut:block_test --test_output=all
+bazel test //cpp/pl/sst/...              # all tests under a package
 
 # CI: cached test results, errors-only output
 bazel test //cpp/... --config=release --config=ci
@@ -81,10 +81,8 @@ bazel/           Build patches for third-party deps (brpc, braft, faiss)
 ### Key C++ subprojects
 | Path | Description |
 |------|-------------|
-| `cpp/pl/minidfs/` | HDFS-like distributed FS (NameNode, DataNode, Client, brpc) |
 | `cpp/pl/flux/` | Flux query language interpreter (lex/parse/optimize/execute) |
 | `cpp/pl/sst/` | LSM-Tree SSTable — block codec, bloom, compression, iterators |
-| `cpp/pl/sstv2/` | SSTable v2 rewrite — modular: `block/`, `bloom/`, `codec/`, `compress/`, `index/`, `pattern/`, `types/`, `format/`, `file/` |
 | `cpp/pl/braft/` | Raft state machine example using braft |
 | `cpp/pl/minisearch/` | MiniSearch — hybrid search service (FAISS + inverted index + BM25 + RRF, brpc HTTP) |
 | `cpp/meta/` | Template metaprogramming: type lists, expression templates, pattern matching, tuple iteration |

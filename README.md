@@ -49,10 +49,8 @@
 
 | 项目                             | 说明                                                                                                                                                              | 技术栈                                                  |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| [MiniDFS](cpp/pl/minidfs/)       | 类 HDFS 的分布式文件系统，包含 NameNode、DataNode 和 Client，支持块存储、副本管理、心跳与块汇报、MySQL 元数据存储及 Docker 部署。                                 | C++20, brpc, protobuf, Boost.MySQL, ISA-L/crc32c, zstd  |
 | [Flux](cpp/pl/flux/)             | Flux 查询语言子集解释器，覆盖词法分析、语法分析、AST、语义分析、规则与代价优化、物理执行、SQLite/MySQL Connector，并提供 LSP 和 REPL。                            | C++20, Abseil, simdjson, SQLite, MySQL                  |
 | [SSTable](cpp/pl/sst/)           | LSM-Tree 存储引擎组件，包含 Block 编解码、布隆过滤器、zstd/snappy 压缩、迭代器、版本管理和 CLI 工具。                                                             | C++20, zstd, snappy                                     |
-| [SSTable v2](cpp/pl/sstv2/)      | SSTable 完全重写版本。模块化架构：类型化键系统（C++20 concept）、memcomparable 编码、多级索引树、列存储 Block、布隆过滤器。                                       | C++20, Abseil, zstd, snappy, lz4, xxHash                |
 | [Braft Counter](cpp/pl/braft/)   | 基于 braft 的 Raft 状态机示例，演示日志复制、快照、Leader 选举和集群部署。                                                                                        | C++20, braft, brpc, protobuf                            |
 | [Meta](cpp/meta/)                | C++20 模板元编程实验，包括 Type List、Expression Template、Pattern Matching 和 Tuple Iteration。                                                                  | C++20                                                   |
 | [MiniSearch](cpp/pl/minisearch/) | 通用混合检索服务（原 Recall）：FAISS 向量召回 + jieba 中文倒排 + BM25 + RRF 融合 + Rerank，多 Collection，附带 Apple Silicon 本地 MLX embedding server。          | C++20, FAISS, jieba, brpc, MLX                          |
@@ -75,7 +73,7 @@
 | python/   | Python 项目：pybind11 绑定、Manim 动画、gRPC Echo 服务。                               |
 | swift/    | Swift 项目：macOS 菜单栏应用（AuraBar、AuraShot）。                                    |
 | proto/    | 跨语言共享的 Protobuf 定义。                                                           |
-| docker/   | 本地实验集群：MiniDFS、Big Data、Doris、FoundationDB、Kerberos、Hermes、监控与 MySQL。 |
+| docker/   | 本地实验集群：Big Data、Doris、FoundationDB、Kerberos、Hermes、监控与 MySQL。 |
 | registry/ | Bazel 本地模块注册表（OpenBLAS、ISA-L 等）。                                           |
 | 其他      | tla/（TLA+ 形式化规约）、latex/（TikZ 示例）、php/（Router）、bash/。                  |
 
@@ -85,7 +83,7 @@
 
 - 全平台需要 [Bazelisk](https://github.com/bazelbuild/bazelisk)（仓库通过 .bazelversion 锁定 Bazel 8.7.0）和 C++20 编译器（Clang 16+ 或 GCC 13+）。
 - Go SDK 1.26.4、JDK 21、Python 3.13、Swift 6.3 工具链及全部第三方依赖由 Bazel 在首次构建时自动下载。
-- Docker 仅容器实验环境与 MiniDFS/Big Data E2E 需要。
+- Docker 仅容器实验环境与 Big Data E2E 需要。
 
 ```bash
 # macOS（最低 macOS 14.0）
@@ -100,7 +98,7 @@ sudo apt-get install -y gcc-14 g++-14 nasm libomp-dev
 ```bash
 bazel build //...                        # 全量构建
 bazel test //...                         # 全量测试
-bazel test //cpp/pl/sstv2/...            # 单包测试
+bazel test //cpp/pl/sst/ut:block_test    # 单包测试
 bazel build //cpp/... --config=release   # 优化构建（关闭 ASan）
 bazel run :refresh_compile_commands      # 生成 compile_commands.json（clangd）
 bazel run //:format                      # 格式化全部代码（C++/Go/Java/Python/...）
