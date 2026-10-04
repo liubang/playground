@@ -75,13 +75,20 @@ struct OpenMeteoProvider: WeatherProvider {
             condition: Self.condition(for: response.current.weatherCode),
         )
 
-        // Next 24 hourly points starting from the current hour.
+        // Next 24 hourly points starting from the current hour. The
+        // parallel arrays are only as trustworthy as their shortest
+        // member — a truncated/malformed response must not crash us.
         let hours = response.hourly
+        let hourlyCount = min(
+            hours.time.count,
+            hours.temperature2m.count,
+            hours.weatherCode.count,
+        )
         let startIndex = hours.time.firstIndex(where: {
             parser.date(from: $0).map { $0 >= currentTime } ?? false
         }) ?? 0
         var hourly: [HourPoint] = []
-        for i in startIndex ..< min(startIndex + 24, hours.time.count) {
+        for i in startIndex ..< min(startIndex + 24, hourlyCount) {
             guard let date = parser.date(from: hours.time[i]) else { continue }
             hourly.append(HourPoint(
                 date: date,
@@ -92,20 +99,28 @@ struct OpenMeteoProvider: WeatherProvider {
             ))
         }
 
+        // Same defensive bound as the hourly loop above.
+        let days = response.daily
+        let dailyCount = min(
+            days.time.count,
+            days.weatherCode.count,
+            days.temperature2mMax.count,
+            days.temperature2mMin.count,
+        )
         var daily: [DayForecast] = []
-        for i in 0 ..< response.daily.time.count {
-            guard let date = dayParser.date(from: response.daily.time[i]) else { continue }
+        for i in 0 ..< dailyCount {
+            guard let date = dayParser.date(from: days.time[i]) else { continue }
             daily.append(DayForecast(
                 date: date,
-                condition: Self.condition(for: response.daily.weatherCode[i]),
-                tempMin: response.daily.temperature2mMin[i],
-                tempMax: response.daily.temperature2mMax[i],
-                precipProbability: i < response.daily.precipitationProbabilityMax.count
-                    ? response.daily.precipitationProbabilityMax[i] : nil,
-                sunrise: i < response.daily.sunrise.count
-                    ? parser.date(from: response.daily.sunrise[i]) : nil,
-                sunset: i < response.daily.sunset.count
-                    ? parser.date(from: response.daily.sunset[i]) : nil,
+                condition: Self.condition(for: days.weatherCode[i]),
+                tempMin: days.temperature2mMin[i],
+                tempMax: days.temperature2mMax[i],
+                precipProbability: i < days.precipitationProbabilityMax.count
+                    ? days.precipitationProbabilityMax[i] : nil,
+                sunrise: i < days.sunrise.count
+                    ? parser.date(from: days.sunrise[i]) : nil,
+                sunset: i < days.sunset.count
+                    ? parser.date(from: days.sunset[i]) : nil,
             ))
         }
 

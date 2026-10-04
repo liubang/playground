@@ -479,14 +479,17 @@ private let chartTimeFormatter: DateFormatter = {
     return formatter
 }()
 
-/// Four bottom time labels at quarter positions of the history window
-/// (indices 0/15/30/45; the newest point at index 59 stays unlabeled).
-/// Shared by the stats and GPU popovers.
+/// Bottom time labels matching TimeSeriesChart's even label spacing:
+/// the i-th label describes the sample at index i·(count−1)/(ticks−1),
+/// so every label sits exactly above the data it describes and the
+/// rightmost label is the newest sample ("now"). Shared by the stats
+/// and GPU popovers.
 func chartTimeLabels(count: Int) -> [String] {
     guard count > 1 else { return [] }
-    return [0, 15, 30, 45].map { index in
-        let clamped = min(index, count - 1)
-        let date = Date().addingTimeInterval(-Double(count - 1 - clamped) * 2)
+    let ticks = 4
+    return (0 ..< ticks).map { i in
+        let index = i * (count - 1) / (ticks - 1)
+        let date = Date().addingTimeInterval(-Double(count - 1 - index) * 2)
         return chartTimeFormatter.string(from: date)
     }
 }

@@ -224,7 +224,9 @@ struct CalendarPopover: View {
                 pickerYear = displayed.year
                 picking.toggle()
             } label: {
-                Text(displayed.title)
+                // While picking, the arrows change pickerYear — show it,
+                // otherwise year navigation is effectively blind.
+                Text(picking ? "\(pickerYear)年" : displayed.title)
                     .font(.system(.headline, design: .rounded))
                     .foregroundStyle(picking ? theme.accent : theme.textPrimary)
             }
@@ -460,14 +462,15 @@ struct CalendarPopover: View {
 
     private var footer: some View {
         HStack {
-            // Always laid out (invisible while viewing today) so the
-            // footer height doesn't jump when the button appears.
+            // Always laid out (invisible while viewing today or while
+            // the month picker shows its own 回到今天) so the footer
+            // height doesn't jump when the button appears.
             Button("回到今天", action: resetToToday)
                 .font(.caption)
                 .buttonStyle(.plain)
                 .foregroundStyle(theme.accent)
-                .opacity(isViewingToday ? 0 : 1)
-                .disabled(isViewingToday)
+                .opacity(isViewingToday || picking ? 0 : 1)
+                .disabled(isViewingToday || picking)
             Spacer()
             settingsMenu
         }

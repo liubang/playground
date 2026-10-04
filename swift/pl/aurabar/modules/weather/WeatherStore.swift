@@ -26,6 +26,11 @@ final class WeatherStore: ObservableObject {
     @Published var qweatherKey: String {
         didSet {
             UserDefaults.standard.set(qweatherKey, forKey: Self.qweatherKeyKey)
+            // A freshly entered key takes effect immediately, without
+            // waiting for the next manual refresh.
+            if providerKind == .qweather {
+                autoRefresh()
+            }
         }
     }
 
@@ -195,7 +200,7 @@ final class WeatherStore: ObservableObject {
         let trimmed = city.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         isLoading = true
-        defer { isLoading = false }
+        defer { endLoading() }
         do {
             let results = try await makeProvider().geocode(city: trimmed)
             guard let first = results.first else {
@@ -206,7 +211,9 @@ final class WeatherStore: ObservableObject {
                 savedLocations.append(first)
                 Self.encode(savedLocations, forKey: Self.savedLocationsKey)
             }
-            isLoading = false
+            // No manual isLoading reset here: selectLocation's refresh
+            // is scheduled as a Task, which runs after the defer below
+            // has already released the loading state.
             selectLocation(first)
         } catch {
             lastError = error.localizedDescription
@@ -248,14 +255,30 @@ final class WeatherStore: ObservableObject {
         )
     }
 
+    /// Concurrency contract: one fetch at a time, but a refresh
+    /// requested mid-flight (city/provider switched while loading) is
+    /// never dropped — it invalidates the in-flight result via
+    /// fetchGeneration and is replayed when the current fetch ends, so
+    /// the UI can never settle on "new city name + old city weather".
     func refresh() async {
-        guard !isLoading else { return }
+        guard !isLoading else {
+            refreshPending = true
+            fetchGeneration += 1
+            return
+        }
         isLoading = true
-        defer { isLoading = false }
+        fetchGeneration += 1
+        let generation = fetchGeneration
+        defer { endLoading() }
         guard let target = await effectiveTarget() else { return }
-        location = target
         do {
             let snap = try await makeProvider().fetch(location: target)
+            // Superseded while fetching — discard the stale result and
+            // let the pending refresh publish its own.
+            guard generation == fetchGeneration else { return }
+            // Committed only on success: location always describes the
+            // snapshot being shown, even in the error state.
+            location = target
             snapshot = snap
             lastError = nil
             // Green checkmark flash in the refresh button.
@@ -267,7 +290,21 @@ final class WeatherStore: ObservableObject {
                 justRefreshed = false
             }
         } catch {
+            guard generation == fetchGeneration else { return }
             lastError = error.localizedDescription
+        }
+    }
+
+    private var fetchGeneration = 0
+    private var refreshPending = false
+
+    /// Release the loading state and replay a refresh that arrived
+    /// while a fetch (or geocode) was in flight.
+    private func endLoading() {
+        isLoading = false
+        if refreshPending {
+            refreshPending = false
+            Task { await refresh() }
         }
     }
 }
