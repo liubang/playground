@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import Combine
 import SwiftUI
 
@@ -239,9 +240,13 @@ final class StatusItemController: NSObject {
         ) { [weak self] _ in
             Task { @MainActor in self?.closePopover() }
         }
-        // ESC → close.
+        // ESC → close. Only swallow ESCs aimed at the popover itself:
+        // a local monitor sees every key event in this app, and eating
+        // one bound for the settings window would break its editing.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == 53 else { return event }
+            guard event.keyCode == UInt16(kVK_Escape),
+                  event.window === self?.popover.contentViewController?.view.window
+            else { return event }
             Task { @MainActor in self?.closePopover() }
             return nil
         }

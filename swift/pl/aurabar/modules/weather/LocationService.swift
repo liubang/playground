@@ -54,6 +54,9 @@ final class LocationService: NSObject, ObservableObject {
         if authorizationDenied {
             return nil
         }
+        // A second locate() while one is in flight would clobber the
+        // pending continuation and hang the first caller forever.
+        guard !isLocating else { return nil }
         if authorization == .notDetermined {
             manager.requestWhenInUseAuthorization()
         }
@@ -72,13 +75,32 @@ final class LocationService: NSObject, ObservableObject {
         return nil
     }
 
+    /// CoreLocation can stay silent indefinitely (no fix, no error),
+    /// so race the request against a timeout: whichever path answers
+    /// first resumes the continuation, the loser no-ops.
+    private static let fixTimeout: Duration = .seconds(10)
+
     private func coreLocationFix() async -> CLLocation? {
-        await withCheckedContinuation { continuation in
-            self.continuation = continuation
-            if authorized {
-                manager.requestLocation()
+        await withTaskGroup(of: CLLocation?.self) { group in
+            group.addTask { @MainActor in
+                await withCheckedContinuation { continuation in
+                    self.continuation = continuation
+                    if self.authorized {
+                        self.manager.requestLocation()
+                    }
+                    // Otherwise the authorization-change delegate resumes it.
+                }
             }
-            // Otherwise the authorization-change delegate resumes it.
+            group.addTask { @MainActor in
+                try? await Task.sleep(for: Self.fixTimeout)
+                // Resuming keeps the continuation from leaking; a late
+                // delegate answer then finds continuation == nil.
+                self.resume(with: nil)
+                return nil
+            }
+            let fix = await group.next() ?? nil
+            group.cancelAll()
+            return fix
         }
     }
 
@@ -91,10 +113,18 @@ final class LocationService: NSObject, ObservableObject {
         return await ipipFix()
     }
 
+    /// The shared session's 60s default is far too patient for a
+    /// location fallback — the user is staring at a loading spinner.
+    private let ipGeoSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 10
+        return URLSession(configuration: config)
+    }()
+
     /// ipinfo.io: free HTTPS IP geolocation, "loc" is "lat,lon".
     private func ipinfoFix() async -> CLLocation? {
         guard let url = URL(string: "https://ipinfo.io/json"),
-              let (data, _) = try? await URLSession.shared.data(from: url),
+              let (data, _) = try? await ipGeoSession.data(from: url),
               let payload = try? JSONDecoder().decode(IPGeoPayload.self, from: data)
         else {
             return nil
@@ -112,7 +142,7 @@ final class LocationService: NSObject, ObservableObject {
     /// parse the city and resolve it with the system geocoder.
     private func ipipFix() async -> CLLocation? {
         guard let url = URL(string: "https://myip.ipip.net"),
-              let (data, _) = try? await URLSession.shared.data(from: url),
+              let (data, _) = try? await ipGeoSession.data(from: url),
               let text = String(data: data, encoding: .utf8),
               let range = text.range(of: "来自于：中国") else { return nil }
         let tail = text[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
@@ -163,7 +193,9 @@ extension LocationService: @preconcurrency CLLocationManagerDelegate {
 
     func locationManager(_: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         MainActor.assumeIsolated {
-            resume(with: locations.first)
+            // Per CLLocationManager docs the last element is the most
+            // recent fix.
+            resume(with: locations.last)
         }
     }
 

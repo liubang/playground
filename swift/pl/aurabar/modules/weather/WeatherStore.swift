@@ -60,49 +60,42 @@ final class WeatherStore: ObservableObject {
         snapshot?.fetchedAt
     }
 
-    private var timer: Timer?
     private var checkmarkTask: Task<Void, Never>?
-    private var itemVisible = false
-    private var popoverOpen = false
 
     /// Fetches only matter while the module is visible (status item
     /// inserted or popover open) — a hidden weather module shouldn't
     /// hit the network every 30 minutes. The first activation after a
     /// pause refetches if the snapshot is older than one interval.
-    private var samplingActive: Bool {
-        itemVisible || popoverOpen
-    }
+    private lazy var sampler = SamplingController(
+        interval: Self.refreshInterval,
+        tolerance: 300,
+        onStart: { [weak self] in self?.refetchIfStale() },
+        onTick: { [weak self] in
+            Task { await self?.refresh() }
+        },
+    )
 
     func statusItemVisibilityChanged(_ visible: Bool) {
-        itemVisible = visible
-        updateSampling()
+        sampler.statusItemVisibilityChanged(visible)
     }
 
     func popoverVisibilityChanged(_ open: Bool) {
-        popoverOpen = open
-        updateSampling()
+        sampler.popoverVisibilityChanged(open)
     }
 
-    private func updateSampling() {
-        if samplingActive {
-            guard timer == nil else { return }
-            startTimer()
-            let stale = snapshot.map {
-                Date().timeIntervalSince($0.fetchedAt) > Self.refreshInterval
-            } ?? true
-            if stale {
-                Task { await refresh() }
-            }
-        } else {
-            timer?.invalidate()
-            timer = nil
+    private func refetchIfStale() {
+        let stale = snapshot.map {
+            Date().timeIntervalSince($0.fetchedAt) > Self.refreshInterval
+        } ?? true
+        if stale {
+            Task { await refresh() }
         }
     }
 
     /// Unattended triggers (wake, provider switch) refetch only while
     /// the module is on screen; otherwise the next activation does.
     private func autoRefresh() {
-        guard samplingActive else { return }
+        guard sampler.isActive else { return }
         Task { await refresh() }
     }
 
@@ -155,15 +148,6 @@ final class WeatherStore: ObservableObject {
         if let data = try? JSONEncoder().encode(value) {
             UserDefaults.standard.set(data, forKey: key)
         }
-    }
-
-    private func startTimer() {
-        let t = Timer(timeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in await self?.refresh() }
-        }
-        t.tolerance = 300
-        RunLoop.main.add(t, forMode: .common)
-        timer = t
     }
 
     private func makeProvider() -> any WeatherProvider {

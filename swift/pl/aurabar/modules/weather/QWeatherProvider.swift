@@ -27,12 +27,15 @@ struct QWeatherProvider: WeatherProvider {
         guard let locations = response.location, !locations.isEmpty else {
             throw WeatherError.cityNotFound(city)
         }
-        return locations.map { r in
+        // Skip entries with unparseable coordinates rather than
+        // fabricating a location at (0°, 0°) in the Gulf of Guinea.
+        return locations.compactMap { r in
+            guard let latitude = Double(r.lat), let longitude = Double(r.lon) else { return nil }
             let qualifier = [r.adm1, r.country].first { !$0.isEmpty && $0 != r.name }
             return WeatherLocation(
                 name: qualifier.map { "\(r.name) · \($0)" } ?? r.name,
-                latitude: Double(r.lat) ?? 0,
-                longitude: Double(r.lon) ?? 0,
+                latitude: latitude,
+                longitude: longitude,
             )
         }
     }

@@ -66,71 +66,47 @@ final class SystemStatsStore: ObservableObject {
     private static let historyCapacity = 60
     private static let sampleInterval: TimeInterval = 2
 
-    private var timer: Timer?
     private var lastCPU: [SystemSampler.CPUTicks]?
     private var lastNet: (rx: UInt64, tx: UInt64, at: Date)?
     private var lastProcTicks: [Int32: (ticks: UInt64, at: Date)] = [:]
-    /// Number of currently open stats popovers (0-3). Histories,
-    /// breakdowns and process enumeration only run while > 0 — the menu
-    /// bar labels keep updating regardless.
-    private var openPopovers = 0
-    /// Number of the three stats status items currently inserted (0-3).
-    /// All sampling stops while no item is visible and no popover is
-    /// open: a hidden module has no label to refresh.
-    private var visibleItems = 0
     private var processTick = 0
     private var netInfoTick = 0
     private var publicIPTick = 0
 
-    private var anyPopoverOpen: Bool {
-        openPopovers > 0
-    }
+    /// Drives the 2s cadence. Three status items (CPU/memory/network)
+    /// and three popovers share this one store, hence the controller's
+    /// counted visibility: sampling stops only when *none* of them is
+    /// visible — a hidden module has no label to refresh.
+    private lazy var sampler = SamplingController(
+        interval: Self.sampleInterval,
+        onStart: { [weak self] in self?.restartSampling() },
+        onTick: { [weak self] in self?.sample() },
+    )
 
-    private var samplingActive: Bool {
-        visibleItems > 0 || anyPopoverOpen
+    /// Histories, breakdowns and process enumeration only run while a
+    /// stats popover is open — the menu bar labels update regardless.
+    private var anyPopoverOpen: Bool {
+        sampler.popoverOpen
     }
 
     func statusItemVisibilityChanged(_ visible: Bool) {
-        visibleItems += visible ? 1 : -1
-        updateSampling()
+        sampler.statusItemVisibilityChanged(visible)
     }
 
-    func popoverDidOpen() {
-        openPopovers += 1
-        updateSampling()
-        // No immediate sample here: sampling right after the timer's own
-        // tick would diff against a tiny dt and inflate the rates into
-        // bogus spikes. Histories are always warm anyway (they append
-        // regardless of visibility), so the charts open populated.
+    func popoverVisibilityChanged(_ open: Bool) {
+        sampler.popoverVisibilityChanged(open)
+        // No immediate sample on open: sampling right after the timer's
+        // own tick would diff against a tiny dt and inflate the rates
+        // into bogus spikes. Histories are always warm anyway (they
+        // append regardless of visibility), so charts open populated.
     }
 
-    func popoverDidClose() {
-        openPopovers = max(0, openPopovers - 1)
-        updateSampling()
-    }
-
-    private func updateSampling() {
-        if samplingActive {
-            startSampling()
-        } else {
-            timer?.invalidate()
-            timer = nil
-        }
-    }
-
-    private func startSampling() {
-        guard timer == nil else { return }
+    private func restartSampling() {
         sample()
         backfillHistories()
         if publicIP == nil {
             fetchPublicIP()
         }
-        let t = Timer(timeInterval: Self.sampleInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.sample() }
-        }
-        t.tolerance = 1
-        RunLoop.main.add(t, forMode: .common)
-        timer = t
     }
 
     /// Pre-fills the 2-minute window with the current reading so charts
@@ -391,9 +367,14 @@ enum Formatters {
             : String(format: "%.1f%%", value)
     }
 
-    /// "23.4 / 32 GB" for the memory card.
+    /// "23.4 / 32 GB" for the memory card; "3.6 / 4 TB" for large
+    /// disks — the unit follows the total so big numbers stay readable.
     static func usagePair(_ used: UInt64, _ total: UInt64) -> String {
         let gb = 1024.0 * 1024.0 * 1024.0
+        if total >= 1024 * 1024 * 1024 * 1024 {
+            let tb = 1024.0 * gb
+            return String(format: "%.1f / %.0f TB", Double(used) / tb, Double(total) / tb)
+        }
         return String(format: "%.1f / %.0f GB", Double(used) / gb, Double(total) / gb)
     }
 }

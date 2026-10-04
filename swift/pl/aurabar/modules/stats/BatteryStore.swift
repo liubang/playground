@@ -120,46 +120,32 @@ final class BatteryStore: ObservableObject {
         }
     }
 
-    private var timer: Timer?
     private var powerSourceRunLoopSource: CFRunLoopSource?
     private var sleepActivity: NSObjectProtocol?
-    private var itemVisible = false
-    private var popoverOpen = false
 
     /// Refreshes only matter while the module is visible (status item
     /// inserted or popover open). The 30s fallback timer follows this;
     /// the power-source run loop source stays registered but no-ops —
-    /// the events are rare and the callback is cheap.
+    /// the events are rare and the callback is cheap. Every visibility
+    /// change while visible also refreshes immediately: the fallback
+    /// timer may have been paused for a long stretch.
+    private lazy var sampler = SamplingController(
+        interval: 30,
+        tolerance: 10,
+        onTick: { [weak self] in self?.refresh() },
+        onVisibilityEvent: { [weak self] in self?.refresh() },
+    )
+
     private var samplingActive: Bool {
-        itemVisible || popoverOpen
+        sampler.isActive
     }
 
     func statusItemVisibilityChanged(_ visible: Bool) {
-        itemVisible = visible
-        updateSampling()
+        sampler.statusItemVisibilityChanged(visible)
     }
 
     func popoverVisibilityChanged(_ open: Bool) {
-        popoverOpen = open
-        updateSampling()
-    }
-
-    private func updateSampling() {
-        if samplingActive {
-            // Catch up immediately: the fallback timer may have been
-            // paused for a long stretch.
-            refresh()
-            guard timer == nil else { return }
-            let t = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
-                Task { @MainActor in self?.refresh() }
-            }
-            t.tolerance = 10
-            RunLoop.main.add(t, forMode: .common)
-            timer = t
-        } else {
-            timer?.invalidate()
-            timer = nil
-        }
+        sampler.popoverVisibilityChanged(open)
     }
 
     init() {
@@ -187,7 +173,6 @@ final class BatteryStore: ObservableObject {
     }
 
     deinit {
-        timer?.invalidate()
         if let activity = sleepActivity {
             ProcessInfo.processInfo.endActivity(activity)
         }

@@ -26,43 +26,27 @@ final class DiskStore: ObservableObject {
     private static let historyCapacity = 60
     private static let sampleInterval: TimeInterval = 2
 
-    private var timer: Timer?
     private var lastCounters: (read: UInt64, write: UInt64, at: Date)?
-    private var itemVisible = false
-    private var popoverOpen = false
 
-    /// Sampling runs only while the module can actually be seen: its
-    /// status item is inserted, or its popover is open. A hidden module
-    /// has no label to refresh and no chart to keep warm.
-    private var samplingActive: Bool {
-        itemVisible || popoverOpen
-    }
+    /// Runs `sample` on the shared 2s cadence, but only while the
+    /// module can actually be seen (status item inserted or popover
+    /// open) — a hidden module has no label to refresh and no chart to
+    /// keep warm.
+    private lazy var sampler = SamplingController(
+        interval: Self.sampleInterval,
+        onStart: { [weak self] in self?.restartSampling() },
+        onTick: { [weak self] in self?.sample() },
+    )
 
     func statusItemVisibilityChanged(_ visible: Bool) {
-        itemVisible = visible
-        updateSampling()
+        sampler.statusItemVisibilityChanged(visible)
     }
 
     func popoverVisibilityChanged(_ open: Bool) {
-        popoverOpen = open
-        updateSampling()
+        sampler.popoverVisibilityChanged(open)
     }
 
-    deinit {
-        timer?.invalidate()
-    }
-
-    private func updateSampling() {
-        if samplingActive {
-            startSampling()
-        } else {
-            timer?.invalidate()
-            timer = nil
-        }
-    }
-
-    private func startSampling() {
-        guard timer == nil else { return }
+    private func restartSampling() {
         sample()
         // Pre-fill the 2-minute window with the current reading, so the
         // chart opens full-width from the first second. Redone on every
@@ -70,12 +54,6 @@ final class DiskStore: ObservableObject {
         // so a fresh flat baseline is more honest.
         readHistory = Array(repeating: readRate, count: Self.historyCapacity)
         writeHistory = Array(repeating: writeRate, count: Self.historyCapacity)
-        let t = Timer(timeInterval: Self.sampleInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.sample() }
-        }
-        t.tolerance = 1
-        RunLoop.main.add(t, forMode: .common)
-        timer = t
     }
 
     private func sample() {

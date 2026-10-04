@@ -101,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.toolTip = "CPU：\(Int((usage * 100).rounded()))%"
         }
         cpuItem.onPopoverVisibilityChange = { [weak stats] open in
-            open ? stats?.popoverDidOpen() : stats?.popoverDidClose()
+            stats?.popoverVisibilityChanged(open)
         }
         cpuItem.observeStatusItemVisibility { [weak stats] visible in
             stats?.statusItemVisibilityChanged(visible)
@@ -125,7 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.toolTip = "内存：\(Formatters.usagePair(used, total))"
         }
         memoryItem.onPopoverVisibilityChange = { [weak stats] open in
-            open ? stats?.popoverDidOpen() : stats?.popoverDidClose()
+            stats?.popoverVisibilityChanged(open)
         }
         memoryItem.observeStatusItemVisibility { [weak stats] visible in
             stats?.statusItemVisibilityChanged(visible)
@@ -146,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.toolTip = "\u{2191}\(Formatters.rate(up))/s \u{2193}\(Formatters.rate(down))/s"
         }
         networkItem.onPopoverVisibilityChange = { [weak stats] open in
-            open ? stats?.popoverDidOpen() : stats?.popoverDidClose()
+            stats?.popoverVisibilityChanged(open)
         }
         networkItem.observeStatusItemVisibility { [weak stats] visible in
             stats?.statusItemVisibilityChanged(visible)
