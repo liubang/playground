@@ -18,11 +18,19 @@ struct BatteryPopover: View, StatsPopoverContent {
                 statusCard(info)
                 healthCard(info)
             } else {
-                Text("未检测到电池（台式机？）")
-                    .font(.callout)
-                    .foregroundStyle(theme.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 20)
+                VStack(spacing: 6) {
+                    Image(systemName: "battery.0")
+                        .font(.title2)
+                        .foregroundStyle(theme.textSecondary)
+                    Text("未检测到电池")
+                        .font(.callout)
+                    Text("此设备可能使用台式电源")
+                        .font(.caption)
+                        .foregroundStyle(theme.textSecondary)
+                }
+                .foregroundStyle(theme.textPrimary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
             }
             sleepCard
             StatsFooter(cadenceLabel: "事件驱动 · 实时刷新")
@@ -40,7 +48,7 @@ struct BatteryPopover: View, StatsPopoverContent {
     private func statusCard(_ info: BatteryInfo) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Label("电池", systemImage: "battery.75")
+                Label("电池", systemImage: Self.levelSymbol(info))
                     .font(.caption)
                     .foregroundStyle(theme.textSecondary)
                 Spacer()
@@ -64,7 +72,7 @@ struct BatteryPopover: View, StatsPopoverContent {
                         .font(.caption)
                         .foregroundStyle(theme.accent)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverablePlain)
             }
             let fraction = Double(info.percentage) / 100
             GeometryReader { geo in
@@ -88,7 +96,7 @@ struct BatteryPopover: View, StatsPopoverContent {
             }
             return "充电中"
         }
-        if info.onAC, !info.isCharging, info.percentage < 100 {
+        if isChargingLimited(info) {
             return "已暂停充电 · 系统优化限充中"
         }
         if info.onAC {
@@ -108,7 +116,9 @@ struct BatteryPopover: View, StatsPopoverContent {
                 row("循环次数", value: "\(cycles) 次")
             }
             if let health = info.health {
-                row("电池健康", value: "\(Int((health * 100).rounded()))%")
+                // Apple's service threshold is 80%; below 60% is dire.
+                let color: Color? = health < 0.6 ? theme.rest : (health < 0.8 ? theme.warning : nil)
+                row("电池健康", value: "\(Int((health * 100).rounded()))%", valueColor: color)
             }
         }
         .cardStyle()
@@ -149,7 +159,7 @@ struct BatteryPopover: View, StatsPopoverContent {
         .animation(.easeInOut(duration: 0.2), value: store.preventSleep)
     }
 
-    private func row(_ name: String, value: String) -> some View {
+    private func row(_ name: String, value: String, valueColor: Color? = nil) -> some View {
         HStack {
             Text(name)
                 .font(.callout)
@@ -158,19 +168,36 @@ struct BatteryPopover: View, StatsPopoverContent {
             Text(value)
                 .font(.callout)
                 .monospacedDigit()
-                .foregroundStyle(theme.textPrimary)
+                .foregroundStyle(valueColor ?? theme.textPrimary)
         }
     }
 
-    /// On AC but not charging below 100% — macOS is holding the charge
-    /// (80% limit or optimized battery charging).
+    /// On AC but not charging, below 95% — macOS is holding the charge
+    /// (80% limit or optimized battery charging). Above 95% a full
+    /// battery simply stopped charging, which is normal, not limiting.
     private func isChargingLimited(_ info: BatteryInfo) -> Bool {
-        info.onAC && !info.isCharging && info.percentage < 100
+        info.onAC && !info.isCharging && info.percentage < 95
+    }
+
+    /// Battery glyph matching the live level, like the system menu bar.
+    private static func levelSymbol(_ info: BatteryInfo) -> String {
+        if info.isCharging {
+            return "battery.100.bolt"
+        }
+        return switch info.percentage {
+        case 75 ... 100: "battery.100"
+        case 50 ..< 75: "battery.75"
+        case 25 ..< 50: "battery.50"
+        default: "battery.25"
+        }
     }
 
     private static func minutesText(_ minutes: Int) -> String {
         let h = minutes / 60
         let m = minutes % 60
-        return h > 0 ? "\(h) 小时 \(m) 分" : "\(m) 分钟"
+        if h == 0 {
+            return "\(m) 分钟"
+        }
+        return m == 0 ? "\(h) 小时" : "\(h) 小时 \(m) 分"
     }
 }

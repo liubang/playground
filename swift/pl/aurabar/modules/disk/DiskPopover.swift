@@ -63,6 +63,8 @@ struct DiskPopover: View, StatsPopoverContent {
                 Label(volume.name, systemImage: "internaldrive.fill")
                     .font(.caption)
                     .foregroundStyle(theme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                 Spacer()
                 Text(Formatters.usagePair(volume.used, volume.total))
                     .font(.system(.callout, design: .rounded))

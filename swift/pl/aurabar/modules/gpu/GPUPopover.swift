@@ -42,6 +42,8 @@ struct GPUPopover: View, StatsPopoverContent {
             Text(store.name)
                 .font(.caption)
                 .foregroundStyle(theme.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
             TimeSeriesChart(
                 series: [TimeSeriesChart.Series(color: theme.accent, values: store.history, fill: true)],
                 maxY: 1,
@@ -54,8 +56,10 @@ struct GPUPopover: View, StatsPopoverContent {
 
     private func memoryCard(_ used: UInt64) -> some View {
         HStack(spacing: 8) {
+            // Matches the usage chart's accent, not the "cold/wet"
+            // aqua the memory module uses for app memory.
             Circle()
-                .fill(theme.aqua)
+                .fill(theme.accent)
                 .frame(width: 6, height: 6)
             Text("GPU 内存")
                 .font(.callout)

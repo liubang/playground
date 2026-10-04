@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The standalone settings window, styled after macOS System Settings:
@@ -542,6 +543,7 @@ private struct CalendarTab: View {
                         }
                     }
                     .labelsHidden()
+                    .tint(theme.accent)
                 }
                 RowDivider()
                 SettingsRow(icon: "globe", color: theme.aqua, label: "第二时区") {
@@ -551,6 +553,7 @@ private struct CalendarTab: View {
                         }
                     }
                     .labelsHidden()
+                    .tint(theme.accent)
                 }
             }
             SettingsSection(title: "日历") {
@@ -561,6 +564,7 @@ private struct CalendarTab: View {
                         }
                     }
                     .labelsHidden()
+                    .tint(theme.accent)
                 }
                 RowDivider()
                 SettingsRow(icon: "moon.stars", color: theme.accent, label: "显示农历与节气") {
@@ -620,11 +624,22 @@ private struct WeatherTab: View {
                     if store.providerKind == .qweather {
                         RowDivider()
                         SettingsRow(icon: "key", color: theme.orange, label: "和风 Key") {
-                            SettingsField(prompt: "API Key", text: $keyDraft) {
-                                store.qweatherKey = keyDraft
-                                Task { await store.refresh() }
+                            // Return and the button both commit — an
+                            // explicit affordance, since a draft is
+                            // otherwise lost silently on window close.
+                            HStack(spacing: 6) {
+                                SettingsField(prompt: "API Key", text: $keyDraft) {
+                                    store.qweatherKey = keyDraft
+                                }
+                                .frame(width: 150)
+                                Button("保存") {
+                                    store.qweatherKey = keyDraft
+                                }
+                                .font(.callout)
+                                .buttonStyle(.hoverablePlain)
+                                .foregroundStyle(theme.accent)
+                                .disabled(keyDraft == store.qweatherKey)
                             }
-                            .frame(width: 200)
                         }
                     }
                 }
@@ -657,13 +672,19 @@ private struct WeatherTab: View {
                     } else {
                         RowDivider()
                         SettingsRow(icon: "plus.circle", color: theme.ok, label: "添加城市") {
-                            SettingsField(prompt: "如 北京 / 上海", text: $cityDraft) {
-                                Task {
-                                    await store.setCity(cityDraft)
-                                    cityDraft = ""
+                            HStack(spacing: 6) {
+                                SettingsField(prompt: "如 北京 / 上海", text: $cityDraft) {
+                                    addCity(store)
                                 }
+                                .frame(width: 120)
+                                Button("添加") {
+                                    addCity(store)
+                                }
+                                .font(.callout)
+                                .buttonStyle(.hoverablePlain)
+                                .foregroundStyle(theme.accent)
+                                .disabled(cityDraft.trimmingCharacters(in: .whitespaces).isEmpty)
                             }
-                            .frame(width: 160)
                         }
                         if !store.savedLocations.isEmpty {
                             RowDivider()
@@ -677,6 +698,13 @@ private struct WeatherTab: View {
         }
         .onAppear {
             keyDraft = AppRegistry.weather?.qweatherKey ?? ""
+        }
+    }
+
+    private func addCity(_ store: WeatherStore) {
+        Task {
+            await store.setCity(cityDraft)
+            cityDraft = ""
         }
     }
 
@@ -697,7 +725,7 @@ private struct WeatherTab: View {
                         }
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.hoverablePlain)
                     Spacer()
                     Button {
                         store.removeLocation(loc)
@@ -705,6 +733,7 @@ private struct WeatherTab: View {
                         Image(systemName: "xmark")
                             .font(.system(size: 8))
                             .foregroundStyle(theme.textSecondary)
+                            .frame(width: 18, height: 18)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -727,12 +756,9 @@ private struct AboutTab: View {
     var body: some View {
         VStack(spacing: 10) {
             Spacer()
-            // The glyph is drawn black-on-transparent; template
-            // rendering + accent tint keeps it visible in dark themes.
-            Image(nsImage: StatsGlyphs.makeBattery(fraction: 0.93, charging: false, value: ""))
-                .renderingMode(.template)
-                .foregroundStyle(theme.accent)
-                .opacity(0.9)
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 64, height: 64)
             Text("AuraBar")
                 .font(.system(.title2, design: .rounded).weight(.semibold))
             Text("版本 \(version)")

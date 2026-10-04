@@ -34,6 +34,8 @@ struct DayCell: View, Equatable {
     let action: () -> Void
 
     @Environment(\.theme) private var theme
+    /// Not part of Equatable: hover is transient chrome, not content.
+    @State private var hover = false
 
     static func == (lhs: DayCell, rhs: DayCell) -> Bool {
         lhs.data == rhs.data && lhs.isSelected == rhs.isSelected
@@ -107,11 +109,17 @@ struct DayCell: View, Equatable {
             .frame(height: 40)
             .padding(.bottom, 3)
             .background {
+                // The selected cell keeps its own border treatment; the
+                // hover wash only shows on "plain" cells, like the
+                // system calendar's day highlight.
                 if isSelected, !data.isToday {
                     RoundedRectangle(cornerRadius: 7)
                         .fill(theme.cardBackground)
                     RoundedRectangle(cornerRadius: 7)
                         .stroke(theme.cardBorder, lineWidth: 1)
+                } else if hover {
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(theme.textPrimary.opacity(data.isToday ? 0.12 : 0.07))
                 }
             }
             .overlay(alignment: .bottom) {
@@ -140,6 +148,8 @@ struct DayCell: View, Equatable {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .animation(.easeOut(duration: 0.12), value: hover)
         .accessibilityLabel(accessibilityText)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }

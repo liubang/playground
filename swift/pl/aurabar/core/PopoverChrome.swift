@@ -58,7 +58,7 @@ enum LaunchAtLogin {
                     try setEnabled(enabled)
                     onError(nil)
                 } catch {
-                    onError("开机自启设置失败: \(error.localizedDescription)")
+                    onError("开机自启设置失败：\(error.localizedDescription)")
                 }
             },
         )
@@ -97,7 +97,7 @@ struct SettingsField: View {
         }
         .labelsHidden()
         .textFieldStyle(.plain)
-        .font(.caption)
+        .font(.callout)
         .foregroundStyle(theme.textPrimary)
         .tint(theme.textPrimary)
         .padding(.horizontal, 7)
@@ -151,6 +151,61 @@ struct RefreshButton: View {
         .animation(.easeInOut(duration: 0.2), value: isLoading)
         .help("刷新")
     }
+}
+
+// MARK: - Settings gear menu
+
+/// The popover footer's shared gear menu: opens the settings window or
+/// quits. Lives in core so every popover stays identical by
+/// construction instead of by copy-paste.
+struct SettingsGearMenu: View {
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        Menu {
+            Button("设置…") {
+                SettingsWindowController.shared.show()
+            }
+            Divider()
+            Button("退出 AuraBar", role: .destructive, action: quitApp)
+        } label: {
+            Image(nsImage: TintedSymbol.make("gearshape", color: theme.textSecondary))
+                .frame(width: 18, height: 14)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .help("设置")
+    }
+}
+
+// MARK: - Hoverable plain button style
+
+/// SwiftUI's .plain button style gives no hover feedback, but native
+/// macOS popovers (Control Center, the calendar) highlight clickable
+/// rows under the cursor. This style closes that gap with a subtle
+/// themed wash — use it on text/icon buttons that don't draw their own
+/// background.
+struct HoverablePlainButtonStyle: ButtonStyle {
+    @Environment(\.theme) private var theme
+    @State private var hover = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background {
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(theme.textPrimary.opacity(hover ? 0.08 : 0))
+            }
+            .contentShape(Rectangle())
+            .animation(.easeOut(duration: 0.12), value: hover)
+            .onHover { hover = $0 }
+    }
+}
+
+extension ButtonStyle where Self == HoverablePlainButtonStyle {
+    static var hoverablePlain: HoverablePlainButtonStyle { HoverablePlainButtonStyle() }
 }
 
 // MARK: - Card style

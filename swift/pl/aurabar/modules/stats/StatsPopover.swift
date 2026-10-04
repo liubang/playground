@@ -255,7 +255,7 @@ struct NetworkPopover: View, StatsPopoverContent {
             if let publicIP = store.publicIP {
                 HStack {
                     Spacer()
-                    CopyableIPText(ip: publicIP, prefix: "公网 ", color: theme.textSecondary)
+                    CopyableIPText(ip: publicIP, prefix: "公网", color: theme.textSecondary)
                 }
             }
         }
@@ -271,6 +271,9 @@ struct NetworkPopover: View, StatsPopoverContent {
                     .font(.callout)
                     .fontWeight(.medium)
                     .lineLimit(1)
+                    // SSIDs often share a prefix; the tail is what
+                    // distinguishes them.
+                    .truncationMode(.middle)
                 if info.isPrimary {
                     Text("默认")
                         .font(.caption2)
@@ -414,7 +417,12 @@ private struct CopyableIPText: View {
     var body: some View {
         Button(action: copy) {
             HStack(spacing: 4) {
-                Text("\(prefix)\(ip)")
+                if !prefix.isEmpty {
+                    Text(prefix)
+                        .font(.caption)
+                        .foregroundStyle(textColor)
+                }
+                Text(ip)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(textColor)
                 // The checkmark slot has a fixed size and only toggles
@@ -562,24 +570,8 @@ struct StatsFooter: View, StatsPopoverContent {
                 .font(.caption)
                 .foregroundStyle(theme.textSecondary)
             Spacer()
-            settingsMenu
+            SettingsGearMenu()
         }
         .padding(.horizontal, 2)
-    }
-
-    private var settingsMenu: some View {
-        Menu {
-            Button("设置…") {
-                SettingsWindowController.shared.show()
-            }
-            Divider()
-            Button("退出 AuraBar", role: .destructive, action: quitApp)
-        } label: {
-            Image(nsImage: TintedSymbol.make("gearshape", color: theme.textSecondary))
-                .frame(width: 18, height: 14)
-                .contentShape(Rectangle())
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
     }
 }

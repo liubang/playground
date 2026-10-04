@@ -74,7 +74,10 @@ struct WeatherPopover: View {
             } else {
                 placeholder
             }
-            if let error = store.lastError {
+            // With no snapshot the placeholder already carries the
+            // error; this strip is only for "stale data + failed
+            // refresh", so the same message never renders twice.
+            if store.snapshot != nil, let error = store.lastError {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(theme.rest)
@@ -213,6 +216,8 @@ struct WeatherPopover: View {
             HStack(spacing: 3) {
                 Text(snapshot.location.name)
                     .font(.system(.headline, design: .rounded))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(theme.textSecondary)
@@ -257,7 +262,9 @@ struct WeatherPopover: View {
                         x: .value("时间", top.date),
                         y: .value("温度", top.temperature),
                     )
-                    .foregroundStyle(theme.rest)
+                    // Warm highlight, not "rest/error" red — the
+                    // orange/aqua pair reads as warm/cold extremes.
+                    .foregroundStyle(theme.orange)
                     .symbolSize(18)
                     .annotation(position: .top, spacing: 0) {
                         Text("\(Int(top.temperature.rounded()))°")
@@ -406,24 +413,8 @@ struct WeatherPopover: View {
             RefreshButton(isLoading: store.isLoading, justRefreshed: store.justRefreshed) {
                 Task { await store.refresh() }
             }
-            settingsMenu
+            SettingsGearMenu()
         }
         .padding(.horizontal, 2)
-    }
-
-    private var settingsMenu: some View {
-        Menu {
-            Button("设置…") {
-                SettingsWindowController.shared.show()
-            }
-            Divider()
-            Button("退出 AuraBar", role: .destructive, action: quitApp)
-        } label: {
-            Image(nsImage: TintedSymbol.make("gearshape", color: theme.textSecondary))
-                .frame(width: 18, height: 14)
-                .contentShape(Rectangle())
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
     }
 }

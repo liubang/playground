@@ -273,7 +273,7 @@ struct CalendarPopover: View {
             }
             Button("回到今天", action: resetToToday)
                 .font(.callout)
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverablePlain)
                 .foregroundStyle(theme.accent)
         }
         .frame(height: 266)
@@ -467,30 +467,14 @@ struct CalendarPopover: View {
             // height doesn't jump when the button appears.
             Button("回到今天", action: resetToToday)
                 .font(.caption)
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverablePlain)
                 .foregroundStyle(theme.accent)
                 .opacity(isViewingToday || picking ? 0 : 1)
                 .disabled(isViewingToday || picking)
             Spacer()
-            settingsMenu
+            SettingsGearMenu()
         }
         .padding(.horizontal, 2)
-    }
-
-    private var settingsMenu: some View {
-        Menu {
-            Button("设置…") {
-                SettingsWindowController.shared.show()
-            }
-            Divider()
-            Button("退出 AuraBar", role: .destructive, action: quitApp)
-        } label: {
-            Image(nsImage: TintedSymbol.make("gearshape", color: theme.textSecondary))
-                .frame(width: 18, height: 14)
-                .contentShape(Rectangle())
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
     }
 }
 
