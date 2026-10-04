@@ -22,7 +22,7 @@ struct CalendarPopover: View {
 
     @AppStorage("themePreference") private var themePreference = ThemePreference.system.rawValue
     @AppStorage(ThemeKind.key) private var themeKind = ThemeKind.everforest.rawValue
-    // Subscribed (not read) so an accent change re-renders the popover.
+    // Feeds the theme accent override; subscribing re-renders on change.
     @AppStorage(AccentColor.key) private var accentHex = ""
     @AppStorage("AuraBar.calendar.weekStart") private var weekStartRaw = WeekStart.monday.rawValue
     @AppStorage("AuraBar.calendar.showLunar") private var showLunar = true
@@ -38,6 +38,7 @@ struct CalendarPopover: View {
     /// Year/month quick picker state; replaces the grid while active.
     @State private var picking = false
     @State private var pickerYear = YearMonth.containing(Date()).year
+    @State private var hoveredMonth: Int?
     /// In-flight grid rebuild; superseded rebuilds are cancelled so a
     /// slow stale build (EventKit daemon round-trip) never overwrites
     /// a newer grid.
@@ -52,6 +53,7 @@ struct CalendarPopover: View {
         (ThemePreference(rawValue: themePreference) ?? .system).theme(
             for: colorScheme,
             kind: ThemeKind(rawValue: themeKind) ?? .everforest,
+            accentOverride: Color(hexString: accentHex),
         )
     }
 
@@ -265,10 +267,20 @@ struct CalendarPopover: View {
                             .padding(.vertical, 9)
                             .background {
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(isCurrent ? theme.accent : theme.cardBackground)
+                                    .fill(
+                                        isCurrent
+                                            ? theme.accent
+                                            : hoveredMonth == month
+                                            ? theme.cardBorder.opacity(0.45)
+                                            : theme.cardBackground,
+                                    )
                             }
                     }
                     .buttonStyle(.plain)
+                    .onHover { hovering in
+                        hoveredMonth = hovering ? month : nil
+                    }
+                    .animation(.easeOut(duration: 0.12), value: hoveredMonth)
                 }
             }
             Button("回到今天", action: resetToToday)

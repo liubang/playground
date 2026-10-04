@@ -7,7 +7,7 @@ struct GPUPopover: View, StatsPopoverContent {
     @ObservedObject var store: GPUStore
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
     @AppStorage(ThemeKind.key) var themeKind = ThemeKind.everforest.rawValue
-    // Subscribed (not read) so an accent change re-renders the popover.
+    // Feeds the theme accent override; subscribing re-renders on change.
     @AppStorage(AccentColor.key) var accentHex = ""
     @Environment(\.colorScheme) var colorScheme
 
@@ -49,6 +49,8 @@ struct GPUPopover: View, StatsPopoverContent {
                 maxY: 1,
                 yLabel: { "\(Int($0 * 100))" },
                 xLabels: chartTimeLabels(count: store.history.count),
+                accessibilityLabel: "GPU 使用率趋势图",
+                accessibilityValue: "当前 \(Int((store.usage * 100).rounded()))%",
             )
         }
         .cardStyle()

@@ -68,7 +68,8 @@ enum LaunchAtLogin {
 // MARK: - Module visibility
 
 /// Status-item visibility keys shared by the StatusItemControllers and
-/// the settings window.
+/// the settings window, plus the autosave names that persist each
+/// item's menu-bar position.
 enum ModuleVisibility {
     static let calendarKey = "AuraBar.module.calendar"
     static let weatherKey = "AuraBar.module.weather"
@@ -78,6 +79,14 @@ enum ModuleVisibility {
     static let gpuKey = "AuraBar.module.gpu"
     static let diskKey = "AuraBar.module.disk"
     static let batteryKey = "AuraBar.module.battery"
+
+    static let weatherAutosave = "AuraBar.weather"
+    static let cpuAutosave = "AuraBar.cpu"
+    static let memoryAutosave = "AuraBar.memory"
+    static let networkAutosave = "AuraBar.network"
+    static let gpuAutosave = "AuraBar.gpu"
+    static let diskAutosave = "AuraBar.disk"
+    static let batteryAutosave = "AuraBar.battery"
 }
 
 // MARK: - Themed settings field
@@ -149,6 +158,7 @@ struct RefreshButton: View {
         .onHover { hover = $0 }
         .animation(.easeOut(duration: 0.15), value: hover)
         .animation(.easeInOut(duration: 0.2), value: isLoading)
+        .animation(.easeInOut(duration: 0.2), value: justRefreshed)
         .help("刷新")
     }
 }
@@ -205,7 +215,9 @@ struct HoverablePlainButtonStyle: ButtonStyle {
 }
 
 extension ButtonStyle where Self == HoverablePlainButtonStyle {
-    static var hoverablePlain: HoverablePlainButtonStyle { HoverablePlainButtonStyle() }
+    static var hoverablePlain: HoverablePlainButtonStyle {
+        HoverablePlainButtonStyle()
+    }
 }
 
 // MARK: - Card style

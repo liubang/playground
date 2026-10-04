@@ -8,7 +8,7 @@ struct BatteryPopover: View, StatsPopoverContent {
     @ObservedObject var store: BatteryStore
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
     @AppStorage(ThemeKind.key) var themeKind = ThemeKind.everforest.rawValue
-    // Subscribed (not read) so an accent change re-renders the popover.
+    // Feeds the theme accent override; subscribing re-renders on change.
     @AppStorage(AccentColor.key) var accentHex = ""
     @Environment(\.colorScheme) var colorScheme
 

@@ -137,6 +137,9 @@ final class MenuBarClock: ObservableObject {
 
     private let secondFormatter: DateFormatter = {
         let f = DateFormatter()
+        // Same pinned locale as `formatter`: the app's copy is
+        // Chinese-first, so both formatters follow one policy.
+        f.locale = Locale(identifier: "zh_CN")
         f.dateFormat = "HH:mm"
         return f
     }()

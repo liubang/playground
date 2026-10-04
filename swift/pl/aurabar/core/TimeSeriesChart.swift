@@ -28,6 +28,10 @@ struct TimeSeriesChart: View {
     let yLabel: (Double) -> String
     /// Bottom time labels, drawn at even spacing across the plot.
     let xLabels: [String]
+    /// VoiceOver summary of what the chart shows, e.g. "CPU 使用率趋势图".
+    var accessibilityLabel: String = ""
+    /// VoiceOver reading of the latest value, e.g. "当前 42%".
+    var accessibilityValue: String = ""
 
     @Environment(\.theme) private var theme
 
@@ -52,6 +56,11 @@ struct TimeSeriesChart: View {
             drawXLabels(context: context, plot: plot)
         }
         .frame(height: 78)
+        // A Canvas is transparent to VoiceOver; collapse it into one
+        // described element.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(accessibilityValue)
     }
 
     // MARK: - Grid & labels

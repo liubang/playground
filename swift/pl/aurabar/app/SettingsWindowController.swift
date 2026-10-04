@@ -11,9 +11,9 @@ final class SettingsWindowController {
     private var window: NSWindow?
 
     /// The fixed SwiftUI content size; the window's frame is the content
-    /// rect plus the titlebar (~32pt on macOS 26). Tall enough that the
-    /// General tab — the most visited one — fits without scrolling.
-    private static let contentSize = NSSize(width: 640, height: 520)
+    /// rect plus the titlebar (~32pt on macOS 26). Owned by SettingsView
+    /// so the SwiftUI frame and the window can never drift apart.
+    private static let contentSize = SettingsView.preferredSize
 
     func show() {
         if window == nil {

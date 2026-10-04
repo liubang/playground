@@ -5,6 +5,10 @@ import SwiftUI
 /// an icon sidebar on the left, themed section cards with icon-badge
 /// rows on the right. Replaces the cramped per-popover gear menus.
 struct SettingsView: View {
+    /// The single source of truth for the window's content size —
+    /// SettingsWindowController sizes the window from this too.
+    static let preferredSize = NSSize(width: 640, height: 520)
+
     enum Tab: String, CaseIterable {
         case general
         case calendar
@@ -31,10 +35,10 @@ struct SettingsView: View {
     }
 
     @State private var selected: Tab = .general
+    @State private var hoveredTab: Tab?
 
     @AppStorage("themePreference") private var themePreference = ThemePreference.system.rawValue
     @AppStorage(ThemeKind.key) private var themeKind = ThemeKind.everforest.rawValue
-    // Subscribed (not read) so an accent change re-renders the window.
     @AppStorage(AccentColor.key) private var accentHex = ""
     @Environment(\.colorScheme) private var colorScheme
 
@@ -42,15 +46,12 @@ struct SettingsView: View {
         (ThemePreference(rawValue: themePreference) ?? .system).theme(
             for: colorScheme,
             kind: ThemeKind(rawValue: themeKind) ?? .everforest,
+            accentOverride: Color(hexString: accentHex),
         )
     }
 
     private var pinnedColorScheme: ColorScheme? {
         (ThemePreference(rawValue: themePreference) ?? .system).pinnedColorScheme
-    }
-
-    private var version: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
     }
 
     var body: some View {
@@ -59,7 +60,7 @@ struct SettingsView: View {
             Divider().overlay(theme.cardBorder)
             content
         }
-        .frame(width: 640, height: 520)
+        .frame(width: Self.preferredSize.width, height: Self.preferredSize.height)
         .background(theme.background)
         .foregroundStyle(theme.textPrimary)
         .environment(\.theme, theme)
@@ -89,14 +90,22 @@ struct SettingsView: View {
                         if selected == tab {
                             RoundedRectangle(cornerRadius: 6)
                                 .fill(theme.accent.opacity(0.15))
+                        } else if hoveredTab == tab {
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(theme.textPrimary.opacity(0.06))
                         }
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    hoveredTab = hovering ? tab : nil
+                }
+                .animation(.easeOut(duration: 0.12), value: hoveredTab)
+                .accessibilityAddTraits(selected == tab ? .isSelected : [])
             }
             Spacer()
-            Text("AuraBar · v\(version)")
+            Text("AuraBar · v\(appVersion())")
                 .font(.caption2)
                 .foregroundStyle(theme.textSecondary)
                 .padding(.horizontal, 10)
@@ -109,22 +118,36 @@ struct SettingsView: View {
     // MARK: - Content
 
     private var content: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text(selected.label)
-                    .font(.system(.title3, design: .rounded).weight(.semibold))
-                switch selected {
-                case .general: GeneralTab()
-                case .calendar: CalendarTab()
-                case .weather: WeatherTab()
-                case .about: AboutTab()
+        // The tab title stays pinned above the scroll area, like the
+        // toolbar title in System Settings — scrolling content must
+        // not take the page's identity with it.
+        VStack(alignment: .leading, spacing: 0) {
+            Text(selected.label)
+                .font(.system(.title3, design: .rounded).weight(.semibold))
+                .padding(.horizontal, 18)
+                .padding(.top, 16)
+                .padding(.bottom, 10)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    switch selected {
+                    case .general: GeneralTab()
+                    case .calendar: CalendarTab()
+                    case .weather: WeatherTab()
+                    case .about: AboutTab()
+                    }
                 }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 18)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(theme.background)
     }
+}
+
+/// The marketing version string for display ("0.2.0").
+private func appVersion() -> String {
+    Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
 }
 
 // MARK: - Shared components
@@ -223,6 +246,7 @@ private struct ThemedSegmented<Option: Hashable>: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(selection == option ? .isSelected : [])
             }
         }
         .padding(2)
@@ -409,6 +433,13 @@ private struct ThemeSwatches: View {
     }
 }
 
+/// Shared layout metrics for the settings rows.
+private enum SettingsMetrics {
+    /// IconBadge width (22) + SettingsRow spacing (10): the indent
+    /// aligning dividers and sub-content with the row's label.
+    static let rowIndent: CGFloat = 32
+}
+
 /// Divider between rows inside a section card.
 private struct RowDivider: View {
     @Environment(\.theme) private var theme
@@ -416,7 +447,7 @@ private struct RowDivider: View {
     var body: some View {
         Divider()
             .overlay(theme.cardBorder)
-            .padding(.leading, 32)
+            .padding(.leading, SettingsMetrics.rowIndent)
     }
 }
 
@@ -618,7 +649,7 @@ private struct WeatherTab: View {
                         Text("需 Apple Developer 账号为 App ID 开启 WeatherKit capability 并用开发者证书签名后生效。")
                             .font(.caption)
                             .foregroundStyle(theme.textSecondary)
-                            .padding(.leading, 32)
+                            .padding(.leading, SettingsMetrics.rowIndent)
                             .padding(.vertical, 7)
                     }
                     if store.providerKind == .qweather {
@@ -667,7 +698,7 @@ private struct WeatherTab: View {
                         }
                         .font(.caption)
                         .foregroundStyle(theme.textSecondary)
-                        .padding(.leading, 32)
+                        .padding(.leading, SettingsMetrics.rowIndent)
                         .padding(.vertical, 7)
                     } else {
                         RowDivider()
@@ -689,7 +720,7 @@ private struct WeatherTab: View {
                         if !store.savedLocations.isEmpty {
                             RowDivider()
                             savedLocationList(store)
-                                .padding(.leading, 32)
+                                .padding(.leading, SettingsMetrics.rowIndent)
                                 .padding(.vertical, 7)
                         }
                     }
@@ -749,10 +780,6 @@ private struct WeatherTab: View {
 private struct AboutTab: View {
     @Environment(\.theme) private var theme
 
-    private var version: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
-    }
-
     var body: some View {
         VStack(spacing: 10) {
             Spacer()
@@ -761,7 +788,7 @@ private struct AboutTab: View {
                 .frame(width: 64, height: 64)
             Text("AuraBar")
                 .font(.system(.title2, design: .rounded).weight(.semibold))
-            Text("版本 \(version)")
+            Text("版本 \(appVersion())")
                 .font(.callout)
                 .foregroundStyle(theme.textSecondary)
             Text("轻量精致的 macOS 菜单栏工具 · 日历 / 天气 / 系统监控")

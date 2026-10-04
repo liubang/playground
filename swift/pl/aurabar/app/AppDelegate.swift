@@ -1,7 +1,9 @@
 import AppKit
+import SwiftUI
 
 /// Wires up the modules at launch: stores, status item controllers and
-/// label bindings. Adding a module = one store + one controller here.
+/// label bindings. Adding a module = one store + one `makeModule` call
+/// + one label binding here.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var calendarController: StatusItemController?
@@ -12,6 +14,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var gpuController: StatusItemController?
     private var diskController: StatusItemController?
     private var batteryController: StatusItemController?
+
+    /// One visibility-driven module = one controller + both visibility
+    /// feeds wired to its store. The label binding stays at the call
+    /// site — it differs per module.
+    private func makeModule(
+        autosaveName: String,
+        visibilityKey: String,
+        store: some VisibilityDriven,
+        content: some View,
+    ) -> StatusItemController {
+        let item = StatusItemController(
+            autosaveName: autosaveName,
+            visibilityKey: visibilityKey,
+            content: content,
+        )
+        item.observeStatusItemVisibility { [weak store] visible in
+            store?.statusItemVisibilityChanged(visible)
+        }
+        item.onPopoverVisibilityChange = { [weak store] open in
+            store?.popoverVisibilityChanged(open)
+        }
+        return item
+    }
 
     func applicationDidFinishLaunching(_: Notification) {
         _ = AppNapDisabler.shared
@@ -49,9 +74,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Weather: condition symbol + temperature.
         let weather = WeatherStore()
         AppRegistry.weather = weather
-        let weatherItem = StatusItemController(
-            autosaveName: "AuraBar.weather",
+        let weatherItem = makeModule(
+            autosaveName: ModuleVisibility.weatherAutosave,
             visibilityKey: ModuleVisibility.weatherKey,
+            store: weather,
             content: WeatherPopover(store: weather),
         )
         weatherItem.bindLabel(to: weather.$snapshot) { button, snapshot in
@@ -66,16 +92,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.image = StatsGlyphs.makeSymbol(
                 snapshot?.current.condition.symbolName ?? "cloud",
             )
-            button.title = snapshot.map { "\(Int($0.current.temperature.rounded()))°" } ?? "--°"
+            button.title = snapshot?.displayTemperature ?? "--°"
             button.toolTip = snapshot.map {
-                "\($0.location.name) · \($0.current.condition.label) \(Int($0.current.temperature.rounded()))°"
+                "\($0.location.name) · \($0.current.condition.label) \($0.displayTemperature)"
             }
-        }
-        weatherItem.observeStatusItemVisibility { [weak weather] visible in
-            weather?.statusItemVisibilityChanged(visible)
-        }
-        weatherItem.onPopoverVisibilityChange = { [weak weather] open in
-            weather?.popoverVisibilityChanged(open)
         }
         weatherController = weatherItem
 
@@ -85,9 +105,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // label text is drawn into the item's image, Stats-widget style.
         let stats = SystemStatsStore()
 
-        let cpuItem = StatusItemController(
-            autosaveName: "AuraBar.cpu",
+        let cpuItem = makeModule(
+            autosaveName: ModuleVisibility.cpuAutosave,
             visibilityKey: ModuleVisibility.cpuKey,
+            store: stats,
             content: CPUPopover(store: stats),
         )
         cpuItem.bindLabel(to: stats.$cpuUsage) { button, usage in
@@ -100,56 +121,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.title = ""
             button.toolTip = "CPU：\(Int((usage * 100).rounded()))%"
         }
-        cpuItem.onPopoverVisibilityChange = { [weak stats] open in
-            stats?.popoverVisibilityChanged(open)
-        }
-        cpuItem.observeStatusItemVisibility { [weak stats] visible in
-            stats?.statusItemVisibilityChanged(visible)
-        }
         cpuController = cpuItem
 
-        let memoryItem = StatusItemController(
-            autosaveName: "AuraBar.memory",
+        let memoryItem = makeModule(
+            autosaveName: ModuleVisibility.memoryAutosave,
             visibilityKey: ModuleVisibility.memoryKey,
+            store: stats,
             content: MemoryPopover(store: stats),
         )
-        memoryItem.bindLabel(to: stats.$memoryUsed) { [weak stats] button, used in
+        memoryItem.bindLabel(to: stats.$memoryUsed.combineLatest(stats.$memoryTotal)) { button, pair in
             guard let button else { return }
-            let total = max(stats?.memoryTotal ?? 1, 1)
+            let (used, total) = pair
             button.image = StatsGlyphs.makeMemory(
-                fraction: Double(used) / Double(total),
+                fraction: Double(used) / Double(max(total, 1)),
                 value: Formatters.bytes(used),
             )
             button.imagePosition = .imageOnly
             button.title = ""
-            button.toolTip = "内存：\(Formatters.usagePair(used, total))"
-        }
-        memoryItem.onPopoverVisibilityChange = { [weak stats] open in
-            stats?.popoverVisibilityChanged(open)
-        }
-        memoryItem.observeStatusItemVisibility { [weak stats] visible in
-            stats?.statusItemVisibilityChanged(visible)
+            button.toolTip = "内存：\(Formatters.usagePair(used, max(total, 1)))"
         }
         memoryController = memoryItem
 
-        let networkItem = StatusItemController(
-            autosaveName: "AuraBar.network",
+        let networkItem = makeModule(
+            autosaveName: ModuleVisibility.networkAutosave,
             visibilityKey: ModuleVisibility.networkKey,
+            store: stats,
             content: NetworkPopover(store: stats),
         )
-        networkItem.bindLabel(to: stats.$downRate) { [weak stats] button, down in
-            guard let button, let stats else { return }
-            let up = stats.upRate
+        networkItem.bindLabel(to: stats.$downRate.combineLatest(stats.$upRate)) { button, rates in
+            guard let button else { return }
+            let (down, up) = rates
             button.image = StatsGlyphs.makeNetwork(up: up, down: down)
             button.imagePosition = .imageOnly
             button.title = ""
             button.toolTip = "\u{2191}\(Formatters.rate(up))/s \u{2193}\(Formatters.rate(down))/s"
-        }
-        networkItem.onPopoverVisibilityChange = { [weak stats] open in
-            stats?.popoverVisibilityChanged(open)
-        }
-        networkItem.observeStatusItemVisibility { [weak stats] visible in
-            stats?.statusItemVisibilityChanged(visible)
         }
         networkController = networkItem
 
@@ -157,9 +162,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // (unlike the other stats items the driver read is a single
         // property fetch, so it doesn't join SystemStatsStore).
         let gpu = GPUStore()
-        let gpuItem = StatusItemController(
-            autosaveName: "AuraBar.gpu",
+        let gpuItem = makeModule(
+            autosaveName: ModuleVisibility.gpuAutosave,
             visibilityKey: ModuleVisibility.gpuKey,
+            store: gpu,
             content: GPUPopover(store: gpu),
         )
         gpuItem.bindLabel(to: gpu.$usage) { button, usage in
@@ -172,35 +178,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.title = ""
             button.toolTip = "GPU：\(Int((usage * 100).rounded()))%"
         }
-        gpuItem.observeStatusItemVisibility { [weak gpu] visible in
-            gpu?.statusItemVisibilityChanged(visible)
-        }
-        gpuItem.onPopoverVisibilityChange = { [weak gpu] open in
-            gpu?.popoverVisibilityChanged(open)
-        }
         gpuController = gpuItem
 
         // Disk: drive icon + write/read rate lines, diffed from the
         // block-storage drivers' cumulative byte counters.
         let disk = DiskStore()
-        let diskItem = StatusItemController(
-            autosaveName: "AuraBar.disk",
+        let diskItem = makeModule(
+            autosaveName: ModuleVisibility.diskAutosave,
             visibilityKey: ModuleVisibility.diskKey,
+            store: disk,
             content: DiskPopover(store: disk),
         )
-        diskItem.bindLabel(to: disk.$readRate) { [weak disk] button, read in
-            guard let button, let disk else { return }
-            let write = disk.writeRate
+        diskItem.bindLabel(to: disk.$readRate.combineLatest(disk.$writeRate)) { button, rates in
+            guard let button else { return }
+            let (read, write) = rates
             button.image = StatsGlyphs.makeDisk(read: read, write: write)
             button.imagePosition = .imageOnly
             button.title = ""
             button.toolTip = "写入 \(Formatters.rate(write))/s · 读取 \(Formatters.rate(read))/s"
-        }
-        diskItem.observeStatusItemVisibility { [weak disk] visible in
-            disk?.statusItemVisibilityChanged(visible)
-        }
-        diskItem.onPopoverVisibilityChange = { [weak disk] open in
-            disk?.popoverVisibilityChanged(open)
         }
         diskController = diskItem
 
@@ -211,9 +206,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let battery = BatteryStore()
         AppRegistry.hasBattery = battery.info != nil
         if battery.info != nil {
-            let batteryItem = StatusItemController(
-                autosaveName: "AuraBar.battery",
+            let batteryItem = makeModule(
+                autosaveName: ModuleVisibility.batteryAutosave,
                 visibilityKey: ModuleVisibility.batteryKey,
+                store: battery,
                 content: BatteryPopover(store: battery),
             )
             batteryItem.bindLabel(to: battery.$info) { button, info in
@@ -226,12 +222,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 button.imagePosition = .imageOnly
                 button.title = ""
                 button.toolTip = info.map { "电池：\($0.percentage)%" }
-            }
-            batteryItem.observeStatusItemVisibility { [weak battery] visible in
-                battery?.statusItemVisibilityChanged(visible)
-            }
-            batteryItem.onPopoverVisibilityChange = { [weak battery] open in
-                battery?.popoverVisibilityChanged(open)
             }
             batteryController = batteryItem
         }

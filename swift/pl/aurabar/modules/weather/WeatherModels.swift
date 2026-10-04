@@ -127,6 +127,11 @@ struct WeatherSnapshot: Equatable, Sendable {
     var fetchedAt: Date
     /// Best-effort extra; only Open-Meteo provides it for now.
     var airQuality: AirQuality?
+
+    /// "23°" — the menu-bar label rendering of the current temperature.
+    var displayTemperature: String {
+        "\(Int(current.temperature.rounded()))°"
+    }
 }
 
 enum WeatherError: LocalizedError {

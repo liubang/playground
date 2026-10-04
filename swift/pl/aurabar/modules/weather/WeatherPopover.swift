@@ -50,7 +50,7 @@ struct WeatherPopover: View {
 
     @AppStorage("themePreference") private var themePreference = ThemePreference.system.rawValue
     @AppStorage(ThemeKind.key) private var themeKind = ThemeKind.everforest.rawValue
-    // Subscribed (not read) so an accent change re-renders the popover.
+    // Feeds the theme accent override; subscribing re-renders on change.
     @AppStorage(AccentColor.key) private var accentHex = ""
     @Environment(\.colorScheme) private var colorScheme
 
@@ -58,6 +58,7 @@ struct WeatherPopover: View {
         (ThemePreference(rawValue: themePreference) ?? .system).theme(
             for: colorScheme,
             kind: ThemeKind(rawValue: themeKind) ?? .everforest,
+            accentOverride: Color(hexString: accentHex),
         )
     }
 
@@ -298,7 +299,9 @@ struct WeatherPopover: View {
                     }
                 }
             }
-            .frame(height: 72)
+            // Same height as the Canvas-based TimeSeriesChart in the
+            // stats popovers — one chart rhythm across the app.
+            .frame(height: 78)
         }
         .cardStyle()
     }

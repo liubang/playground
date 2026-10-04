@@ -7,7 +7,7 @@ struct DiskPopover: View, StatsPopoverContent {
     @ObservedObject var store: DiskStore
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
     @AppStorage(ThemeKind.key) var themeKind = ThemeKind.everforest.rawValue
-    // Subscribed (not read) so an accent change re-renders the popover.
+    // Feeds the theme accent override; subscribing re-renders on change.
     @AppStorage(AccentColor.key) var accentHex = ""
     @Environment(\.colorScheme) var colorScheme
 
@@ -52,6 +52,8 @@ struct DiskPopover: View, StatsPopoverContent {
                 maxY: store.chartYMax,
                 yLabel: { Formatters.rate($0) },
                 xLabels: chartTimeLabels(count: store.readHistory.count),
+                accessibilityLabel: "磁盘读写速率趋势图",
+                accessibilityValue: "读取 \(Formatters.rate(store.readRate))每秒，写入 \(Formatters.rate(store.writeRate))每秒",
             )
         }
         .cardStyle()

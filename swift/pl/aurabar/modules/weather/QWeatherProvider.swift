@@ -45,8 +45,12 @@ struct QWeatherProvider: WeatherProvider {
         // 和风天气接受 "经度,纬度" 形式的坐标。
         let loc = "\(location.longitude),\(location.latitude)"
         async let current = fetchNow(loc)
-        async let hourly = fetch24h(loc)
-        async let daily = fetch7d(loc)
+        async let hourlyResult = fetch24h(loc)
+        // fetch7d needs the city's timezone — derived from the hourly
+        // fxTime offset — to place its naive sunrise/sunset clock times
+        // in the right day, so it waits on the hourly response.
+        let (hourly, timeZone) = try await hourlyResult
+        async let daily = fetch7d(loc, timeZone: timeZone)
         return try await WeatherSnapshot(
             location: location,
             current: current,
@@ -81,14 +85,17 @@ struct QWeatherProvider: WeatherProvider {
         )
     }
 
-    private func fetch24h(_ loc: String) async throws -> [HourPoint] {
+    /// The hourly points plus the city's timezone (from the fxTime UTC
+    /// offset), which the daily parser needs for sunrise/sunset.
+    private func fetch24h(_ loc: String) async throws -> ([HourPoint], TimeZone?) {
         let data = try await get("/v7/weather/24h", query: [URLQueryItem(name: "location", value: loc)])
         let response = try JSONDecoder().decode(HourlyResponse.self, from: data)
         guard response.code == "200" else {
             throw WeatherError.badResponse("weather/24h code=\(response.code)")
         }
         let parser = ISO8601DateFormatter()
-        return response.hourly.prefix(24).compactMap { h in
+        let timeZone = response.hourly.first.flatMap { Self.timeZone(fromFxTime: $0.fxTime) }
+        let points: [HourPoint] = response.hourly.prefix(24).compactMap { h in
             guard let date = parser.date(from: h.fxTime) else { return nil }
             return HourPoint(
                 date: date,
@@ -97,9 +104,10 @@ struct QWeatherProvider: WeatherProvider {
                 condition: Self.condition(for: h.icon),
             )
         }
+        return (points, timeZone)
     }
 
-    private func fetch7d(_ loc: String) async throws -> [DayForecast] {
+    private func fetch7d(_ loc: String, timeZone: TimeZone?) async throws -> [DayForecast] {
         let data = try await get("/v7/weather/7d", query: [URLQueryItem(name: "location", value: loc)])
         let response = try JSONDecoder().decode(DailyResponse.self, from: data)
         guard response.code == "200" else {
@@ -108,6 +116,9 @@ struct QWeatherProvider: WeatherProvider {
         let parser = DateFormatter()
         parser.locale = Locale(identifier: "en_US_POSIX")
         parser.dateFormat = "yyyy-MM-dd"
+        // fxDate is the city's calendar day; parsing it in the device
+        // timezone would shift it when the two differ.
+        parser.timeZone = timeZone ?? .current
         return response.daily.compactMap { d in
             guard let date = parser.date(from: d.fxDate) else { return nil }
             return DayForecast(
@@ -116,18 +127,40 @@ struct QWeatherProvider: WeatherProvider {
                 tempMin: Double(d.tempMin) ?? 0,
                 tempMax: Double(d.tempMax) ?? 0,
                 precipProbability: Int(d.pop ?? ""),
-                sunrise: Self.dayTime(d.sunrise, on: date),
-                sunset: Self.dayTime(d.sunset, on: date),
+                sunrise: Self.dayTime(d.sunrise, on: date, timeZone: timeZone),
+                sunset: Self.dayTime(d.sunset, on: date, timeZone: timeZone),
             )
         }
     }
 
-    /// Combines an "HH:mm" clock string with a day's local start.
-    private static func dayTime(_ clock: String?, on day: Date) -> Date? {
+    /// The UTC offset embedded in an fxTime string
+    /// ("2026-10-04T06:00+08:00") — the only timezone signal QWeather
+    /// gives for a location.
+    private static func timeZone(fromFxTime fxTime: String) -> TimeZone? {
+        let suffix = fxTime.suffix(6)
+        guard let sign = suffix.first, sign == "+" || sign == "-" else { return nil }
+        let parts = suffix.dropFirst().split(separator: ":")
+        guard parts.count == 2, let hours = Int(parts[0]), let minutes = Int(parts[1]) else {
+            return nil
+        }
+        let seconds = (hours * 3600 + minutes * 60) * (sign == "+" ? 1 : -1)
+        return TimeZone(secondsFromGMT: seconds)
+    }
+
+    /// Combines an "HH:mm" clock string with a day's start **in the
+    /// city's timezone** — sunrise/sunset arrive as naive local times,
+    /// so Calendar.current would misplace them whenever the device is
+    /// not in the queried city. Falls back to the device calendar when
+    /// no offset was seen.
+    private static func dayTime(_ clock: String?, on day: Date, timeZone: TimeZone?) -> Date? {
         guard let clock else { return nil }
         let parts = clock.split(separator: ":").compactMap { Int($0) }
         guard parts.count == 2 else { return nil }
-        return Calendar.current.date(
+        var calendar = Calendar.current
+        if let timeZone {
+            calendar.timeZone = timeZone
+        }
+        return calendar.date(
             bySettingHour: parts[0],
             minute: parts[1],
             second: 0,

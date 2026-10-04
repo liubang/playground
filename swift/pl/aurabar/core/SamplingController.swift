@@ -1,5 +1,20 @@
 import Foundation
 
+/// A store whose background work follows module visibility. Every
+/// module store already exposes these two methods; the protocol lets
+/// AppDelegate wire both visibility streams generically.
+@MainActor
+protocol VisibilityDriven: AnyObject {
+    func statusItemVisibilityChanged(_ visible: Bool)
+    func popoverVisibilityChanged(_ open: Bool)
+}
+
+extension SystemStatsStore: VisibilityDriven {}
+extension BatteryStore: VisibilityDriven {}
+extension DiskStore: VisibilityDriven {}
+extension GPUStore: VisibilityDriven {}
+extension WeatherStore: VisibilityDriven {}
+
 /// Shared "sample only while visible" driver for the module stores.
 ///
 /// The timer runs while at least one visibility source holds — an

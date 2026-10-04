@@ -1,10 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// Shared theme plumbing for the three stats popovers.
+/// Shared theme plumbing for the stats popovers.
 protocol StatsPopoverContent: View {
     var themePreference: String { get }
     var themeKind: String { get }
+    var accentHex: String { get }
     var colorScheme: ColorScheme { get }
 }
 
@@ -13,6 +14,7 @@ extension StatsPopoverContent {
         (ThemePreference(rawValue: themePreference) ?? .system).theme(
             for: colorScheme,
             kind: ThemeKind(rawValue: themeKind) ?? .everforest,
+            accentOverride: Color(hexString: accentHex),
         )
     }
 
@@ -27,7 +29,7 @@ struct CPUPopover: View, StatsPopoverContent {
     @ObservedObject var store: SystemStatsStore
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
     @AppStorage(ThemeKind.key) var themeKind = ThemeKind.everforest.rawValue
-    // Subscribed (not read) so an accent change re-renders the popover.
+    // Feeds the theme accent override; subscribing re-renders on change.
     @AppStorage(AccentColor.key) var accentHex = ""
     @Environment(\.colorScheme) var colorScheme
 
@@ -67,6 +69,8 @@ struct CPUPopover: View, StatsPopoverContent {
                 maxY: 1,
                 yLabel: { "\(Int($0 * 100))" },
                 xLabels: chartTimeLabels(count: store.cpuHistory.count),
+                accessibilityLabel: "CPU 使用率趋势图",
+                accessibilityValue: "当前 \(Int((store.cpuUsage * 100).rounded()))%",
             )
         }
         .cardStyle()
@@ -113,7 +117,7 @@ struct MemoryPopover: View, StatsPopoverContent {
     @ObservedObject var store: SystemStatsStore
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
     @AppStorage(ThemeKind.key) var themeKind = ThemeKind.everforest.rawValue
-    // Subscribed (not read) so an accent change re-renders the popover.
+    // Feeds the theme accent override; subscribing re-renders on change.
     @AppStorage(AccentColor.key) var accentHex = ""
     @Environment(\.colorScheme) var colorScheme
 
@@ -150,19 +154,30 @@ struct MemoryPopover: View, StatsPopoverContent {
                     .monospacedDigit()
                     .foregroundStyle(theme.textPrimary)
             }
+            // Stacked segments matching the breakdown card's dots
+            // one-to-one: app (aqua), wired (accent), compressed
+            // (orange), and whatever "used" remains unattributed.
             GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(theme.background)
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [theme.aqua, theme.orange],
-                                startPoint: .leading,
-                                endPoint: .trailing,
-                            ),
-                        )
-                        .frame(width: geo.size.width * fraction)
+                let total = Double(max(store.memoryTotal, 1))
+                let widths = [
+                    Double(store.memoryApp) / total,
+                    Double(store.memoryWired) / total,
+                    Double(store.memoryCompressed) / total,
+                ]
+                let colors = [theme.aqua, theme.accent, theme.orange]
+                let used = min(widths.reduce(0, +), fraction)
+                HStack(spacing: 0) {
+                    ForEach(0 ..< 3, id: \.self) { index in
+                        Rectangle()
+                            .fill(colors[index])
+                            .frame(width: geo.size.width * widths[index])
+                    }
+                    Rectangle()
+                        .fill(theme.textSecondary.opacity(0.35))
+                        .frame(width: geo.size.width * max(0, fraction - used))
                 }
+                .clipShape(Capsule())
+                .background(Capsule().fill(theme.background))
             }
             .frame(height: 5)
             .animation(.easeInOut(duration: 0.3), value: fraction)
@@ -212,7 +227,7 @@ struct NetworkPopover: View, StatsPopoverContent {
     @ObservedObject var store: SystemStatsStore
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
     @AppStorage(ThemeKind.key) var themeKind = ThemeKind.everforest.rawValue
-    // Subscribed (not read) so an accent change re-renders the popover.
+    // Feeds the theme accent override; subscribing re-renders on change.
     @AppStorage(AccentColor.key) var accentHex = ""
     @Environment(\.colorScheme) var colorScheme
 
@@ -355,6 +370,8 @@ struct NetworkPopover: View, StatsPopoverContent {
                 maxY: store.networkYMax,
                 yLabel: { Formatters.rate($0) },
                 xLabels: chartTimeLabels(count: store.downHistory.count),
+                accessibilityLabel: "网络速率趋势图",
+                accessibilityValue: "下行 \(Formatters.rate(store.downRate))每秒，上行 \(Formatters.rate(store.upRate))每秒",
             )
         }
         .cardStyle()
@@ -560,7 +577,7 @@ struct StatsFooter: View, StatsPopoverContent {
 
     @AppStorage("themePreference") var themePreference = ThemePreference.system.rawValue
     @AppStorage(ThemeKind.key) var themeKind = ThemeKind.everforest.rawValue
-    // Subscribed (not read) so an accent change re-renders the popover.
+    // Feeds the theme accent override; subscribing re-renders on change.
     @AppStorage(AccentColor.key) var accentHex = ""
     @Environment(\.colorScheme) var colorScheme
 

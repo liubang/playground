@@ -40,20 +40,19 @@ extension Color {
 }
 
 /// The accent-color override persisted by the settings UI. An empty
-/// string means "theme default". Applied centrally in
-/// ThemePreference.theme(for:) so every popover picks it up without
-/// touching call sites; top-level views just subscribe to the key.
+/// string means "theme default". Top-level views subscribe the key via
+/// @AppStorage and pass the parsed color explicitly into
+/// ThemePreference.theme(for:kind:accentOverride:) — keeping the
+/// dependency visible in the call signature rather than hidden in a
+/// UserDefaults read.
 enum AccentColor {
     static let key = "accentColorHex"
-
-    static var override: Color? {
-        guard let raw = UserDefaults.standard.string(forKey: key), !raw.isEmpty else { return nil }
-        return Color(hexString: raw)
-    }
 }
 
-/// Semantic color palette: Everforest Dark Hard and Everforest Light Hard,
-/// following the system appearance or pinned to either side.
+/// An 11-slot semantic palette. Slots are filled by the bundled
+/// community schemes (Everforest, Catppuccin, Tokyo Night, …), each in
+/// dark and (mostly) light variants, following the system appearance
+/// or pinned to either side.
 ///
 /// Color language: teal marks "today"/accent, red marks rest (holidays,
 /// weekends, errors), yellow marks warnings (shifted workdays, the sun),
@@ -342,16 +341,17 @@ enum ThemePreference: String, CaseIterable, Sendable {
 
     /// The 11-slot palette for `appearance`, with the user's accent
     /// override applied on top. Callers subscribe each @AppStorage key
-    /// that feeds it so the popovers re-render on change.
-    func theme(for colorScheme: ColorScheme, kind: ThemeKind) -> Theme {
+    /// that feeds it (preference, kind, accent) so the popovers
+    /// re-render on change.
+    func theme(for colorScheme: ColorScheme, kind: ThemeKind, accentOverride: Color?) -> Theme {
         let wantsDark = switch self {
         case .dark: true
         case .system: colorScheme == .dark
         case .light: false
         }
         var theme = wantsDark ? kind.darkTheme : (kind.lightTheme ?? kind.darkTheme)
-        if let accent = AccentColor.override {
-            theme.accent = accent
+        if let accentOverride {
+            theme.accent = accentOverride
         }
         return theme
     }
