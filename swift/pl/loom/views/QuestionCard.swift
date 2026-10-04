@@ -120,7 +120,9 @@ struct QuestionCard: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // Same 720 cap as ApprovalCard: the two cards share the
+        // pending area and must align when both are pending at once.
+        .frame(maxWidth: 720, alignment: .leading)
         .overlay(
             RoundedRectangle(cornerRadius: Theme.radiusMd)
                 .strokeBorder(Theme.primary, lineWidth: 2),

@@ -281,7 +281,11 @@ struct ReasoningBlock: View {
                     Text(head)
                         .font(.system(size: Theme.textSm, weight: .medium))
                         .foregroundStyle(active ? Theme.primary : Theme.muted)
-                    if !expanded, let summary = summaryLine {
+                    // Sealed blocks show the FIRST line as the summary;
+                    // a live block shows its LAST line below instead —
+                    // early in the stream both excerpts are the same
+                    // line, so they must never appear together.
+                    if !active, !expanded, let summary = summaryLine {
                         Text(summary)
                             .font(.system(size: Theme.textSm).italic())
                             .foregroundStyle(Theme.muted)
@@ -1249,7 +1253,7 @@ struct DiffView: View {
     @ViewBuilder
     private func bodyLines(_ parsed: ParsedDiff) -> some View {
         if parsed.lines.count > Self.collapseLines {
-            ScrollView(.horizontal, showsIndicators: false) {
+            HScrollFade(color: Theme.bg1) {
                 ScrollView(.vertical) {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(parsed.lines.indices, id: \.self) { index in
@@ -1261,7 +1265,7 @@ struct DiffView: View {
                 .frame(maxHeight: 400)
             }
         } else {
-            ScrollView(.horizontal, showsIndicators: false) {
+            HScrollFade(color: Theme.bg1) {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(parsed.lines.indices, id: \.self) { index in
                         DiffLineView(line: parsed.lines[index])

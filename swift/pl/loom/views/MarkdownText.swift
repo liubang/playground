@@ -150,6 +150,12 @@ struct MarkdownText: View {
         /// GFM pipe table: header row + body rows (the dashed separator
         /// row is consumed by the parser).
         case table(header: [String], rows: [[String]])
+        /// Blockquote ("> …"): consecutive quote lines with the ">
+        /// markers consumed by the parser; the view draws the leading
+        /// bar. Without a real block the text parser strips the
+        /// markers into a blockQuote intent SwiftUI Text IGNORES —
+        /// the quote silently renders as ordinary prose.
+        case quote(String)
         /// Thematic break (---, ***, ___): rendered as a full-width
         /// hairline (the WebUI's .md hr). Left in prose, Apple's inline
         /// parser would reduce it to a single ⸻ glyph — NOT a divider.
@@ -188,6 +194,8 @@ struct MarkdownText: View {
                     CodeBlockView(language: language, code: code, deferHighlight: live)
                 case let .table(header, rows):
                     MarkdownTableView(header: header, rows: rows)
+                case let .quote(text):
+                    QuoteText(text: text)
                 case .rule:
                     // .md hr: 1px --bg2 full-width line, 14px margins
                     // (block spacing 10 + vertical padding 4 each side).
@@ -233,6 +241,7 @@ struct MarkdownText: View {
             case let .code(language, code): total + (language?.utf8.count ?? 0) + code.utf8.count
             case let .table(header, rows):
                 total + (header + rows.flatMap(\.self)).reduce(0) { $0 + $1.utf8.count }
+            case let .quote(text): total + text.utf8.count
             case .rule:
                 total
             }
@@ -337,6 +346,14 @@ struct MarkdownText: View {
                 // (never a setext underline), interrupt unconditionally.
                 flushProse()
                 blocks.append(.rule)
+            } else if let quoteLine = parseQuoteLine(line) {
+                flushProse()
+                var quoteLines = [quoteLine]
+                while i + 1 < lines.count, let next = parseQuoteLine(lines[i + 1]) {
+                    quoteLines.append(next)
+                    i += 1
+                }
+                blocks.append(.quote(quoteLines.joined(separator: "\n")))
             } else if let item = parseListItem(line) {
                 flushParagraph()
                 listItems.append(item)
@@ -413,6 +430,24 @@ struct MarkdownText: View {
             text = String(text.dropFirst(3)).trimmingCharacters(in: .whitespaces)
         }
         return ListItem(ordinal: ordinal, indent: spaces / 2, checkbox: checkbox, text: text)
+    }
+
+    /// Blockquote line (CommonMark): up to 3 leading spaces, ">",
+    /// then one optional space. The marker is consumed; nested quotes
+    /// (">>") keep the inner marker as literal text.
+    private static func parseQuoteLine(_ line: String) -> String? {
+        var rest = Substring(line)
+        var leading = 0
+        while rest.first == " ", leading < 3 {
+            rest = rest.dropFirst()
+            leading += 1
+        }
+        guard rest.first == ">" else { return nil }
+        rest = rest.dropFirst()
+        if rest.first == " " {
+            rest = rest.dropFirst()
+        }
+        return String(rest)
     }
 
     /// Thematic break line (CommonMark): up to 3 leading spaces, then
@@ -844,6 +879,28 @@ private struct HeadingText: View {
     }
 }
 
+/// Blockquote block (blocks.css .md blockquote): a 3px --bg2 bar
+/// leading muted prose — the same visual language as the reasoning
+/// block's expanded region.
+private struct QuoteText: View {
+    let text: String
+
+    var body: some View {
+        Text(renderInlineMarkdown(text))
+            .font(.system(size: Theme.textLg, weight: .light))
+            .foregroundStyle(Theme.muted)
+            .lineSpacing(7)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, 12)
+            .overlay(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(Theme.bg2)
+                    .frame(width: 3)
+            }
+    }
+}
+
 /// List block: one row per item — bullet / ordinal / task checkbox in
 /// a fixed-width marker column, inline-markdown text after it. Rows
 /// pack tighter than block spacing (a list reads as one unit).
@@ -938,7 +995,7 @@ private struct MarkdownTableView: View {
 
     var body: some View {
         let numeric = numericColumns
-        return ScrollView(.horizontal, showsIndicators: false) {
+        return HScrollFade(color: Theme.bg0) {
             Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
                 GridRow {
                     ForEach(0 ..< columnCount, id: \.self) { col in
@@ -1002,7 +1059,7 @@ struct CodeBlockView: View {
     }
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        HScrollFade(color: Theme.bg1) {
             Text(highlightedCode)
                 .lineSpacing(4.5) // ≈ the WebUI's 1.55 line-height (.md pre)
                 .textSelection(.enabled)

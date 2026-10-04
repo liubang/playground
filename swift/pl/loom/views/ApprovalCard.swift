@@ -175,6 +175,7 @@ struct ApprovalCard: View {
                 .font(.system(size: Theme.textXs, weight: .semibold))
                 .foregroundStyle(riskColor)
                 .padding(.horizontal, 8)
+                .padding(.vertical, 2)
                 .overlay(Capsule().strokeBorder(riskColor, lineWidth: 1))
                 .help("Risk level R\(approval.risk): \(riskLabel)")
 

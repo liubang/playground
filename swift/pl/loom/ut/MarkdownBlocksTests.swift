@@ -187,6 +187,50 @@ final class MarkdownBlocksTests: XCTestCase {
         ])
     }
 
+    // MARK: Blockquotes (> …)
+
+    func testBlockquote() {
+        XCTAssertEqual(MarkdownText.splitBlocks("intro\n\n> 注意：这是引用\n> 第二行\n\nafter"), [
+            .prose("intro"),
+            .quote("注意：这是引用\n第二行"),
+            .prose("after"),
+        ])
+    }
+
+    /// A quote ends at the first non-quote line — no blank line
+    /// required (a quote cannot swallow the paragraph after it).
+    func testBlockquoteInterruptedByProseAndList() {
+        XCTAssertEqual(MarkdownText.splitBlocks("> quoted\nplain"), [
+            .quote("quoted"),
+            .prose("plain"),
+        ])
+        XCTAssertEqual(MarkdownText.splitBlocks("> q\n- item"), [
+            .quote("q"),
+            .list([MarkdownText.ListItem(ordinal: nil, indent: 0, checkbox: nil, text: "item")]),
+        ])
+    }
+
+    /// Up to 3 leading spaces and a missing space after ">" are
+    /// valid; a bare ">" is an empty quote line (a paragraph break
+    /// inside the quote). 4+ leading spaces is indented code, and
+    /// ">>" keeps the inner marker as literal text.
+    func testBlockquoteMarkerVariants() {
+        XCTAssertEqual(MarkdownText.splitBlocks("   > spaced\n>nospace\n>\n> after gap"), [
+            .quote("spaced\nnospace\n\nafter gap"),
+        ])
+        XCTAssertEqual(MarkdownText.splitBlocks("> a\n>> b"), [.quote("a\n> b")])
+        XCTAssertEqual(MarkdownText.splitBlocks("    > not a quote"), [.prose("> not a quote")])
+    }
+
+    func testLiveBlockquoteStream() {
+        assertIncrementalMatchesWhole([
+            "intro\n", "\n> 引用", "\n> 第二行\n", "\n", "after",
+        ])
+        assertIncrementalMatchesWhole([
+            "> q", "uoted\nplain",
+        ])
+    }
+
     // MARK: Inline Markdown numeric ranges
 
     func testNumericRangesDoNotBecomeStrikethrough() {

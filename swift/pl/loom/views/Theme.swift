@@ -257,6 +257,64 @@ struct Hairline: View {
     }
 }
 
+/// A horizontal ScrollView whose trailing edge fades out ONLY while
+/// content hides past it (code blocks, tables, diffs). TranscriptView
+/// uses the same edge treatment vertically; without it, cut-off
+/// horizontal content is undiscoverable — these views deliberately
+/// hide their scrollbars for the WebUI's clean look.
+struct HScrollFade<Content: View>: View {
+    /// The surface color beneath the scroll content; the fade blends
+    /// toward it (bg1 for cards, bg0 for content on the transcript).
+    let color: Color
+    @ViewBuilder let content: () -> Content
+
+    @State private var cutOff = false
+    @State private var contentMaxX: CGFloat = 0
+    // Start "infinite" so the fade never flashes on first layout,
+    // before the container width is known.
+    @State private var containerWidth: CGFloat = .greatestFiniteMagnitude
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            content()
+                .onGeometryChange(for: CGRect.self) { proxy in
+                    proxy.frame(in: .named("HScrollFade"))
+                } action: { frame in
+                    contentMaxX = frame.maxX
+                    updateCutOff()
+                }
+        }
+        .coordinateSpace(name: "HScrollFade")
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            containerWidth = width
+            updateCutOff()
+        }
+        .overlay(alignment: .trailing) {
+            if cutOff {
+                LinearGradient(
+                    colors: [color.opacity(0), color],
+                    startPoint: .leading,
+                    endPoint: .trailing,
+                )
+                .frame(width: 28)
+                .allowsHitTesting(false)
+            }
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: cutOff)
+    }
+
+    /// The content's right edge in the scroll view's own coordinate
+    /// space slides left as the user scrolls; past the container's
+    /// right edge (+1pt tolerance for fractional layouts) means more
+    /// content is hidden, so the fade shows.
+    private func updateCutOff() {
+        cutOff = contentMaxX > containerWidth + 1
+    }
+}
+
 /// Waiting-for-model indicator: the WebUI's three-dot traveling wave
 /// (.block-thinking / think-wave 1.4s — opacity 0.3↔1 with a -2px rise
 /// at the midpoint, staggered 0.2s per dot). Honors Reduce Motion.
