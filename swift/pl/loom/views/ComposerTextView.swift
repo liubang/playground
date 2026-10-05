@@ -35,7 +35,8 @@ import SwiftUI
 /// Geometry mirrors the WebUI's .composer textarea: 5pt leading inset,
 /// 6pt top/bottom inset, 14pt system font, 5pt line spacing (≈ the
 /// WebUI's 1.55 line-height), growing from 44 to 200pt before the
-/// overlay scroller engages (the frame clamp lives on the SwiftUI side).
+/// overlay scroller engages (the clamp lives in the scroll view's
+/// intrinsicContentSize — see ComposerScrollView).
 struct ComposerTextView: NSViewRepresentable {
     @Binding var text: String
     /// The @ScaledMetric-resolved point size (Dynamic Type aware).
@@ -183,10 +184,20 @@ struct ComposerTextView: NSViewRepresentable {
 
 // MARK: - Scroll view (intrinsic height = content height)
 
-/// The NSScrollView whose intrinsic height tracks the laid-out text:
-/// SwiftUI's frame(minHeight:maxHeight:) clamp provides the 44–200pt
-/// window, and past 200 the overlay scroller takes over.
+/// The NSScrollView whose intrinsic height tracks the laid-out text,
+/// clamped to the composer's 44–200pt growth window; past 200 the
+/// overlay scroller takes over. The clamp MUST live here: SwiftUI sets
+/// a platform view's frame from the representable's sizeThatFits result
+/// — the RAW intrinsic height — not from the layout slot its
+/// .frame(maxHeight:) clamp reports. An unclamped report (measured:
+/// slot 200 vs an actual NSView frame of 5287pt on a large paste) left
+/// the editor painted across the transcript and under the composer bar.
 final class ComposerScrollView: NSScrollView {
+    /// The composer's growth window (composer.css .composer textarea):
+    /// tracks content from 44 to 200pt, then scrolls.
+    static let minHeight: CGFloat = 44
+    static let maxHeight: CGFloat = 200
+
     weak var composerTextView: ComposerNSTextView?
     /// A focus request observed while the view had no window yet,
     /// applied in viewDidMoveToWindow.
@@ -197,28 +208,32 @@ final class ComposerScrollView: NSScrollView {
     private var lastLayoutWidth: CGFloat = -1
     private var lastContentHeight: CGFloat = -1
 
-    override var intrinsicContentSize: NSSize {
+    /// The laid-out content height (raw, unclamped), or nil before the
+    /// text system exists.
+    private var measuredContentHeight: CGFloat? {
         guard let textView = composerTextView,
               let layoutManager = textView.layoutManager,
               let textContainer = textView.textContainer
-        else { return super.intrinsicContentSize }
+        else { return nil }
         layoutManager.ensureLayout(for: textContainer)
         let used = layoutManager.usedRect(for: textContainer)
-        let height = ceil(used.height + textView.textContainerInset.height * 2)
+        return ceil(used.height + textView.textContainerInset.height * 2)
+    }
+
+    override var intrinsicContentSize: NSSize {
+        guard let raw = measuredContentHeight else { return super.intrinsicContentSize }
+        let height = min(max(raw, Self.minHeight), Self.maxHeight)
         lastContentHeight = height
         return NSSize(width: NSView.noIntrinsicMetric, height: height)
     }
 
     /// textDidChange fires per keystroke; only height changes justify a
-    /// SwiftUI layout pass.
+    /// SwiftUI layout pass. The CLAMPED height is compared: past the
+    /// 200pt cap further growth changes nothing, and each such
+    /// invalidation would be a wasted layout pass.
     func invalidateIntrinsicContentSizeIfContentHeightChanged() {
-        guard let textView = composerTextView,
-              let layoutManager = textView.layoutManager,
-              let textContainer = textView.textContainer
-        else { return }
-        layoutManager.ensureLayout(for: textContainer)
-        let used = layoutManager.usedRect(for: textContainer)
-        let height = ceil(used.height + textView.textContainerInset.height * 2)
+        guard let raw = measuredContentHeight else { return }
+        let height = min(max(raw, Self.minHeight), Self.maxHeight)
         if height != lastContentHeight {
             lastContentHeight = height
             invalidateIntrinsicContentSize()

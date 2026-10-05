@@ -107,7 +107,11 @@ struct ComposerView: View {
                         return true
                     },
                 )
-                .frame(minHeight: 44, maxHeight: 200)
+                // The REAL clamp lives in the scroll view's
+                // intrinsicContentSize (a platform view's frame follows
+                // its sizeThatFits result, not this slot); this frame
+                // only keeps the SwiftUI-side layout in agreement.
+                .frame(minHeight: ComposerScrollView.minHeight, maxHeight: ComposerScrollView.maxHeight)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 4)
