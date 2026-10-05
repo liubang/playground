@@ -89,6 +89,9 @@ struct SessionTraceView: View {
     @State private var expanded: Set<String> = []
     @State private var maze: MazeData?
     @State private var following = true
+    /// Arbitration for the bottom sentinel leaving the viewport (see its
+    /// onDisappear): cancelled when the sentinel reappears in time.
+    @State private var detachArbiter: Task<Void, Never>?
     @State private var exporting = false
     @FocusState private var searchFocused: Bool
 
@@ -420,16 +423,35 @@ struct SessionTraceView: View {
                     ForEach(groups) { group in
                         turnGroup(group)
                     }
-                    // Bottom sentinel: drives follow mode + the jump button.
+                    // Bottom sentinel: drives follow mode + the jump
+                    // button. Its 17pt height doubles as the list's bottom
+                    // spacing — anchor-.bottom scrolls land it INSIDE the
+                    // viewport (a 1pt sentinel sat exactly on the edge with
+                    // the padding below it, so the next stream flush pushed
+                    // it out and follow disengaged mid-run).
                     Color.clear
-                        .frame(height: 1)
+                        .frame(height: 17)
                         .id(Self.bottomId)
-                        .onAppear { following = true }
-                        .onDisappear { following = false }
+                        .onAppear {
+                            detachArbiter?.cancel()
+                            detachArbiter = nil
+                            following = true
+                        }
+                        .onDisappear {
+                            // Content growth pushes the sentinel out one
+                            // beat before snapToBottom pulls it back — that
+                            // is not the user scrolling away. Disengage
+                            // follow only if the sentinel stays gone.
+                            detachArbiter?.cancel()
+                            detachArbiter = Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(100))
+                                guard !Task.isCancelled else { return }
+                                following = false
+                            }
+                        }
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 6)
-                .padding(.bottom, 16)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .overlay(alignment: .bottom) {
@@ -500,7 +522,11 @@ struct SessionTraceView: View {
     }
 
     private func snapToBottom(_ proxy: ScrollViewProxy) {
-        guard store.isBusy, following, !searching else { return }
+        // No isBusy gate: the follow contract is "while pinned to the
+        // tail, keep the tail in view". The turn-end snapshot swap flips
+        // isBusy false in the same beat it grows the list — gating on it
+        // stranded the viewport mid-growth and wedged follow for good.
+        guard following, !searching else { return }
         proxy.scrollTo(Self.bottomId, anchor: .bottom)
     }
 
