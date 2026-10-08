@@ -82,7 +82,6 @@ struct ChatView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             if viewMode == .chat {
-                PendingAreaView(store: store)
                 ComposerView(store: store, models: models)
             }
             Hairline(axis: .horizontal)
@@ -555,6 +554,14 @@ private struct TranscriptView: View {
                         }
                     }
 
+                    // Resolved pending cards fold into one-line
+                    // receipts where the interaction happened —
+                    // between the settled history and the live draft
+                    // (WebUI collapseApproval / collapseQuestion).
+                    ForEach(store.resolvedReceipts) { receipt in
+                        ResolvedReceiptView(receipt: receipt)
+                    }
+
                     if let draft = store.draft, !draft.isEmpty {
                         DraftView(
                             draft: draft,
@@ -562,6 +569,32 @@ private struct TranscriptView: View {
                         )
                     } else if store.state == .running || store.state == .cancelling {
                         ThinkingDots()
+                    }
+
+                    // Pending requests render IN the flow at the
+                    // transcript tail: the agent is parked waiting for
+                    // the answer, so nothing can arrive after them
+                    // (WebUI addApprovalCard/addQuestionCard append to
+                    // the block stream). Docking them above the
+                    // composer severed the question from the
+                    // conversation it belongs to.
+                    ForEach(store.pendingApprovals, id: \.approvalId) { approval in
+                        ApprovalCard(approval: approval) { decision, always, trust in
+                            Task {
+                                await store.resolveApproval(
+                                    approval, decision: decision, always: always, trust: trust,
+                                )
+                            }
+                        }
+                    }
+                    ForEach(store.pendingQuestions, id: \.id) { question in
+                        QuestionCard(question: question) { selected, custom, skipped in
+                            Task {
+                                await store.answerQuestion(
+                                    question, selected: selected, customText: custom, skipped: skipped,
+                                )
+                            }
+                        }
                     }
 
                     if !store.isBusy, let feedback = store.turnFeedback {
@@ -664,17 +697,11 @@ private struct TranscriptView: View {
                             }
                         }
                     } label: {
-                        Image(systemName: "arrow.down")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Theme.muted)
-                            .frame(width: 28, height: 28)
-                            .background(Theme.bg1, in: Circle())
-                            .overlay(Circle().strokeBorder(Theme.bg2, lineWidth: 1))
-                            .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                        jumpButtonLabel
                     }
                     .buttonStyle(.plain)
-                    .help("Jump to the latest message")
-                    .accessibilityLabel("Jump to bottom")
+                    .help(pendingCount > 0 ? "Jump to the pending request" : "Jump to the latest message")
+                    .accessibilityLabel(pendingCount > 0 ? "Jump to pending request" : "Jump to bottom")
                     .padding(.trailing, 20)
                     .padding(.bottom, 12)
                     .transition(.opacity)
@@ -686,6 +713,44 @@ private struct TranscriptView: View {
                 locateRequest = nil
                 locate(request, proxy: proxy)
             }
+        }
+    }
+
+    /// Unresolved approvals/questions waiting at the transcript tail.
+    private var pendingCount: Int {
+        store.pendingApprovals.count + store.pendingQuestions.count
+    }
+
+    /// The jump-to-bottom button: a plain arrow at rest, but a tinted
+    /// "N ↓" capsule while unresolved requests wait at the tail —
+    /// off-screen pending cards are the one thing a scrolled-up
+    /// reader must not miss. A waiting approval escalates the tint to
+    /// warning, mirroring the two cards' accents.
+    @ViewBuilder private var jumpButtonLabel: some View {
+        if pendingCount > 0 {
+            let tint = store.pendingApprovals.isEmpty ? Theme.primary : Theme.warning
+            HStack(spacing: 6) {
+                Image(systemName: store.pendingApprovals.isEmpty ? "questionmark" : "exclamationmark")
+                    .font(.system(size: 10, weight: .bold))
+                Text("\(pendingCount)")
+                    .font(.system(size: Theme.textXs, weight: .semibold))
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(tint)
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background(Theme.bg1, in: Capsule())
+            .overlay(Capsule().strokeBorder(tint.opacity(0.6), lineWidth: 1))
+            .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+        } else {
+            Image(systemName: "arrow.down")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.muted)
+                .frame(width: 28, height: 28)
+                .background(Theme.bg1, in: Circle())
+                .overlay(Circle().strokeBorder(Theme.bg2, lineWidth: 1))
+                .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
         }
     }
 
@@ -827,38 +892,34 @@ private struct TurnStatusView: View {
     }
 }
 
-// MARK: - Pending requests
-
-private struct PendingAreaView: View {
-    let store: SessionStore
+/// A resolved pending card's folded one-line record: the WebUI's
+/// .resolved block (✓/✗ + bold Allowed/Denied + actor) and its
+/// question notice (muted italic), both padded like the WebUI's
+/// notice rows.
+private struct ResolvedReceiptView: View {
+    let receipt: ResolvedReceipt
 
     var body: some View {
-        if !store.pendingApprovals.isEmpty || !store.pendingQuestions.isEmpty {
-            VStack(spacing: 10) {
-                ForEach(store.pendingApprovals, id: \.approvalId) { approval in
-                    ApprovalCard(approval: approval) { decision, always, trust in
-                        Task {
-                            await store.resolveApproval(
-                                approval, decision: decision, always: always, trust: trust,
-                            )
-                        }
-                    }
+        Group {
+            switch receipt.kind {
+            case let .approval(allowed, actor):
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: allowed ? "checkmark" : "xmark")
+                        .font(.system(size: Theme.textSm, weight: .bold))
+                        .foregroundStyle(allowed ? Theme.success : Theme.error)
+                    Text(allowed ? "Allowed " : "Denied ").fontWeight(.bold)
+                        + Text("approval · \(actor)")
                 }
-                ForEach(store.pendingQuestions, id: \.id) { question in
-                    QuestionCard(question: question) { selected, custom, skipped in
-                        Task {
-                            await store.answerQuestion(
-                                question, selected: selected, customText: custom, skipped: skipped,
-                            )
-                        }
-                    }
-                }
+                .foregroundStyle(Theme.muted)
+                .accessibilityElement(children: .combine)
+            case let .question(skipped, summary):
+                Text(skipped ? "Question skipped" : (summary ?? "Question answered"))
+                    .italic()
+                    .foregroundStyle(Theme.muted)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-            .frame(maxWidth: Theme.contentWidth)
-            .frame(maxWidth: .infinity)
         }
+        .font(.system(size: Theme.textMd))
+        .padding(.leading, 16)
     }
 }
 

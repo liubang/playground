@@ -274,6 +274,28 @@ enum SessionConnection: Equatable, Sendable {
     case offline(attempt: Int)
 }
 
+// MARK: - Resolved-request receipt
+
+/// A resolved pending card's folded one-line record in the transcript
+/// (WebUI collapseApproval → .resolved block, collapseQuestion →
+/// notice block): a resolved card never vanishes silently.
+struct ResolvedReceipt: Equatable, Identifiable, Sendable {
+    enum Kind: Equatable, Sendable {
+        /// WebUI ResolvedNotice: Allowed/Denied + the resolving actor.
+        case approval(allowed: Bool, actor: String)
+        /// WebUI question notice; `summary` carries the answer text
+        /// ("Answered: A, B") when THIS client supplied it — the
+        /// broadcast event reports only the skip flag.
+        case question(skipped: Bool, summary: String?)
+    }
+
+    /// The originating request's id (approval_id / question_id) —
+    /// receipts are idempotent by it (the local resolve and the
+    /// broadcast echo race; first writer wins).
+    let id: String
+    let kind: Kind
+}
+
 // MARK: - Session store
 
 /// Per-session state machine: snapshot → SSE attach (after=event_seq) →
@@ -346,6 +368,23 @@ final class SessionStore {
     private(set) var draft: DraftTurn?
     private(set) var pendingApprovals: [ApprovalRequestedPayload] = []
     private(set) var pendingQuestions: [PendingRequest.Question] = []
+    /// Folded outcome records of resolved pending cards (WebUI
+    /// collapseApproval/collapseQuestion): a resolved card never
+    /// vanishes silently — it collapses into a one-line receipt in
+    /// the conversation flow. Receipts render between the settled
+    /// history and the live draft; they clear at the next
+    /// turn.started, where the persisted history (the ask_user tool
+    /// block) takes over the narrative. A cold open rebuilds nothing,
+    /// exactly like the WebUI's live-only notice blocks.
+    private(set) var resolvedReceipts: [ResolvedReceipt] = []
+    /// Locally-initiated resolutions awaiting their broadcast echo:
+    /// the resolved/answered EVENT is the single receipt writer (it
+    /// reaches every client, this one included), and these tell the
+    /// writer the resolution was ours — the approval event's actor is
+    /// empty for the local frontend, and the answered event doesn't
+    /// carry the answer at all, so its summary rides along here.
+    private var localApprovalResolutions: Set<String> = []
+    private var localAnswerSummaries: [String: String] = [:]
     private(set) var plan: PlanPayload?
     /// Distinguishes a newly created plan from a previous one with identical goals.
     private(set) var planIdentity = UUID()
@@ -757,6 +796,9 @@ final class SessionStore {
         // Snappy UI: remove now; a stale binding (409) triggers a reconcile
         // which restores the authoritative pending set.
         pendingApprovals.removeAll { $0.approvalId == approval.approvalId }
+        // The approval.resolved echo writes the receipt; mark it as ours
+        // so the actor reads "you" instead of the event's empty actor.
+        localApprovalResolutions.insert(approval.approvalId)
         do {
             try await api.resolveApproval(
                 sessionId, approvalId: approval.approvalId,
@@ -764,6 +806,7 @@ final class SessionStore {
                 ruleHint: always ? ApprovalRuleHint(trust: trust) : nil,
             )
         } catch {
+            localApprovalResolutions.remove(approval.approvalId)
             lastError = error.localizedDescription
             if state == .awaitingApproval,
                !pendingApprovals.contains(where: { $0.approvalId == approval.approvalId })
@@ -779,18 +822,50 @@ final class SessionStore {
         selected: [String], customText: String?, skipped: Bool,
     ) async {
         pendingQuestions.removeAll { $0.id == question.id }
+        // The question.answered echo writes the receipt; the event
+        // carries only the skip flag, so the answer's summary rides
+        // along locally.
+        if let summary = Self.answerSummary(selected: selected, customText: customText, skipped: skipped) {
+            localAnswerSummaries[question.id] = summary
+        }
         do {
             try await api.answerQuestion(
                 sessionId, questionId: question.id,
                 selected: selected, customText: customText, skipped: skipped,
             )
         } catch {
+            localAnswerSummaries.removeValue(forKey: question.id)
             lastError = error.localizedDescription
             if isBusy, !pendingQuestions.contains(where: { $0.id == question.id }) {
                 pendingQuestions.append(question)
             }
             await refresh()
         }
+    }
+
+    /// The receipt's answer text ("Answered: A, B") — richer than the
+    /// bare "Question answered" notice a cross-client resolution can
+    /// offer, possible only because this client supplied the answer.
+    private static func answerSummary(selected: [String], customText: String?, skipped: Bool) -> String? {
+        guard !skipped else { return nil }
+        var parts = selected
+        if let custom = customText?.trimmingCharacters(in: .whitespacesAndNewlines), !custom.isEmpty {
+            parts.append(custom)
+        }
+        guard !parts.isEmpty else { return nil }
+        var text = "Answered: " + parts.joined(separator: ", ")
+        if text.count > 120 {
+            text = String(text.prefix(120)) + "…"
+        }
+        return text
+    }
+
+    /// Idempotent by request id: the local resolve's optimistic path
+    /// and the broadcast echo race — the first writer wins (WebUI
+    /// collapse* parity).
+    private func addReceipt(_ receipt: ResolvedReceipt) {
+        guard !resolvedReceipts.contains(where: { $0.id == receipt.id }) else { return }
+        resolvedReceipts.append(receipt)
     }
 
     func dismissNotices() {
@@ -1253,6 +1328,13 @@ final class SessionStore {
             dismissedTurnFailure = nil
             state = .running
             pendingSteers = []
+            // The previous turn's resolved-card receipts end their
+            // life here: its persisted history (the ask_user tool
+            // block) now carries the narrative (WebUI receipts are
+            // live-only blocks too — a rebuild drops them).
+            resolvedReceipts = []
+            localApprovalResolutions = []
+            localAnswerSummaries = [:]
             if let prompt = payload?.prompt, !prompt.isEmpty {
                 messages.append(Message(
                     id: "local-\(event.sequence)", role: .user,
@@ -1353,6 +1435,16 @@ final class SessionStore {
         case .approvalResolved:
             if let payload = tryDecode(ApprovalResolvedPayload.self, from: event) {
                 pendingApprovals.removeAll { $0.approvalId == payload.approvalId }
+                // Single receipt writer for local and cross-client
+                // resolutions alike (WebUI collapseApproval): ours was
+                // marked at resolve time so the actor reads "you".
+                let actor = localApprovalResolutions.remove(payload.approvalId) != nil
+                    ? "you"
+                    : (payload.actor.flatMap { $0.isEmpty ? nil : $0 } ?? "another client")
+                addReceipt(ResolvedReceipt(
+                    id: payload.approvalId,
+                    kind: .approval(allowed: payload.decision == "allow", actor: actor),
+                ))
                 if pendingApprovals.isEmpty, state == .awaitingApproval {
                     state = .running
                 }
@@ -1372,6 +1464,13 @@ final class SessionStore {
         case .questionAnswered:
             if let payload = tryDecode(QuestionAnsweredPayload.self, from: event) {
                 pendingQuestions.removeAll { $0.id == payload.questionId }
+                // WebUI collapseQuestion: the card folds into a notice;
+                // a locally supplied answer's summary rides along.
+                let summary = localAnswerSummaries.removeValue(forKey: payload.questionId)
+                addReceipt(ResolvedReceipt(
+                    id: payload.questionId,
+                    kind: .question(skipped: payload.skipped ?? false, summary: summary),
+                ))
             }
 
         case .budgetUpdated:

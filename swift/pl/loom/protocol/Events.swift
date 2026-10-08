@@ -225,10 +225,14 @@ struct ApprovalRequestedPayload: Decodable, Sendable {
 struct ApprovalResolvedPayload: Decodable, Sendable {
     let approvalId: String
     let decision: String
+    /// Who resolved the approval (a named serve client, or "system:…");
+    /// empty/nil for the local interactive frontend
+    /// (runtimeevent.ApprovalResolvedPayload).
+    let actor: String?
 
     enum CodingKeys: String, CodingKey {
         case approvalId = "approval_id"
-        case decision
+        case decision, actor
     }
 }
 
@@ -252,9 +256,13 @@ struct QuestionAskedPayload: Decodable, Sendable {
 
 struct QuestionAnsweredPayload: Decodable, Sendable {
     let questionId: String
+    /// runtimeevent.QuestionAnsweredPayload: the only outcome detail the
+    /// broadcast carries — the answer itself never leaves the resolver.
+    let skipped: Bool?
 
     enum CodingKeys: String, CodingKey {
         case questionId = "question_id"
+        case skipped
     }
 }
 
