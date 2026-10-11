@@ -46,6 +46,17 @@ enum Theme {
     static let purple = adaptive(dark: 0xD699B6, light: 0xDF69BA)
     static let onAccent = adaptive(dark: 0x1E2326, light: 0xFDF6E3)
 
+    // Text-grade accents. The base accents are graphics-grade: on the
+    // light canvas they sit at 2.2–3.3:1 — fine for dots, badges and
+    // timeline bars, below WCAG AA 4.5:1 for text. These variants keep
+    // the hue and deepen to ≥4.5:1 on bg0. Dark mode maps them to the
+    // base accents (already AA there), so text usages can pick the
+    // *Text grade unconditionally. Swift-side addition; tokens.css has
+    // no twin (the WebUI's text usages live on darker surfaces).
+    static let successText = adaptive(dark: 0xA7C080, light: 0x5C7501)
+    static let warningText = adaptive(dark: 0xDBBC7F, light: 0x8A6100)
+    static let errorText = adaptive(dark: 0xE67E80, light: 0xC7281F)
+
     /// tokens.css --ring-color: the uniform focus halo (gate input /
     /// question card / pickers) — primary at 35%.
     static let ring = primary.opacity(0.35)
@@ -103,8 +114,12 @@ enum Theme {
 }
 
 /// Raw hex pairs for the tokens that participate in blends (fg/muted).
-private let fgHex = (dark: UInt32(0xD3C6AA), light: UInt32(0x5C6A72))
-private let mutedHex = (dark: UInt32(0x9DA9A0), light: UInt32(0x5C6E5E))
+/// Light fg/muted run deeper than Everforest Light Medium's originals:
+/// fg ~6.5:1 on bg0 (crisper primary text) and muted ≥4.5:1 even on
+/// bg2 cards (the stock #5C6E5E dips to ~4.4:1 there) — while keeping
+/// the fg-darker-than-muted hierarchy.
+private let fgHex = (dark: UInt32(0xD3C6AA), light: UInt32(0x4F5B63))
+private let mutedHex = (dark: UInt32(0x9DA9A0), light: UInt32(0x576B59))
 
 /// sRGB channel blend of two hex colors (the WebUI's color-mix) so
 /// derived tokens stay compile-time constants — Color.mix would need
@@ -521,7 +536,8 @@ struct ConfirmDialogHost: View {
 /// its dark-mode destructive button renders low-contrast red-on-maroon,
 /// and everything was crammed into a single bold title line. Here the
 /// title/body hierarchy matches the rest of the app, and the danger
-/// button is solid Theme.error with onAccent text (real contrast).
+/// button is solid Theme.errorText with onAccent text (≥4.5:1 — the
+/// base error is only ~3:1 on the light canvas).
 ///
 /// Cancel is the only keyboard-exposed action (Esc / backdrop click) —
 /// destructive confirms stay pointer-only, matching macOS convention.
@@ -576,7 +592,7 @@ struct ConfirmDialogView: View {
                             .padding(.horizontal, 14)
                             .padding(.vertical, 5)
                             .background(
-                                Theme.error.opacity(confirmHovered ? 0.85 : 1),
+                                Theme.errorText.opacity(confirmHovered ? 0.85 : 1),
                                 in: RoundedRectangle(cornerRadius: Theme.radiusSm),
                             )
                     }

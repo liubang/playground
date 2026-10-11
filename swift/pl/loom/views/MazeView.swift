@@ -1402,7 +1402,7 @@ private struct MazeWhyBlock: View {
     var body: some View {
         Text(text)
             .font(.system(size: Theme.textXs))
-            .foregroundStyle(Theme.warning)
+            .foregroundStyle(Theme.warningText)
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)

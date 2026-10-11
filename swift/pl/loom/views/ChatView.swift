@@ -165,7 +165,7 @@ struct ChatHeaderView: View {
         Button(action: copySessionId) {
             Text(displayTitle)
                 .font(.system(size: Theme.textMd, weight: .semibold))
-                .foregroundStyle(copiedSessionId ? Theme.success : (hasTitle ? Theme.fg : Theme.muted))
+                .foregroundStyle(copiedSessionId ? Theme.successText : (hasTitle ? Theme.fg : Theme.muted))
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
@@ -185,7 +185,7 @@ struct ChatHeaderView: View {
                     .frame(width: 15, height: 15)
             } else {
                 Image(systemName: copiedShareLink ? "checkmark" : "square.and.arrow.up")
-                    .foregroundStyle(copiedShareLink ? Theme.success : Theme.muted)
+                    .foregroundStyle(copiedShareLink ? Theme.successText : Theme.muted)
             }
         }
         .disabled(sharing)
@@ -237,7 +237,7 @@ struct ChatHeaderView: View {
                 if explorer.changeCount > 0 {
                     Text("\(explorer.changeCount)")
                         .font(.system(size: 9, weight: .bold, design: .rounded))
-                        .foregroundStyle(Theme.warning)
+                        .foregroundStyle(Theme.warningText)
                 }
             }
         }
@@ -248,10 +248,10 @@ struct ChatHeaderView: View {
     private var statusPills: some View {
         HStack(spacing: 6) {
             if store.readOnly {
-                StatusPill(color: Theme.warning, text: "sub-agent · read-only")
+                StatusPill(color: Theme.warningText, text: "sub-agent · read-only")
                     .help(store.readOnlyTitle)
             } else if archived {
-                StatusPill(color: Theme.warning, text: "archived · read-only")
+                StatusPill(color: Theme.warningText, text: "archived · read-only")
             }
             statePill
             connectionPill
@@ -350,17 +350,17 @@ struct ChatHeaderView: View {
     @ViewBuilder private var statePill: some View {
         switch store.state {
         case .running:
-            StatusPill(color: Theme.success, text: "running", pulses: true)
+            StatusPill(color: Theme.successText, text: "running", pulses: true)
         case .awaitingApproval:
-            StatusPill(color: Theme.warning, text: "awaiting approval", pulses: true)
+            StatusPill(color: Theme.warningText, text: "awaiting approval", pulses: true)
         case .cancelling:
-            StatusPill(color: Theme.warning, text: "cancelling", pulses: true)
+            StatusPill(color: Theme.warningText, text: "cancelling", pulses: true)
         case .booting:
             StatusPill(color: Theme.muted, text: "booting")
         case .closed:
             StatusPill(color: Theme.muted, text: "closed")
         case .fatal:
-            StatusPill(color: Theme.error, text: "fatal")
+            StatusPill(color: Theme.errorText, text: "fatal")
         default:
             EmptyView()
         }
@@ -374,11 +374,11 @@ struct ChatHeaderView: View {
         case .live:
             EmptyView()
         case .connecting:
-            StatusPill(color: Theme.warning, text: "connecting…", pulses: true)
+            StatusPill(color: Theme.warningText, text: "connecting…", pulses: true)
         case let .offline(attempt):
-            StatusPill(color: Theme.warning, text: "reconnecting (\(attempt))", pulses: true)
+            StatusPill(color: Theme.warningText, text: "reconnecting (\(attempt))", pulses: true)
         case .drained:
-            StatusPill(color: Theme.error, text: "server shut down")
+            StatusPill(color: Theme.errorText, text: "server shut down")
         }
     }
 }
@@ -394,7 +394,7 @@ private struct ShareCopiedToast: View {
             Text("Link copied")
         }
         .font(.system(size: Theme.textXs, weight: .medium))
-        .foregroundStyle(Theme.success)
+        .foregroundStyle(Theme.successText)
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
         .background(Theme.bg1, in: Capsule())
@@ -728,7 +728,7 @@ private struct TranscriptView: View {
     /// warning, mirroring the two cards' accents.
     @ViewBuilder private var jumpButtonLabel: some View {
         if pendingCount > 0 {
-            let tint = store.pendingApprovals.isEmpty ? Theme.primary : Theme.warning
+            let tint = store.pendingApprovals.isEmpty ? Theme.primary : Theme.warningText
             HStack(spacing: 6) {
                 Image(systemName: store.pendingApprovals.isEmpty ? "questionmark" : "exclamationmark")
                     .font(.system(size: 10, weight: .bold))
@@ -847,7 +847,7 @@ private struct TurnStatusView: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: isCancelled ? "stop.circle" : "exclamationmark.circle")
-                .foregroundStyle(isCancelled ? Theme.muted : Theme.warning)
+                .foregroundStyle(isCancelled ? Theme.muted : Theme.warningText)
             Text(isCancelled ? "Stopped" : "Response interrupted")
                 .foregroundStyle(Theme.muted)
             if !isCancelled, canContinue {
@@ -906,7 +906,7 @@ private struct ResolvedReceiptView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: allowed ? "checkmark" : "xmark")
                         .font(.system(size: Theme.textSm, weight: .bold))
-                        .foregroundStyle(allowed ? Theme.success : Theme.error)
+                        .foregroundStyle(allowed ? Theme.successText : Theme.errorText)
                     Text(allowed ? "Allowed " : "Denied ").fontWeight(.bold)
                         + Text("approval · \(actor)")
                 }

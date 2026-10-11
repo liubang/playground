@@ -729,15 +729,15 @@ private struct TraceRowView: View {
                 .foregroundStyle(Theme.fg)
                 + Text(result.isEmpty ? "" : " → \(result)")
                 .font(Theme.monoXs)
-                .foregroundStyle(failed ? Theme.error : Theme.muted))
+                .foregroundStyle(failed ? Theme.errorText : Theme.muted))
                 .lineLimit(1)
                 .truncationMode(.tail)
         } else {
             let text = Self.firstLine(row.text)
             Text(text.isEmpty ? "(empty)" : text)
                 .font(.system(size: Theme.textSm))
-                .foregroundStyle(row.kind == .error ? Theme.error
-                    : (row.kind == .notice && row.warn) ? Theme.warning : Theme.fg)
+                .foregroundStyle(row.kind == .error ? Theme.errorText
+                    : (row.kind == .notice && row.warn) ? Theme.warningText : Theme.fg)
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
@@ -846,7 +846,7 @@ private struct TraceRowDetail: View {
                             if let error = tool.errorMessage, !error.isEmpty {
                                 Text(error)
                                     .font(.system(size: Theme.textXs))
-                                    .foregroundStyle(Theme.error)
+                                    .foregroundStyle(Theme.errorText)
                             }
                             pre(tool.fullOutput ?? tool.output ?? "(no output)")
                         }

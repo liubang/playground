@@ -1034,7 +1034,7 @@ private struct MarkdownTableView: View {
             .background(isHeader ? Theme.bg1 : Color.clear)
             // Cell borders double up between neighbours, reading as a
             // single 1px line (border-collapse).
-            .overlay(Rectangle().strokeBorder(Theme.bg2, lineWidth: 1))
+            .overlay(Rectangle().strokeBorder(Theme.bg3, lineWidth: 1))
     }
 }
 
@@ -1083,7 +1083,7 @@ struct CodeBlockView: View {
                         .background(Theme.bg2, in: Capsule())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(copied ? Theme.success : Theme.muted)
+                .foregroundStyle(copied ? Theme.successText : Theme.muted)
                 .padding(6)
                 .transition(.opacity)
             }

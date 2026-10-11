@@ -258,7 +258,7 @@ struct SidebarView: View {
                 if let error = list.loadError {
                     Label(error, systemImage: "exclamationmark.triangle")
                         .font(.system(size: Theme.textXs))
-                        .foregroundStyle(Theme.error)
+                        .foregroundStyle(Theme.errorText)
                         .padding(8)
                 }
                 if list.isLoading, list.workspaces.isEmpty, list.sessions.isEmpty {
@@ -550,7 +550,7 @@ private struct BatchActionStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: Theme.textXs, weight: .medium))
-            .foregroundStyle(danger ? Theme.error : Theme.primary)
+            .foregroundStyle(danger ? Theme.errorText : Theme.primary)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
             .contentShape(Rectangle())
@@ -929,11 +929,13 @@ private struct SessionRow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        // Active = bg3: the bg1→bg2 step is only ~3% luminance and
-        // the selection wash was nearly invisible on its own. Marked
-        // (batch-selected) rows get the steady bg2.
+        // Active = primary tint + a 2.5pt leading indicator. The
+        // bg-step washes (bg2, then bg3) sat within ~3% luminance of
+        // the sidebar and the selection was nearly invisible; the
+        // accent bar marks the current session at a glance, in either
+        // appearance. Marked (batch-selected) rows keep the steady bg2.
         .background(
-            isMarked ? Theme.bg2 : (isActive ? Theme.bg3 : (hovered ? Theme.bg2.opacity(0.55) : Color.clear)),
+            isMarked ? Theme.bg2 : (isActive ? Theme.primary.opacity(0.12) : (hovered ? Theme.bg2.opacity(0.55) : Color.clear)),
             in: UnevenRoundedRectangle(
                 topLeadingRadius: isChild ? 0 : Theme.radiusSm,
                 bottomLeadingRadius: isChild ? 0 : Theme.radiusSm,
@@ -941,6 +943,15 @@ private struct SessionRow: View {
                 topTrailingRadius: Theme.radiusSm,
             ),
         )
+        .overlay(alignment: .leading) {
+            if isActive, !isMarked {
+                Capsule()
+                    .fill(Theme.primary)
+                    .frame(width: 2.5)
+                    .padding(.vertical, 4)
+                    .padding(.leading, 2)
+            }
+        }
         // .sess-item.is-child: 12px indent + 1px left hierarchy guide.
         .overlay(alignment: .leading) {
             if isChild {

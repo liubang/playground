@@ -176,7 +176,7 @@ struct ComposerView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.radiusXl)
                     .strokeBorder(
-                        editorFocused ? Theme.primary.opacity(0.5) : Theme.bg2,
+                        editorFocused ? Theme.primary.opacity(0.5) : Theme.bg3,
                         lineWidth: 1,
                     ),
             )
@@ -360,7 +360,7 @@ struct ComposerView: View {
         .padding(.vertical, 10)
         .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusLg))
         .overlay(RoundedRectangle(cornerRadius: Theme.radiusLg)
-            .strokeBorder(Theme.bg2, lineWidth: 1))
+            .strokeBorder(Theme.bg3, lineWidth: 1))
         .frame(maxWidth: Theme.contentWidth)
     }
 
@@ -668,7 +668,7 @@ private struct PickerCapsule<Content: View>: View {
 
     private var foreground: Color {
         if isWarn {
-            return Theme.warning
+            return Theme.warningText
         }
         if isOn || isActive {
             return Theme.primary
@@ -882,7 +882,7 @@ struct PlanPanel: View {
             return Theme.fg
         }
         if allDone {
-            return Theme.success
+            return Theme.successText
         }
         return currentIndex == nil ? Theme.muted : Theme.fg
     }
@@ -915,7 +915,7 @@ struct PlanPanel: View {
                 }
                 Text("\(doneCount)/\(items.count)")
                     .font(.system(size: Theme.textXs, weight: .medium, design: .monospaced))
-                    .foregroundStyle(allDone ? Theme.success : Theme.muted)
+                    .foregroundStyle(allDone ? Theme.successText : Theme.muted)
                     .monospacedDigit()
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .medium))

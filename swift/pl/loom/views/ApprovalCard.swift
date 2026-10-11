@@ -53,7 +53,7 @@ struct ApprovalCard: View {
 
     /// Destructive-and-above operations escalate the pill to error red.
     private var riskColor: Color {
-        approval.risk >= 3 ? Theme.error : Theme.warning
+        approval.risk >= 3 ? Theme.errorText : Theme.warningText
     }
 
     /// run_cmd approval descriptions always end with a display-only
@@ -126,7 +126,7 @@ struct ApprovalCard: View {
                     Image(systemName: "questionmark.circle")
                 }
                 .font(.system(size: Theme.textSm))
-                .foregroundStyle(Theme.warning.opacity(0.9))
+                .foregroundStyle(Theme.warningText)
                 .textSelection(.enabled)
                 .padding(.top, 6)
                 .help("Why this call requires approval")
@@ -184,7 +184,7 @@ struct ApprovalCard: View {
 
             Spacer(minLength: 0)
         }
-        .foregroundStyle(Theme.warning)
+        .foregroundStyle(Theme.warningText)
     }
 
     // MARK: Paths (read/write)
@@ -232,11 +232,11 @@ struct ApprovalCard: View {
 
                 if !trustPreview.isEmpty {
                     Button("Trust (no sandbox)") { onResolve(.allow, true, "unsandboxed") }
-                        .buttonStyle(OutlineButtonStyle(color: Theme.error))
+                        .buttonStyle(OutlineButtonStyle(color: Theme.errorText))
                 }
 
                 Button("Deny") { onResolve(.deny, false, nil) }
-                    .buttonStyle(OutlineButtonStyle(color: Theme.error))
+                    .buttonStyle(OutlineButtonStyle(color: Theme.errorText))
                     .keyboardShortcut(.delete, modifiers: .command)
                     .help("Deny (⌘⌫)")
 

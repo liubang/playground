@@ -155,7 +155,7 @@ struct SettingsView: View {
                 VStack(spacing: 10) {
                     Label("配置加载失败：\(error)", systemImage: "exclamationmark.triangle")
                         .font(.system(size: Theme.textMd))
-                        .foregroundStyle(Theme.error)
+                        .foregroundStyle(Theme.errorText)
                     Button("重试") { Task { await store.load() } }
                         .buttonStyle(OutlineButtonStyle())
                 }
@@ -232,7 +232,7 @@ struct SettingsView: View {
             if !store.msg.isEmpty {
                 Text(store.msg)
                     .font(.system(size: Theme.textSm))
-                    .foregroundStyle(store.msgIsError ? Theme.error : Theme.muted)
+                    .foregroundStyle(store.msgIsError ? Theme.errorText : Theme.muted)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .help(store.msg)
@@ -414,7 +414,7 @@ struct FieldRow: View {
                             .foregroundStyle(Theme.fg)
                         if spec.required {
                             Text("*")
-                                .foregroundStyle(Theme.error)
+                                .foregroundStyle(Theme.errorText)
                         }
                     }
                     .font(.system(size: Theme.textMd, weight: .medium))

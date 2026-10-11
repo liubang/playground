@@ -35,9 +35,11 @@
   --bg1: #f4f0d9;
   --bg2: #efebd4;
   --bg3: #e2dcc4;
-  --fg: #5c6a72;
-  /* AA on --bg0 (>=4.5:1); was #939f91 (~2.5:1) */
-  --muted: #5c6e5e;
+  /* Deepened for crisper primary text (~6.5:1 on --bg0); was #5c6a72 (~5.1:1) */
+  --fg: #4f5b63;
+  /* AA even on --bg2 cards (>=4.5:1); was #939f91 (~2.5:1 on --bg0), then
+     #5c6e5e which still dips to ~4.4:1 on --bg2 */
+  --muted: #576b59;
   /* Deepened for AA: white label text (~5:1) and text-on-canvas usage (~4.8:1) both pass;
      the previous #3a94c5 failed against --on-accent */
   --primary: #2273a8;

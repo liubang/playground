@@ -203,7 +203,7 @@ struct MessageActionsView: View {
             Image(systemName: copied ? "checkmark" : "doc.on.doc")
                 .font(.system(size: 11))
                 // .msg-action:hover: fg glyph on a bg2 wash.
-                .foregroundStyle(copied ? Theme.success : (hovered ? Theme.fg : Theme.muted))
+                .foregroundStyle(copied ? Theme.successText : (hovered ? Theme.fg : Theme.muted))
                 .frame(width: 26, height: 24)
                 .background(
                     hovered ? Theme.bg2 : Color.clear,
@@ -468,7 +468,7 @@ struct ToolBlock: View {
             if let error = model.errorMessage, !error.isEmpty {
                 Text(error)
                     .font(.system(size: Theme.textSm))
-                    .foregroundStyle(Theme.error)
+                    .foregroundStyle(Theme.errorText)
                     .textSelection(.enabled)
                     .padding(.top, 8)
             }
@@ -508,7 +508,7 @@ struct ToolBlock: View {
         .background(Theme.bg1, in: RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Theme.bg2, lineWidth: 1),
+                .strokeBorder(Theme.bg3, lineWidth: 1),
         )
     }
 
@@ -561,11 +561,11 @@ struct ToolBlock: View {
                 Text("Running")
             }
             .font(.system(size: Theme.textSm, weight: .semibold))
-            .foregroundStyle(Theme.success)
+            .foregroundStyle(Theme.successText)
         case .success:
             Image(systemName: "checkmark")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Theme.success)
+                .foregroundStyle(Theme.successText)
                 .help("Succeeded")
         case .failed:
             HStack(spacing: 4) {
@@ -573,7 +573,7 @@ struct ToolBlock: View {
                 Text("Failed")
             }
             .font(.system(size: Theme.textSm, weight: .semibold))
-            .foregroundStyle(Theme.error)
+            .foregroundStyle(Theme.errorText)
         case .cancelled:
             HStack(spacing: 4) {
                 Image(systemName: "nosign")
@@ -609,13 +609,13 @@ struct ToolBlock: View {
                 Button(action: copyOutput) {
                     Text(copied ? "✓ Copied" : (model.commandOutputFormatted ? "Copy preview" : "Copy"))
                         .font(.system(size: Theme.textXs))
-                        .foregroundStyle(copied ? Theme.success : Theme.muted)
+                        .foregroundStyle(copied ? Theme.successText : Theme.muted)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 1)
                         .contentShape(Rectangle())
                         .overlay(
                             RoundedRectangle(cornerRadius: 5)
-                                .strokeBorder(copied ? Theme.success : Theme.bg2, lineWidth: 1),
+                                .strokeBorder(copied ? Theme.successText : Theme.bg2, lineWidth: 1),
                         )
                 }
                 .buttonStyle(.plain)
@@ -725,7 +725,7 @@ private struct RunCmdAttachmentView: View {
             .font(.system(size: Theme.textXs))
             .foregroundStyle(Theme.muted)
             if failed {
-                Text("Output attachment failed to load").foregroundStyle(Theme.warning)
+                Text("Output attachment failed to load").foregroundStyle(Theme.warningText)
             }
             if expanded, let data {
                 ScrollView {
@@ -940,7 +940,7 @@ struct ArtifactBlockView: View {
         .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusMd))
         .overlay(
             RoundedRectangle(cornerRadius: Theme.radiusMd)
-                .strokeBorder(Theme.bg2, lineWidth: 1),
+                .strokeBorder(Theme.bg3, lineWidth: 1),
         )
     }
 
@@ -985,7 +985,7 @@ private struct ArtifactNotice: View {
     var body: some View {
         Text(text)
             .font(.system(size: Theme.textSm))
-            .foregroundStyle(Theme.warning)
+            .foregroundStyle(Theme.warningText)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(
@@ -1107,7 +1107,7 @@ struct ImageLightboxView: View {
                     .accessibilityLabel("Close image preview")
                 }
                 .font(.system(size: 13))
-                .foregroundStyle(copied ? Theme.success : Theme.muted)
+                .foregroundStyle(copied ? Theme.successText : Theme.muted)
                 .buttonStyle(.plain)
                 .background(Theme.bg1, in: Capsule())
                 .overlay(Capsule().strokeBorder(Theme.bg2, lineWidth: 1))
@@ -1220,7 +1220,7 @@ struct DiffView: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusSm))
         .overlay(
             RoundedRectangle(cornerRadius: Theme.radiusSm)
-                .strokeBorder(Theme.bg2, lineWidth: 1),
+                .strokeBorder(Theme.bg3, lineWidth: 1),
         )
     }
 
@@ -1309,8 +1309,8 @@ struct DiffLineView: View {
 
     private var signColor: Color {
         switch line.kind {
-        case .add: Theme.success
-        case .del: Theme.error
+        case .add: Theme.successText
+        case .del: Theme.errorText
         default: Theme.muted
         }
     }
@@ -1321,8 +1321,8 @@ struct DiffLineView: View {
 
     private var background: Color {
         switch line.kind {
-        case .add: Theme.success.opacity(0.12)
-        case .del: Theme.error.opacity(0.12)
+        case .add: Theme.successText.opacity(0.12)
+        case .del: Theme.errorText.opacity(0.12)
         case .hunk: Theme.bg1
         case .ctx: .clear
         }
@@ -1483,10 +1483,10 @@ struct TurnSummaryView: View {
                     // not as information.
                     HStack(spacing: 6) {
                         if totals.added > 0 {
-                            Text("+\(totals.added)").foregroundStyle(Theme.success)
+                            Text("+\(totals.added)").foregroundStyle(Theme.successText)
                         }
                         if totals.removed > 0 {
-                            Text("−\(totals.removed)").foregroundStyle(Theme.error)
+                            Text("−\(totals.removed)").foregroundStyle(Theme.errorText)
                         }
                     }
                     .font(.system(size: 12, design: .monospaced))
@@ -1559,7 +1559,7 @@ struct TurnSummaryView: View {
             // retain the action so the user can retry.
             Label(revertNote, systemImage: revertWarn ? "exclamationmark.triangle" : "checkmark")
                 .font(.system(size: 12))
-                .foregroundStyle(revertWarn ? Theme.warning : Theme.success)
+                .foregroundStyle(revertWarn ? Theme.warningText : Theme.successText)
         }
         if revertNote == nil || revertFailed {
             HStack(alignment: .top, spacing: 12) {
@@ -1652,7 +1652,7 @@ private struct TurnSummaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .foregroundStyle(hovering ? Theme.error : Theme.fg)
+            .foregroundStyle(hovering ? Theme.errorText : Theme.fg)
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.radiusMd)
                     .strokeBorder(hovering ? Theme.error : Theme.fg.opacity(0.16), lineWidth: 1),
@@ -1720,7 +1720,7 @@ private struct TurnSummaryFileRow: View {
     private var badge: some View {
         Text(change.created == true ? "A" : "M")
             .font(.system(size: 11, weight: .bold))
-            .foregroundStyle(change.created == true ? Theme.success : Theme.warning)
+            .foregroundStyle(change.created == true ? Theme.successText : Theme.warningText)
             .frame(width: 20, height: 20)
             .background(
                 change.created == true ? Theme.success.opacity(0.18) : Theme.warning.opacity(0.20),
@@ -1753,7 +1753,7 @@ private struct TurnSummaryFileRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             if deleted {
                 Text("已删除")
-                    .foregroundStyle(Theme.error)
+                    .foregroundStyle(Theme.errorText)
             }
             if edits > 1 {
                 Text("\(edits) 次修改")
@@ -1762,11 +1762,11 @@ private struct TurnSummaryFileRow: View {
                 // Zero halves hide (same "no noise" rule as the head).
                 if stat.added > 0 {
                     Text("+\(stat.added)")
-                        .foregroundStyle(Theme.success)
+                        .foregroundStyle(Theme.successText)
                 }
                 if stat.removed > 0 {
                     Text("−\(stat.removed)")
-                        .foregroundStyle(Theme.error)
+                        .foregroundStyle(Theme.errorText)
                 }
             }
             if expandable {
@@ -1894,24 +1894,24 @@ private struct TurnSummaryInlineDiff: View {
     /// tint; context lines stay fg with a muted sign.
     private func textColor(for kind: ParsedDiff.Kind) -> Color {
         switch kind {
-        case .add: Theme.success
-        case .del: Theme.error
+        case .add: Theme.successText
+        case .del: Theme.errorText
         default: Theme.fg
         }
     }
 
     private func signColor(for kind: ParsedDiff.Kind) -> Color {
         switch kind {
-        case .add: Theme.success
-        case .del: Theme.error
+        case .add: Theme.successText
+        case .del: Theme.errorText
         default: Theme.muted
         }
     }
 
     private func backgroundColor(for kind: ParsedDiff.Kind) -> Color {
         switch kind {
-        case .add: Theme.success.opacity(0.12)
-        case .del: Theme.error.opacity(0.12)
+        case .add: Theme.successText.opacity(0.12)
+        case .del: Theme.errorText.opacity(0.12)
         default: .clear
         }
     }

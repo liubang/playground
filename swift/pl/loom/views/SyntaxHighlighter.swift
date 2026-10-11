@@ -269,8 +269,8 @@ private enum HLJSHTMLConverter {
 /// mirror Theme.swift (keep in sync); SwiftUI's Color can't be stored
 /// inside an NSAttributedString.
 private enum Palette {
-    static let fg = adaptive(dark: 0xD3C6AA, light: 0x5C6A72)
-    static let muted = adaptive(dark: 0x9DA9A0, light: 0x5C6E5E)
+    static let fg = adaptive(dark: 0xD3C6AA, light: 0x4F5B63)
+    static let muted = adaptive(dark: 0x9DA9A0, light: 0x576B59)
     static let primary = adaptive(dark: 0x7FBBB3, light: 0x2273A8)
     static let success = adaptive(dark: 0xA7C080, light: 0x8DA101)
     static let info = adaptive(dark: 0x83C092, light: 0x35A77C)

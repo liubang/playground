@@ -73,7 +73,7 @@ struct ConnectView: View {
                 // .gate-error
                 Text(message)
                     .font(.system(size: Theme.textSm))
-                    .foregroundStyle(Theme.error)
+                    .foregroundStyle(Theme.errorText)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 10)
             }

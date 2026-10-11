@@ -167,9 +167,9 @@ private struct ChangesListView: View {
                     .lineLimit(1)
                 Spacer(minLength: 6)
                 Text("+\(git.adds ?? 0)")
-                    .foregroundStyle(Theme.success)
+                    .foregroundStyle(Theme.successText)
                 Text("−\(git.dels ?? 0)")
-                    .foregroundStyle(Theme.error)
+                    .foregroundStyle(Theme.errorText)
                 GhostButton(size: 10) {
                     Task { await store.refreshGit() }
                 } label: {
@@ -229,8 +229,8 @@ private struct ChangeRow: View {
                 Spacer(minLength: 6)
                 if !(file.noStat ?? false) {
                     HStack(spacing: 4) {
-                        Text("+\(file.adds ?? 0)").foregroundStyle(Theme.success)
-                        Text("−\(file.dels ?? 0)").foregroundStyle(Theme.error)
+                        Text("+\(file.adds ?? 0)").foregroundStyle(Theme.successText)
+                        Text("−\(file.dels ?? 0)").foregroundStyle(Theme.errorText)
                     }
                     .font(Theme.monoXs)
                 }
@@ -508,10 +508,10 @@ private struct ExplorerDiffDetail: View {
             ) {
                 if let diff = store.diff {
                     if diff.untracked == true {
-                        ExplorerPill(text: "untracked", color: Theme.success)
+                        ExplorerPill(text: "untracked", color: Theme.successText)
                     }
                     if diff.truncated == true {
-                        ExplorerPill(text: "truncated", color: Theme.warning)
+                        ExplorerPill(text: "truncated", color: Theme.warningText)
                     }
                 }
             }
@@ -551,8 +551,8 @@ private struct ExplorerDiffDetail: View {
                 Text("\(parsed.lines.count) lines")
                     .foregroundStyle(Theme.muted)
                 Spacer(minLength: 6)
-                Text("+\(parsed.adds)").foregroundStyle(Theme.success)
-                Text("−\(parsed.dels)").foregroundStyle(Theme.error)
+                Text("+\(parsed.adds)").foregroundStyle(Theme.successText)
+                Text("−\(parsed.dels)").foregroundStyle(Theme.errorText)
             }
             .font(Theme.monoXs)
             .padding(.horizontal, 12)
@@ -688,7 +688,7 @@ private struct ExplorerPreviewDetail: View {
             if preview.truncated == true {
                 Text("Showing the first 256 KB — the file is \(explorerFormatBytes(preview.size))")
                     .font(.system(size: Theme.textXs))
-                    .foregroundStyle(Theme.warning)
+                    .foregroundStyle(Theme.warningText)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 5)
@@ -852,9 +852,9 @@ private struct ExplorerPlaceholder: View {
 /// Git status letter → change colour (VS Code idiom).
 private func explorerGitColor(_ letter: String) -> Color {
     switch letter {
-    case "M": Theme.warning
-    case "A", "U": Theme.success
-    case "D": Theme.error
+    case "M": Theme.warningText
+    case "A", "U": Theme.successText
+    case "D": Theme.errorText
     case "R", "T": Theme.purple
     default: Theme.muted
     }

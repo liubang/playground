@@ -345,7 +345,7 @@ struct McpTabView: View {
                     if let error = status?.error, !error.isEmpty {
                         Text(error)
                             .font(.system(size: Theme.textXs))
-                            .foregroundStyle(Theme.error)
+                            .foregroundStyle(Theme.errorText)
                             .lineLimit(2)
                     }
                 }
@@ -358,11 +358,11 @@ struct McpTabView: View {
             if status.connected == true {
                 Label("已连接 · \(status.tools?.count ?? 0) 个工具", systemImage: "circle.fill")
                     .font(.system(size: Theme.textXs))
-                    .foregroundStyle(Theme.success)
+                    .foregroundStyle(Theme.successText)
             } else if let error = status.error, !error.isEmpty {
                 Label("连接失败", systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: Theme.textXs))
-                    .foregroundStyle(Theme.error)
+                    .foregroundStyle(Theme.errorText)
                     .help(error)
             } else {
                 Text("未连接")
@@ -419,7 +419,7 @@ struct SkillsTabView: View {
         if let error = store.skillsError {
             Label("技能加载失败：\(error)", systemImage: "exclamationmark.triangle")
                 .font(.system(size: Theme.textSm))
-                .foregroundStyle(Theme.error)
+                .foregroundStyle(Theme.errorText)
             Button("重试") { Task { await store.loadSkills() } }
                 .buttonStyle(OutlineButtonStyle())
         }
@@ -427,7 +427,7 @@ struct SkillsTabView: View {
             if overview.enabled == false {
                 Label(overview.reason ?? "技能已禁用", systemImage: "exclamationmark.triangle")
                     .font(.system(size: Theme.textSm))
-                    .foregroundStyle(Theme.warning)
+                    .foregroundStyle(Theme.warningText)
             }
             let groups = overview.groups ?? []
             let anySkill = groups.contains { !($0.skills ?? []).isEmpty }
@@ -444,7 +444,7 @@ struct SkillsTabView: View {
                     ForEach(group.issues ?? [], id: \.self) { issue in
                         Label(issue, systemImage: "exclamationmark.triangle")
                             .font(.system(size: Theme.textXs))
-                            .foregroundStyle(Theme.warning)
+                            .foregroundStyle(Theme.warningText)
                     }
                     ForEach(group.skills ?? []) { skill in
                         skillRow(skill)
@@ -532,7 +532,7 @@ struct RulePacksView: View {
             if let error = store.rulePacksError {
                 Label("规则包加载失败：\(error)", systemImage: "exclamationmark.triangle")
                     .font(.system(size: Theme.textSm))
-                    .foregroundStyle(Theme.error)
+                    .foregroundStyle(Theme.errorText)
                 Button("重试") { Task { await store.loadRulePacks() } }
                     .buttonStyle(OutlineButtonStyle())
             }
@@ -639,7 +639,7 @@ struct SystemExtrasView: View {
             if let error = store.environmentError {
                 Label("环境检测失败：\(error)", systemImage: "exclamationmark.triangle")
                     .font(.system(size: Theme.textSm))
-                    .foregroundStyle(Theme.error)
+                    .foregroundStyle(Theme.errorText)
                 Button("重试") { Task { await store.loadEnvironment() } }
                     .buttonStyle(OutlineButtonStyle())
             }
