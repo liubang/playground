@@ -119,6 +119,9 @@ func readSocksConnect(br *bufio.Reader) (string, int, error) {
 	if head[1] != socksCmdConnect {
 		return "", 0, &socksProtoError{rep: socksRepCmdNotSupported, err: errBadAuthority}
 	}
+	if head[2] != 0x00 { // RSV must be zero (RFC 1928)
+		return "", 0, &socksProtoError{rep: socksRepFailure, err: errBadAuthority}
+	}
 	var host string
 	switch head[3] {
 	case socksAtypIPv4:

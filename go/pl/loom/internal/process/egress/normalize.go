@@ -118,16 +118,22 @@ func normalizeHost(host string) string {
 	return strings.ToLower(host)
 }
 
-// validateHost rejects hosts that could corrupt logs or resolvers:
-// empty, or carrying control characters (SOCKS5 DOMAINNAME arrives as a
-// length-prefixed raw byte string with zero protocol validation).
+// validateHost rejects hosts that could corrupt logs, resolvers, or
+// the policy layer: empty, or carrying anything outside printable
+// ASCII. Control characters would forge log lines (SOCKS5 DOMAINNAME
+// arrives as a length-prefixed raw byte string with zero protocol
+// validation); spaces are never valid in a DNS name or URL host; and
+// non-ASCII (IDN) spellings must arrive as punycode — otherwise an
+// IDNA-aware resolver (macOS getaddrinfo) can resolve a homograph the
+// policy's deny rules never matched. Everything downstream — policy
+// matching, guard, logging — compares ASCII spellings only.
 func validateHost(host string) error {
 	if host == "" {
 		return errBadAuthority
 	}
 	for _, r := range host {
-		if r < 0x20 || r == 0x7f {
-			return fmt.Errorf("%w: control character in host", errBadAuthority)
+		if r < 0x21 || r > 0x7e {
+			return fmt.Errorf("%w: non-printable-ASCII character in host", errBadAuthority)
 		}
 	}
 	return nil

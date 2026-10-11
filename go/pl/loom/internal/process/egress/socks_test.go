@@ -150,6 +150,28 @@ func TestSOCKSFragmentedWrites(t *testing.T) {
 	}
 }
 
+// TestSOCKSReservedByte: a nonzero RSV is malformed and answered with
+// a general-failure reply (RFC 1928 requires 0x00).
+func TestSOCKSReservedByte(t *testing.T) {
+	echoPort := startEcho(t)
+	server, _ := newTestServer(t, serverOpts{socksPolicy: mapPolicy{"example.test": allowExempt()}})
+	conn := dialProxy(t, server)
+	br := bufio.NewReader(conn)
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	socksGreeting(t, conn, br)
+	req := []byte{socks5Version, socksCmdConnect, 0x01, socksAtypDomain, byte(len("example.test"))}
+	req = append(req, "example.test"...)
+	var portRaw [2]byte
+	binary.BigEndian.PutUint16(portRaw[:], uint16(echoPort))
+	req = append(req, portRaw[:]...)
+	if _, err := conn.Write(req); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if rep := socksReply(t, br); rep != socksRepFailure {
+		t.Fatalf("rep = %d, want general failure for nonzero RSV", rep)
+	}
+}
+
 func TestSOCKSNoCommonMethod(t *testing.T) {
 	server, _ := newTestServer(t, serverOpts{})
 	conn := dialProxy(t, server)

@@ -293,8 +293,15 @@ type Sandbox struct {
 // to a destination no host rule covers: "allow" (default: ambient
 // network with the deny list enforced at connection time, everything
 // logged) or "deny" (allowlist posture for sensitive workspaces).
+// DenyPrivate additionally bars the proxy from dialing private ranges
+// (RFC1918/CGNAT/ULA); default off keeps internal allowlisting
+// possible. Non-Go clients (curl) do not honour the CIDR entries in
+// NO_PROXY, so without this knob they can ride the proxy to private
+// space under the unmatched-allow posture. Explicitly allow-listed IP
+// literals stay exempt either way.
 type SandboxProxy struct {
-	Unmatched string `yaml:"unmatched,omitempty"`
+	Unmatched   string `yaml:"unmatched,omitempty"`
+	DenyPrivate bool   `yaml:"deny_private,omitempty"`
 }
 
 // Tracing configures Langfuse observability. Keys follow the same

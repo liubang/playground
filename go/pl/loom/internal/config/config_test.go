@@ -1198,3 +1198,26 @@ func TestEnsureFirstRunConfig(t *testing.T) {
 		t.Fatalf("explicit home's config was created unexpectedly: %v", err)
 	}
 }
+
+func TestResolveSandboxProxyDenyPrivate(t *testing.T) {
+	// Default off: private-range reachability stays the documented
+	// posture (internal allowlisting possible).
+	got, err := resolveSandbox(Sandbox{Network: "proxy"})
+	if err != nil {
+		t.Fatalf("resolveSandbox: %v", err)
+	}
+	if got.ProxyDenyPrivate {
+		t.Fatalf("ProxyDenyPrivate = true, want default false: %+v", got)
+	}
+	// Opt-in resolves through, independent of the unmatched posture.
+	got, err = resolveSandbox(Sandbox{
+		Network: "proxy",
+		Proxy:   SandboxProxy{Unmatched: "deny", DenyPrivate: true},
+	})
+	if err != nil {
+		t.Fatalf("resolveSandbox: %v", err)
+	}
+	if !got.ProxyDenyPrivate || got.ProxyUnmatchedAllow {
+		t.Fatalf("sandbox = %+v, want deny_private with the allowlist posture", got)
+	}
+}

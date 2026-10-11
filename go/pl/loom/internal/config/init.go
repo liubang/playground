@@ -221,6 +221,8 @@ providers:
 #   proxy:
 #     unmatched: allow            # allow（默认：无规则覆盖的目的地放行，拒绝列表在连接时强制，全部记录）
 #                                 # | deny（白名单姿态，适合敏感工作区）
+#     deny_private: false         # 默认 false；true 时代理拒绝直连私网（RFC1918/CGNAT/ULA），
+#                                 # 显式 allow 的 IP 字面量规则仍豁免
 
 # Langfuse 追踪（host 与两个 key 都填写才启用；key 也支持 *_env 引用环境变量）：
 # tracing:

@@ -101,9 +101,11 @@ type serverOpts struct {
 	socksPolicy Policy
 	// lookup overrides hostname → answers; absent names resolve to
 	// 127.0.0.1 (the guard then needs an exempt literal to pass).
-	lookup    map[string][]string
-	handshake time.Duration
-	maxConns  int
+	lookup            map[string][]string
+	handshake         time.Duration
+	respHeaderTimeout time.Duration
+	maxConns          int
+	denyPrivate       bool
 }
 
 func newTestServer(t *testing.T, opts serverOpts) (*Server, *recordLogger) {
@@ -114,11 +116,13 @@ func newTestServer(t *testing.T, opts serverOpts) (*Server, *recordLogger) {
 	}
 	logger := &recordLogger{}
 	server, err := NewServer(Config{
-		Policy:           policy,
-		SOCKSPolicy:      opts.socksPolicy,
-		Logger:           logger,
-		MaxConns:         opts.maxConns,
-		HandshakeTimeout: opts.handshake,
+		Policy:                policy,
+		SOCKSPolicy:           opts.socksPolicy,
+		Logger:                logger,
+		MaxConns:              opts.maxConns,
+		HandshakeTimeout:      opts.handshake,
+		ResponseHeaderTimeout: opts.respHeaderTimeout,
+		DenyPrivate:           opts.denyPrivate,
 		LookupIP: func(_ context.Context, host string) ([]netip.Addr, error) {
 			answers := []string{"127.0.0.1"}
 			if opts.lookup != nil {

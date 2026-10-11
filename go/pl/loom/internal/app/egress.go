@@ -115,7 +115,8 @@ func startEgressProxy(resolved *config.ResolvedConfig, packages *permission.Pack
 			workspace:  workspaceRoot,
 			globalOnly: true,
 		},
-		Logger: egressLogger{logger: logger.With("component", "egress")},
+		Logger:      egressLogger{logger: logger.With("component", "egress")},
+		DenyPrivate: resolved.Sandbox.ProxyDenyPrivate,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("start egress proxy: %w", err)

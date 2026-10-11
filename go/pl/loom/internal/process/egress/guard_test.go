@@ -24,6 +24,7 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+	"time"
 )
 
 func addr(t *testing.T, s string) netip.Addr {
@@ -89,6 +90,9 @@ func TestCheckAddrDeniedClasses(t *testing.T) {
 		{"2002:7f00:1::", "loopback"},                // 6to4 of 127.0.0.1
 		{"::ffff:100.100.100.200", "cloud metadata"}, // 4-in-6 metadata
 		{"fe80::1%en0", "link-local"},                // zone stripped before classify
+		{"64:ff9b:1::7f00:1", "reserved"},            // local-use NAT64 (RFC 8215)
+		{"100::1", "reserved"},                       // discard-only block (RFC 6666)
+		{"64:ff9b::a9fe:a9fe", "link-local"},         // well-known NAT64 still decodes
 	}
 	for _, c := range cases {
 		reason := g.checkAddr(addr(t, c.addr), nil, mustLocal(t, g))
@@ -279,5 +283,71 @@ func TestValidateHostControlChars(t *testing.T) {
 	}
 	if err := validateHost("ok.example.com"); err != nil {
 		t.Errorf("normal host rejected: %v", err)
+	}
+}
+
+// TestValidateHostPrintableASCII: spaces and non-ASCII (IDN) spellings
+// are rejected — an IDNA-aware resolver could otherwise resolve a
+// homograph the policy's deny rules never matched.
+func TestValidateHostPrintableASCII(t *testing.T) {
+	if err := validateHost("exa mple.com"); err == nil {
+		t.Error("space-carrying host accepted")
+	}
+	if err := validateHost("еxample.com"); err == nil { // Cyrillic e
+		t.Error("IDN homograph host accepted")
+	}
+	if err := validateHost("xn--xample-9of.com"); err != nil {
+		t.Errorf("punycode host rejected: %v", err)
+	}
+}
+
+// TestCheckAddrPrivateClass: DenyPrivate bars private ranges while
+// explicit allow-listed literals stay exempt; without the flag the
+// same addresses pass.
+func TestCheckAddrPrivateClass(t *testing.T) {
+	private := []string{"10.0.0.1", "172.16.5.5", "192.168.1.1", "100.64.1.1", "fd12::1"}
+	g := newTestGuard(nil)
+	g.denyPrivate = true
+	for _, p := range private {
+		if reason := g.checkAddr(addr(t, p), nil, nil); !strings.Contains(reason, "private") {
+			t.Errorf("denyPrivate checkAddr(%s) = %q, want private denial", p, reason)
+		}
+	}
+	// Exemption semantics are unchanged: an explicit allow-listed
+	// literal still punches through.
+	exempt := []netip.Addr{addr(t, "10.0.0.1")}
+	if reason := g.checkAddr(addr(t, "10.0.0.1"), exempt, nil); reason != "" {
+		t.Errorf("exempt private literal denied: %q", reason)
+	}
+	// Public space unaffected.
+	if reason := g.checkAddr(addr(t, "93.184.216.34"), nil, nil); reason != "" {
+		t.Errorf("public address denied under denyPrivate: %q", reason)
+	}
+	// Without the flag the private ranges pass (documented default).
+	gOff := newTestGuard(nil)
+	for _, p := range private {
+		if reason := gOff.checkAddr(addr(t, p), nil, nil); reason != "" {
+			t.Errorf("default checkAddr(%s) = %q, want permitted", p, reason)
+		}
+	}
+}
+
+// TestDialGuardedResolveTimeout: a resolver that never answers is cut
+// off by the guard's overall timeout instead of pinning the
+// connection slot on the resolver's internal retry budget.
+func TestDialGuardedResolveTimeout(t *testing.T) {
+	g := newTestGuard(nil)
+	g.timeout = 50 * time.Millisecond
+	g.lookupIP = func(ctx context.Context, _ string) ([]netip.Addr, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	start := time.Now()
+	_, _, err := g.dialGuarded(context.Background(), Decision{Allow: true, Matched: true}, "slow.test", 443)
+	if err == nil || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want context deadline exceeded", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("resolve bounded after %v, want ~guard timeout", elapsed)
 	}
 }

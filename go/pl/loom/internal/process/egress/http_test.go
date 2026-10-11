@@ -186,6 +186,7 @@ func TestCONNECTBadAuthority(t *testing.T) {
 		"user@example.com:443",
 		"example.com:443/path",
 		"[fe80::1%en0]:443",
+		"еxample.com:443", // IDN homograph (Cyrillic e): punycode or nothing
 	}
 	for _, authority := range bad {
 		conn := dialProxy(t, server)
@@ -405,5 +406,129 @@ func TestPlainHTTPBadForms(t *testing.T) {
 	fmt.Fprintf(conn2, "GET https://example.test/x HTTP/1.1\r\nProxy-Authorization: %s\r\n\r\n", server.authHeader())
 	if status := readStatusLine(t, conn2); !strings.Contains(status, "400") {
 		t.Fatalf("https absolute-form status = %q, want 400", status)
+	}
+}
+
+// TestCONNECTBadVersion: only HTTP/1.0 and HTTP/1.1 request lines are
+// accepted — a trailing junk token or another major version is a 400.
+func TestCONNECTBadVersion(t *testing.T) {
+	server, _ := newTestServer(t, serverOpts{})
+	for _, version := range []string{"HTTP/2", "HTTP/1.1 junk", "HTTP/3.0"} {
+		conn := dialProxy(t, server)
+		fmt.Fprintf(conn, "CONNECT example.test:443 %s\r\nProxy-Authorization: %s\r\n\r\n", version, server.authHeader())
+		if status := readStatusLine(t, conn); !strings.Contains(status, "400") {
+			t.Fatalf("CONNECT with version %q: status = %q, want 400", version, status)
+		}
+	}
+}
+
+// TestCONNECTAuthFailureLogged: unauthenticated probing must leave a
+// connection record even though the target host is not yet known.
+func TestCONNECTAuthFailureLogged(t *testing.T) {
+	server, logger := newTestServer(t, serverOpts{})
+	conn := dialProxy(t, server)
+	fmt.Fprintf(conn, "CONNECT example.test:443 HTTP/1.1\r\n\r\n")
+	if status := readStatusLine(t, conn); !strings.Contains(status, "407") {
+		t.Fatalf("status = %q, want 407", status)
+	}
+	rec := logger.last()
+	if rec.Proto != "connect" || rec.Decision.Allow || !strings.Contains(rec.Err, "authentication") {
+		t.Fatalf("record = %+v, want a denied auth-failure record on the connect leg", rec)
+	}
+}
+
+// TestCONNECTPrivateLiteralDenyPrivate: with DenyPrivate on, a private
+// literal target is a guard refusal (403) even under the
+// unmatched-allow posture. (The default posture lets private targets
+// through the guard — asserted directly in guard_test.)
+func TestCONNECTPrivateLiteralDenyPrivate(t *testing.T) {
+	server, _ := newTestServer(t, serverOpts{denyPrivate: true})
+	conn := dialProxy(t, server)
+	fmt.Fprintf(conn, "CONNECT 10.255.255.1:80 HTTP/1.1\r\nProxy-Authorization: %s\r\n\r\n", server.authHeader())
+	if status := readStatusLine(t, conn); !strings.Contains(status, "403") {
+		t.Fatalf("deny_private status = %q, want 403", status)
+	}
+}
+
+// TestPlainHTTPLargeBody: the 256KB cap applies to the request HEAD
+// only — a body larger than maxHeaderBytes must stream through.
+func TestPlainHTTPLargeBody(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n, err := io.Copy(io.Discard, r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		fmt.Fprintf(w, "got %d", n)
+	}))
+	t.Cleanup(upstream.Close)
+	port := upstreamPort(t, upstream)
+	server, _ := newTestServer(t, serverOpts{policy: mapPolicy{"example.test": allowExempt()}})
+
+	body := strings.Repeat("x", maxHeaderBytes+64*1024)
+	conn := dialProxy(t, server)
+	fmt.Fprintf(conn, "POST http://example.test:%d/upload HTTP/1.1\r\nHost: example.test\r\nProxy-Authorization: %s\r\nContent-Length: %d\r\n\r\n%s",
+		port, server.authHeader(), len(body), body)
+	req := &http.Request{Method: "POST"}
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
+	if err != nil {
+		t.Fatalf("ReadResponse: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	got, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK || string(got) != fmt.Sprintf("got %d", len(body)) {
+		t.Fatalf("status = %d body = %q, want 200 'got %d'", resp.StatusCode, got, len(body))
+	}
+}
+
+// TestPlainHTTPResponseHeaderTimeout: an upstream that accepts and
+// stays silent is cut off by ResponseHeaderTimeout (502), not allowed
+// to pin the connection slot forever.
+func TestPlainHTTPResponseHeaderTimeout(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(500 * time.Millisecond)
+		_, _ = w.Write([]byte("too late"))
+	}))
+	t.Cleanup(upstream.Close)
+	port := upstreamPort(t, upstream)
+	server, logger := newTestServer(t, serverOpts{
+		policy:            mapPolicy{"example.test": allowExempt()},
+		respHeaderTimeout: 50 * time.Millisecond,
+	})
+	conn := dialProxy(t, server)
+	resp := proxyGet(t, conn, server, fmt.Sprintf("http://example.test:%d/slow", port))
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", resp.StatusCode)
+	}
+	if rec := logger.last(); rec.Err == "" {
+		t.Fatalf("record = %+v, want the upstream timeout recorded", rec)
+	}
+}
+
+// TestPlainHTTP10Client: the answer speaks the CLIENT's protocol
+// version — an HTTP/1.0 client must not receive an HTTP/1.1 (possibly
+// chunked) response.
+func TestPlainHTTP10Client(t *testing.T) {
+	upstream, _ := startHTTPUpstream(t)
+	port := upstreamPort(t, upstream)
+	server, _ := newTestServer(t, serverOpts{policy: mapPolicy{"example.test": allowExempt()}})
+	conn := dialProxy(t, server)
+	fmt.Fprintf(conn, "GET http://example.test:%d/ok HTTP/1.0\r\nHost: example.test\r\nProxy-Authorization: %s\r\n\r\n",
+		port, server.authHeader())
+	br := bufio.NewReader(conn)
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	resp, err := http.ReadResponse(br, &http.Request{Method: "GET"})
+	if err != nil {
+		t.Fatalf("ReadResponse: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.ProtoMajor != 1 || resp.ProtoMinor != 0 || resp.StatusCode != http.StatusOK {
+		t.Fatalf("response proto = %s status = %d, want HTTP/1.0 200", resp.Proto, resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil || string(body) != "hello" {
+		t.Fatalf("body = %q, %v; want hello", body, err)
 	}
 }

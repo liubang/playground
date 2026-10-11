@@ -76,7 +76,7 @@ func (s *Server) serveHTTP(conn net.Conn, br *bufio.Reader, capped *cappedReader
 		s.serveCONNECT(conn, br, capped)
 		return
 	}
-	s.servePlainHTTP(conn, br)
+	s.servePlainHTTP(conn, br, capped)
 }
 
 // isConnect peeks the request line's method token.
@@ -96,7 +96,7 @@ func (s *Server) serveCONNECT(conn net.Conn, br *bufio.Reader, capped *cappedRea
 		return
 	}
 	parts := strings.SplitN(line, " ", 3)
-	if len(parts) != 3 || parts[0] != "CONNECT" || !strings.HasPrefix(parts[2], "HTTP/1.") {
+	if len(parts) != 3 || parts[0] != "CONNECT" || (parts[2] != "HTTP/1.0" && parts[2] != "HTTP/1.1") {
 		writeStatusLine(conn, "400 Bad Request")
 		return
 	}
@@ -105,7 +105,7 @@ func (s *Server) serveCONNECT(conn net.Conn, br *bufio.Reader, capped *cappedRea
 		s.writeHeaderError(conn, err)
 		return
 	}
-	if !s.checkAuth(conn, mime.Get("Proxy-Authorization")) {
+	if !s.checkAuth(conn, "connect", mime.Get("Proxy-Authorization")) {
 		return
 	}
 	host, port, err := parseAuthority(parts[1], 443)
@@ -119,14 +119,22 @@ func (s *Server) serveCONNECT(conn net.Conn, br *bufio.Reader, capped *cappedRea
 // servePlainHTTP forwards one absolute-URI request upstream. The
 // connection is closed after the response (one request per proxied
 // connection keeps the state machine trivial; keep-alive is a v2 item).
-func (s *Server) servePlainHTTP(conn net.Conn, br *bufio.Reader) {
+func (s *Server) servePlainHTTP(conn net.Conn, br *bufio.Reader, capped *cappedReader) {
 	req, err := http.ReadRequest(br)
 	if err != nil {
 		s.writeHeaderError(conn, err)
 		return
 	}
 	defer func() { _ = req.Body.Close() }()
-	if !s.checkAuth(conn, req.Header.Get("Proxy-Authorization")) {
+	// The header block is parsed: lift the byte cap so the request BODY
+	// is not charged against maxHeaderBytes (a >256KB upload must not
+	// fail as "header too large"), and re-arm the read deadline so the
+	// body phase gets its own full window rather than the accept-time
+	// leftovers. The body streams to upstream without buffering, so
+	// uncapping reopens no memory-DoS surface.
+	capped.uncap()
+	_ = conn.SetReadDeadline(time.Now().Add(s.handshake))
+	if !s.checkAuth(conn, "http", req.Header.Get("Proxy-Authorization")) {
 		return
 	}
 	if !req.URL.IsAbs() || req.URL.Scheme != "http" {
@@ -157,6 +165,9 @@ func (s *Server) servePlainHTTP(conn net.Conn, br *bufio.Reader) {
 	transport := &http.Transport{
 		DisableCompression: true, // forward bytes as upstream sent them
 		DisableKeepAlives:  true, // one RoundTrip per transport
+		// An upstream that accepts and then stays silent must not pin
+		// the connection slot forever.
+		ResponseHeaderTimeout: s.respHeaderTimeout,
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			upstream, addr, err := s.guard.dialGuarded(ctx, dec, host, port)
 			dialed = addr
@@ -182,6 +193,11 @@ func (s *Server) servePlainHTTP(conn net.Conn, br *bufio.Reader) {
 	defer func() { _ = resp.Body.Close() }()
 	stripHopByHop(resp.Header)
 	resp.Close = true // emit Connection: close; we do not keep the client conn
+	// Answer in the CLIENT's protocol version: resp carries the
+	// upstream's, and an HTTP/1.1 chunked response is undecodable by an
+	// HTTP/1.0 client.
+	resp.ProtoMajor = req.ProtoMajor
+	resp.ProtoMinor = req.ProtoMinor
 	if err := resp.Write(conn); err != nil {
 		rec.Err = err.Error()
 	}
@@ -257,8 +273,10 @@ func statusFor(err error) string {
 // checkAuth validates Proxy-Authorization against the session token and
 // writes the 407 (with Proxy-Authenticate, or clients never retry with
 // credentials) on failure. Only the password half is compared; the
-// username is reserved for future per-command attribution.
-func (s *Server) checkAuth(conn net.Conn, header string) bool {
+// username is reserved for future per-command attribution. Failures are
+// logged (host is still unknown at this point): unauthenticated probing
+// must not be invisible.
+func (s *Server) checkAuth(conn net.Conn, proto, header string) bool {
 	ok := false
 	if scheme, credentials, found := strings.Cut(header, " "); found && strings.EqualFold(scheme, "basic") {
 		if decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(credentials)); err == nil {
@@ -271,6 +289,7 @@ func (s *Server) checkAuth(conn net.Conn, header string) bool {
 		_, _ = io.WriteString(conn, "HTTP/1.1 407 Proxy Authentication Required\r\n"+
 			`Proxy-Authenticate: Basic realm="loom-egress"`+"\r\n"+
 			"Content-Length: 0\r\n\r\n")
+		s.log(ConnRecord{Time: time.Now(), Proto: proto, Err: "proxy authentication failed"})
 	}
 	return ok
 }

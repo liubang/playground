@@ -35,10 +35,14 @@ import (
 // ever earned by an explicit allow rule's literal (Decision.ExemptLiterals);
 // decoding an embedded IPv4 form only ever ADDS denials, never one.
 type addressGuard struct {
-	lookupIP   func(ctx context.Context, host string) ([]netip.Addr, error)
-	dial       func(ctx context.Context, addr netip.AddrPort) (net.Conn, error)
-	localAddrs func() ([]netip.Addr, error)
-	selfPort   int
+	lookupIP    func(ctx context.Context, host string) ([]netip.Addr, error)
+	dial        func(ctx context.Context, addr netip.AddrPort) (net.Conn, error)
+	localAddrs  func() ([]netip.Addr, error)
+	selfPort    int
+	denyPrivate bool
+	// timeout bounds one dialGuarded call (resolution + dial attempts);
+	// 0 disables the bound (direct struct construction in tests).
+	timeout time.Duration
 
 	localMu     sync.Mutex
 	localCached []netip.Addr
@@ -99,6 +103,23 @@ var deniedClasses = []deniedClass{
 	{"a multicast address", mustPrefixes("224.0.0.0/4", "ff00::/8")},
 	{"the broadcast address", mustPrefixes("255.255.255.255/32")},
 	{"a cloud metadata address", mustPrefixes(cloudMetadata...)},
+	// Reserved translation/discard space: local-use NAT64 (RFC 8215)
+	// embeds an IPv4 the well-known-prefix decoder never sees, and the
+	// discard-only block (RFC 6666) has no legitimate server.
+	{"a reserved address", mustPrefixes("64:ff9b:1::/48", "100::/64")},
+}
+
+// privateClass is the opt-in denied class (Config.DenyPrivate) covering
+// RFC1918, CGNAT, and ULA space. It stays out of deniedClasses by
+// default: allowlisting internal names is a documented legitimate
+// scenario, and NO_PROXY-compliant clients already fail closed on these
+// ranges. The documented gap is that non-Go clients (curl) do not
+// honour CIDR entries in no_proxy, so they ride the proxy to private
+// space under the unmatched-allow posture — this class is the knob for
+// workspaces that cannot accept that.
+var privateClass = deniedClass{
+	"a private address",
+	mustPrefixes("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "fc00::/7"),
 }
 
 // errTargetIsProxy refuses connections aimed at the proxy's own
@@ -132,6 +153,8 @@ func newAddressGuard(cfg Config) *addressGuard {
 	if g.localAddrs == nil {
 		g.localAddrs = defaultLocalAddrs
 	}
+	g.denyPrivate = cfg.DenyPrivate
+	g.timeout = defaultDialGuardTimeout
 	return g
 }
 
@@ -256,6 +279,9 @@ func (g *addressGuard) checkAddr(addr netip.Addr, exempt []netip.Addr, local []n
 			return class.reason
 		}
 	}
+	if g.denyPrivate && matches(privateClass.prefixes) {
+		return privateClass.reason
+	}
 	for _, l := range local {
 		if addr == l || (hasV4 && v4 == l) {
 			return "one of this host's addresses"
@@ -324,6 +350,11 @@ func (g *addressGuard) checkLiteral(addr netip.Addr, dec Decision) error {
 // no second lookup in between (rebinding TOCTOU). It returns the dialed
 // connection and the address actually used.
 func (g *addressGuard) dialGuarded(ctx context.Context, dec Decision, host string, port int) (net.Conn, string, error) {
+	if g.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, g.timeout)
+		defer cancel()
+	}
 	var candidates []netip.Addr
 	if literal, err := netip.ParseAddr(host); err == nil {
 		if err := g.checkLiteral(literal, dec); err != nil {

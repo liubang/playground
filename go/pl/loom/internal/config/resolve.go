@@ -526,11 +526,18 @@ type ResolvedSandbox struct {
 	// ProxyUnmatchedAllow is the proxy's posture for destinations no host
 	// rule covers: true = allow (and log), false = allowlist posture.
 	ProxyUnmatchedAllow bool
+	// ProxyDenyPrivate bars the egress proxy from dialing private ranges
+	// (RFC1918/CGNAT/ULA); explicitly allow-listed IP literals stay exempt.
+	ProxyDenyPrivate bool
 }
 
 // resolveSandbox validates the sandbox section and applies defaults.
 func resolveSandbox(s Sandbox) (ResolvedSandbox, error) {
-	resolved := ResolvedSandbox{Network: SandboxNetworkOff, ProxyUnmatchedAllow: true}
+	resolved := ResolvedSandbox{
+		Network:             SandboxNetworkOff,
+		ProxyUnmatchedAllow: true,
+		ProxyDenyPrivate:    s.Proxy.DenyPrivate,
+	}
 	switch s.Network {
 	case "", string(SandboxNetworkOff):
 	case string(SandboxNetworkProxy):

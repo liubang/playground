@@ -48,6 +48,15 @@ const (
 	defaultHandshakeTimeout = 10 * time.Second
 	// dialTimeout bounds a single upstream dial attempt.
 	dialTimeout = 10 * time.Second
+	// defaultDialGuardTimeout bounds one dialGuarded call end to end
+	// (resolution + every dial attempt). Resolution alone only had the
+	// resolver's internal retry budget, so a blackholed DNS server could
+	// pin a connection slot far past the handshake timeout.
+	defaultDialGuardTimeout = 30 * time.Second
+	// defaultResponseHeaderTimeout bounds the plain-HTTP leg's wait for
+	// upstream response headers; an upstream that accepts and stays
+	// silent must not hold a connection slot forever.
+	defaultResponseHeaderTimeout = 30 * time.Second
 	// maxHeaderBytes caps the request header block (http.ReadRequest and
 	// the textproto CONNECT parse have no built-in limit).
 	maxHeaderBytes = 256 << 10
@@ -116,6 +125,15 @@ type Config struct {
 	// HandshakeTimeout bounds the pre-tunnel phase per connection;
 	// 0 selects defaultHandshakeTimeout. Exposed for tests.
 	HandshakeTimeout time.Duration
+	// ResponseHeaderTimeout bounds the plain-HTTP leg's wait for
+	// upstream response headers; 0 selects defaultResponseHeaderTimeout.
+	// Exposed for tests.
+	ResponseHeaderTimeout time.Duration
+	// DenyPrivate extends the resolved-address guard's denied classes
+	// with the private ranges (RFC1918, ULA, CGNAT). Default off: the
+	// documented posture keeps internal allowlisting possible. Explicit
+	// allow-listed IP literals stay exempt either way.
+	DenyPrivate bool
 	// LookupIP resolves a hostname to addresses (resolved-address guard
 	// seam). Nil uses net.DefaultResolver.
 	LookupIP func(ctx context.Context, host string) ([]netip.Addr, error)
@@ -130,13 +148,14 @@ type Config struct {
 // Server is the egress proxy: one muxed loopback listener serving HTTP
 // CONNECT, plain-HTTP forwarding, and SOCKS5.
 type Server struct {
-	ln          net.Listener
-	token       string
-	policy      Policy
-	socksPolicy Policy
-	logger      Logger
-	guard       *addressGuard
-	handshake   time.Duration
+	ln                net.Listener
+	token             string
+	policy            Policy
+	socksPolicy       Policy
+	logger            Logger
+	guard             *addressGuard
+	handshake         time.Duration
+	respHeaderTimeout time.Duration
 
 	sem    chan struct{} // connection accounting (MaxConns)
 	mu     sync.Mutex
@@ -170,20 +189,25 @@ func NewServer(cfg Config) (*Server, error) {
 	if handshake <= 0 {
 		handshake = defaultHandshakeTimeout
 	}
+	respHeaderTimeout := cfg.ResponseHeaderTimeout
+	if respHeaderTimeout <= 0 {
+		respHeaderTimeout = defaultResponseHeaderTimeout
+	}
 	socksPolicy := cfg.SOCKSPolicy
 	if socksPolicy == nil {
 		socksPolicy = cfg.Policy
 	}
 	s := &Server{
-		ln:          ln,
-		token:       token,
-		policy:      cfg.Policy,
-		socksPolicy: socksPolicy,
-		logger:      cfg.Logger,
-		guard:       newAddressGuard(cfg),
-		handshake:   handshake,
-		sem:         make(chan struct{}, maxConns),
-		conns:       make(map[net.Conn]struct{}),
+		ln:                ln,
+		token:             token,
+		policy:            cfg.Policy,
+		socksPolicy:       socksPolicy,
+		logger:            cfg.Logger,
+		guard:             newAddressGuard(cfg),
+		handshake:         handshake,
+		respHeaderTimeout: respHeaderTimeout,
+		sem:               make(chan struct{}, maxConns),
+		conns:             make(map[net.Conn]struct{}),
 	}
 	// The listener binds :0, so the guard learns the port (for the
 	// self-connect refusal) only after NewServer has it.
