@@ -66,6 +66,22 @@ func TestSeatbeltProxyProfileAddsTrustd(t *testing.T) {
 	}
 }
 
+// needs_network in the off posture widens the sandbox to allowNetwork
+// with no proxy: TLS verification needs the same trustd exception, or
+// every Go binary fails its handshakes with x509: OSStatus -26276
+// (SecTrustEvaluate cannot reach trustd under the default-deny profile).
+func TestSeatbeltNetworkProfileAddsTrustd(t *testing.T) {
+	spec := SandboxSpec{ExecutablePath: "/bin/echo", WorkingDir: "/tmp", WorkspaceRoot: "/tmp"}
+
+	networked, err := SeatbeltSandbox{allowNetwork: true}.profile(spec)
+	if err != nil {
+		t.Fatalf("profile() error = %v", err)
+	}
+	if !strings.Contains(networked, `(allow mach-lookup (global-name "com.apple.trustd.agent"))`) {
+		t.Fatalf("allowNetwork profile missing trustd rule:\n%s", networked)
+	}
+}
+
 func TestSeatbeltProxyIsolationLabel(t *testing.T) {
 	if got := (SeatbeltSandbox{}).Isolation(); got != SeatbeltIsolation {
 		t.Fatalf("plain isolation = %v, want seatbelt", got.Name())

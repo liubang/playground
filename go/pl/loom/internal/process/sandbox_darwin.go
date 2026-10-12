@@ -225,13 +225,16 @@ func (s SeatbeltSandbox) profile(spec SandboxSpec) (string, error) {
 	if s.allowNetwork {
 		lines = append(lines, "(allow network*)")
 	}
-	if s.proxy != nil {
+	if s.proxy != nil || s.allowNetwork {
 		// trustd performs TLS trust evaluation for anything linked against
 		// the Security framework — including every Go binary verifying a
-		// certificate through the CONNECT tunnel. Without this lookup,
-		// sandboxed Go programs cannot complete any TLS handshake. The
-		// trade (trustd is a potential, if awkward, exfiltration channel)
-		// is a deliberate, accepted exception.
+		// certificate, whether through the CONNECT tunnel or over a direct
+		// (allowNetwork) connection. Without this lookup, sandboxed Go
+		// programs cannot complete any TLS handshake: SecTrustEvaluate
+		// fails and Go surfaces x509: OSStatus -26276. The trade (trustd
+		// is a potential, if awkward, exfiltration channel) is a
+		// deliberate, accepted exception — and it only applies when the
+		// sandbox was granted some form of outbound network anyway.
 		lines = append(lines, `(allow mach-lookup (global-name "com.apple.trustd.agent"))`)
 	}
 	if s.allowGUIOpen {

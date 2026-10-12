@@ -346,6 +346,43 @@ let settingsTabs: [TabSpec] = [
                 type: .tristate,
             ),
         ]),
+        // Keep in sync with webui spec.ts (permission tab) and the
+        // sandbox section of internal/config/schema.go.
+        ("沙箱网络", [
+            FieldSpec(
+                "sandbox.network", label: "网络姿态",
+                hint: "沙箱内命令的出站网络策略；改动需重启 loom 生效",
+                type: .select,
+                options: [
+                    ("", "默认（off）"),
+                    ("off", "off · 逐次审批联网"),
+                    ("proxy", "proxy · 代理过滤 + 连接日志"),
+                    ("full", "full · 不限制"),
+                ],
+                optionHints: [
+                    "": "off（默认）：出站与 DNS 默认拒绝，命令可声明 needs_network 经轻量审批后在沙箱内联网",
+                    "off": "出站与 DNS 默认拒绝，命令可声明 needs_network 经轻量审批后在沙箱内联网",
+                    "proxy": "出站一律经由 loom egress 代理：按域名规则过滤并逐条记录连接日志，沙箱内直连保持拒绝",
+                    "full": "直接放行全部出站：无过滤、无连接日志，可见性最弱",
+                ],
+            ),
+            FieldSpec(
+                "sandbox.proxy.unmatched", label: "未命中规则的域名",
+                hint: "egress 代理对未匹配任何域名规则的目标采取的姿态（仅 proxy 模式生效）",
+                type: .select,
+                options: [
+                    ("", "默认（allow · 放行并记录）"),
+                    ("allow", "allow · 放行并记录"),
+                    ("deny", "deny · 白名单姿态"),
+                ],
+            ),
+            FieldSpec(
+                "sandbox.proxy.deny_private", label: "禁止代理拨号私网段",
+                hint: "阻止代理连接 RFC1918/CGNAT/ULA 私网地址；显式 allow 的 IP 字面量不受影响（仅 proxy 模式生效）",
+                type: .tristate,
+                def: "关",
+            ),
+        ]),
     ]),
     TabSpec(id: "agent", label: "智能体", icon: "brain", sections: [
         ("系统提示词", [
