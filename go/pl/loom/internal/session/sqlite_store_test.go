@@ -931,6 +931,54 @@ func TestSQLiteStoreFirstUserMessageTexts(t *testing.T) {
 	}
 }
 
+func TestSQLiteStoreSessionTitle(t *testing.T) {
+	ctx := context.Background()
+	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	// Fresh sessions are untitled.
+	if title, err := store.SessionTitle(ctx, sessionID); err != nil || title != "" {
+		t.Fatalf("SessionTitle = %q, %v; want empty, nil", title, err)
+	}
+
+	// The first write wins and surfaces in listings and inspection alike.
+	won, err := store.SetSessionTitle(ctx, sessionID, "Fix the flaky SST test")
+	if err != nil || !won {
+		t.Fatalf("SetSessionTitle = %v, %v; want true, nil", won, err)
+	}
+	if title, err := store.SessionTitle(ctx, sessionID); err != nil || title != "Fix the flaky SST test" {
+		t.Fatalf("SessionTitle = %q, %v", title, err)
+	}
+	listed, _, err := store.ListSessions(ctx, "", 10, false, domain.WorkspaceID{})
+	if err != nil || len(listed) != 1 || listed[0].Title != "Fix the flaky SST test" {
+		t.Fatalf("ListSessions = %+v, %v", listed, err)
+	}
+	inspection, err := store.InspectSession(ctx, sessionID)
+	if err != nil || inspection.Session.Title != "Fix the flaky SST test" {
+		t.Fatalf("InspectSession title = %q, %v", inspection.Session.Title, err)
+	}
+
+	// A second write loses: titles are write-once.
+	won, err = store.SetSessionTitle(ctx, sessionID, "overwritten")
+	if err != nil || won {
+		t.Fatalf("second SetSessionTitle = %v, %v; want false, nil", won, err)
+	}
+	if title, _ := store.SessionTitle(ctx, sessionID); title != "Fix the flaky SST test" {
+		t.Fatalf("title after losing write = %q", title)
+	}
+
+	// Validation: empty title and unknown session are rejected.
+	if _, err := store.SetSessionTitle(ctx, sessionID, "  "); err == nil {
+		t.Fatal("SetSessionTitle with blank title must fail")
+	}
+	if _, err := store.SessionTitle(ctx, domain.NewSessionID()); err == nil {
+		t.Fatal("SessionTitle for unknown session must fail")
+	}
+}
+
 func TestSQLiteStoreIndexesArtifactReferencesAcrossCheckpoints(t *testing.T) {
 	ctx := context.Background()
 	store := openTestSQLiteStore(t, filepath.Join(t.TempDir(), "sessions.db"))

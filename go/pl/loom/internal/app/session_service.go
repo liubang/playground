@@ -610,8 +610,11 @@ func summarizeSessionTitle(text string) string {
 }
 
 // ListSessions returns one page of persisted sessions, including non-live
-// ones, enriched for frontend pickers (docs/WEB_DESIGN.md §7.7): every row
-// gets a title (first user prompt); live sessions additionally report their
+// ones, enriched for frontend pickers (docs/WEB_DESIGN.md §7.7). Titles:
+// the persisted sidecar title wins; untitled sessions fall back to the
+// truncated first user prompt, except while their title sidecar is still
+// in flight — the entry stays untitled so clients keep their placeholder
+// until the sidecar lands. Live sessions additionally report their
 // controller state, model and turn count — non-live rows report
 // state=closed. archived selects the archived view. cursor ("" = first
 // page) enables keyset pagination for infinite-scroll pickers; nextCursor
@@ -625,36 +628,56 @@ func (s *SessionService) ListSessions(ctx context.Context, cursor string, limit 
 	if err != nil {
 		return nil, "", err
 	}
-	ids := make([]domain.SessionID, len(summaries))
-	for i, summary := range summaries {
-		ids[i] = summary.ID
-	}
-	// Titles are best-effort enrichment: a title failure must not fail the
-	// listing itself.
-	titles, err := store.FirstUserMessageTexts(ctx, ids)
-	if err != nil {
-		titles = nil
-	}
+	// First pass: project live state — the title rule below needs the
+	// sidecar's in-flight marker.
 	result := make([]SessionSummary, len(summaries))
+	pending := make([]bool, len(summaries))
 	for i, summary := range summaries {
 		item := SessionSummary{
 			ID: summary.ID, Version: summary.Version,
 			CreatedAt: summary.CreatedAt, UpdatedAt: summary.UpdatedAt,
 			WorkspaceID: summary.WorkspaceID.String(),
 			State:       ControllerStateClosed,
-			Title:       summarizeSessionTitle(titles[summary.ID]),
+			Title:       summary.Title,
 		}
 		if !summary.ParentSessionID.IsZero() {
 			item.ParentSessionID = summary.ParentSessionID.String()
 		}
 		if h, ok := s.Get(summary.ID); ok {
 			item.State = h.Controller.State()
+			pending[i] = h.Controller.TitlePending()
 			if snap, err := h.Controller.RequestSnapshot(ctx); err == nil {
 				item.ModelName = snap.ModelName
 				item.TurnCount = snap.TurnCount
 			}
 		}
 		result[i] = item
+	}
+	// Titles: the persisted sidecar title wins; untitled sessions fall
+	// back to the truncated first user prompt — except while the title
+	// sidecar is still in flight (pending): the entry keeps the client
+	// placeholder ("New Session", ChatGPT-style) instead of flashing a
+	// prompt fragment the generated title replaces seconds later. The
+	// marker — not the session's busy state — gates the suppression, so a
+	// session whose generation failed keeps its fallback title through
+	// every later turn. All enrichments are best-effort: a title failure
+	// must not fail the listing itself.
+	var untitled []domain.SessionID
+	for i, item := range result {
+		if item.Title == "" && !pending[i] {
+			untitled = append(untitled, item.ID)
+		}
+	}
+	if len(untitled) > 0 {
+		fallback := map[domain.SessionID]string(nil)
+		if titles, err := store.FirstUserMessageTexts(ctx, untitled); err == nil {
+			fallback = titles
+		}
+		for i := range result {
+			if result[i].Title == "" && !pending[i] {
+				result[i].Title = summarizeSessionTitle(fallback[result[i].ID])
+			}
+		}
 	}
 	return result, nextCursor, nil
 }
@@ -1087,10 +1110,14 @@ func (s *SessionService) SharedView(ctx context.Context, token string) (SharedSe
 		Messages:      inspection.Transcript.Messages,
 		TurnSummaries: turnSummariesFromEvents(inspection.Events),
 	}
-	// Title enrichment mirrors the session listing: first user prompt,
-	// best-effort (failure must not fail the view).
-	if titles, err := sqlite.FirstUserMessageTexts(ctx, []domain.SessionID{sessionID}); err == nil {
-		view.Title = summarizeSessionTitle(titles[sessionID])
+	// Title enrichment mirrors the session listing: the persisted sidecar
+	// title wins, the first user prompt is the best-effort fallback (a
+	// failure must not fail the view).
+	view.Title = inspection.Session.Title
+	if view.Title == "" {
+		if titles, err := sqlite.FirstUserMessageTexts(ctx, []domain.SessionID{sessionID}); err == nil {
+			view.Title = summarizeSessionTitle(titles[sessionID])
+		}
 	}
 	return view, nil
 }

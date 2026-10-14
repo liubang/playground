@@ -444,6 +444,11 @@ type Sessions struct {
 	// or "0" disables purging (the default): archived sessions are kept
 	// forever.
 	GCArchivedAfter string `yaml:"gc_archived_after,omitempty"`
+	// TitleModel pins the session-title sidecar model ("provider/model" or
+	// a bare model/provider name); empty follows the session's own model.
+	// A cheap/fast model is recommended — the sidecar runs once per
+	// session, after the first turn.
+	TitleModel string `yaml:"title_model,omitempty"`
 }
 
 // Browser configures the headless Chrome browser tool. Enabled is

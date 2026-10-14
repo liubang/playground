@@ -276,6 +276,7 @@ providers:
 # sessions:
 #   auto_archive_after: "0"       # 如 "720h"：超龄未活跃会话自动归档（隐藏且只读）
 #   gc_archived_after: "0"        # 如 "720h"：归档超龄后永久删除（含事件/检查点/历史）
+#   title_model: ""               # 会话标题生成模型（首轮后运行一次）；空 = 跟随会话模型，建议用便宜模型
 
 # 文生图（generate_image；provider 与 model 都设置即启用，复用 openai 类型 provider 凭据）：
 # image:

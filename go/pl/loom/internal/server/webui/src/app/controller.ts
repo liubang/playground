@@ -940,7 +940,15 @@ export class AppController {
       .join(',')
   }
 
+  // Monotonic refresh counter: concurrent refreshes (turn.finished and
+  // session.titled land close together) must apply in issue order — an
+  // older response arriving last would otherwise overwrite a newer list
+  // (e.g. dropping a just-generated title until the next poll). Same
+  // pattern as the Swift client's sessionsRequest counter.
+  private sessReqSeq = 0
+
   refreshSessions = async () => {
+    const req = ++this.sessReqSeq
     try {
       const limit = Math.max(this.store.get().sessions.length, SESSION_PAGE_SIZE)
       const { sessions, next_cursor } = await this.api.listSessions(
@@ -949,6 +957,7 @@ export class AppController {
         this.store.get().showArchived,
         'all',
       )
+      if (req !== this.sessReqSeq) return // superseded by a newer refresh
       const list = sessions || []
       this.sessCursor = next_cursor || ''
       const sig = this.sessionListSig(list) + '|' + this.workspacesSig(this.store.get().workspaces)
@@ -1405,6 +1414,11 @@ export class AppController {
       case 'turn.finished':
         this.setSessionState('idle')
         this.bumpGitStamp()
+        void this.refreshSessions()
+        break
+      case 'session.titled':
+        // The title sidecar persisted the generated title — the sidebar
+        // and header read it off the session list.
         void this.refreshSessions()
         break
       case 'approval.requested':

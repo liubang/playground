@@ -950,9 +950,13 @@ func (s *SessionService) mazeForSession(ctx context.Context, sqlite *session.SQL
 	if err != nil {
 		return nil, err
 	}
-	title := ""
-	if titles, err := sqlite.FirstUserMessageTexts(ctx, []domain.SessionID{id}); err == nil {
-		title = summarizeSessionTitle(titles[id])
+	// Same title rule as the session listing: the persisted sidecar title
+	// wins, the truncated first user prompt is the fallback.
+	title := inspection.Session.Title
+	if title == "" {
+		if titles, err := sqlite.FirstUserMessageTexts(ctx, []domain.SessionID{id}); err == nil {
+			title = summarizeSessionTitle(titles[id])
+		}
 	}
 	running := false
 	if h, ok := s.Get(id); ok {

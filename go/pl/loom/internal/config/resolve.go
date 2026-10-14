@@ -771,7 +771,7 @@ func resolve(f *File, baseDir string, lookup EnvLookup) (*ResolvedConfig, error)
 	out.Memory = memory
 
 	// Session lifecycle maintenance (auto-archive): opt-in, off by default.
-	sessions, err := resolveSessions(f.Sessions)
+	sessions, err := resolveSessions(f.Sessions, out)
 	if err != nil {
 		return nil, err
 	}
@@ -1402,12 +1402,22 @@ type ResolvedSessions struct {
 	// GCArchivedAfter permanently deletes sessions archived for longer than
 	// this; 0 disables the purge (archived sessions are kept forever).
 	GCArchivedAfter time.Duration
+	// TitleModel pins the session-title sidecar model (canonical
+	// "provider/model"); empty follows the session's own model.
+	TitleModel string
 }
 
-// resolveSessions validates the sessions section. Both knobs are opt-in:
-// absent/empty/"0" leaves the durations at 0 (disabled).
-func resolveSessions(in Sessions) (ResolvedSessions, error) {
+// resolveSessions validates the sessions section. The lifecycle knobs are
+// opt-in: absent/empty/"0" leaves the durations at 0 (disabled).
+func resolveSessions(in Sessions, cfg *ResolvedConfig) (ResolvedSessions, error) {
 	var out ResolvedSessions
+	if m := strings.TrimSpace(in.TitleModel); m != "" {
+		ref, err := cfg.ResolveRef(m)
+		if err != nil {
+			return ResolvedSessions{}, fmt.Errorf("config: sessions.title_model: %w", err)
+		}
+		out.TitleModel = ref.String()
+	}
 	for _, d := range []struct {
 		name  string
 		raw   string

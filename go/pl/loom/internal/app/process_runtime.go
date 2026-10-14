@@ -88,6 +88,10 @@ type ProcessRuntime struct {
 	// enqueues a job (a cheap upsert); the background pipeline drains it —
 	// no model calls ever happen on the exit path (MEMORY_DESIGN P0-A).
 	MemoryJobQueue memory.JobQueue
+	// TitleSidecar generates the persisted picker title after a session's
+	// first turn (nil in bare test runtimes disables it, mirroring
+	// MemoryJobQueue).
+	TitleSidecar *TitleSidecar
 	// Questioner is the headless fallback (AutonomousQuestioner); a
 	// session-level ChannelQuestioner takes precedence when present.
 	Questioner domain.Questioner
@@ -461,6 +465,7 @@ func NewProcessRuntime(ctx context.Context, resolved *config.ResolvedConfig, cfg
 	// manual/persisted preference, so a hot-applied new default takes
 	// effect for processes that never made a manual choice.
 	p.resolved.Store(resolved)
+	p.TitleSidecar = NewTitleSidecar(store, p.Resolved, logger)
 	p.loadPrefs(ctx)
 	// Session maintenance sweep: one pass at startup, then hourly. Each
 	// pass reads Resolved() fresh, so a hot-applied config change takes

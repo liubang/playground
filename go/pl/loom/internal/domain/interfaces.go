@@ -292,6 +292,10 @@ type SessionSummary struct {
 	// delegation edge persisted in the child's run.created event
 	// (docs/SUBAGENT_DESIGN.md §6.1), surfaced for hierarchical pickers.
 	ParentSessionID SessionID `json:"parent_session_id"`
+	// Title is the model-generated picker title (schema v11), written once
+	// by the first-turn title sidecar; empty until then — listings fall
+	// back to the truncated first user prompt.
+	Title string `json:"title,omitempty"`
 }
 
 // SessionTranscript is the recovered message history of a session.

@@ -198,6 +198,11 @@ func (c *Controller) handleRewind(cmd controllerCommand) {
 	c.mu.Lock()
 	c.runID = domain.RunID{}
 	c.turnCounter = 0
+	// A rewind past the first turn re-opens the title question for this
+	// session: re-arm the one-shot (the transcript gate still applies when
+	// messages survive).
+	c.titleTriggered = false
+	c.titlePending = false
 	c.messages = append([]domain.Message(nil), inspection.Transcript.Messages...)
 	// The rewind truncated the timeline: drop the stale turn projections
 	// and rebuild from the surviving events (derived state — TurnSummary).

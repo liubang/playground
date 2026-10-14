@@ -189,6 +189,12 @@ func (e *Env) StartStack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewProcessRuntime: %v", err)
 	}
+	// The session-title sidecar fires one unscripted model call after the
+	// first turn: in replay runs it would derail the recorded call
+	// sequence, in record runs it would leak an extra call into the
+	// fixtures. e2e keeps deterministic scripts; the sidecar is covered
+	// by unit tests (internal/app/title_test.go).
+	proc.TitleSidecar = nil
 	e.Proc = proc
 	// Close is observable by some suites (the memory pipeline asserts the
 	// exit path is fast), so it must be idempotent: tests call CloseProc

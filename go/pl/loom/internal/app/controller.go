@@ -179,8 +179,11 @@ type SessionSummary struct {
 	// from the controller projection, not the store).
 	ModelName string `json:"model_name,omitempty"`
 	TurnCount int    `json:"turn_count,omitempty"`
-	// Title is the session's first user prompt: whitespace-collapsed and
-	// rune-truncated; empty when the session never received a prompt.
+	// Title is the model-generated session title when the first-turn
+	// sidecar wrote one, else the session's first user prompt:
+	// whitespace-collapsed and rune-truncated. Empty when the session
+	// never received a prompt, and while the title sidecar is still in
+	// flight — clients render their placeholder in both cases.
 	Title string `json:"title,omitempty"`
 	// ParentSessionID is set for delegated sub-agent sessions (the child's
 	// run.created delegation edge), for hierarchical pickers.
@@ -240,6 +243,15 @@ type Controller struct {
 	// prompts are rejected; approvals and questions stay resolvable.
 	delegated       bool
 	parentSessionID domain.SessionID
+	// titleTriggered makes the first-turn title sidecar a one-shot per
+	// session on this controller: the turn-start attempt and the turn-end
+	// recovery trigger share it so a slow sidecar call is never
+	// duplicated. titlePending is set alongside and cleared when the
+	// sidecar concludes (success OR failure); SessionService suppresses
+	// the prompt fallback only while it is set. Both are re-armed when the
+	// controller switches sessions (new/resume/rewind).
+	titleTriggered bool
+	titlePending   bool
 	// appliedSeq is the broker-sequence watermark sampled inside the
 	// projection-update critical section (docs/SERVE_DESIGN.md §4.4).
 	appliedSeq uint64
@@ -1216,6 +1228,11 @@ func (c *Controller) handleSubmitPrompt(cmd controllerCommand) {
 		c.plan = domain.Plan{}
 		c.hasPlan = false
 	}
+	// Whether the transcript held messages BEFORE this turn's prompt lands
+	// (the projection carries the new prompt by the time the title gate
+	// runs): a resumed conversation must not be titled after its new
+	// first submission.
+	hadHistory := len(c.messages) > 0
 	c.mu.Unlock()
 
 	if planArchived {
@@ -1225,7 +1242,9 @@ func (c *Controller) handleSubmitPrompt(cmd controllerCommand) {
 	// Resolve @file references and the leading /skill trigger: content is
 	// injected into the model context here rather than discovered by the model.
 	// The enriched prompt persists with the user message, so the transcript
-	// matches what the model saw.
+	// matches what the model saw. The title sidecar keeps the raw text:
+	// injected file contents only dilute the summary input.
+	rawPrompt := cmd.Prompt
 	cmd.Prompt = enrichPromptWithReferences(c.bootstrap, cmd.Prompt, c.logger)
 
 	// Publish turn started event
@@ -1253,8 +1272,12 @@ func (c *Controller) handleSubmitPrompt(cmd controllerCommand) {
 	go func() {
 		defer cancelTurn()
 		defer close(turnDone)
-		err := c.runTurn(turnCtx, cmd.Prompt, cmd.ImageRefs, turnCounter)
+		err := c.runTurn(turnCtx, cmd.Prompt, cmd.ImageRefs, turnCounter, rawPrompt, hadHistory)
 		c.onTurnFinished(turnID, turnCounter, err)
+		// Recovery trigger: the sidecar normally fires inside runTurn the
+		// moment the first user message lands; if that early attempt lost
+		// its race (e.g. the session row was not there yet), retry now.
+		c.maybeGenerateSessionTitle(turnCounter, rawPrompt, hadHistory)
 	}()
 
 	cmd.ResultCh <- controllerResult{Value: SubmitResult{Turn: turnCounter}}
@@ -1397,7 +1420,7 @@ func (c *Controller) SubagentView(ctx context.Context, sessionID domain.SessionI
 	}, nil
 }
 
-func (c *Controller) runTurn(ctx context.Context, prompt string, imageRefs []domain.ArtifactRef, turnCounter int) error {
+func (c *Controller) runTurn(ctx context.Context, prompt string, imageRefs []domain.ArtifactRef, turnCounter int, titlePrompt string, hadHistory bool) error {
 	store := c.bootstrap.Store
 	clock := c.clock
 
@@ -1468,6 +1491,11 @@ func (c *Controller) runTurn(ctx context.Context, prompt string, imageRefs []dom
 	if err := c.flushRunEvents(ctx, run); err != nil {
 		return fmt.Errorf("persist user message: %w", err)
 	}
+
+	// The session row and the opening prompt now exist: kick off the title
+	// sidecar so the generated title typically lands mid-turn — the opening
+	// prompt is all the input it needs.
+	c.maybeGenerateSessionTitle(turnCounter, titlePrompt, hadHistory)
 
 	// Update controller state and its recoverable transcript projection.
 	c.mu.Lock()
@@ -1848,6 +1876,9 @@ func (c *Controller) handleNewSession(cmd controllerCommand) {
 	c.hasPlan = false
 	c.delegated = false
 	c.parentSessionID = domain.SessionID{}
+	// Re-arm the title one-shot: the new session gets its own sidecar run.
+	c.titleTriggered = false
+	c.titlePending = false
 	c.lastUsage = domain.Usage{}
 	c.resumedRun = nil
 	c.resumed = false
@@ -2011,6 +2042,11 @@ func (c *Controller) handleResumeSession(cmd controllerCommand) {
 	c.sessionID = cmd.SessionID
 	c.runID = domain.RunID{}
 	c.turnCounter = 0
+	// Re-arm the title one-shot for the resumed session; the transcript
+	// gate in maybeGenerateSessionTitle still skips generation whenever
+	// the conversation has history.
+	c.titleTriggered = false
+	c.titlePending = false
 	c.messages = append([]domain.Message(nil), inspection.Transcript.Messages...)
 	c.lastError = lastErrorFromEvents(inspection.Events)
 	// Rebuild the per-turn change projection from the same timeline (the

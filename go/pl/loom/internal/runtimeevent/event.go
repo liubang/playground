@@ -42,6 +42,10 @@ const (
 	// Session lifecycle
 	KindSessionOpened RuntimeEventKind = "session.opened"
 	KindSessionClosed RuntimeEventKind = "session.closed"
+	// KindSessionTitled is the title sidecar's completion notice (always
+	// ephemeral): the title itself is persisted in the session store, the
+	// event only tells frontends to refresh their session lists.
+	KindSessionTitled RuntimeEventKind = "session.titled"
 	// Turn lifecycle
 	KindTurnStarted  RuntimeEventKind = "turn.started"
 	KindTurnFinished RuntimeEventKind = "turn.finished"
@@ -125,7 +129,7 @@ func (e RuntimeEvent) Validate() error {
 		return fmt.Errorf("runtime event session ID required")
 	}
 	switch e.Kind {
-	case KindSessionOpened, KindSessionClosed,
+	case KindSessionOpened, KindSessionClosed, KindSessionTitled,
 		KindTurnStarted, KindTurnFinished,
 		KindRunPhaseChanged,
 		KindModelRequestStarted, KindModelTextDelta, KindModelReasoningDelta, KindModelToolCallDelta,
@@ -156,6 +160,11 @@ type SessionOpenedPayload struct {
 	Workspace    string `json:"workspace"`
 	Resumed      bool   `json:"resumed"`
 	MessageCount int    `json:"message_count,omitempty"`
+}
+
+// SessionTitledPayload carries the title the sidecar just persisted.
+type SessionTitledPayload struct {
+	Title string `json:"title"`
 }
 
 // TurnStartedPayload describes the start of a new turn.

@@ -67,6 +67,20 @@ func newTestServiceWithRecorder(t *testing.T, model domain.Model, rec trace.Reco
 // SessionServiceConfig (e.g. wiring the share-endpoint controller).
 func newTestServiceFull(t *testing.T, model domain.Model, rec trace.Recorder, svcCfg app.SessionServiceConfig) (*app.SessionService, *runtimeevent.Broker) {
 	t.Helper()
+	return buildTestService(t, model, rec, svcCfg, false)
+}
+
+// newTestServiceWithSidecar additionally wires the title sidecar over the
+// same store, so listing tests can drive the full generation lifecycle
+// (pending → titled).
+func newTestServiceWithSidecar(t *testing.T, model domain.Model) *app.SessionService {
+	t.Helper()
+	svc, _ := buildTestService(t, model, nil, app.SessionServiceConfig{}, true)
+	return svc
+}
+
+func buildTestService(t *testing.T, model domain.Model, rec trace.Recorder, svcCfg app.SessionServiceConfig, withSidecar bool) (*app.SessionService, *runtimeevent.Broker) {
+	t.Helper()
 	ctx := context.Background()
 	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
 	if err != nil {
@@ -101,6 +115,9 @@ func newTestServiceFull(t *testing.T, model domain.Model, rec trace.Recorder, sv
 		// A workspace assembled on demand (registering a new one) wires the
 		// ask_user tool, which requires a non-nil questioner.
 		Questioner: domain.AutonomousQuestioner{},
+	}
+	if withSidecar {
+		proc.TitleSidecar = app.NewTitleSidecar(store, proc.Resolved, nil)
 	}
 	proc.SwapResolved(resolved)
 	svc := app.NewSingletonWorkspaceService(&app.Bootstrap{
@@ -161,6 +178,23 @@ func newTestServer(t *testing.T, model domain.Model) (*httptest.Server, *app.Ses
 func newTestServerWithRecorder(t *testing.T, model domain.Model, rec trace.Recorder) (*httptest.Server, *app.SessionService) {
 	t.Helper()
 	svc := newTestServiceWithRecorder(t, model, rec)
+	srv, err := New(Config{
+		Token:   testToken,
+		Version: "test",
+		Service: svc,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ts := httptest.NewServer(srv.http.Handler)
+	t.Cleanup(ts.Close)
+	return ts, svc
+}
+
+// newTestServerWithSidecar is newTestServer with the title sidecar wired.
+func newTestServerWithSidecar(t *testing.T, model domain.Model) (*httptest.Server, *app.SessionService) {
+	t.Helper()
+	svc := newTestServiceWithSidecar(t, model)
 	srv, err := New(Config{
 		Token:   testToken,
 		Version: "test",
@@ -777,6 +811,13 @@ func TestSessionListLiveState(t *testing.T) {
 		}
 		entry, _ := sessions[0].(map[string]any)
 		if entry["state"] == "running" {
+			// Busy alone must NOT hide the truncated-prompt fallback: only a
+			// session whose title sidecar is actually in flight suppresses
+			// it (this bare runtime wires none). Otherwise every later turn
+			// of a session whose generation failed would flicker its title.
+			if entry["title"] != "first" {
+				t.Fatalf("title = %v, want the truncated prompt visible while busy (no sidecar pending)", entry["title"])
+			}
 			break
 		}
 		if time.Now().After(deadline) {
@@ -786,6 +827,95 @@ func TestSessionListLiveState(t *testing.T) {
 	}
 	close(release)
 	waitIdle(t, ts, id)
+}
+
+// titleGateModel blocks model calls on separate gates: the title
+// sidecar's call (identified by its tool-less request) waits on
+// releaseTitle, regular turn calls (which always carry tools) on
+// releaseTurn — giving the test deterministic busy/pending windows.
+type titleGateModel struct {
+	inner        *fakes.FakeModel
+	releaseTitle chan struct{}
+	releaseTurn  chan struct{}
+}
+
+func (m *titleGateModel) Stream(ctx context.Context, req domain.ModelRequest) (domain.ModelStream, error) {
+	gate := m.releaseTurn
+	if len(req.Tools) == 0 {
+		gate = m.releaseTitle
+	}
+	select {
+	case <-gate:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return m.inner.Stream(ctx, req)
+}
+
+// TestSessionListTitleLifecycle drives the full sidecar lifecycle through
+// the listing: while the title run is in flight the entry stays untitled
+// (client placeholder) — including after the turn itself settles, because
+// the pending marker, not the busy state, gates the suppression — and the
+// persisted title appears once the sidecar lands.
+func TestSessionListTitleLifecycle(t *testing.T) {
+	releaseTitle := make(chan struct{})
+	releaseTurn := make(chan struct{})
+	model := &titleGateModel{inner: fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "answer", StopReason: domain.StopEndTurn},
+		fakes.ScriptEntry{Text: "Generated Title", StopReason: domain.StopEndTurn},
+	), releaseTitle: releaseTitle, releaseTurn: releaseTurn}
+	ts, _ := newTestServerWithSidecar(t, model)
+	id := createTestSession(t, ts)
+
+	if status, body := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/prompts", `{"prompt":"fix the flaky test in sstv2"}`); status != http.StatusAccepted {
+		t.Fatalf("submit = (%d, %v)", status, body)
+	}
+	listEntry := func() map[string]any {
+		_, listing := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/sessions", "")
+		sessions, _ := listing["sessions"].([]any)
+		if len(sessions) != 1 {
+			t.Fatalf("sessions = %v, want exactly 1", listing)
+		}
+		entry, _ := sessions[0].(map[string]any)
+		return entry
+	}
+
+	// Wait for the turn to start (no title assertion here: state=running
+	// is set before the turn goroutine fires the sidecar trigger, so the
+	// pending marker is not yet guaranteed).
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if entry := listEntry(); entry["state"] == "running" {
+			break
+		} else if time.Now().After(deadline) {
+			t.Fatalf("state = %v, want running (blocked turn)", entry["state"])
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// The turn settles while the sidecar is still blocked: the trigger
+	// definitely fired by now (it precedes the turn's model call), so
+	// pending alone keeps the fallback suppressed even in idle state.
+	close(releaseTurn)
+	waitIdle(t, ts, id)
+	if entry := listEntry(); entry["state"] != "idle" {
+		t.Fatalf("state = %v, want idle", entry["state"])
+	} else if title, has := entry["title"]; has {
+		t.Fatalf("title = %v, want still suppressed (sidecar pending)", title)
+	}
+
+	// Releasing the sidecar persists the generated title; the listing
+	// picks it up.
+	close(releaseTitle)
+	deadline = time.Now().Add(5 * time.Second)
+	for {
+		if entry := listEntry(); entry["title"] == "Generated Title" {
+			break
+		} else if time.Now().After(deadline) {
+			t.Fatalf("title = %v, want Generated Title after the sidecar landed", entry["title"])
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 // TestSessionListAwaitingApproval locks the approval-state projection the

@@ -34,7 +34,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const sqliteSchemaVersion = 10
+const sqliteSchemaVersion = 11
 
 // SQLiteStore persists session events and checkpoints in a SQLite database.
 // A store serializes writes through one connection; optimistic versions still
@@ -153,6 +153,9 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY,
     applied_at TEXT NOT NULL
 );
+-- sessions.title (schema v11): the model-generated picker title, written
+-- once by the first-turn title sidecar; '' means untitled — listings fall
+-- back to the truncated first user prompt.
 CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
     version INTEGER NOT NULL CHECK (version >= 0),
@@ -161,7 +164,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     updated_at TEXT NOT NULL,
     updated_at_unix_nano INTEGER NOT NULL,
     archived_at_unix_nano INTEGER,
-    workspace_id TEXT NOT NULL DEFAULT ''
+    workspace_id TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_workspace_updated
     ON sessions(workspace_id, updated_at_unix_nano DESC);
@@ -579,7 +583,7 @@ func (s *SQLiteStore) ListSessions(ctx context.Context, cursor string, limit int
 		archivedFlag = 1
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT s.session_id, s.version, s.created_at, s.updated_at, s.created_at_unix_nano, s.workspace_id,
+SELECT s.session_id, s.version, s.created_at, s.updated_at, s.created_at_unix_nano, s.workspace_id, s.title,
        (SELECT json_extract(CAST(e.payload AS TEXT), '$.parent_session_id')
         FROM events e
         WHERE e.session_id = s.session_id AND e.type = 'run.created'
@@ -601,10 +605,10 @@ LIMIT ?3`, cursorNano, cursorID, limit, archivedFlag, workspaceID.String())
 	var lastNano int64
 	var lastID string
 	for rows.Next() {
-		var id, createdAt, updatedAt, rawWorkspace string
+		var id, createdAt, updatedAt, rawWorkspace, title string
 		var version int64
 		var parent sql.NullString
-		if err := rows.Scan(&id, &version, &createdAt, &updatedAt, &lastNano, &rawWorkspace, &parent); err != nil {
+		if err := rows.Scan(&id, &version, &createdAt, &updatedAt, &lastNano, &rawWorkspace, &title, &parent); err != nil {
 			return nil, "", storeError("scan session", err)
 		}
 		lastID = id
@@ -621,7 +625,7 @@ LIMIT ?3`, cursorNano, cursorID, limit, archivedFlag, workspaceID.String())
 			return nil, "", storeError("decode session update time", err)
 		}
 		summary := domain.SessionSummary{
-			ID: sessionID, Version: version, CreatedAt: created, UpdatedAt: updated,
+			ID: sessionID, Version: version, CreatedAt: created, UpdatedAt: updated, Title: title,
 		}
 		if wsID, err := domain.ParseWorkspaceID(rawWorkspace); err == nil {
 			summary.WorkspaceID = wsID
@@ -676,6 +680,44 @@ SELECT payload FROM events WHERE session_id = ? AND type = ? ORDER BY sequence L
 	return result, nil
 }
 
+// SessionTitle returns the session's persisted picker title, or "" when the
+// title sidecar never wrote one (listings then fall back to the truncated
+// first user prompt).
+func (s *SQLiteStore) SessionTitle(ctx context.Context, sessionID domain.SessionID) (string, error) {
+	if sessionID.IsZero() {
+		return "", domain.NewError(domain.ErrInvalidInput, "session ID is required")
+	}
+	var title string
+	if err := s.db.QueryRowContext(ctx,
+		"SELECT title FROM sessions WHERE session_id = ?", sessionID.String()).Scan(&title); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", domain.NewError(domain.ErrInvalidInput, "session not found")
+		}
+		return "", storeError("load session title", err)
+	}
+	return title, nil
+}
+
+// SetSessionTitle records the generated picker title once: the write is
+// conditional on the session still being untitled, so a concurrent or
+// repeated sidecar run can never overwrite an existing title. Reports
+// whether this call won the write.
+func (s *SQLiteStore) SetSessionTitle(ctx context.Context, sessionID domain.SessionID, title string) (bool, error) {
+	if sessionID.IsZero() || strings.TrimSpace(title) == "" {
+		return false, domain.NewError(domain.ErrInvalidInput, "session ID and a non-empty title are required")
+	}
+	result, err := s.db.ExecContext(ctx,
+		"UPDATE sessions SET title = ? WHERE session_id = ? AND title = ''", title, sessionID.String())
+	if err != nil {
+		return false, storeError("set session title", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, storeError("inspect session title update", err)
+	}
+	return affected == 1, nil
+}
+
 // InspectSession returns session metadata, its latest checkpoint, the recovered
 // transcript, and the complete event timeline from one consistent read snapshot.
 func (s *SQLiteStore) InspectSession(ctx context.Context, sessionID domain.SessionID) (domain.SessionInspection, error) {
@@ -691,9 +733,9 @@ func (s *SQLiteStore) InspectSession(ctx context.Context, sessionID domain.Sessi
 	var summary domain.SessionSummary
 	var id, createdAt, updatedAt string
 	if err := tx.QueryRowContext(ctx, `
-SELECT session_id, version, created_at, updated_at
+SELECT session_id, version, created_at, updated_at, title
 FROM sessions WHERE session_id = ?`, sessionID.String()).Scan(
-		&id, &summary.Version, &createdAt, &updatedAt,
+		&id, &summary.Version, &createdAt, &updatedAt, &summary.Title,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domain.SessionInspection{}, domain.NewError(domain.ErrInvalidInput, "session not found")

@@ -1580,6 +1580,12 @@ final class SessionStore {
         case .sessionClosed:
             state = .closed
 
+        case .sessionTitled:
+            // The title sidecar persisted the generated title: the
+            // sidebar/header read it off the session list, so this is
+            // just a refresh nudge (WebUI: session.titled → refreshSessions).
+            onTurnActivity?()
+
         case .runtimeWarning:
             if let payload = tryDecode(RuntimeMessagePayload.self, from: event) {
                 addNotice(payload.message)

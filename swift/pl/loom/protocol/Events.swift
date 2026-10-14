@@ -40,6 +40,7 @@ struct RuntimeEvent: Decodable, Sendable {
     enum Kind: String, Decodable, Sendable {
         case sessionOpened = "session.opened"
         case sessionClosed = "session.closed"
+        case sessionTitled = "session.titled"
         case turnStarted = "turn.started"
         case turnFinished = "turn.finished"
         case runPhaseChanged = "run.phase_changed"

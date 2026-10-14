@@ -202,6 +202,7 @@ interface Envelope<K extends string, P> {
 export type RuntimeEvent =
   | Envelope<'turn.started', TurnStartedPayload>
   | Envelope<'turn.finished', TurnFinishedPayload>
+  | Envelope<'session.titled', { title: string }>
   | Envelope<'model.text_delta', TextDeltaPayload>
   | Envelope<'model.reasoning_delta', TextDeltaPayload>
   | Envelope<'model.response_completed', ResponseCompletedPayload>

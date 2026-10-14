@@ -39,6 +39,7 @@ go_library(
         "session_service.go",
         "skills.go",
         "subagent_bridge.go",
+        "title.go",
         "turn_summary.go",
         "user_intent_policy.go",
         "workspace_registry.go",
@@ -98,6 +99,7 @@ go_test(
         "session_service_test.go",
         "skills_test.go",
         "subagent_bridge_test.go",
+        "title_test.go",
     ],
     embed = [":app"],
     deps = [

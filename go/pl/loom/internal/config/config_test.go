@@ -861,6 +861,40 @@ sessions:
 	}
 }
 
+func TestResolveSessionsTitleModel(t *testing.T) {
+	// Absent: the title sidecar follows the session's own model.
+	def := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if def.Sessions.TitleModel != "" {
+		t.Fatalf("title_model default = %q, want empty (follow session model)", def.Sessions.TitleModel)
+	}
+
+	// A pinned model resolves to its canonical form.
+	cfg := loadFile(t, twoProviderYAML+`
+sessions:
+  title_model: deepseek/deepseek-chat
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if cfg.Sessions.TitleModel != "deepseek/deepseek-chat" {
+		t.Fatalf("title_model = %q, want deepseek/deepseek-chat", cfg.Sessions.TitleModel)
+	}
+
+	// Bare unique model names resolve too.
+	bare := loadFile(t, twoProviderYAML+`
+sessions:
+  title_model: gpt-5
+`, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if bare.Sessions.TitleModel != "openai/gpt-5" {
+		t.Fatalf("title_model = %q, want openai/gpt-5", bare.Sessions.TitleModel)
+	}
+
+	_, err := Load(writeConfig(t, twoProviderYAML+`
+sessions:
+  title_model: nosuch/model
+`), LoadOptions{RequireProviders: true}, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
+	if err == nil || !strings.Contains(err.Error(), "sessions.title_model") {
+		t.Fatalf("err = %v, want sessions.title_model validation error", err)
+	}
+}
+
 func TestResolveSessionsGCArchivedAfter(t *testing.T) {
 	// Absent: the purge is disabled.
 	def := loadFile(t, twoProviderYAML, envWith(map[string]string{"OPENAI_API_KEY": "sk"}))
