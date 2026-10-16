@@ -328,6 +328,12 @@ func (d *Derivation) derivePlainBuiltin(call domain.PreparedCall) {
 		return
 	}
 	d.Effect = ZeroEffect
+	if call.Call.Name == "memory" {
+		// R3 memory mutations revoke shared evidence, unlike quota spenders:
+		// danger-only must not bypass approval for these destructive calls.
+		d.Effect.Consequence = ConsequenceSharedDestructive
+		d.Effect.Indicators = []string{"memory mutation revokes shared evidence"}
+	}
 	d.ForcedAsk = "R3+ builtin operation requires approval"
 }
 
@@ -382,11 +388,13 @@ func expandTilde(p string) string {
 // source must be carried through from the producing tool: without it an
 // MCP call would be re-derived from its argument shape (a "program"
 // field becomes an exec effect, a "url" field a host binding) instead
-// of keeping its third-party identity.
-func DeriveRawArgs(toolName string, source domain.ToolSource, raw json.RawMessage, env DeriveEnv) Derivation {
+// of keeping its third-party identity. Risk is the producing PreparedCall's
+// actual risk, not a classification inferred again from raw arguments.
+func DeriveRawArgs(toolName string, source domain.ToolSource, risk domain.RiskLevel, raw json.RawMessage, env DeriveEnv) Derivation {
 	return DeriveEffect(domain.PreparedCall{
 		Call:       domain.ToolCall{Name: toolName, Arguments: raw},
 		Definition: domain.ToolDefinition{Name: toolName, Source: source},
+		Risk:       risk,
 	}, env)
 }
 

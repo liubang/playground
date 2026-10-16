@@ -1,418 +1,596 @@
 // Copyright (c) 2026 The Authors. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-// Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/08/02
+// SPDX-License-Identifier: Apache-2.0
 
 package memory
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
-func TestMemoryToolDefinition(t *testing.T) {
-	s := newTestStore(t)
+func newTestMemoryTool(t *testing.T, s *Store) *MemoryTool {
+	t.Helper()
 	tool, err := NewMemoryTool(s)
 	if err != nil {
-		t.Fatalf("NewMemoryTool: %v", err)
+		t.Fatal(err)
 	}
-	def := tool.Definition()
-	if def.Name != ToolMemory {
-		t.Errorf("Name = %q, want %q", def.Name, ToolMemory)
-	}
-	if got := def.Risk(); got != domain.R0 {
-		t.Errorf("definition Risk() = %v, want R0 (capability-free; per-action grading)", got)
-	}
-	if !tool.ConcurrentSafe() {
-		t.Error("MemoryTool should be concurrent-safe")
-	}
-}
-
-func TestNewMemoryToolNilStore(t *testing.T) {
-	if _, err := NewMemoryTool(nil); err == nil {
-		t.Error("expected error for nil store")
-	}
+	return tool
 }
 
 func prepareMemory(t *testing.T, tool *MemoryTool, args string) domain.PreparedCall {
 	t.Helper()
-	prepared, err := tool.Prepare(context.Background(), domain.ToolCall{
-		ID:        domain.NewToolCallID(),
-		Name:      ToolMemory,
-		Arguments: json.RawMessage(args),
-	})
+	prepared, err := tool.Prepare(t.Context(), domain.ToolCall{ID: domain.NewToolCallID(), Name: ToolMemory, Arguments: json.RawMessage(args)})
 	if err != nil {
 		t.Fatalf("Prepare(%s): %v", args, err)
 	}
 	return prepared
 }
 
-func TestMemoryToolRiskPerAction(t *testing.T) {
-	s := newTestStore(t)
-	tool, _ := NewMemoryTool(s)
+func memoryJSON(t *testing.T, args any) string {
+	t.Helper()
+	raw, err := json.Marshal(args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
 
-	for action, args := range map[string]string{
-		"list":   `{"action":"list"}`,
-		"read":   `{"action":"read","path":"MEMORY.md"}`,
-		"search": `{"action":"search","query":"x"}`,
-	} {
-		if prepared := prepareMemory(t, tool, args); prepared.Risk != domain.R1 {
-			t.Errorf("%s: Risk = %v, want R1", action, prepared.Risk)
+func decodeMemoryResult(t *testing.T, result domain.ToolResult, out any) {
+	t.Helper()
+	if result.Status != domain.ToolStatusSuccess || len(result.Content) != 1 || result.Content[0].Kind != domain.PartText {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if err := json.Unmarshal([]byte(result.Content[0].Text), out); err != nil {
+		t.Fatalf("result JSON: %v", err)
+	}
+}
+
+func requireMemoryToolError(t *testing.T, result domain.ToolResult, code domain.ErrorCode) {
+	t.Helper()
+	if result.Status != domain.ToolStatusError || result.Error == nil || result.Error.Code != string(code) {
+		t.Fatalf("result=%+v; want error %s", result, code)
+	}
+	if (code == domain.ErrInvalidInput || code == domain.ErrConflict) && result.Error.Retryable {
+		t.Fatal("invalid input/conflict must not be reported as retryable success")
+	}
+}
+
+func TestMemoryToolDefinition(t *testing.T) {
+	tool := newTestMemoryTool(t, newTestStore(t))
+	def := tool.Definition()
+	if def.Name != ToolMemory || def.Risk() != domain.R0 || !tool.ConcurrentSafe() {
+		t.Fatalf("definition=%+v concurrent=%v", def, tool.ConcurrentSafe())
+	}
+	var schema struct {
+		AdditionalProperties bool                       `json:"additionalProperties"`
+		Properties           map[string]json.RawMessage `json:"properties"`
+	}
+	if err := json.Unmarshal(def.InputSchema, &schema); err != nil {
+		t.Fatal(err)
+	}
+	if schema.AdditionalProperties || schema.Properties["id"] == nil || schema.Properties["revision"] == nil || schema.Properties["scope"] == nil {
+		t.Fatalf("schema missing active-record constraints: %s", def.InputSchema)
+	}
+	for _, store := range []*Store{nil, NewStore(nil)} {
+		if _, err := NewMemoryTool(store); err == nil {
+			t.Fatal("missing repository accepted")
 		}
 	}
-	addNote := prepareMemory(t, tool,
-		`{"action":"add_note","filename":"2026-08-02T12-00-00-x.md","note":"n"}`)
-	if addNote.Risk != domain.R2 {
-		t.Errorf("add_note: Risk = %v, want R2", addNote.Risk)
+}
+
+func TestMemoryToolPrepareCanonicalRiskAndIdempotency(t *testing.T) {
+	tool := newTestMemoryTool(t, newTestStore(t).ForWorkspace("/project"))
+	for _, tc := range []struct {
+		args string
+		risk domain.RiskLevel
+	}{
+		{`{"action":"list"}`, domain.R1},
+		{`{"action":"search","query":"  Go bazel  "}`, domain.R1},
+		{`{"action":"read","id":"active"}`, domain.R1},
+		{`{"action":"read","id":"active","byte_offset":"3"}`, domain.R1},
+		{`{"action":"remember","content":"  fact  "}`, domain.R2},
+		{`{"action":"remember","scope":"workspace","id":"active","revision":"2","content":"update"}`, domain.R3},
+		{`{"action":"forget","id":"active","revision":1}`, domain.R3},
+		{`{"action":"add_note","filename":"2026-08-02T12-00-00-prefer-go.md","note":"fact"}`, domain.R2},
+		{`{"action":"add_note","filename":"prefer-go.md","note":"fact"}`, domain.R2},
+		{`{"action":"add_note","filename":"../not-a-storage-path","note":"fact"}`, domain.R2},
+		{`{"action":"list","max_results":"2","scope":null}`, domain.R1},
+	} {
+		t.Run(tc.args, func(t *testing.T) {
+			first := prepareMemory(t, tool, tc.args)
+			second, err := tool.Prepare(t.Context(), first.Call)
+			if err != nil || first.Risk != tc.risk || second.Risk != first.Risk || string(first.Call.Arguments) != string(second.Call.Arguments) || first.ArgsHash != second.ArgsHash || first.ApprovalDesc != second.ApprovalDesc || first.Call.ID != second.Call.ID {
+				t.Fatalf("canonical replay drift: first=%+v second=%+v err=%v", first, second, err)
+			}
+			if first.ArgsHash == "" || strings.Contains(string(first.Call.Arguments), "filename") || strings.Contains(string(first.Call.Arguments), `"note"`) {
+				t.Fatalf("legacy label retained in canonical mutation: %s", first.Call.Arguments)
+			}
+		})
+	}
+	legacy := prepareMemory(t, tool, `{"action":"add_note","filename":"2026-08-02T12-00-00-x.md","note":" fact "}`)
+	modern := prepareMemory(t, tool, `{"action":"remember","content":"fact","scope":"global"}`)
+	if string(legacy.Call.Arguments) != string(modern.Call.Arguments) || legacy.ArgsHash != modern.ArgsHash {
+		t.Fatalf("alias not canonical: %s vs %s", legacy.Call.Arguments, modern.Call.Arguments)
+	}
+	changed := prepareMemory(t, tool, `{"action":"remember","content":"different","scope":"global"}`)
+	workspace := prepareMemory(t, tool, `{"action":"remember","content":"fact","scope":"workspace"}`)
+	update := prepareMemory(t, tool, `{"action":"remember","content":"fact","id":"active","revision":1}`)
+	revision := prepareMemory(t, tool, `{"action":"remember","content":"fact","id":"active","revision":2}`)
+	if changed.ArgsHash == modern.ArgsHash || workspace.ArgsHash == modern.ArgsHash || update.ArgsHash == revision.ArgsHash {
+		t.Fatal("approval hash did not bind content, scope and revision")
 	}
 }
 
 func TestMemoryToolPrepareValidation(t *testing.T) {
-	s := newTestStore(t)
-	tool, _ := NewMemoryTool(s)
-
+	tool := newTestMemoryTool(t, newTestStore(t).ForWorkspace("/project"))
 	for name, args := range map[string]string{
-		"invalid json":          `{invalid}`,
-		"missing action":        `{}`,
-		"unknown action":        `{"action":"delete"}`,
-		"read missing path":     `{"action":"read"}`,
-		"search empty query":    `{"action":"search","query":"  "}`,
-		"add_note bad filename": `{"action":"add_note","filename":"Bad Slug.md","note":"User prefers Go"}`,
-		"add_note traversal":    `{"action":"add_note","filename":"../escape.md","note":"User prefers Go"}`,
-		"add_note empty note":   `{"action":"add_note","filename":"2026-08-02T12-00-00-test.md","note":"  "}`,
-		"unknown field":         `{"action":"list","extra":true}`,
+		"invalid JSON":             `{invalid}`,
+		"missing action":           `{}`,
+		"unknown action":           `{"action":"delete"}`,
+		"unknown field":            `{"action":"list","extra":true}`,
+		"unknown null field":       `{"action":"list","extra":null}`,
+		"old path field":           `{"action":"read","id":"active","path":"MEMORY.md"}`,
+		"read ID required":         `{"action":"read"}`,
+		"search empty":             `{"action":"search","query":"  "}`,
+		"content empty":            `{"action":"remember","content":"  "}`,
+		"aliases disagree":         `{"action":"remember","content":"one","note":"two"}`,
+		"invalid scope":            `{"action":"remember","scope":"/project","content":"fact"}`,
+		"negative revision":        `{"action":"remember","revision":-1,"content":"fact"}`,
+		"update revision required": `{"action":"remember","id":"active","content":"fact"}`,
+		"forget revision required": `{"action":"forget","id":"active"}`,
+		"forget ID required":       `{"action":"forget","revision":1}`,
+		"forget content":           `{"action":"forget","id":"active","revision":1,"content":"fact"}`,
+		"negative byte offset":     `{"action":"read","id":"active","byte_offset":-1}`,
+		"fractional byte offset":   `{"action":"read","id":"active","byte_offset":1.5}`,
+		"negative offset":          `{"action":"read","id":"active","line_offset":-1}`,
+		"negative lines":           `{"action":"read","id":"active","max_lines":-1}`,
+		"too many lines":           `{"action":"read","id":"active","max_lines":501}`,
+		"negative results":         `{"action":"list","max_results":-1}`,
+		"too many results":         `{"action":"search","query":"x","max_results":201}`,
+		"fractional revision":      `{"action":"forget","id":"active","revision":1.5}`,
+		"query byte limit":         memoryJSON(t, memoryArgs{Action: ActionSearch, Query: strings.Repeat("界", MaxQueryBytes/3+1)}),
+		"content byte limit":       memoryJSON(t, memoryArgs{Action: ActionRemember, Content: strings.Repeat("界", MaxContentBytes/3+1)}),
 	} {
-		call := domain.ToolCall{
-			ID:        domain.NewToolCallID(),
-			Name:      ToolMemory,
-			Arguments: json.RawMessage(args),
+		t.Run(name, func(t *testing.T) {
+			_, err := tool.Prepare(t.Context(), domain.ToolCall{ID: domain.NewToolCallID(), Name: ToolMemory, Arguments: json.RawMessage(args)})
+			if err == nil {
+				t.Fatal("invalid arguments accepted")
+			}
+			agentErr, ok := errors.AsType[*domain.AgentError](err)
+			if !ok || agentErr.Code != domain.ErrInvalidInput {
+				t.Fatalf("unexpected validation error: %v", err)
+			}
+		})
+	}
+	unbound := newTestMemoryTool(t, newTestStore(t))
+	if _, err := unbound.Prepare(t.Context(), domain.ToolCall{ID: domain.NewToolCallID(), Arguments: json.RawMessage(`{"action":"remember","scope":"workspace","content":"fact"}`)}); err == nil {
+		t.Fatal("workspace mutation accepted without host binding")
+	}
+	boundary := strings.Repeat("界", MaxContentBytes/3) + "x"
+	prepareMemory(t, tool, memoryJSON(t, memoryArgs{Action: ActionRemember, Content: boundary}))
+	prepareMemory(t, tool, memoryJSON(t, memoryArgs{Action: ActionSearch, Query: strings.Repeat("x", MaxQueryBytes)}))
+	prepareMemory(t, tool, `{"action":"read","id":"active","max_lines":500}`)
+	prepareMemory(t, tool, `{"action":"list","max_results":200}`)
+}
+
+func TestMemoryToolRememberReplaySourceAndSameLabel(t *testing.T) {
+	s := newTestStore(t).ForWorkspace("/project/a")
+	tool := newTestMemoryTool(t, s)
+	origin := domain.ToolContext{SessionID: domain.NewSessionID(), SourceVersion: 42}
+	ctx := domain.WithToolContext(t.Context(), origin)
+	first := prepareMemory(t, tool, `{"action":"add_note","filename":"2026-08-02T12-00-00-same.md","note":"project fact","scope":"workspace"}`)
+	type mutationResult struct {
+		Record             Record `json:"record"`
+		Status             string `json:"status"`
+		VisibleImmediately bool   `json:"visible_immediately"`
+	}
+	var one, replay, two mutationResult
+	decodeMemoryResult(t, tool.Execute(ctx, first), &one)
+	decodeMemoryResult(t, tool.Execute(ctx, first), &replay)
+	if one.Record != replay.Record || one.Record.ID == "" || one.Status != ActionRemember || !one.VisibleImmediately {
+		t.Fatalf("write/replay=%+v/%+v", one, replay)
+	}
+	if one.Record.Scope != s.Workspace() || one.Record.SessionID != origin.SessionID || one.Record.SourceVersion != origin.SourceVersion {
+		t.Fatalf("source/binding not propagated: %+v", one.Record)
+	}
+	second := prepareMemory(t, tool, `{"action":"add_note","filename":"2026-08-02T12-00-00-same.md","note":"second project fact","scope":"workspace"}`)
+	decodeMemoryResult(t, tool.Execute(ctx, second), &two)
+	if two.Record.ID == one.Record.ID {
+		t.Fatal("same compatibility label collided across distinct call IDs")
+	}
+	repo := s.repo.(*testRepo)
+	if repo.seenCtx != ctx || repo.mutations[0].RequestID != first.Call.ID.String() || repo.mutations[0].SessionID != origin.SessionID || repo.mutations[0].SourceVersion != origin.SourceVersion {
+		t.Fatalf("mutation lost execution context: %+v", repo.mutations)
+	}
+	drift := first
+	drift.Call.Arguments = json.RawMessage(`{"action":"remember","scope":"workspace","content":"changed"}`)
+	requireMemoryToolError(t, tool.Execute(ctx, drift), domain.ErrConflict)
+	records, err := NewStore(repo).ForWorkspace(s.Workspace()).Records(ctx)
+	if err != nil || len(records) != 2 {
+		t.Fatalf("active records=%+v err=%v", records, err)
+	}
+	prompt, err := NewPromptProvider(NewStore(repo).ForWorkspace(s.Workspace())).MemoryPrompt(ctx)
+	if err != nil || !strings.Contains(prompt, one.Record.Content) || !strings.Contains(prompt, two.Record.Content) {
+		t.Fatalf("cross-Store prompt not immediately visible: %q err=%v", prompt, err)
+	}
+	other, err := NewPromptProvider(NewStore(repo).ForWorkspace("/project/b")).MemoryPrompt(ctx)
+	if err != nil || strings.Contains(other, "project fact") {
+		t.Fatalf("workspace fact leaked: %q err=%v", other, err)
+	}
+}
+
+func TestMemoryToolConcurrentCallIDReplay(t *testing.T) {
+	s := newTestStore(t)
+	tool := newTestMemoryTool(t, s)
+	prepared := prepareMemory(t, tool, `{"action":"remember","content":"one fact"}`)
+	results := make(chan domain.ToolResult, 8)
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() { results <- tool.Execute(t.Context(), prepared) })
+	}
+	wg.Wait()
+	close(results)
+	for result := range results {
+		var payload struct {
+			Record Record `json:"record"`
 		}
-		if _, err := tool.Prepare(context.Background(), call); err == nil {
-			t.Errorf("%s: expected prepare error", name)
+		decodeMemoryResult(t, result, &payload)
+		if payload.Record.Revision != 1 {
+			t.Fatalf("replay mutated revision: %+v", payload.Record)
+		}
+	}
+	records, err := s.Records(t.Context())
+	if err != nil || len(records) != 1 {
+		t.Fatalf("duplicate records after replay=%+v err=%v", records, err)
+	}
+}
+
+func TestMemoryToolReportsAutomaticEvidenceRevocation(t *testing.T) {
+	for _, scope := range []string{"global", "workspace"} {
+		for _, action := range []string{ActionRemember, ActionForget} {
+			t.Run(scope+"/"+action, func(t *testing.T) {
+				s := newTestStore(t).ForWorkspace("/project")
+				tool := newTestMemoryTool(t, s)
+				var created struct {
+					Record  Record `json:"record"`
+					Revoked string `json:"automatic_evidence_revoked"`
+				}
+				decodeMemoryResult(t, tool.Execute(t.Context(), prepareMemory(t, tool, memoryJSON(t, memoryArgs{Action: ActionRemember, Scope: scope, Content: "old fact"}))), &created)
+				if created.Revoked != "" {
+					t.Fatalf("new record reported evidence revocation: %+v", created)
+				}
+				args := memoryArgs{Action: action, Scope: scope, ID: created.Record.ID, Revision: created.Record.Revision}
+				if action == ActionRemember {
+					args.Content = "replacement"
+				}
+				var result struct {
+					Revoked string `json:"automatic_evidence_revoked"`
+				}
+				decodeMemoryResult(t, tool.Execute(t.Context(), prepareMemory(t, tool, memoryJSON(t, args))), &result)
+				want := "workspace"
+				if scope == "global" {
+					want = "all_workspaces"
+				}
+				if result.Revoked != want {
+					t.Fatalf("revocation=%q want %q", result.Revoked, want)
+				}
+			})
 		}
 	}
 }
 
-// add_note accepts a bare slug (or no filename at all) and prepends the
-// current UTC timestamp itself, so the model never burns a run_cmd date
-// call to satisfy the filename convention. The timestamp lands at
-// Execute time: baking it into the signed canonical arguments would
-// break the agent loop's freshness re-Prepare, which re-runs Prepare
-// after approval — at a later second — and would mint a different name.
-func TestMemoryToolAddNoteAutoTimestamp(t *testing.T) {
-	s := newTestStore(t)
-	tool, _ := NewMemoryTool(s)
-
-	prepared := prepareMemory(t, tool, `{"action":"add_note","filename":"prefer-go.md","note":"User prefers Go"}`)
-	var args memoryArgs
-	if err := json.Unmarshal(prepared.Call.Arguments, &args); err != nil {
-		t.Fatalf("canonical args undecodable: %v", err)
-	}
-	// The canonical arguments keep the bare slug — stable across the
-	// freshness re-Prepare.
-	if args.Filename != "prefer-go.md" {
-		t.Fatalf("canonical filename = %q, want the bare slug", args.Filename)
-	}
-	result := tool.Execute(context.Background(), prepared)
-	if result.Status != domain.ToolStatusSuccess {
-		t.Fatalf("Execute status = %s: %+v", result.Status, result.Error)
-	}
-	// The timestamp is prepended at Execute time.
+func TestMemoryToolUpdateForgetAndInvalidForget(t *testing.T) {
+	s := newTestStore(t).ForWorkspace("/project")
+	tool := newTestMemoryTool(t, s)
+	record := mustMutateMemory(t, s, Mutation{RequestID: "seed", Scope: s.Workspace(), Content: "old fact"})
+	args := memoryArgs{Action: ActionRemember, Scope: "workspace", ID: record.ID, Revision: record.Revision, Content: "corrected fact"}
 	var payload struct {
-		Path string `json:"path"`
+		Record Record `json:"record"`
 	}
-	if err := json.Unmarshal([]byte(result.Content[0].Text), &payload); err != nil {
-		t.Fatalf("result payload undecodable: %v", err)
+	decodeMemoryResult(t, tool.Execute(t.Context(), prepareMemory(t, tool, memoryJSON(t, args))), &payload)
+	if payload.Record.Revision != 2 || payload.Record.Content != args.Content {
+		t.Fatalf("update=%+v", payload)
 	}
-	finalName := strings.TrimPrefix(payload.Path, NotesDir+"/")
-	if !noteFilePattern.MatchString(finalName) {
-		t.Fatalf("executed filename %q does not match the timestamped pattern", finalName)
+	for _, tc := range []struct {
+		id, scope string
+		revision  int64
+		code      domain.ErrorCode
+	}{
+		{record.ID, "workspace", 1, domain.ErrConflict},
+		{record.ID, "global", 2, domain.ErrInvalidInput},
+		{"missing", "workspace", 1, domain.ErrInvalidInput},
+	} {
+		prepared := prepareMemory(t, tool, memoryJSON(t, memoryArgs{Action: ActionForget, ID: tc.id, Scope: tc.scope, Revision: tc.revision}))
+		requireMemoryToolError(t, tool.Execute(t.Context(), prepared), tc.code)
 	}
-	if !strings.HasSuffix(finalName, "-prefer-go.md") {
-		t.Fatalf("slug lost in executed filename %q", finalName)
+	forget := prepareMemory(t, tool, memoryJSON(t, memoryArgs{Action: ActionForget, Scope: "workspace", ID: record.ID, Revision: 2}))
+	decodeMemoryResult(t, tool.Execute(t.Context(), forget), &payload)
+	decodeMemoryResult(t, tool.Execute(t.Context(), forget), &payload)
+	read := prepareMemory(t, tool, memoryJSON(t, memoryArgs{Action: ActionRead, ID: record.ID}))
+	result := tool.Execute(t.Context(), read)
+	requireMemoryToolError(t, result, domain.ErrInvalidInput)
+	if !strings.Contains(result.Error.Message, "action=list") || !strings.Contains(result.Error.Message, "action=search") {
+		t.Fatalf("missing ID guidance=%+v", result.Error)
 	}
-
-	// No filename at all falls back to the default slug.
-	prepared = prepareMemory(t, tool, `{"action":"add_note","note":"another note"}`)
-	if err := json.Unmarshal(prepared.Call.Arguments, &args); err != nil {
-		t.Fatalf("canonical args undecodable: %v", err)
-	}
-	if args.Filename != "note.md" {
-		t.Fatalf("default canonical filename = %q, want note.md", args.Filename)
-	}
-
-	// A fully timestamped name passes through untouched.
-	prepared = prepareMemory(t, tool, `{"action":"add_note","filename":"2026-08-02T12-00-00-x.md","note":"n"}`)
-	if err := json.Unmarshal(prepared.Call.Arguments, &args); err != nil {
-		t.Fatalf("canonical args undecodable: %v", err)
-	}
-	if args.Filename != "2026-08-02T12-00-00-x.md" {
-		t.Fatalf("timestamped filename rewritten: %q", args.Filename)
+	for _, args := range []string{`{"action":"forget"}`, `{"action":"forget","id":"missing"}`} {
+		requireMemoryToolError(t, tool.Execute(t.Context(), domain.PreparedCall{Call: domain.ToolCall{ID: domain.NewToolCallID(), Arguments: json.RawMessage(args)}}), domain.ErrInvalidInput)
 	}
 }
 
-// The freshness contract: a slug-form add_note re-Prepares to the
-// identical canonical form no matter how much time passes between the
-// two Prepares — before the fix, the auto-timestamped filename made
-// every approved add_note fail closed as a security error.
-func TestMemoryToolAddNoteFreshnessReplay(t *testing.T) {
-	s := newTestStore(t)
-	tool, _ := NewMemoryTool(s)
-
-	for _, args := range []string{
-		`{"action":"add_note","filename":"prefer-go.md","note":"User prefers Go"}`,
-		`{"action":"add_note","note":"no filename at all"}`,
-		`{"action":"add_note","filename":"2026-08-02T12-00-00-x.md","note":"fully timestamped"}`,
+func TestMemoryToolListSearchLimitsAndPreviews(t *testing.T) {
+	s := newTestStore(t).ForWorkspace("/project")
+	repo := s.repo.(*testRepo)
+	var records []Record
+	for i := range 65 {
+		records = append(records, Record{ID: fmt.Sprintf("id-%03d", i), Kind: Automatic, Revision: 1, Content: "keyword " + strings.Repeat("界", 120), Rollout: "private rollout detail"})
+	}
+	repo.fixture(Snapshot{Version: 65, Records: records})
+	repo.fixture(Snapshot{Scope: "/other", Version: 1, Records: []Record{{ID: "hidden", Kind: Explicit, Content: "keyword hidden"}}})
+	tool := newTestMemoryTool(t, s)
+	for _, tc := range []struct {
+		args           string
+		count, preview int
+		truncated      bool
+	}{
+		{`{"action":"list"}`, DefaultListMaxResults, 240, true},
+		{`{"action":"list","max_results":1}`, 1, 240, true},
+		{`{"action":"list","max_results":65}`, 65, 240, false},
+		{`{"action":"search","query":"KEYWORD"}`, DefaultSearchMaxResults, 512, true},
+		{`{"action":"search","query":"keyword","max_results":2}`, 2, 512, true},
+		{`{"action":"search","query":"rollout detail","max_results":65}`, 65, 512, false},
+		{`{"action":"search","query":"absent"}`, 0, 512, false},
 	} {
-		first := prepareMemory(t, tool, args)
-		second := prepareMemory(t, tool, string(first.Call.Arguments))
-		if string(first.Call.Arguments) != string(second.Call.Arguments) {
-			t.Fatalf("%s: canonical drift across re-Prepare: %s vs %s", args, first.Call.Arguments, second.Call.Arguments)
+		t.Run(tc.args, func(t *testing.T) {
+			var result SearchResult
+			decodeMemoryResult(t, tool.Execute(t.Context(), prepareMemory(t, tool, tc.args)), &result)
+			if len(result.Records) != tc.count || result.Truncated != tc.truncated {
+				t.Fatalf("result count=%d truncated=%v", len(result.Records), result.Truncated)
+			}
+			for _, record := range result.Records {
+				if len(record.Content) > tc.preview || !utf8.ValidString(record.Content) || record.Rollout != "" || record.ID == "hidden" || record.Revision != 1 {
+					t.Fatalf("invalid preview=%+v", record)
+				}
+			}
+		})
+	}
+	original, err := s.Read(t.Context(), "id-000")
+	if err != nil || original.Content != records[0].Content || original.Rollout != records[0].Rollout {
+		t.Fatalf("preview changed repository evidence: %+v err=%v", original, err)
+	}
+}
+
+// Regression contract: max_results alone is not an output-byte budget.
+// Budget the encoded JSON, including control-character and quote escaping.
+func TestMemoryToolListSearchOutputByteBudget(t *testing.T) {
+	for _, tc := range []struct{ name, content string }{
+		{"UTF8", "keyword " + strings.Repeat("界", 1300)},
+		{"JSON escaping", "keyword " + strings.Repeat("\u0001\"\\", 1300)},
+	} {
+		for _, action := range []string{ActionList, ActionSearch} {
+			t.Run(tc.name+"/"+action, func(t *testing.T) {
+				s := newTestStore(t)
+				var records []Record
+				for i := range 201 {
+					records = append(records, Record{ID: fmt.Sprintf("id-%03d", i), Kind: Explicit, Revision: 1, Content: tc.content})
+				}
+				s.repo.(*testRepo).fixture(Snapshot{Version: 201, Records: records})
+				tool := newTestMemoryTool(t, s)
+				args := memoryArgs{Action: action, MaxResults: 200}
+				if action == ActionSearch {
+					args.Query = "keyword"
+				}
+				result := tool.Execute(t.Context(), prepareMemory(t, tool, memoryJSON(t, args)))
+				var payload SearchResult
+				decodeMemoryResult(t, result, &payload)
+				if !payload.Truncated || len(payload.Records) > 200 {
+					t.Fatalf("overflow not signalled: count=%d truncated=%v", len(payload.Records), payload.Truncated)
+				}
+				if got := len(result.Content[0].Text); got > maxToolBytes {
+					t.Errorf("%s JSON is %d bytes, exceeds %d-byte tool budget; bound aggregate previews, not just max_results", action, got, maxToolBytes)
+				}
+			})
 		}
 	}
 }
 
-// Reading a memory file that does not exist must fail with actionable
-// guidance, not a raw OS error leaking the store's absolute root.
-func TestMemoryToolReadNotFoundGuidance(t *testing.T) {
+type memoryReadPayload struct {
+	Record         Record `json:"record"`
+	Content        string `json:"content"`
+	TotalLines     int    `json:"total_lines"`
+	Truncated      bool   `json:"truncated"`
+	NextLineOffset int    `json:"next_line_offset"`
+	NextByteOffset int    `json:"next_byte_offset"`
+	TotalBytes     int    `json:"total_bytes"`
+}
+
+func TestMemoryToolReadAutomaticRolloutPagination(t *testing.T) {
 	s := newTestStore(t)
-	tool, _ := NewMemoryTool(s)
-
-	prepared := prepareMemory(t, tool, `{"action":"read","path":"MEMORY.md"}`)
-	result := tool.Execute(context.Background(), prepared)
-	if result.Status != domain.ToolStatusError {
-		t.Fatalf("Status = %s, want error", result.Status)
+	var lines []string
+	for i := range 250 {
+		lines = append(lines, fmt.Sprintf("line%d", i+1))
 	}
-	if result.Error == nil || !strings.Contains(result.Error.Message, "memory file not found") ||
-		!strings.Contains(result.Error.Message, "action=list") {
-		t.Fatalf("error = %+v, want not-found guidance pointing at list", result.Error)
+	s.repo.(*testRepo).fixture(Snapshot{Version: 1, Records: []Record{{ID: "automatic", Kind: Automatic, Revision: 3, Content: "recap", Rollout: strings.Join(lines, "\n")}}})
+	tool := newTestMemoryTool(t, s)
+	var parts []string
+	offset := 1
+	for page := range 3 {
+		args := memoryArgs{Action: ActionRead, ID: "automatic"}
+		if page > 0 {
+			args.LineOffset = offset
+		}
+		var payload memoryReadPayload
+		decodeMemoryResult(t, tool.Execute(t.Context(), prepareMemory(t, tool, memoryJSON(t, args))), &payload)
+		if payload.TotalLines != 252 || payload.Record.Revision != 3 || payload.Record.Kind != Automatic || payload.Record.Content != "" || payload.Record.Rollout != "" {
+			t.Fatalf("read metadata=%+v", payload)
+		}
+		wantLines := min(DefaultReadMaxLines, 253-offset)
+		if len(strings.Split(payload.Content, "\n")) != wantLines || payload.NextLineOffset != offset+wantLines || payload.Truncated != (page < 2) {
+			t.Fatalf("page %d: %+v", page, payload)
+		}
+		parts = append(parts, payload.Content)
+		offset = payload.NextLineOffset
 	}
-	if strings.Contains(result.Error.Message, s.root) {
-		t.Fatalf("error leaks the store root: %q", result.Error.Message)
+	if strings.Join(parts, "\n") != "recap\n\n"+strings.Join(lines, "\n") {
+		t.Fatal("rollout pagination skipped or duplicated lines")
 	}
-	if result.Error.Retryable {
-		t.Fatal("not-found must not be retryable")
+	for _, tc := range []struct {
+		offset, max int
+		want        string
+		next        int
+		truncated   bool
+	}{
+		{2, 2, "\nline1", 4, true},
+		{500, 1, "", 253, false},
+	} {
+		var payload memoryReadPayload
+		decodeMemoryResult(t, tool.Execute(t.Context(), prepareMemory(t, tool, memoryJSON(t, memoryArgs{Action: ActionRead, ID: "automatic", LineOffset: tc.offset, MaxLines: tc.max}))), &payload)
+		if payload.Content != tc.want || payload.NextLineOffset != tc.next || payload.Truncated != tc.truncated {
+			t.Fatalf("offset read=%+v", payload)
+		}
 	}
 }
 
-func TestMemoryToolListExecute(t *testing.T) {
+func TestMemoryToolReadByteBudgetUTF8(t *testing.T) {
 	s := newTestStore(t)
-	s.WriteSummary("test summary")
-	s.WriteMain("test main")
-	tool, _ := NewMemoryTool(s)
-
-	prepared := prepareMemory(t, tool, `{"action":"list"}`)
-	result := tool.Execute(context.Background(), prepared)
-	if result.Status != domain.ToolStatusSuccess {
-		t.Fatalf("Status = %s, error = %+v", result.Status, result.Error)
+	s.repo.(*testRepo).fixture(Snapshot{Version: 1, Records: []Record{{ID: "big", Kind: Automatic, Revision: 1, Rollout: strings.Repeat("界", maxToolBytes)}}})
+	tool := newTestMemoryTool(t, s)
+	result := tool.Execute(t.Context(), prepareMemory(t, tool, `{"action":"read","id":"big"}`))
+	var payload memoryReadPayload
+	decodeMemoryResult(t, result, &payload)
+	if len(result.Content[0].Text) > maxToolBytes || len(payload.Content) > maxToolBytes/2 || !utf8.ValidString(payload.Content) || !payload.Truncated {
+		t.Fatalf("read byte budget: JSON=%d content=%d truncated=%v", len(result.Content[0].Text), len(payload.Content), payload.Truncated)
 	}
 }
 
-func TestMemoryToolListWithMaxResults(t *testing.T) {
+func TestMemoryToolReadByteContinuation(t *testing.T) {
+	for _, tc := range []struct{ name, text string }{
+		{"long UTF8 single line", strings.Repeat("界𐐀", 10000)},
+		{"JSON escaped single line", strings.Repeat("\u0001\"\\界", 10000)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTestStore(t)
+			s.repo.(*testRepo).fixture(Snapshot{Version: 1, Records: []Record{{ID: "long", Kind: Automatic, Revision: 1, Content: tc.text}}})
+			tool := newTestMemoryTool(t, s)
+			var joined strings.Builder
+			offset, pages := 0, 0
+			for offset < len(tc.text) {
+				prepared := prepareMemory(t, tool, memoryJSON(t, memoryArgs{Action: ActionRead, ID: "long", ByteOffset: offset}))
+				fresh, err := tool.Prepare(t.Context(), prepared.Call)
+				if err != nil || string(fresh.Call.Arguments) != string(prepared.Call.Arguments) || fresh.ArgsHash != prepared.ArgsHash || fresh.Risk != domain.R1 {
+					t.Fatalf("byte_offset canonical drift at %d: %+v err=%v", offset, fresh, err)
+				}
+				result := tool.Execute(t.Context(), fresh)
+				var payload memoryReadPayload
+				decodeMemoryResult(t, result, &payload)
+				if len(result.Content[0].Text) > maxToolBytes || !utf8.ValidString(payload.Content) || payload.Content == "" {
+					t.Fatalf("invalid page at %d: JSON bytes=%d content bytes=%d", offset, len(result.Content[0].Text), len(payload.Content))
+				}
+				if payload.TotalLines != 1 || payload.TotalBytes != len(tc.text) || payload.NextByteOffset != offset+len(payload.Content) || payload.Truncated != (payload.NextByteOffset < len(tc.text)) {
+					t.Fatalf("incorrect continuation metadata at %d: next=%d total=%d truncated=%v", offset, payload.NextByteOffset, payload.TotalBytes, payload.Truncated)
+				}
+				var fields map[string]json.RawMessage
+				decodeMemoryResult(t, result, &fields)
+				if _, present := fields["next_line_offset"]; present {
+					t.Fatal("byte-limited/byte-offset read returned a line cursor that could skip unread text")
+				}
+				if payload.Content != tc.text[offset:payload.NextByteOffset] {
+					t.Fatalf("page skipped or duplicated bytes at %d", offset)
+				}
+				joined.WriteString(payload.Content)
+				offset = payload.NextByteOffset
+				pages++
+			}
+			if pages < 2 || joined.String() != tc.text {
+				t.Fatalf("continuation failed to reconstruct original text: pages=%d bytes=%d", pages, joined.Len())
+			}
+		})
+	}
+}
+
+func TestMemoryToolReadRejectsMiddleUTF8ByteOffset(t *testing.T) {
 	s := newTestStore(t)
-	tool, _ := NewMemoryTool(s)
-
-	prepared := prepareMemory(t, tool, `{"action":"list","max_results":1}`)
-	result := tool.Execute(context.Background(), prepared)
-	if result.Status != domain.ToolStatusSuccess {
-		t.Fatalf("Status = %s", result.Status)
+	s.repo.(*testRepo).fixture(Snapshot{Version: 1, Records: []Record{{ID: "utf8", Kind: Automatic, Revision: 1, Content: "界𐐀tail"}}})
+	tool := newTestMemoryTool(t, s)
+	for _, offset := range []int{1, 2, 4, 5, 6} {
+		prepared := prepareMemory(t, tool, memoryJSON(t, memoryArgs{Action: ActionRead, ID: "utf8", ByteOffset: offset}))
+		result := tool.Execute(t.Context(), prepared)
+		requireMemoryToolError(t, result, domain.ErrInvalidInput)
+		if !strings.Contains(result.Error.Message, "UTF-8 boundary") {
+			t.Fatalf("missing boundary guidance: %+v", result.Error)
+		}
 	}
-	var output struct {
-		Entries []FileEntry `json:"entries"`
-	}
-	if err := json.Unmarshal([]byte(result.Content[0].Text), &output); err != nil {
-		t.Fatalf("parse output: %v", err)
-	}
-	if len(output.Entries) > 1 {
-		t.Errorf("expected at most 1 entry, got %d", len(output.Entries))
+	var payload memoryReadPayload
+	decodeMemoryResult(t, tool.Execute(t.Context(), prepareMemory(t, tool, `{"action":"read","id":"utf8","byte_offset":3}`)), &payload)
+	if payload.Content != "𐐀tail" || payload.Truncated || payload.NextByteOffset != len("界𐐀tail") {
+		t.Fatalf("valid boundary rejected: %+v", payload)
 	}
 }
 
-func TestMemoryToolReadExecute(t *testing.T) {
+// Fail the consumer methods directly, independently of snapshot-loading behavior.
+type failingMemoryConsumerRepo struct {
+	*testRepo
+	failure error
+}
+
+func (r *failingMemoryConsumerRepo) QueryMemory(context.Context, string, string, int) (SearchResult, error) {
+	return SearchResult{}, r.failure
+}
+
+func (r *failingMemoryConsumerRepo) ReadMemory(context.Context, string, string) (Record, error) {
+	return Record{}, r.failure
+}
+
+func TestMemoryToolReadActionsRepositoryErrors(t *testing.T) {
+	failure := errors.New("consumer query unavailable")
+	repo := &failingMemoryConsumerRepo{testRepo: newTestStore(t).repo.(*testRepo), failure: failure}
+	tool := newTestMemoryTool(t, NewStore(repo))
+	for _, args := range []string{`{"action":"list"}`, `{"action":"search","query":"fact"}`, `{"action":"read","id":"active"}`} {
+		t.Run(args, func(t *testing.T) {
+			prepared := prepareMemory(t, tool, args)
+			result := tool.Execute(t.Context(), prepared)
+			if result.Status != domain.ToolStatusError || result.Error == nil || result.Error.Message != failure.Error() || result.CallID != prepared.Call.ID || len(result.Content) != 0 {
+				t.Fatalf("repository error returned a successful/partial payload: %+v", result)
+			}
+		})
+	}
+}
+
+func TestMemoryToolSecretRedactionAndErrors(t *testing.T) {
 	s := newTestStore(t)
-	s.WriteMain("line1\nline2\nline3")
-	tool, _ := NewMemoryTool(s)
-
-	prepared := prepareMemory(t, tool, `{"action":"read","path":"MEMORY.md"}`)
-	result := tool.Execute(context.Background(), prepared)
-	if result.Status != domain.ToolStatusSuccess {
-		t.Fatalf("Status = %s", result.Status)
+	tool := newTestMemoryTool(t, s)
+	secret := "sk-abcdefghijklmnopqrstuv"
+	prepared := prepareMemory(t, tool, memoryJSON(t, memoryArgs{Action: ActionRemember, Content: "token " + secret}))
+	if strings.Contains(string(prepared.Call.Arguments), secret) || strings.Contains(prepared.ApprovalDesc, secret) {
+		t.Fatal("secret leaked through canonical arguments or approval description")
 	}
-	var output struct {
-		Content    string `json:"content"`
-		TotalLines int    `json:"total_lines"`
+	var payload struct {
+		Record Record `json:"record"`
 	}
-	if err := json.Unmarshal([]byte(result.Content[0].Text), &output); err != nil {
-		t.Fatalf("parse output: %v", err)
+	decodeMemoryResult(t, tool.Execute(t.Context(), prepared), &payload)
+	if payload.Record.Content != "token "+redactPlaceholder {
+		t.Fatalf("secret persisted: %+v", payload.Record)
 	}
-	if output.Content != "line1\nline2\nline3" {
-		t.Errorf("Content = %q", output.Content)
+	failure := errors.New("repository offline")
+	s.repo.(*testRepo).err = failure
+	for _, args := range []string{`{"action":"list"}`, `{"action":"search","query":"token"}`, `{"action":"read","id":"missing"}`, `{"action":"remember","content":"fact"}`, `{"action":"forget","id":"missing","revision":1}`} {
+		result := tool.Execute(t.Context(), prepareMemory(t, tool, args))
+		if result.Status != domain.ToolStatusError || result.Error == nil || !strings.Contains(result.Error.Message, failure.Error()) {
+			t.Fatalf("repository failure swallowed: %+v", result)
+		}
 	}
-}
-
-func TestMemoryToolReadWithOffset(t *testing.T) {
-	s := newTestStore(t)
-	s.WriteMain("line1\nline2\nline3")
-	tool, _ := NewMemoryTool(s)
-
-	prepared := prepareMemory(t, tool, `{"action":"read","path":"MEMORY.md","line_offset":2,"max_lines":1}`)
-	result := tool.Execute(context.Background(), prepared)
-	if result.Status != domain.ToolStatusSuccess {
-		t.Fatalf("Status = %s", result.Status)
-	}
-	var output struct {
-		Content    string `json:"content"`
-		TotalLines int    `json:"total_lines"`
-	}
-	json.Unmarshal([]byte(result.Content[0].Text), &output)
-	if output.Content != "line2" {
-		t.Errorf("Content = %q, want 'line2'", output.Content)
-	}
-}
-
-// writeBigMain stores a 250-line MEMORY.md and returns the store.
-func writeBigMain(t *testing.T) *Store {
-	t.Helper()
-	s := newTestStore(t)
-	var b strings.Builder
-	for i := 1; i <= 250; i++ {
-		fmt.Fprintf(&b, "line%d\n", i)
-	}
-	if err := s.WriteMain(strings.TrimSuffix(b.String(), "\n")); err != nil {
-		t.Fatalf("WriteMain: %v", err)
-	}
-	return s
-}
-
-func TestMemoryToolReadDefaultsToPagedWindow(t *testing.T) {
-	tool, _ := NewMemoryTool(writeBigMain(t))
-
-	prepared := prepareMemory(t, tool, `{"action":"read","path":"MEMORY.md"}`)
-	result := tool.Execute(context.Background(), prepared)
-	if result.Status != domain.ToolStatusSuccess {
-		t.Fatalf("Status = %s", result.Status)
-	}
-	var output struct {
-		Content    string `json:"content"`
-		TotalLines int    `json:"total_lines"`
-		Truncated  bool   `json:"truncated"`
-		Hint       string `json:"hint"`
-	}
-	if err := json.Unmarshal([]byte(result.Content[0].Text), &output); err != nil {
-		t.Fatalf("parse output: %v", err)
-	}
-	if output.TotalLines != 250 {
-		t.Fatalf("total_lines = %d, want 250", output.TotalLines)
-	}
-	if got := countLines(output.Content); got != DefaultReadMaxLines {
-		t.Fatalf("uncapped read returned %d lines, want the %d-line default window", got, DefaultReadMaxLines)
-	}
-	if !output.Truncated || !strings.Contains(output.Hint, "line_offset=201") {
-		t.Fatalf("truncated=%v hint=%q, want a paging hint continuing at line 201", output.Truncated, output.Hint)
-	}
-}
-
-func TestMemoryToolReadLastPageHasNoTruncationHint(t *testing.T) {
-	tool, _ := NewMemoryTool(writeBigMain(t))
-
-	prepared := prepareMemory(t, tool, `{"action":"read","path":"MEMORY.md","line_offset":201}`)
-	result := tool.Execute(context.Background(), prepared)
-	if result.Status != domain.ToolStatusSuccess {
-		t.Fatalf("Status = %s", result.Status)
-	}
-	var output struct {
-		Content   string `json:"content"`
-		Truncated bool   `json:"truncated"`
-		Hint      string `json:"hint"`
-	}
-	if err := json.Unmarshal([]byte(result.Content[0].Text), &output); err != nil {
-		t.Fatalf("parse output: %v", err)
-	}
-	if !strings.HasPrefix(output.Content, "line201\n") || !strings.HasSuffix(output.Content, "line250") {
-		t.Fatalf("second page content wrong: %.40q...%.40q", output.Content, output.Content[len(output.Content)-40:])
-	}
-	if output.Truncated || output.Hint != "" {
-		t.Fatalf("last page must not carry a truncation hint: truncated=%v hint=%q", output.Truncated, output.Hint)
-	}
-}
-
-func TestMemoryToolReadExplicitMaxLines(t *testing.T) {
-	tool, _ := NewMemoryTool(writeBigMain(t))
-
-	prepared := prepareMemory(t, tool, `{"action":"read","path":"MEMORY.md","max_lines":10}`)
-	result := tool.Execute(context.Background(), prepared)
-	if result.Status != domain.ToolStatusSuccess {
-		t.Fatalf("Status = %s", result.Status)
-	}
-	var output struct {
-		Content string `json:"content"`
-		Hint    string `json:"hint"`
-	}
-	if err := json.Unmarshal([]byte(result.Content[0].Text), &output); err != nil {
-		t.Fatalf("parse output: %v", err)
-	}
-	if got := countLines(output.Content); got != 10 {
-		t.Fatalf("read returned %d lines, want 10", got)
-	}
-	if !strings.Contains(output.Hint, "line_offset=11") {
-		t.Fatalf("hint = %q, want continuation at line 11", output.Hint)
-	}
-}
-
-func TestMemoryToolSearchExecute(t *testing.T) {
-	s := newTestStore(t)
-	content := "# Preferences\n\nUser prefers Go over Python"
-	if err := s.WriteMain(content); err != nil {
-		t.Fatalf("WriteMain: %v", err)
-	}
-
-	tool, _ := NewMemoryTool(s)
-	prepared := prepareMemory(t, tool, `{"action":"search","query":"prefers Go"}`)
-	result := tool.Execute(context.Background(), prepared)
-	if result.Status != domain.ToolStatusSuccess {
-		t.Fatalf("Status = %s", result.Status)
-	}
-	var output struct {
-		Matches []SearchMatch `json:"matches"`
-	}
-	if err := json.Unmarshal([]byte(result.Content[0].Text), &output); err != nil {
-		t.Fatalf("parse output: %v, raw: %s", err, result.Content[0].Text)
-	}
-	if len(output.Matches) == 0 {
-		t.Errorf("expected at least 1 match, raw output: %s", result.Content[0].Text)
-	}
-}
-
-func TestMemoryToolAddNoteExecute(t *testing.T) {
-	s := newTestStore(t)
-	tool, _ := NewMemoryTool(s)
-
-	prepared := prepareMemory(t, tool,
-		`{"action":"add_note","filename":"2026-08-02T12-00-00-prefer-go.md","note":"User prefers Go"}`)
-	result := tool.Execute(context.Background(), prepared)
-	if result.Status != domain.ToolStatusSuccess {
-		t.Fatalf("Status = %s", result.Status)
-	}
-	// Verify the note was actually written.
-	notes, _ := s.ListNotes()
-	if len(notes) != 1 {
-		t.Errorf("expected 1 note, got %d", len(notes))
+	s.repo.(*testRepo).err = nil
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	result := tool.Execute(ctx, prepareMemory(t, tool, `{"action":"remember","content":"cancelled fact"}`))
+	if result.Status != domain.ToolStatusError || result.Error == nil || !strings.Contains(result.Error.Message, "context canceled") {
+		t.Fatalf("cancellation swallowed: %+v", result)
 	}
 }

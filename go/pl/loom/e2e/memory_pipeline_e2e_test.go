@@ -35,11 +35,11 @@ import (
 //  2. session shutdown performs NO model work — it only enqueues a job;
 //  3. the background pipeline (run manually here with zero idle window)
 //     claims the job, extracts a memory with the real model, and Phase 2
-//     consolidates it into MEMORY.md / memory_summary.md;
+//     publishes a versioned automatic-memory view;
 //  4. ProcessRuntime.Close returns fast — consolidation no longer runs on
 //     the exit path.
 func TestMemoryPipelineRealModelE2E(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	env := harness.NewEnv(t, harness.WithAdjust(func(resolved *config.ResolvedConfig) {
 		// Neutralize the process's own background pipeline so the test
 		// drives the pass manually: a huge idle window means the startup
@@ -79,7 +79,7 @@ func TestMemoryPipelineRealModelE2E(t *testing.T) {
 
 	// --- 2. session shutdown enqueues a memory job (no model work) ---
 	shutdownStart := time.Now()
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	if err := svc.Shutdown(shutdownCtx); err != nil {
 		t.Logf("svc.Shutdown: %v (continuing)", err)
 	}
@@ -98,7 +98,7 @@ func TestMemoryPipelineRealModelE2E(t *testing.T) {
 	// --- 3. pipeline pass: extraction + consolidation with the real model ---
 	cfg := memory.DefaultPipelineConfig()
 	cfg.MinIdle = 0 // the session just closed; claim it now
-	pipeline := memory.NewPipeline(proc.MemoryJobQueue, proc.Store, proc.MemoryExtractor, proc.MemoryConsolidator, cfg, discard)
+	pipeline := memory.NewPipeline(proc.MemoryJobQueue, proc.MemoryExtractor, proc.MemoryConsolidator, cfg, discard)
 
 	passStart := time.Now()
 	stats := pipeline.RunOnce(ctx)
@@ -113,30 +113,43 @@ func TestMemoryPipelineRealModelE2E(t *testing.T) {
 		t.Fatalf("phase2 did not run: %+v", stats)
 	}
 
-	// --- artifacts on disk ---
-	raw, err := proc.MemoryStore.ReadRaw()
+	// --- authoritative records and the actual published repository view ---
+	store := proc.MemoryStore.ForWorkspace(env.Workspace)
+	records, err := store.Records(ctx)
 	if err != nil {
-		t.Fatalf("ReadRaw: %v", err)
+		t.Fatalf("Records: %v", err)
 	}
-	if stats.Succeeded == 1 && strings.TrimSpace(raw) == "" {
-		t.Fatal("extraction succeeded but raw_memories.md is empty")
+	var raw strings.Builder
+	for _, record := range records {
+		if record.Kind == memory.Automatic {
+			raw.WriteString(record.Content + "\n" + record.Rollout + "\n")
+		}
 	}
-	main, err := proc.MemoryStore.ReadMain()
+	if stats.Succeeded == 1 && strings.TrimSpace(raw.String()) == "" {
+		t.Fatal("extraction succeeded but no automatic evidence was persisted")
+	}
+	snapshots, err := store.Snapshots(ctx)
 	if err != nil {
-		t.Fatalf("ReadMain: %v", err)
+		t.Fatalf("Snapshots: %v", err)
 	}
-	summary, err := proc.MemoryStore.ReadSummary()
-	if err != nil {
-		t.Fatalf("ReadSummary: %v", err)
+	var main, summary strings.Builder
+	for _, snapshot := range snapshots {
+		if snapshot.ValidView() {
+			main.WriteString(snapshot.View.Main + "\n")
+			summary.WriteString(snapshot.View.Summary + "\n")
+		}
 	}
-	combined := raw + "\n" + main + "\n" + summary
+	if stats.Succeeded == 1 && (strings.TrimSpace(main.String()) == "" || strings.TrimSpace(summary.String()) == "") {
+		t.Fatalf("successful extraction has no published nonempty view: %+v", snapshots)
+	}
+	combined := raw.String() + main.String() + summary.String()
 	if stats.Succeeded == 1 && !strings.Contains(combined, codeWord) && !strings.Contains(combined, "孔雀石") {
-		t.Fatalf("memory artifacts lost the marker %q:\nraw=%q\nmain=%q\nsummary=%q", codeWord, raw, main, summary)
+		t.Fatalf("memory records/views lost the marker %q: %s", codeWord, combined)
 	}
 	if strings.Contains(combined, fakeSecret) {
-		t.Fatalf("synthetic secret leaked into memory artifacts:\nraw=%q\nmain=%q\nsummary=%q", raw, main, summary)
+		t.Fatalf("synthetic secret leaked into memory records/views: %s", combined)
 	}
-	t.Logf("memory artifacts ok: MEMORY.md=%d bytes, summary=%d bytes, raw=%d bytes", len(main), len(summary), len(raw))
+	t.Logf("memory records/views ok: main=%d bytes, summary=%d bytes, evidence=%d bytes", main.Len(), summary.Len(), raw.Len())
 
 	// --- 4. process close is fast (no consolidation on the exit path) ---
 	closeStart := time.Now()

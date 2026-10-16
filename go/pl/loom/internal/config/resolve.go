@@ -312,9 +312,6 @@ func (s ResolvedStorage) LogsDir() string { return filepath.Join(s.BaseDir, "log
 // snapshot, ...): losing it costs one recompute, never correctness.
 func (s ResolvedStorage) CacheDir() string { return filepath.Join(s.BaseDir, "cache") }
 
-// MemoriesDir is the long-term memory store root.
-func (s ResolvedStorage) MemoriesDir() string { return filepath.Join(s.BaseDir, "memories") }
-
 // RulesDir is the user-layer permission rules directory (plus the
 // remembered-approvals store).
 func (s ResolvedStorage) RulesDir() string { return filepath.Join(s.BaseDir, "rules") }

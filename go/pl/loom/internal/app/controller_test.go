@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -59,6 +60,225 @@ func testBootstrap(store domain.SessionStore, model domain.Model) *Bootstrap {
 		ProcessRuntime: proc,
 		Registry:       agent.NewToolRegistry(),
 		SteerCell:      agent.NewSteerCell(),
+	}
+}
+
+func TestControllerMemoryLoopPersistsExecutionSourceAcrossSessions(t *testing.T) {
+	ctx := t.Context()
+	cfg := testResolvedConfig(nil)
+	cfg.Storage.BaseDir = t.TempDir()
+	cfg.Memory.Enabled = true
+	cfg.Approval.Mode = permission.ModeOnRequest
+	if err := os.MkdirAll(cfg.Storage.SessionsDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Initialize explicit memory with no model, so no background extraction
+	// or title generation can consume the fake model's tool-call script.
+	proc, err := NewProcessRuntime(ctx, cfg, ProcessRuntimeConfig{ArtifactDir: filepath.Join(t.TempDir(), "artifacts")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proc.Close)
+	proc.TitleSidecar = nil
+	workspaceCall := domain.ToolCall{ID: domain.NewToolCallID(), Name: "memory", Arguments: json.RawMessage(`{"action":"remember","content":"project uses cobalt conventions","scope":"workspace"}`)}
+	globalCall := domain.ToolCall{ID: domain.NewToolCallID(), Name: "memory", Arguments: json.RawMessage(`{"action":"remember","content":"user prefers amber answers","scope":"global"}`)}
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{ToolCalls: []domain.ToolCall{workspaceCall, globalCall}, StopReason: domain.StopToolUse},
+		fakes.ScriptEntry{Text: "saved", StopReason: domain.StopEndTurn},
+		fakes.ScriptEntry{Text: "I can see your preferences", StopReason: domain.StopEndTurn},
+	)
+	cfg.Providers[0].Model = model
+	root := t.TempDir()
+	newBootstrap := func() *Bootstrap {
+		t.Helper()
+		b, err := NewWorkspaceBootstrap(ctx, proc, BootstrapConfig{WorkspaceRoot: root})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(b.Close)
+		return b
+	}
+	newController := func(b *Bootstrap) *Controller {
+		t.Helper()
+		broker := runtimeevent.NewBroker()
+		t.Cleanup(broker.Close)
+		c := NewController(ControllerConfig{Bootstrap: b, Broker: broker, Approver: NewChannelApprover(), Clock: domain.RealClock{}})
+		go c.Run(ctx)
+		t.Cleanup(func() { _ = c.Shutdown(context.Background()) })
+		if err := c.NewSession(ctx); err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	first := newController(newBootstrap())
+	if _, err := first.SubmitPrompt(ctx, "Remember both my project and personal preferences"); err != nil {
+		t.Fatal(err)
+	}
+	waitForIdle(t, first)
+	repo := proc.Store.(*session.SQLiteStore)
+	inspection, err := repo.InspectSession(ctx, first.sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sourceVersion int64
+	started := make(map[domain.ToolCallID]int64)
+	for _, event := range inspection.Events {
+		if event.Type != domain.EventToolExecutionStarted {
+			continue
+		}
+		var payload struct {
+			CallID domain.ToolCallID `json:"call_id"`
+			Tool   string            `json:"tool"`
+		}
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.Tool == "memory" {
+			started[payload.CallID] = event.Sequence
+			sourceVersion = max(sourceVersion, event.Sequence)
+		}
+	}
+	if len(started) != 2 || started[workspaceCall.ID] == 0 || started[globalCall.ID] == 0 {
+		t.Fatalf("missing actual memory execution starts: %+v", started)
+	}
+	for _, scope := range []string{root, ""} {
+		snapshot, err := repo.MemorySnapshot(ctx, scope)
+		if err != nil || len(snapshot.Records) != 1 {
+			t.Fatalf("real memory tool failed to persist scope %q: %+v, %v", scope, snapshot, err)
+		}
+		record := snapshot.Records[0]
+		if record.SessionID != first.sessionID || record.SourceVersion != sourceVersion {
+			t.Fatalf("record source %+v does not match flushed execution-start version %d", record, sourceVersion)
+		}
+	}
+	var succeeded int
+	for _, message := range inspection.Transcript.Messages {
+		for _, part := range message.Parts {
+			if part.ToolResult != nil && (part.ToolResult.CallID == workspaceCall.ID || part.ToolResult.CallID == globalCall.ID) {
+				if part.ToolResult.Status != domain.ToolStatusSuccess {
+					t.Fatalf("actual memory tool failed: %+v", part.ToolResult)
+				}
+				succeeded++
+			}
+		}
+	}
+	if succeeded != 2 {
+		t.Fatalf("successful memory results = %d, want 2", succeeded)
+	}
+	if err := first.Shutdown(ctx); err != nil {
+		t.Fatal(err)
+	}
+	secondBootstrap := newBootstrap()
+	second := newController(secondBootstrap)
+	if second.sessionID == first.sessionID {
+		t.Fatal("test must use separate sessions")
+	}
+	if _, err := second.SubmitPrompt(ctx, "What preferences did I ask you to remember?"); err != nil {
+		t.Fatal(err)
+	}
+	waitForIdle(t, second)
+	calls := model.Calls()
+	if len(calls) != 3 {
+		t.Fatalf("model requests = %d, want 3", len(calls))
+	}
+	var system strings.Builder
+	for _, message := range calls[2].Messages {
+		if message.Role == domain.RoleSystem {
+			for _, part := range message.Parts {
+				system.WriteString(part.Text)
+			}
+		}
+	}
+	if !strings.Contains(system.String(), "project uses cobalt conventions") || !strings.Contains(system.String(), "user prefers amber answers") {
+		t.Fatalf("new session model prompt missed durable memory: %s", system.String())
+	}
+}
+
+type observingMemoryQueue struct {
+	*session.SQLiteStore
+	controller *Controller
+	versions   chan int64
+}
+
+func (q *observingMemoryQueue) EnqueueMemoryJob(ctx context.Context, id domain.SessionID, root string) error {
+	// Re-enter a controller read to detect enqueue inside its mutex.
+	if !q.controller.mu.TryLock() {
+		return fmt.Errorf("memory enqueue ran while controller mutex was locked")
+	}
+	q.controller.mu.Unlock()
+	if err := q.SQLiteStore.EnqueueMemoryJob(ctx, id, root); err != nil {
+		return err
+	}
+	inspection, err := q.SQLiteStore.InspectSession(ctx, id)
+	if err == nil {
+		q.versions <- inspection.Session.Version
+	}
+	return err
+}
+
+func TestControllerEnqueuesMemoryEachTurnAndShutdown(t *testing.T) {
+	ctx := t.Context()
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "first", StopReason: domain.StopEndTurn},
+		fakes.ScriptEntry{Text: "second", StopReason: domain.StopEndTurn},
+	)
+	b := testBootstrap(store, model)
+	b.WorkspaceRoot = t.TempDir()
+	queue := &observingMemoryQueue{SQLiteStore: store, versions: make(chan int64, 8)}
+	b.MemoryJobQueue = queue
+	broker := runtimeevent.NewBroker()
+	t.Cleanup(broker.Close)
+	c := NewController(ControllerConfig{Bootstrap: b, Broker: broker, Approver: NewChannelApprover(), Clock: domain.RealClock{}})
+	queue.controller = c
+	go c.Run(ctx)
+	t.Cleanup(func() { _ = c.Shutdown(context.Background()) })
+	if err := c.NewSession(ctx); err != nil {
+		t.Fatal(err)
+	}
+	nextVersion := func() int64 {
+		t.Helper()
+		select {
+		case version := <-queue.versions:
+			return version
+		case <-time.After(3 * time.Second):
+			t.Fatal("no durable memory enqueue after turn/shutdown")
+			return 0
+		}
+	}
+	var previous int64
+	for _, question := range []string{"first question", "second question"} {
+		if _, err := c.SubmitPrompt(ctx, question); err != nil {
+			t.Fatal(err)
+		}
+		version := nextVersion()
+		if version <= previous {
+			t.Fatalf("enqueue version = %d, previous = %d", version, previous)
+		}
+		previous = version
+		waitForIdle(t, c)
+	}
+	jobs, err := store.ClaimMemoryJobs(ctx, 1, 0, time.Hour, time.Minute, 3)
+	if err != nil || len(jobs) != 1 || jobs[0].SessionVersion != previous || jobs[0].WorkspaceRoot != b.WorkspaceRoot {
+		t.Fatalf("durable job = %+v, %v", jobs, err)
+	}
+	// Delegated sessions and empty identities never invoke the queue.
+	c.enqueueMemoryJob(c.sessionID, true)
+	c.enqueueMemoryJob(domain.SessionID{}, false)
+	select {
+	case <-queue.versions:
+		t.Fatal("delegated/empty session enqueued")
+	default:
+	}
+	if err := c.Shutdown(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if version := nextVersion(); version != previous {
+		t.Fatalf("shutdown fallback version = %d, want %d", version, previous)
 	}
 }
 
@@ -1605,6 +1825,78 @@ func forceAwaitingApproval(controller *Controller) {
 	controller.mu.Lock()
 	controller.state = ControllerStateAwaitingApproval
 	controller.mu.Unlock()
+}
+
+// Approval projection and remembrance must preserve the producing call's
+// actual risk instead of inferring it again from raw arguments.
+func TestPublishingStoreApprovalPreservesActualRisk(t *testing.T) {
+	ctx := t.Context()
+	store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	for _, tc := range []struct {
+		name   string
+		source domain.ToolSource
+		risk   domain.RiskLevel
+		args   json.RawMessage
+	}{
+		{"memory", domain.ToolSourceBuiltin, domain.R3, json.RawMessage(`{"action":"forget","id":"mem_test","revision":1}`)},
+		{"memory", domain.ToolSourceBuiltin, domain.R2, json.RawMessage(`{"action":"forget","id":"mem_test","revision":1}`)},
+		{"mcp__srv__mutate", domain.ToolSourceMCP, domain.R3, json.RawMessage(`{"command":"git push --force","path":"/outside/file"}`)},
+		{"mcp__srv__mutate", domain.ToolSourceMCP, domain.R1, json.RawMessage(`{"command":"git push --force","path":"/outside/file"}`)},
+	} {
+		t.Run(fmt.Sprintf("%s/R%d", tc.name, tc.risk), func(t *testing.T) {
+			broker := runtimeevent.NewBroker()
+			t.Cleanup(broker.Close)
+			b := testBootstrap(store, fakes.NewFakeModel())
+			b.Packages = permission.NewPackageSet()
+			b.permissionPolicy = &permission.Policy{Packages: b.Packages, Mode: permission.ModeOnRequest}
+			controller := NewController(ControllerConfig{Bootstrap: b, Broker: broker, Approver: NewChannelApprover(), Clock: domain.RealClock{}})
+			callID, approvalID, sessionID := domain.NewToolCallID(), domain.NewEventID(), domain.NewSessionID()
+			ps := &publishingStore{broker: broker, sessionID: sessionID, runID: domain.NewRunID(), clock: domain.RealClock{}, controller: controller, pendingArgs: map[domain.ToolCallID]json.RawMessage{callID: tc.args}}
+			events, unsubscribe := broker.Subscribe()
+			defer unsubscribe()
+			raw, err := json.Marshal(toolCallAuditDTO{CallID: callID, Tool: tc.name, Source: tc.source, Risk: tc.risk, ApprovalDesc: "approve operation"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ps.publishForEvent(sessionID, domain.Event{ID: approvalID, Type: domain.EventPermissionRequested, Payload: raw})
+			prepared := domain.PreparedCall{Call: domain.ToolCall{Name: tc.name, Arguments: tc.args}, Definition: domain.ToolDefinition{Source: tc.source}, Risk: tc.risk}
+			derivation := permission.DeriveEffect(prepared, controller.deriveEnv())
+			controller.mu.Lock()
+			card, ok := controller.pendingCards[approvalID]
+			controller.mu.Unlock()
+			if !ok || card.Risk != tc.risk || card.Source != tc.source || card.Consequence != approvalConsequence(derivation) {
+				t.Fatalf("pending card diverged from actual Prepare: %+v, %+v", card, derivation)
+			}
+			if tc.name == "memory" && tc.risk == domain.R3 && (card.Consequence == "" || !strings.Contains(card.Consequence, "memory mutation revokes shared evidence")) {
+				t.Fatalf("memory R3 destructive consequence missing: %+v", card)
+			}
+			select {
+			case event := <-events:
+				if event.Kind != runtimeevent.KindApprovalRequested {
+					t.Fatalf("unexpected frame: %s", event.Kind)
+				}
+				var broadcast runtimeevent.ApprovalRequestedPayload
+				if err := json.Unmarshal(event.Payload, &broadcast); err != nil {
+					t.Fatal(err)
+				}
+				if broadcast.Risk != card.Risk || broadcast.Source != card.Source || broadcast.Consequence != card.Consequence {
+					t.Fatalf("broadcast diverged from pending card: %+v", broadcast)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("approval frame missing")
+			}
+			// Remembering must use the same actual risk shown by the card.
+			label := controller.rememberApprovalRule(ApprovalBinding{ApprovalID: approvalID, CallID: callID, ArgsHash: card.ArgsHash}, "")
+			wantLabel, _, canRemember := permission.MemoryPreviewLabel(derivation, "")
+			if (label != "") != canRemember || (canRemember && label != wantLabel) {
+				t.Fatalf("remembered label = %q, want %q (eligible=%v)", label, wantLabel, canRemember)
+			}
+		})
+	}
 }
 
 // Regression: a permission.resolved domain event names its approval by the

@@ -1759,7 +1759,11 @@ func (l *Loop) callModel(ctx context.Context) error {
 		modelName = "default"
 	}
 	reasoning := l.effectiveReasoning()
-	messages, rules, systemText := l.effectiveMessages(ctx)
+	messages, rules, systemText, err := l.effectiveMessages(ctx)
+	if err != nil {
+		l.terminate(ctx, domain.OutcomeFailed)
+		return fmt.Errorf("build system prompt: %w", err)
+	}
 	manifest, err := buildContextManifest(messages, rules)
 	if err != nil {
 		l.terminate(ctx, domain.OutcomeFailed)
@@ -1997,8 +2001,8 @@ func (l *Loop) reportContextUsage(ctx context.Context) {
 }
 
 // effectiveMessages returns the transcript with the ephemeral system prompt
-// prepended, together with the prompt's audit rule references. A build
-// failure degrades to the bare transcript rather than failing the turn.
+// prepended, together with the prompt's audit rule references and any build
+// error. The caller must reject a failed build before requesting the model.
 //
 // The prompt rides as up to three leading system messages: the cacheable
 // static part (marked domain.MetadataPromptCache), the per-request dynamic
@@ -2007,10 +2011,10 @@ func (l *Loop) reportContextUsage(ctx context.Context) {
 // hint); OpenAI-compatible vendors keep the head system and downgrade the
 // rest to user text (GLM-class constraint, see openai.apiRole) — which
 // conveniently matches the codex "dynamic context as user fragments" model.
-func (l *Loop) effectiveMessages(ctx context.Context) ([]domain.Message, []domain.ContextRuleRef, string) {
+func (l *Loop) effectiveMessages(ctx context.Context) ([]domain.Message, []domain.ContextRuleRef, string, error) {
 	messages := append([]domain.Message(nil), l.Run.Messages...)
-	prefix, rules, systemText := requestPrefix(ctx, l.SystemPrompt, l.ModelName, l.Run.Clock, l.Run.Plan, l.Logger)
-	return append(prefix, messages...), rules, systemText
+	prefix, rules, systemText, err := requestPrefix(ctx, l.SystemPrompt, l.ModelName, l.Run.Clock, l.Run.Plan)
+	return append(prefix, messages...), rules, systemText, err
 }
 
 // requestPrefix assembles the ephemeral head every model request carries:
@@ -2018,21 +2022,19 @@ func (l *Loop) effectiveMessages(ctx context.Context) ([]domain.Message, []domai
 // live plan note (rebuilt per request and never persisted, so the model
 // keeps plan awareness across context compactions and crash recovery — a
 // summary replacement that drops message history cannot lose the plan).
-// A prompt build failure degrades to no prefix rather than failing the
-// turn. Shared by the loop (effectiveMessages) and the read-only
-// overhead estimate (EstimateOverheadTokens) so both count the same head.
-func requestPrefix(ctx context.Context, builder PromptBuilder, modelName string, clock domain.Clock, plan domain.Plan, logger *slog.Logger) ([]domain.Message, []domain.ContextRuleRef, string) {
+// A prompt build failure returns the plan note together with the error:
+// model requests must fail, but read-only estimates may ignore the error
+// and still count the available head. Shared by effectiveMessages and
+// EstimateOverheadTokens so both assemble the same head.
+func requestPrefix(ctx context.Context, builder PromptBuilder, modelName string, clock domain.Clock, plan domain.Plan) ([]domain.Message, []domain.ContextRuleRef, string, error) {
 	var prefix []domain.Message
 	var rules []domain.ContextRuleRef
 	var systemText string
+	var buildErr error
 	if builder != nil {
 		static, dynamic, refs, err := systemPromptParts(ctx, builder, modelName)
-		switch {
-		case err != nil:
-			if logger != nil {
-				logger.Warn("build system prompt failed; continuing without it", "error", err)
-			}
-		default:
+		buildErr = err
+		if err == nil {
 			if s := strings.TrimSpace(static); s != "" {
 				prefix = append(prefix, systemMessage(s, true, clock))
 				systemText = s
@@ -2051,15 +2053,16 @@ func requestPrefix(ctx context.Context, builder PromptBuilder, modelName string,
 	if len(plan.Items) > 0 && !plan.IsComplete() {
 		prefix = append(prefix, systemMessage(planStatusNote(plan), false, clock))
 	}
-	return prefix, rules, systemText
+	return prefix, rules, systemText, buildErr
 }
 
 // EstimateOverheadTokens approximates the per-request overhead beyond the
 // transcript — rendered system prompt parts, the plan note and the tool
 // schemas — so read-only projections (the session snapshot) report
-// occupancy on the same scale as the loop's request estimate.
+// occupancy on the same scale as the loop's request estimate. If prompt
+// rendering fails, it still counts the plan note and tool schemas.
 func EstimateOverheadTokens(ctx context.Context, builder PromptBuilder, modelName string, clock domain.Clock, plan domain.Plan, tools []domain.ToolDefinition) int {
-	prefix, _, _ := requestPrefix(ctx, builder, modelName, clock, plan, nil)
+	prefix, _, _, _ := requestPrefix(ctx, builder, modelName, clock, plan)
 	return estTokens(prefix) + schemaTokenEstimate(tools)
 }
 
@@ -2746,7 +2749,10 @@ func (l *Loop) executeOne(ctx context.Context, item preparedExec) error {
 			return err
 		}
 	}
-	result := l.executeTool(ctx, item)
+	toolCtx := domain.WithToolContext(ctx, domain.ToolContext{
+		SessionID: l.Run.SessionID, SourceVersion: l.Run.Version,
+	})
+	result := l.executeTool(toolCtx, item)
 	l.recordToolOutcome(ctx, item, result)
 	if reason := l.runaway.trackExecResult(l.runawayConfig(), result); reason != "" {
 		return l.terminateRunaway(ctx, reason)
@@ -2797,17 +2803,18 @@ func (l *Loop) executeSegmentParallel(ctx context.Context, segment []preparedExe
 		}
 	}
 
+	toolCtx := domain.WithToolContext(ctx, domain.ToolContext{
+		SessionID: l.Run.SessionID, SourceVersion: l.Run.Version,
+	})
 	results := make([]domain.ToolResult, len(segment))
 	sem := make(chan struct{}, maxConcurrentToolExecs)
 	var wg sync.WaitGroup
 	for i, item := range segment {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			results[i] = item.tool.Execute(ctx, item.prepared)
-		}()
+			results[i] = item.tool.Execute(toolCtx, item.prepared)
+		})
 	}
 	wg.Wait()
 
@@ -2890,9 +2897,11 @@ func (l *Loop) contextOccupancy(ctx context.Context) int64 {
 // requestEstimate approximates the full size of the next model request
 // when no metered call exists yet (first call, right after compaction):
 // the ephemeral request head (system prompt parts + plan note), the
-// transcript and the tool schemas, all in the byte/4 estimate scale.
+// transcript and the tool schemas, all in the byte/4 estimate scale. This
+// read-only estimate ignores prompt build errors while retaining the plan
+// note, transcript and schema costs; callModel fails on the same errors.
 func (l *Loop) requestEstimate(ctx context.Context) int {
-	prefix, _, _ := requestPrefix(ctx, l.SystemPrompt, l.ModelName, l.Run.Clock, l.Run.Plan, l.Logger)
+	prefix, _, _, _ := requestPrefix(ctx, l.SystemPrompt, l.ModelName, l.Run.Clock, l.Run.Plan)
 	return estTokens(prefix) + estTokens(l.Run.Messages) + schemaTokenEstimate(l.wireTools())
 }
 

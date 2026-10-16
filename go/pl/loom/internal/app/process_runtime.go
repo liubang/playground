@@ -84,8 +84,8 @@ type ProcessRuntime struct {
 	MemoryStore        *memory.Store
 	MemoryExtractor    *memory.Extractor
 	MemoryConsolidator *memory.Consolidator
-	// MemoryJobQueue persists Phase 1 extraction jobs. Session shutdown
-	// enqueues a job (a cheap upsert); the background pipeline drains it —
+	// MemoryJobQueue persists Phase 1 extraction jobs. Turn end and session
+	// shutdown enqueue a job (a cheap upsert); the background pipeline drains it —
 	// no model calls ever happen on the exit path (MEMORY_DESIGN P0-A).
 	MemoryJobQueue memory.JobQueue
 	// TitleSidecar generates the persisted picker title after a session's
@@ -392,51 +392,42 @@ func NewProcessRuntime(ctx context.Context, resolved *config.ResolvedConfig, cfg
 		memoryPipelineStop context.CancelFunc
 	)
 	if resolved.Memory.Enabled {
-		if memStore, err := memory.OpenStore(resolved.Storage.MemoriesDir()); err != nil {
-			logger.Warn("memory system disabled: open store failed", "error", err)
-		} else {
-			memoryStore = memStore
-			if err := memStore.InitGit(ctx); err != nil {
-				logger.Warn("memory git init failed; consolidation will be disabled until git is available", "error", err)
-			}
-			// Per-role model selection (P2): extraction and consolidation
-			// may pin their own models; both fall back to the default.
-			extractRef := resolved.Default
-			if resolved.Memory.ExtractModel != nil {
-				extractRef = *resolved.Memory.ExtractModel
-			}
-			if provider := resolved.ProviderByName(extractRef.Provider); provider != nil {
-				// Structured output (P4) is only requested from wire APIs
-				// that support it (OpenAI chat/responses).
+		// Explicit memory and durable enqueue remain available without a model.
+		memoryStore = memory.NewStore(store)
+		memoryJobQueue = store
+		extractRef := resolved.Default
+		if resolved.Memory.ExtractModel != nil {
+			extractRef = *resolved.Memory.ExtractModel
+		}
+		if provider := resolved.ProviderByName(extractRef.Provider); provider != nil {
+			if model := provider.ModelFor(extractRef.Model); model != nil {
 				structured := provider.WireAPIFor(extractRef.Model) != "messages"
-				memoryExtractor = memory.NewExtractor(memStore, provider.ModelFor(extractRef.Model), extractRef.Model, structured)
+				memoryExtractor = memory.NewExtractor(model, extractRef.Model, structured)
 			}
-			consolidationRef := resolved.Default
-			if resolved.Memory.ConsolidationModel != nil {
-				consolidationRef = *resolved.Memory.ConsolidationModel
+		}
+		consolidationRef := resolved.Default
+		if resolved.Memory.ConsolidationModel != nil {
+			consolidationRef = *resolved.Memory.ConsolidationModel
+		}
+		if provider := resolved.ProviderByName(consolidationRef.Provider); provider != nil {
+			if model := provider.ModelFor(consolidationRef.Model); model != nil {
+				memoryConsolidator = memory.NewConsolidator(memoryStore, model, consolidationRef.Model)
 			}
-			if provider := resolved.ProviderByName(consolidationRef.Provider); provider != nil {
-				memoryConsolidator = memory.NewConsolidator(memStore, provider.ModelFor(consolidationRef.Model), consolidationRef.Model)
-			}
-			// Background pipeline (P0-A): drains the persistent extraction
-			// job queue at startup and every RunInterval afterwards. The
-			// shutdown path only enqueues jobs; model work never blocks
-			// exit. A cancelled pass leaves leased jobs to be reclaimed
-			// after lease expiry, so Close does not wait for it.
-			if memoryExtractor != nil {
-				memoryJobQueue = store
-				pipelineCfg := memory.DefaultPipelineConfig()
-				pipelineCfg.MaxJobsPerRun = resolved.Memory.MaxJobsPerRun
-				pipelineCfg.MinIdle = resolved.Memory.MinSessionIdle
-				pipelineCfg.MaxAge = resolved.Memory.MaxSessionAge
-				pipeline := memory.NewPipeline(store, store, memoryExtractor, memoryConsolidator, pipelineCfg, logger)
-				pipelineCtx, cancel := context.WithCancel(context.Background())
-				memoryPipelineStop = cancel
-				pipeline.Start(pipelineCtx, resolved.Memory.RunInterval)
-				logger.Info("memory pipeline started",
-					"run_interval", resolved.Memory.RunInterval,
-					"max_jobs_per_run", resolved.Memory.MaxJobsPerRun)
-			}
+		}
+		// Model work runs only in the shared background pipeline. Its backfill
+		// discovers raw-event evidence missed by crashes or CLI bypasses.
+		if memoryExtractor != nil || memoryConsolidator != nil {
+			pipelineCfg := memory.DefaultPipelineConfig()
+			pipelineCfg.MaxJobsPerRun = resolved.Memory.MaxJobsPerRun
+			pipelineCfg.MinIdle = resolved.Memory.MinSessionIdle
+			pipelineCfg.MaxAge = resolved.Memory.MaxSessionAge
+			pipeline := memory.NewPipeline(store, memoryExtractor, memoryConsolidator, pipelineCfg, logger)
+			pipelineCtx, cancel := context.WithCancel(context.Background())
+			memoryPipelineStop = cancel
+			pipeline.Start(pipelineCtx, resolved.Memory.RunInterval)
+			logger.Info("memory pipeline started",
+				"run_interval", resolved.Memory.RunInterval,
+				"max_jobs_per_run", resolved.Memory.MaxJobsPerRun)
 		}
 	}
 

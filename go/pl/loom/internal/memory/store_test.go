@@ -1,422 +1,417 @@
 // Copyright (c) 2026 The Authors. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-// Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/08/02
+// SPDX-License-Identifier: Apache-2.0
 
 package memory
 
 import (
 	"context"
-	"os"
-	"path/filepath"
-	"sort"
+	"errors"
+	"fmt"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/liubang/playground/go/pl/loom/internal/domain"
 )
 
-func TestOpenStoreCreatesDirs(t *testing.T) {
-	root := t.TempDir()
-	memDir := filepath.Join(root, "memories")
-	s, err := OpenStore(memDir)
-	if err != nil {
-		t.Fatalf("OpenStore: %v", err)
-	}
-	if s.Root() != memDir {
-		t.Errorf("Root() = %q, want %q", s.Root(), memDir)
-	}
-	// Check sub-directories were created.
-	for _, dir := range []string{RolloutDir, SkillsDir, NotesDir} {
-		p := filepath.Join(memDir, dir)
-		if fi, err := os.Stat(p); err != nil || !fi.IsDir() {
-			t.Errorf("subdirectory %q not created", dir)
-		}
-	}
+// testRepo is an in-memory behavior fixture, not a SQLite implementation.
+// It provides active snapshots, revision checks and request replay so Store and
+// tool tests can exercise the facade without importing session (which imports memory).
+type testRepo struct {
+	mu        sync.Mutex
+	snapshots map[string]Snapshot
+	requests  map[string]testRequest
+	nextID    int
+	err       error
+	seenCtx   context.Context
+	mutations []Mutation
 }
 
-func TestOpenStoreRequiresRoot(t *testing.T) {
-	// The store performs no path conventions of its own: an empty root is
-	// an error, and the caller derives it from the loom home.
-	if _, err := OpenStore(""); err == nil {
-		t.Fatal("OpenStore with empty root = nil error, want error")
-	}
+type testRequest struct {
+	mutation Mutation
+	record   Record
 }
 
-func TestSummaryRoundTrip(t *testing.T) {
-	s := newTestStore(t)
-	content := "# Memory Summary\n\nUser prefers Go over Python."
-	if err := s.WriteSummary(content); err != nil {
-		t.Fatalf("WriteSummary: %v", err)
-	}
-	got, err := s.ReadSummary()
-	if err != nil {
-		t.Fatalf("ReadSummary: %v", err)
-	}
-	if got != content {
-		t.Errorf("ReadSummary() = %q, want %q", got, content)
-	}
-}
-
-func TestSummaryNotFound(t *testing.T) {
-	s := newTestStore(t)
-	got, err := s.ReadSummary()
-	if err != nil {
-		t.Fatalf("ReadSummary: %v", err)
-	}
-	if got != "" {
-		t.Errorf("ReadSummary() = %q, want empty", got)
-	}
-}
-
-func TestMainRoundTrip(t *testing.T) {
-	s := newTestStore(t)
-	content := "# MEMORY.md\n\n## User Preferences\n- Go"
-	if err := s.WriteMain(content); err != nil {
-		t.Fatalf("WriteMain: %v", err)
-	}
-	got, err := s.ReadMain()
-	if err != nil {
-		t.Fatalf("ReadMain: %v", err)
-	}
-	if got != content {
-		t.Errorf("ReadMain() = %q, want %q", got, content)
-	}
-}
-
-func TestRawAppend(t *testing.T) {
-	s := newTestStore(t)
-	if err := s.AppendRaw("first line\n"); err != nil {
-		t.Fatalf("AppendRaw: %v", err)
-	}
-	if err := s.AppendRaw("second line\n"); err != nil {
-		t.Fatalf("AppendRaw: %v", err)
-	}
-	got, err := s.ReadRaw()
-	if err != nil {
-		t.Fatalf("ReadRaw: %v", err)
-	}
-	want := "first line\nsecond line\n"
-	if got != want {
-		t.Errorf("ReadRaw() = %q, want %q", got, want)
-	}
-}
-
-func TestRolloutSummary(t *testing.T) {
-	s := newTestStore(t)
-	slug := "2026-08-02T12-00-00-abc12345"
-	content := "## Rollout Summary\n\nFixed bazel build."
-	if err := s.WriteRolloutSummary(slug, content); err != nil {
-		t.Fatalf("WriteRolloutSummary: %v", err)
-	}
-	got, err := s.ReadRolloutSummary(slug)
-	if err != nil {
-		t.Fatalf("ReadRolloutSummary: %v", err)
-	}
-	if got != content {
-		t.Errorf("ReadRolloutSummary() = %q, want %q", got, content)
-	}
-}
-
-func TestListRolloutSummaries(t *testing.T) {
-	s := newTestStore(t)
-	slugs := []string{"alpha", "beta", "gamma"}
-	for _, slug := range slugs {
-		if err := s.WriteRolloutSummary(slug, "content"); err != nil {
-			t.Fatalf("WriteRolloutSummary(%s): %v", slug, err)
-		}
-	}
-	got, err := s.ListRolloutSummaries()
-	if err != nil {
-		t.Fatalf("ListRolloutSummaries: %v", err)
-	}
-	sort.Strings(got)
-	if len(got) != 3 {
-		t.Errorf("got %d summaries, want 3", len(got))
-	}
-}
-
-func TestAddNoteAndList(t *testing.T) {
-	s := newTestStore(t)
-	filename := "2026-08-02T12-00-00-prefer-go.md"
-	content := "User prefers Go over Python"
-	if err := s.AddNote(filename, content); err != nil {
-		t.Fatalf("AddNote: %v", err)
-	}
-	notes, err := s.ListNotes()
-	if err != nil {
-		t.Fatalf("ListNotes: %v", err)
-	}
-	if len(notes) != 1 || notes[0] != filename {
-		t.Errorf("ListNotes() = %v, want [%s]", notes, filename)
-	}
-	got, err := s.ReadNote(filename)
-	if err != nil {
-		t.Fatalf("ReadNote: %v", err)
-	}
-	if got != content {
-		t.Errorf("ReadNote() = %q, want %q", got, content)
-	}
-}
-
-// AddNote is exclusive: a same-slug collision (the tool auto-timestamps
-// to second precision, so two notes within one second can collide) must
-// fail loudly instead of silently overwriting the first note.
-func TestAddNoteConflictRejected(t *testing.T) {
-	s := newTestStore(t)
-	filename := "2026-08-02T12-00-00-prefer-go.md"
-	if err := s.AddNote(filename, "first"); err != nil {
-		t.Fatalf("AddNote: %v", err)
-	}
-	err := s.AddNote(filename, "second")
-	if err == nil {
-		t.Fatal("duplicate AddNote succeeded, want an already-exists error")
-	}
-	if !strings.Contains(err.Error(), "already exists") {
-		t.Fatalf("conflict error = %v, want an actionable already-exists message", err)
-	}
-	got, err := s.ReadNote(filename)
-	if err != nil {
-		t.Fatalf("ReadNote: %v", err)
-	}
-	if got != "first" {
-		t.Fatalf("note content = %q, want the original %q", got, "first")
-	}
-}
-
-func TestListDirectory(t *testing.T) {
-	s := newTestStore(t)
-	// Write some files to populate the directory.
-	s.WriteSummary("summary")
-	s.WriteMain("main")
-	s.WriteRolloutSummary("test-rollout", "content")
-
-	entries, err := s.List("", 100)
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
-	// Should see at least the files and directories we created.
-	names := make(map[string]bool)
-	for _, e := range entries {
-		names[e.Path] = true
-	}
-	if !names["memory_summary.md"] {
-		t.Error("expected memory_summary.md in listing")
-	}
-	if !names["MEMORY.md"] {
-		t.Error("expected MEMORY.md in listing")
-	}
-	if !names[RolloutDir] {
-		t.Errorf("expected %s in listing", RolloutDir)
-	}
-}
-
-func TestReadFileWithOffset(t *testing.T) {
-	s := newTestStore(t)
-	content := "line1\nline2\nline3\nline4\nline5"
-	if err := s.WriteMain(content); err != nil {
-		t.Fatalf("WriteMain: %v", err)
-	}
-	got, total, err := s.ReadFile(MainFile, 2, 2)
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-	if total != 5 {
-		t.Errorf("total = %d, want 5", total)
-	}
-	// lines[1]="line2", lines[2]="line3", join with newline
-	if got != "line2\nline3" {
-		t.Errorf("ReadFile(2,2) = %q, want %q", got, "line2\nline3")
-	}
-}
-
-func TestSearch(t *testing.T) {
-	s := newTestStore(t)
-	s.WriteMain("# Preferences\n\nUser prefers Go\nUser dislikes Java\n")
-	s.WriteSummary("Summary: Go preference")
-
-	matches, err := s.Search("Go", 100)
-	if err != nil {
-		t.Fatalf("Search: %v", err)
-	}
-	if len(matches) < 2 {
-		t.Errorf("expected at least 2 matches, got %d", len(matches))
-	}
-}
-
-func TestSearchLimit(t *testing.T) {
-	s := newTestStore(t)
-	// Create a file with many matching lines.
-	var lines []string
-	for i := 0; i < 100; i++ {
-		lines = append(lines, "keyword match "+strings.Repeat("x", i))
-	}
-	s.WriteMain(strings.Join(lines, "\n"))
-	matches, err := s.Search("keyword", 5)
-	if err != nil {
-		t.Fatalf("Search: %v", err)
-	}
-	if len(matches) != 5 {
-		t.Errorf("expected 5 matches, got %d", len(matches))
-	}
-}
-
-func TestCleanup(t *testing.T) {
-	s := newTestStore(t)
-	// Create an old rollout summary.
-	oldSlug := "old-summary"
-	if err := s.WriteRolloutSummary(oldSlug, "old content"); err != nil {
-		t.Fatalf("WriteRolloutSummary: %v", err)
-	}
-	// Backdate the file.
-	oldPath := filepath.Join(s.Root(), RolloutDir, oldSlug+".md")
-	oldTime := time.Now().Add(-48 * time.Hour)
-	if err := os.Chtimes(oldPath, oldTime, oldTime); err != nil {
-		t.Fatalf("Chtimes: %v", err)
-	}
-	// Create a new rollout summary.
-	if err := s.WriteRolloutSummary("new-summary", "new content"); err != nil {
-		t.Fatalf("WriteRolloutSummary: %v", err)
-	}
-	// Cleanup with 24h max age.
-	removed, err := s.Cleanup(24 * time.Hour)
-	if err != nil {
-		t.Fatalf("Cleanup: %v", err)
-	}
-	if removed != 1 {
-		t.Errorf("removed = %d, want 1", removed)
-	}
-	// Verify old is gone, new remains.
-	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
-		t.Error("old summary should be removed")
-	}
-}
-
-func TestPathEscapes(t *testing.T) {
-	s := newTestStore(t)
-	_, err := s.List("../../etc", 10)
-	if err == nil {
-		t.Error("expected error for path escape")
-	}
-	_, _, err = s.ReadFile("../../../etc/passwd", 0, 0)
-	if err == nil {
-		t.Error("expected error for path escape in ReadFile")
-	}
-}
-
-func TestReadFileOffsetBeyondTotal(t *testing.T) {
-	s := newTestStore(t)
-	s.WriteMain("line1\nline2\nline3")
-	// offset=500 but file only has 3 lines — should return empty, not the whole file.
-	got, total, err := s.ReadFile(MainFile, 500, 0)
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-	if total != 3 {
-		t.Errorf("total = %d, want 3", total)
-	}
-	if got != "" {
-		t.Errorf("ReadFile(500,0) = %q, want empty string", got)
-	}
-}
-
-func TestReadFileRejectsGitPath(t *testing.T) {
-	s := newTestStore(t)
-	// Create a .git directory inside the memory root (as InitGit would).
-	gitDir := filepath.Join(s.Root(), ".git")
-	if err := os.MkdirAll(gitDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	configPath := filepath.Join(gitDir, "config")
-	if err := os.WriteFile(configPath, []byte("[core]\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	_, _, err := s.ReadFile(".git/config", 0, 0)
-	if err == nil {
-		t.Error("expected error for .git path in ReadFile")
-	}
-}
-
-func TestListSkipGitDoesNotAffectCount(t *testing.T) {
-	s := newTestStore(t)
-	// Write two files and init .git so there are 3 entries (2 files + .git).
-	s.WriteSummary("s")
-	s.WriteMain("m")
-	// InitGit creates the .git directory.
-	ctx := context.Background()
-	_ = s.InitGit(ctx) // error OK — we just need .git to exist
-
-	entries, err := s.List("", 10)
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
-	// Should get exactly 2 non-.git entries + rollout_summaries + skills + extensions dirs.
-	// The important thing is that .git is not counted.
-	for _, e := range entries {
-		if strings.HasPrefix(e.Path, ".git") {
-			t.Errorf("List returned .git entry: %s", e.Path)
-		}
-	}
-}
-
-func TestSearchEmptyQuery(t *testing.T) {
-	s := newTestStore(t)
-	s.WriteMain("some content")
-	matches, err := s.Search("", 10)
-	if err != nil {
-		t.Fatalf("Search: %v", err)
-	}
-	if len(matches) != 0 {
-		t.Errorf("Search('') = %d matches, want 0", len(matches))
-	}
-}
-
-func TestSearchDefaultMaxResults(t *testing.T) {
-	s := newTestStore(t)
-	s.WriteMain("content")
-	// maxResults=0 should default to DefaultSearchMaxResults, not return 0 matches.
-	matches, err := s.Search("content", 0)
-	if err != nil {
-		t.Fatalf("Search: %v", err)
-	}
-	if len(matches) != 1 {
-		t.Errorf("Search with maxResults=0 got %d matches, want 1", len(matches))
-	}
-}
-
-func TestAddNotePathEscape(t *testing.T) {
-	s := newTestStore(t)
-	err := s.AddNote("../../etc/evil.md", "pwned")
-	if err == nil {
-		t.Error("expected error for path escape in AddNote")
-	}
-}
-
-func TestReadNotePathEscape(t *testing.T) {
-	s := newTestStore(t)
-	_, err := s.ReadNote("../../../etc/passwd")
-	if err == nil {
-		t.Error("expected error for path escape in ReadNote")
-	}
-}
+var _ Repository = (*testRepo)(nil)
 
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
-	root := t.TempDir()
-	s, err := OpenStore(root)
-	if err != nil {
-		t.Fatalf("OpenStore: %v", err)
+	return NewStore(&testRepo{snapshots: make(map[string]Snapshot), requests: make(map[string]testRequest)})
+}
+
+func (r *testRepo) MemorySnapshot(ctx context.Context, scope string) (Snapshot, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.seenCtx = ctx
+	if err := ctx.Err(); err != nil {
+		return Snapshot{}, err
 	}
-	return s
+	if r.err != nil {
+		return Snapshot{}, r.err
+	}
+	s := r.snapshots[scope]
+	s.Scope = scope
+	s.Records = slices.Clone(s.Records)
+	return s, nil
+}
+
+// Consumer adapters preserve fixture behavior; SQLite bounds and consistency
+// are tested in session rather than simulated by this in-memory fake.
+func fakeMemoryContext(ctx context.Context, workspace string, load func(context.Context, string) (Snapshot, error)) ([]Snapshot, error) {
+	scopes := []string{""}
+	if workspace != "" {
+		scopes = append(scopes, workspace)
+	}
+	var snapshots []Snapshot
+	for _, scope := range scopes {
+		snapshot, err := load(ctx, scope)
+		if err != nil {
+			return nil, err
+		}
+		snapshot.Scope = scope
+		snapshots = append(snapshots, snapshot)
+	}
+	return snapshots, nil
+}
+
+func fakeReadMemory(ctx context.Context, workspace, id string, load func(context.Context, string) (Snapshot, error)) (Record, error) {
+	snapshots, err := fakeMemoryContext(ctx, workspace, load)
+	if err != nil {
+		return Record{}, err
+	}
+	for _, snapshot := range snapshots {
+		for _, record := range snapshot.Records {
+			if record.ID == id {
+				return record, nil
+			}
+		}
+	}
+	return Record{}, domain.NewError(domain.ErrInvalidInput, "memory not found; use action=list or action=search to find active memories")
+}
+
+func fakeQueryMemory(ctx context.Context, workspace, query string, limit int, load func(context.Context, string) (Snapshot, error)) (SearchResult, error) {
+	snapshots, err := fakeMemoryContext(ctx, workspace, load)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	records := []Record{}
+	for _, snapshot := range snapshots {
+		records = append(records, snapshot.Records...)
+	}
+	sortRecords(records)
+	out := SearchResult{Records: []Record{}}
+	for _, record := range records {
+		text := strings.ToLower(record.Content + "\n" + record.Rollout)
+		matches := true
+		for term := range strings.FieldsSeq(strings.ToLower(query)) {
+			if !strings.Contains(text, term) {
+				matches = false
+				break
+			}
+		}
+		if !matches {
+			continue
+		}
+		if len(out.Records) == limit {
+			out.Truncated = true
+			break
+		}
+		out.Records = append(out.Records, record)
+	}
+	return out, nil
+}
+
+func (r *testRepo) MemoryContext(ctx context.Context, workspace string) ([]Snapshot, error) {
+	return fakeMemoryContext(ctx, workspace, r.MemorySnapshot)
+}
+
+func (r *testRepo) ReadMemory(ctx context.Context, workspace, id string) (Record, error) {
+	return fakeReadMemory(ctx, workspace, id, r.MemorySnapshot)
+}
+
+func (r *testRepo) QueryMemory(ctx context.Context, workspace, query string, limit int) (SearchResult, error) {
+	return fakeQueryMemory(ctx, workspace, query, limit, r.MemorySnapshot)
+}
+
+func (r *testRepo) MemoryScopes(ctx context.Context) ([]string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if r.err != nil {
+		return nil, r.err
+	}
+	var scopes []string
+	for scope := range r.snapshots {
+		scopes = append(scopes, scope)
+	}
+	slices.Sort(scopes)
+	return scopes, nil
+}
+
+func (r *testRepo) PublishMemoryView(ctx context.Context, s Snapshot, main, summary string) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if r.err != nil {
+		return false, r.err
+	}
+	current := r.snapshots[s.Scope]
+	if current.Version != s.Version || current.Epoch != s.Epoch {
+		return false, nil
+	}
+	current.View = View{Version: s.Version, Epoch: s.Epoch, Main: main, Summary: summary}
+	r.snapshots[s.Scope] = current
+	return true, nil
+}
+
+func (r *testRepo) MutateMemory(ctx context.Context, m Mutation) (Record, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.seenCtx = ctx
+	if err := ctx.Err(); err != nil {
+		return Record{}, err
+	}
+	if r.err != nil {
+		return Record{}, r.err
+	}
+	r.mutations = append(r.mutations, m)
+	if old, ok := r.requests[m.RequestID]; ok {
+		if old.mutation != m {
+			return Record{}, domain.NewError(domain.ErrConflict, "request ID reused with different mutation")
+		}
+		return old.record, nil
+	}
+	s := r.snapshots[m.Scope]
+	s.Scope = m.Scope
+	index := slices.IndexFunc(s.Records, func(record Record) bool { return record.ID == m.ID })
+	var record Record
+	if m.ID != "" {
+		if index < 0 {
+			return Record{}, domain.NewError(domain.ErrInvalidInput, "memory not found")
+		}
+		record = s.Records[index]
+		if record.Revision != m.Revision {
+			return Record{}, domain.NewError(domain.ErrConflict, "memory revision changed")
+		}
+		s.Epoch++ // Any replacement or revocation makes the old view unusable.
+	} else {
+		r.nextID++
+		record = Record{ID: fmt.Sprintf("record-%06d", r.nextID), Scope: m.Scope, Kind: Explicit}
+	}
+	s.Version++
+	record.Revision++
+	record.Sequence = s.Version
+	record.Content = m.Content
+	record.SessionID, record.SourceVersion = m.SessionID, m.SourceVersion
+	record.UpdatedAt = time.Unix(s.Version, 0).UTC()
+	if m.Forget {
+		s.Records = slices.Delete(s.Records, index, index+1)
+	} else if index >= 0 {
+		s.Records[index] = record
+	} else {
+		s.Records = append(s.Records, record)
+	}
+	r.snapshots[m.Scope] = s
+	r.requests[m.RequestID] = testRequest{mutation: m, record: record}
+	return record, nil
+}
+
+func (r *testRepo) fixture(s Snapshot) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s.Records = slices.Clone(s.Records)
+	r.snapshots[s.Scope] = s
+}
+
+func mustMutateMemory(t *testing.T, s *Store, m Mutation) Record {
+	t.Helper()
+	record, err := s.Mutate(t.Context(), m)
+	if err != nil {
+		t.Fatalf("Mutate(%+v): %v", m, err)
+	}
+	return record
+}
+
+func TestStoreWorkspaceVisibilityAndReadOrdering(t *testing.T) {
+	s := newTestStore(t)
+	r := s.repo.(*testRepo)
+	now := time.Unix(100, 0)
+	r.fixture(Snapshot{Version: 3, Records: []Record{
+		{ID: "automatic", Kind: Automatic, Content: "inferred", UpdatedAt: now.Add(time.Hour)},
+		{ID: "global-b", Kind: Explicit, Content: "personal", UpdatedAt: now},
+		{ID: "global-a", Kind: Explicit, Content: "tie", UpdatedAt: now},
+	}})
+	r.fixture(Snapshot{Scope: "/project/a", Version: 1, Records: []Record{{ID: "workspace-a", Scope: "/project/a", Kind: Explicit, Content: "project A", UpdatedAt: now.Add(time.Minute)}}})
+	r.fixture(Snapshot{Scope: "/project/b", Version: 1, Records: []Record{{ID: "workspace-b", Scope: "/project/b", Kind: Explicit, Content: "project B"}}})
+	for _, tc := range []struct {
+		workspace string
+		want      []string
+	}{
+		{"", []string{"global-a", "global-b", "automatic"}},
+		{"/project/a", []string{"workspace-a", "global-a", "global-b", "automatic"}},
+		{"/project/b", []string{"global-a", "global-b", "workspace-b", "automatic"}},
+	} {
+		t.Run(tc.workspace, func(t *testing.T) {
+			bound := s.ForWorkspace(tc.workspace)
+			if bound.Workspace() != tc.workspace || s.Workspace() != "" {
+				t.Fatal("ForWorkspace changed the original binding")
+			}
+			records, err := bound.Records(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			var ids []string
+			for _, record := range records {
+				ids = append(ids, record.ID)
+				got, err := bound.Read(t.Context(), record.ID)
+				if err != nil || got != record {
+					t.Fatalf("Read(%s)=%+v, %v", record.ID, got, err)
+				}
+			}
+			if !slices.Equal(ids, tc.want) {
+				t.Fatalf("IDs=%v want %v", ids, tc.want)
+			}
+		})
+	}
+	for _, id := range []string{"workspace-b", "missing"} {
+		if _, err := s.ForWorkspace("/project/a").Read(t.Context(), id); err == nil || !strings.Contains(err.Error(), "action=list") {
+			t.Fatalf("Read(%s) should reject invisible/missing ID with discovery guidance: %v", id, err)
+		}
+	}
+}
+
+func TestStoreSearchActiveEvidence(t *testing.T) {
+	s := newTestStore(t)
+	s.repo.(*testRepo).fixture(Snapshot{Version: 4, View: View{Version: 4, Summary: "summary-only keyword"}, Records: []Record{
+		{ID: "one", Kind: Explicit, Content: "Go prefers bazel"},
+		{ID: "two", Kind: Automatic, Content: "Go", Rollout: "PREFERS bazel"},
+		{ID: "three", Kind: Automatic, Content: "prefers Python"},
+		{ID: "four", Kind: Automatic, Content: "prefers Go"},
+	}})
+	got, err := s.Search(t.Context(), "  PREFERS go  ", 1)
+	if err != nil || len(got.Records) != 1 || got.Records[0].ID != "one" || !got.Truncated {
+		t.Fatalf("limited search=%+v err=%v", got, err)
+	}
+	got, err = s.Search(t.Context(), "prefers go", 3)
+	if err != nil || len(got.Records) != 3 || got.Truncated {
+		t.Fatalf("exact limit search=%+v err=%v", got, err)
+	}
+	for _, query := range []string{"summary-only", "absent"} {
+		got, err := s.Search(t.Context(), query, 20)
+		if err != nil || len(got.Records) != 0 || got.Truncated {
+			t.Fatalf("search(%q)=%+v err=%v", query, got, err)
+		}
+	}
+	for _, query := range []string{"", " \t ", strings.Repeat("界", MaxQueryBytes/3+1)} {
+		if _, err := s.Search(t.Context(), query, 20); err == nil {
+			t.Fatalf("invalid query %q accepted", query)
+		}
+	}
+}
+
+func TestStoreMutateValidationAndRedaction(t *testing.T) {
+	s := newTestStore(t).ForWorkspace("/project/a")
+	for name, m := range map[string]Mutation{
+		"request required": {Content: "fact"},
+		"foreign scope":    {RequestID: "bad", Scope: "/project/b", Content: "fact"},
+		"empty":            {RequestID: "bad", Content: " \n "},
+		"oversized bytes":  {RequestID: "bad", Content: strings.Repeat("界", MaxContentBytes/3+1)},
+		"invalid UTF8":     {RequestID: "bad", Content: "\xff"},
+		"update revision":  {RequestID: "bad", ID: "id", Content: "fact"},
+		"forget ID":        {RequestID: "bad", Forget: true},
+		"forget revision":  {RequestID: "bad", ID: "id", Forget: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := s.Mutate(t.Context(), m); err == nil {
+				t.Fatal("invalid mutation succeeded")
+			}
+		})
+	}
+	if len(s.repo.(*testRepo).mutations) != 0 {
+		t.Fatal("invalid mutation reached repository")
+	}
+	secret := "sk-abcdefghijklmnopqrstuv"
+	record := mustMutateMemory(t, s, Mutation{RequestID: "redacted", Content: "  preference " + secret + "  "})
+	if record.Content != "preference "+redactPlaceholder {
+		t.Fatalf("stored content=%q", record.Content)
+	}
+	boundary := strings.Repeat("界", MaxContentBytes/3) + "x"
+	if len(boundary) != MaxContentBytes {
+		t.Fatal("invalid boundary fixture")
+	}
+	mustMutateMemory(t, s, Mutation{RequestID: "boundary", Scope: s.Workspace(), Content: boundary})
+}
+
+func TestStoreContextAndRepositoryErrorsPropagate(t *testing.T) {
+	s := newTestStore(t)
+	r := s.repo.(*testRepo)
+	type key struct{}
+	ctx := context.WithValue(t.Context(), key{}, "trace")
+	failure := errors.New("snapshot unavailable")
+	r.err = failure
+	if _, err := s.Snapshots(ctx); !errors.Is(err, failure) {
+		t.Fatalf("Snapshots error=%v", err)
+	}
+	if r.seenCtx != ctx {
+		t.Fatal("snapshot context not forwarded")
+	}
+	if _, err := s.Records(ctx); !errors.Is(err, failure) {
+		t.Fatalf("Records error=%v", err)
+	}
+	if _, err := s.Read(ctx, "id"); !errors.Is(err, failure) {
+		t.Fatalf("Read swallowed repository error: %v", err)
+	}
+	if _, err := s.Search(ctx, "fact", 1); !errors.Is(err, failure) {
+		t.Fatalf("Search swallowed repository error: %v", err)
+	}
+	if _, err := s.Mutate(ctx, Mutation{RequestID: "call", Content: "fact"}); !errors.Is(err, failure) || r.seenCtx != ctx {
+		t.Fatalf("Mutate error/context=%v/%v", err, r.seenCtx)
+	}
+	r.err = nil
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := s.Snapshots(cancelled); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled Snapshots=%v", err)
+	}
+	if _, err := s.Records(cancelled); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled Records=%v", err)
+	}
+	if _, err := s.Mutate(cancelled, Mutation{RequestID: "cancel", Content: "fact"}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled Mutate=%v", err)
+	}
+}
+
+func TestStoreSnapshotsExposeStoredViewsAndActiveRecords(t *testing.T) {
+	s := newTestStore(t)
+	snapshots, err := s.Snapshots(t.Context())
+	if err != nil || len(snapshots) != 1 || snapshots[0].ValidView() || len(snapshots[0].Records) != 0 {
+		t.Fatalf("empty snapshots=%+v err=%v", snapshots, err)
+	}
+	view := View{Version: 2, Epoch: 1, Main: "consolidated automatic handbook", Summary: "stored automatic summary"}
+	s.repo.(*testRepo).fixture(Snapshot{Version: 2, Epoch: 1, View: view, Records: []Record{
+		{ID: "manual", Kind: Explicit, Revision: 1, Content: "explicit fact"},
+		{ID: "auto", Kind: Automatic, Revision: 2, Sequence: 2, Content: "automatic fact", Rollout: "rollout evidence"},
+	}})
+	snapshots, err = s.Snapshots(t.Context())
+	if err != nil || len(snapshots) != 1 || !snapshots[0].ValidView() || snapshots[0].View != view {
+		t.Fatalf("stored view not preserved: snapshots=%+v err=%v", snapshots, err)
+	}
+	records, err := s.Records(t.Context())
+	if err != nil || len(records) != 2 || records[0].Content != "explicit fact" || records[1].Content != "automatic fact" || records[1].Rollout != "rollout evidence" {
+		t.Fatalf("active records=%+v err=%v", records, err)
+	}
+	// Snapshot consumers must distinguish a stored cache from valid evidence.
+	stale := snapshots[0]
+	stale.Epoch++
+	s.repo.(*testRepo).fixture(stale)
+	snapshots, err = s.Snapshots(t.Context())
+	if err != nil || snapshots[0].ValidView() || snapshots[0].View != view {
+		t.Fatalf("stale view metadata lost: snapshots=%+v err=%v", snapshots, err)
+	}
 }

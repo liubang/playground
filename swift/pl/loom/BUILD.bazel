@@ -82,9 +82,10 @@ macos_application(
 sh_binary(
     name = "install",
     srcs = ["install.sh"],
-    args = ["$(location :Loom)"],
+    # The executable output is rules_apple's launch runner, not the archive.
+    args = ["$(location :Loom.zip)"],
     data = [
-        ":Loom",
+        ":Loom.zip",
         ":make-signing-cert",
     ],
     target_compatible_with = ["@platforms//os:macos"],

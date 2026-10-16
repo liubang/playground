@@ -34,7 +34,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const sqliteSchemaVersion = 11
+const sqliteSchemaVersion = 12
 
 // SQLiteStore persists session events and checkpoints in a SQLite database.
 // A store serializes writes through one connection; optimistic versions still
@@ -231,13 +231,51 @@ CREATE TABLE IF NOT EXISTS workspaces (
     updated_at TEXT NOT NULL,
     updated_at_unix_nano INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS memory_scope_state (
+    scope TEXT PRIMARY KEY,
+    version INTEGER NOT NULL DEFAULT 0,
+    epoch INTEGER NOT NULL DEFAULT 0,
+    evidence_cutoff_unix_nano INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS memory_records (
+    id TEXT PRIMARY KEY,
+    scope TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('explicit', 'automatic')),
+    content TEXT NOT NULL,
+    rollout TEXT NOT NULL DEFAULT '',
+    revision INTEGER NOT NULL CHECK (revision > 0),
+    sequence INTEGER NOT NULL CHECK (sequence > 0),
+    source_session_id TEXT NOT NULL DEFAULT '',
+    source_version INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_memory_records_scope ON memory_records(scope, sequence);
+CREATE INDEX IF NOT EXISTS idx_memory_records_source ON memory_records(source_session_id, source_version);
+CREATE TABLE IF NOT EXISTS memory_views (
+    scope TEXT PRIMARY KEY,
+    version INTEGER NOT NULL,
+    epoch INTEGER NOT NULL,
+    main TEXT NOT NULL,
+    summary TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS memory_requests (
+    request_id TEXT PRIMARY KEY,
+    payload_hash TEXT NOT NULL,
+    record_id TEXT NOT NULL,
+    source_session_id TEXT NOT NULL DEFAULT '',
+    source_version INTEGER NOT NULL DEFAULT 0,
+    response BLOB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_memory_requests_record ON memory_requests(record_id);
 CREATE TABLE IF NOT EXISTS memory_jobs (
     session_id TEXT PRIMARY KEY,
     workspace_root TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'pending',
     attempts INTEGER NOT NULL DEFAULT 0,
+    attempt_version INTEGER NOT NULL DEFAULT -1,
     claim_token TEXT NOT NULL DEFAULT '',
     claimed_at_unix_nano INTEGER NOT NULL DEFAULT 0,
+    claimed_evidence_cutoff_unix_nano INTEGER NOT NULL DEFAULT 0,
     next_retry_at_unix_nano INTEGER NOT NULL DEFAULT 0,
     extracted_version INTEGER NOT NULL DEFAULT -1,
     last_error TEXT NOT NULL DEFAULT '',
@@ -821,6 +859,10 @@ FROM events WHERE session_id = ? ORDER BY sequence ASC`, sessionID.String())
 }
 
 func scanEvents(rows *sql.Rows, sessionID domain.SessionID) ([]domain.Event, error) {
+	return scanEventsAfter(rows, sessionID, 0)
+}
+
+func scanEventsAfter(rows *sql.Rows, sessionID domain.SessionID, after int64) ([]domain.Event, error) {
 	defer rows.Close()
 	result := make([]domain.Event, 0)
 	for rows.Next() {
@@ -848,9 +890,9 @@ func scanEvents(rows *sql.Rows, sessionID domain.SessionID) ([]domain.Event, err
 		if err := event.Validate(); err != nil {
 			return nil, storeError("validate persisted event", err)
 		}
-		if event.Sequence != int64(len(result))+1 {
+		if event.Sequence != after+int64(len(result))+1 {
 			return nil, storeError("validate session event log",
-				fmt.Errorf("event sequence is %d, want %d", event.Sequence, len(result)+1))
+				fmt.Errorf("event sequence is %d, want %d", event.Sequence, after+int64(len(result))+1))
 		}
 		result = append(result, event)
 	}
@@ -1046,6 +1088,11 @@ func (s *SQLiteStore) DeleteSession(ctx context.Context, sessionID domain.Sessio
 	if err != nil {
 		return err
 	}
+	for _, id := range append(descendants, sessionID) {
+		if err := revokeMemoryTx(ctx, tx, "source_session_id = ? AND kind = 'automatic'", id.String()); err != nil {
+			return err
+		}
+	}
 	for _, id := range descendants {
 		if _, err := tx.ExecContext(ctx,
 			"DELETE FROM file_changes WHERE session_id = ?", id.String()); err != nil {
@@ -1197,6 +1244,9 @@ WHERE archived_at_unix_nano IS NOT NULL AND archived_at_unix_nano <= ?`, cutoff.
 	}
 	_ = rows.Close()
 	for _, id := range ids {
+		if err := revokeMemoryTx(ctx, tx, "source_session_id = ? AND kind = 'automatic'", id.String()); err != nil {
+			return nil, err
+		}
 		if _, err := tx.ExecContext(ctx,
 			"DELETE FROM file_changes WHERE session_id = ?", id.String()); err != nil {
 			return nil, storeError("delete purged session file changes", err)

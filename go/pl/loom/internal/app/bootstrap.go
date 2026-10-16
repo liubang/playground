@@ -519,7 +519,7 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 	// registry. The prompt-side injection is part of buildPrompt (the
 	// memoryPromptWrapper), so prompt rebuilds keep it.
 	if proc.MemoryStore != nil {
-		if err := registerMemoryTools(registry, proc.MemoryStore); err != nil {
+		if err := registerMemoryTools(registry, proc.MemoryStore.ForWorkspace(cfg.WorkspaceRoot)); err != nil {
 			logger.Warn("memory tools registration failed", "error", err)
 		}
 	}
@@ -587,7 +587,7 @@ func (b *Bootstrap) buildPrompt(ctx context.Context, resolved *config.ResolvedCo
 	}
 	var pb agent.PromptBuilder = prompt.NewBuilder(b.WorkspaceRoot, promptOpts...)
 	if b.MemoryStore != nil {
-		pb = &memoryPromptWrapper{inner: pb, store: b.MemoryStore, logger: logger}
+		pb = &memoryPromptWrapper{inner: pb, store: b.MemoryStore.ForWorkspace(b.WorkspaceRoot), logger: logger}
 	}
 	return pb
 }
@@ -1031,8 +1031,8 @@ func ResolveManagedPrompt(ctx context.Context, managed config.ManagedPrompt, tra
 
 // memoryPromptWrapper wraps a PromptBuilder to inject the memory summary
 // and memory instructions into the system prompt. It reads the current
-// memory_summary.md on each Build call so updates between turns are
-// reflected.
+// SQLite memory snapshots on each Build call so updates between turns
+// are reflected.
 type memoryPromptWrapper struct {
 	inner  agent.PromptBuilder
 	store  *memory.Store
@@ -1049,7 +1049,7 @@ func (w *memoryPromptWrapper) Build(ctx context.Context) (string, []domain.Conte
 
 // BuildSections splits the wrapped prompt for prompt caching: the memory
 // instructions (a constant) join the cacheable static part; the memory
-// summary (re-read from disk every turn) joins the per-request dynamic
+// summary (re-read from SQLite every turn) joins the per-request dynamic
 // part. See agent.SectionedPromptBuilder.
 func (w *memoryPromptWrapper) BuildSections(ctx context.Context) (prompt.Sections, error) {
 	var secs prompt.Sections
@@ -1069,9 +1069,17 @@ func (w *memoryPromptWrapper) BuildSections(ctx context.Context) (prompt.Section
 
 	// Inject memory summary (hot tier).
 	provider := memory.NewPromptProvider(w.store)
-	summary, err := provider.MemoryPrompt(ctx)
-	if err != nil && w.logger != nil {
-		w.logger.Warn("memory prompt injection failed", "error", err)
+	readCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	summary, err := provider.MemoryPrompt(readCtx)
+	if err != nil {
+		if w.logger != nil {
+			w.logger.Warn("memory prompt injection failed", "error", err)
+		}
+		if ctx.Err() != nil {
+			return prompt.Sections{}, fmt.Errorf("memory prompt injection: %w", ctx.Err())
+		}
+		summary = "[MEMORY_UNAVAILABLE] Memory is unavailable; use memory tools to verify prior context rather than assume it does not exist."
 	}
 
 	// Assemble the injected memory sections in one place so the audit rule

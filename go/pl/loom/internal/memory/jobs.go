@@ -28,14 +28,17 @@ import (
 type JobStatus string
 
 const (
-	// JobPending waits to be claimed by a pipeline pass.
+	// JobPending waits to be claimed by a pipeline pass. As a processJob
+	// outcome it also means interrupted/rescheduled, not failed; interruption
+	// leaves the persisted job claimed until its lease expires.
 	JobPending JobStatus = "pending"
 	// JobClaimed is being processed by a pipeline worker (leased).
 	JobClaimed JobStatus = "claimed"
 	// JobFailed failed with a retryable error; eligible again once its
 	// backoff (next_retry_at) expires.
 	JobFailed JobStatus = "failed"
-	// JobAbandoned exhausted its retry budget and is never claimed again.
+	// JobAbandoned exhausted this evidence version's retry budget; new
+	// session activity makes it eligible again.
 	JobAbandoned JobStatus = "abandoned"
 	// JobSucceeded produced a memory artifact.
 	JobSucceeded JobStatus = "succeeded"
@@ -54,6 +57,9 @@ type Job struct {
 	// time; it is recorded on success so a session only re-extracts after
 	// new activity.
 	SessionVersion int64
+	// ExtractedVersion is the last successfully settled evidence version.
+	// Evidence loaders must stay within (ExtractedVersion, SessionVersion].
+	ExtractedVersion int64
 }
 
 // JobQueue persists Phase 1 extraction jobs and the Phase 2 global lease.
@@ -68,19 +74,27 @@ type JobQueue interface {
 	// and cheap (a single upsert): a session already extracted at its
 	// current event version is left untouched.
 	EnqueueMemoryJob(ctx context.Context, sessionID domain.SessionID, workspaceRoot string) error
+	// BackfillMemoryJobs discovers eligible sessions without explicit enqueue,
+	// preserving existing claims, terminal versions and failure backoff.
+	BackfillMemoryJobs(ctx context.Context, maxAge time.Duration) error
+	// LoadMemoryEvidence loads authoritative evidence bounded by the claim's
+	// fixed version, not the latest checkpoint or compacted model surface.
+	// It must release database transactions before returning to the model caller.
+	LoadMemoryEvidence(ctx context.Context, job Job) ([]domain.Message, error)
+	// CompleteMemoryExtraction atomically publishes records and settles the
+	// matching claim. A nil result settles successful no-output. A stale claim
+	// must publish nothing; the host assigns scope and source provenance.
+	CompleteMemoryExtraction(ctx context.Context, job Job, result *ExtractionResult) error
 	// ClaimMemoryJobs atomically leases up to limit eligible jobs
 	// (pending, retry-due failed, or lease-expired claimed) whose session
 	// has been idle for at least minIdle, is no older than maxAge, and has
 	// activity beyond the last successful extraction.
 	ClaimMemoryJobs(ctx context.Context, limit int, minIdle, maxAge, lease time.Duration, maxAttempts int) ([]Job, error)
-	// CompleteMemoryJob marks a claimed job with a terminal status
-	// (JobSucceeded or JobSucceededNoOutput) and records the extracted
-	// session version. The claim token must match.
-	CompleteMemoryJob(ctx context.Context, sessionID domain.SessionID, claimToken string, status JobStatus, extractedVersion int64) error
-	// FailMemoryJob records a retryable failure: attempts is incremented
-	// and the job either re-enters the queue after retryDelay*attempts or
-	// is abandoned once maxAttempts is reached. The claim token must match.
-	FailMemoryJob(ctx context.Context, sessionID domain.SessionID, claimToken string, jobErr error, retryDelay time.Duration, maxAttempts int) error
+	// FailMemoryJob charges failures only to the matched claim's version.
+	// Changed evidence/ErrConflict releases it as pending with short backoff,
+	// without incrementing attempts, and returns ErrConflict. Stale tokens
+	// return ErrConflict without touching a newer claim.
+	FailMemoryJob(ctx context.Context, job Job, jobErr error, retryDelay time.Duration, maxAttempts int) error
 	// AcquirePhase2Lease takes the global Phase 2 lease; false means
 	// another (possibly crashed) process still holds it within its lease.
 	AcquirePhase2Lease(ctx context.Context, token string, lease time.Duration) (bool, error)

@@ -19,6 +19,8 @@ package permission
 
 import (
 	"encoding/json"
+	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -43,6 +45,33 @@ func needsNet(req *domain.ExecRequest)  { req.NeedsNetwork = true }
 func needsGUI(req *domain.ExecRequest)  { req.NeedsGUIOpen = true }
 func needsWrite(p string) func(*domain.ExecRequest) {
 	return func(req *domain.ExecRequest) { req.WritablePaths = []string{p} }
+}
+
+func TestDeriveDestructiveMemoryRequiresApproval(t *testing.T) {
+	call := domain.PreparedCall{
+		Call:       domain.ToolCall{Name: "memory", Arguments: json.RawMessage(`{"action":"forget","id":"mem-1","revision":1}`)},
+		Definition: domain.ToolDefinition{Name: "memory", Source: domain.ToolSourceBuiltin},
+		Risk:       domain.R3,
+	}
+	d := DeriveEffect(call, DeriveEnv{})
+	if d.Effect.Consequence != ConsequenceSharedDestructive || len(d.Effect.Indicators) == 0 || d.ForcedAsk == "" {
+		t.Fatalf("R3 memory lost destructive classification: %+v", d)
+	}
+	for _, mode := range []ApprovalMode{ModeOnRequest, ModeDangerOnly, ModeNever} {
+		policy := DefaultPolicy()
+		policy.Mode = mode
+		want := domain.DecisionAsk
+		if mode == ModeNever {
+			want = domain.DecisionDeny
+		}
+		if got := policy.Evaluate(call); got.Decision != want {
+			t.Errorf("mode %s: %+v, want %s", mode, got, want)
+		}
+	}
+	call.Risk = domain.R2
+	if got := DefaultPolicy().Evaluate(call); got.Decision != domain.DecisionAllow {
+		t.Fatalf("non-destructive memory no longer allowed: %+v", got)
+	}
 }
 
 func TestDerivePlainArgv(t *testing.T) {
@@ -270,14 +299,47 @@ func TestDeriveMCP(t *testing.T) {
 	}
 }
 
+func TestDeriveRawArgsPreservesActualRisk(t *testing.T) {
+	for _, source := range []domain.ToolSource{domain.ToolSourceBuiltin, domain.ToolSourceMCP} {
+		for _, risk := range []domain.RiskLevel{domain.R1, domain.R2, domain.R3, domain.R4} {
+			t.Run(fmt.Sprintf("source=%s/risk=%d", source, risk), func(t *testing.T) {
+				raw := json.RawMessage(`{"action":"forget","id":"mem_test","revision":1}`)
+				name := "memory"
+				if source == domain.ToolSourceMCP {
+					name = "mcp__srv__mutate"
+					// MCP argument shapes must not override source or actual risk.
+					raw = json.RawMessage(`{"command":"git push --force","url":"https://example.com","path":"/outside/file"}`)
+				}
+				prepared := domain.PreparedCall{
+					Call:       domain.ToolCall{Name: name, Arguments: raw},
+					Definition: domain.ToolDefinition{Name: name, Source: source},
+					Risk:       risk,
+				}
+				got := DeriveRawArgs(name, source, risk, raw, DeriveEnv{})
+				want := DeriveEffect(prepared, DeriveEnv{})
+				if !reflect.DeepEqual(got, want) {
+					t.Fatalf("raw derivation = %+v, prepared = %+v", got, want)
+				}
+				if source == domain.ToolSourceBuiltin {
+					if (got.Effect.Consequence == ConsequenceSharedDestructive) != (risk >= domain.R3) {
+						t.Fatalf("memory consequence does not reflect actual risk: %+v", got)
+					}
+				} else if got.Effect.Proven || (got.ForcedAsk != "") != (risk > domain.R1) {
+					t.Fatalf("MCP actual risk or identity lost: %+v", got)
+				}
+			})
+		}
+	}
+}
+
 func TestDeriveRawArgs(t *testing.T) {
 	raw, _ := json.Marshal(map[string]any{"command": "git push --force"})
-	d := DeriveRawArgs("run_cmd", domain.ToolSourceBuiltin, raw, DeriveEnv{Roots: []string{"/ws"}})
+	d := DeriveRawArgs("run_cmd", domain.ToolSourceBuiltin, domain.R2, raw, DeriveEnv{Roots: []string{"/ws"}})
 	if d.Effect.Consequence != ConsequenceSharedDestructive {
 		t.Fatalf("raw-args derivation = %s", d.Effect.Consequence)
 	}
 	raw, _ = json.Marshal(map[string]string{"url": "https://Example.com/x"})
-	d = DeriveRawArgs("web_fetch", domain.ToolSourceBuiltin, raw, DeriveEnv{})
+	d = DeriveRawArgs("web_fetch", domain.ToolSourceBuiltin, domain.R3, raw, DeriveEnv{})
 	if d.Host != "example.com" {
 		t.Fatalf("raw url host = %q", d.Host)
 	}

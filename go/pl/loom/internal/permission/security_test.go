@@ -417,7 +417,7 @@ func TestAttackNeverPersistPrograms(t *testing.T) {
 // identity — a "path" argument must not become a writable-directory
 // memory covering the builtin file tools.
 func TestAttackMCPIdentityRawDerivation(t *testing.T) {
-	d := DeriveRawArgs("mcp__fs__write_file", domain.ToolSourceMCP,
+	d := DeriveRawArgs("mcp__fs__write_file", domain.ToolSourceMCP, domain.R2,
 		json.RawMessage(`{"path":"/tmp/notes/a.md"}`), DeriveEnv{Roots: []string{"/ws"}})
 	if d.Effect.Proven {
 		t.Fatal("an MCP call must stay unprovable")

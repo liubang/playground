@@ -2998,6 +2998,7 @@ type stubSectionedPromptBuilder struct {
 	static  string
 	dynamic string
 	rules   []domain.ContextRuleRef
+	err     error
 }
 
 func (s stubSectionedPromptBuilder) Build(context.Context) (string, []domain.ContextRuleRef, error) {
@@ -3009,7 +3010,7 @@ func (s stubSectionedPromptBuilder) Build(context.Context) (string, []domain.Con
 }
 
 func (s stubSectionedPromptBuilder) BuildSections(context.Context) (prompt.Sections, error) {
-	return prompt.Sections{Static: s.static, Dynamic: s.dynamic, Refs: s.rules}, nil
+	return prompt.Sections{Static: s.static, Dynamic: s.dynamic, Refs: s.rules}, s.err
 }
 
 func TestLoopSplitsSystemPromptForCaching(t *testing.T) {
@@ -3068,30 +3069,70 @@ func TestLoopSplitsSystemPromptForCaching(t *testing.T) {
 	}
 }
 
-func TestLoopContinuesWithoutSystemPromptWhenBuildFails(t *testing.T) {
-	model := fakes.NewFakeModel(fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn})
-	run := newTestRun(domain.DefaultLimits())
-	run.AddUserMessage(domain.Message{
-		ID: domain.NewMessageID(), Role: domain.RoleUser,
-		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "question"}},
-		CreatedAt: run.Clock.Now(),
-	})
-	loop := &Loop{
-		Run: run, Model: model, Registry: NewToolRegistry(), Logger: slog.Default(),
-		SystemPrompt: stubPromptBuilder{err: errors.New("boom")},
-	}
-	if err := loop.Execute(context.Background()); err != nil {
-		t.Fatalf("Execute should tolerate prompt build failure: %v", err)
-	}
-	calls := model.Calls()
-	if len(calls) != 1 {
-		t.Fatalf("expected 1 model call, got %d", len(calls))
-	}
-	if len(calls[0].Messages) != 1 || calls[0].Messages[0].Role != domain.RoleUser {
-		t.Fatalf("expected bare transcript on prompt failure, got %+v", calls[0].Messages)
-	}
-	if len(calls[0].ContextManifest.Rules) != 0 {
-		t.Fatalf("expected no rule refs on prompt failure, got %+v", calls[0].ContextManifest.Rules)
+func TestLoopFailsWhenSystemPromptBuildFails(t *testing.T) {
+	buildErr := errors.New("boom")
+	for _, tc := range []struct {
+		name    string
+		builder PromptBuilder
+	}{
+		{name: "legacy Build", builder: stubPromptBuilder{text: "partial prompt", err: buildErr}},
+		// Build succeeds: a BuildSections error must not fall back to it.
+		{name: "sectioned BuildSections", builder: stubSectionedPromptBuilder{
+			static: "partial static", dynamic: "partial dynamic", err: buildErr,
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
+			model := fakes.NewFakeModel(fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn})
+			store := fakes.NewFakeStore()
+			run := newTestRun(domain.DefaultLimits())
+			mustCreateSession(t, store, run.SessionID)
+			run.AddUserMessage(domain.Message{
+				ID: domain.NewMessageID(), Role: domain.RoleUser,
+				Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "question"}},
+				CreatedAt: run.Clock.Now(),
+			})
+			// A surviving plan note is not a substitute for the failed prompt.
+			run.Plan = domain.Plan{Items: []domain.PlanItem{
+				{Index: 0, Goal: "finish the task", Status: domain.PlanItemInProgress},
+			}}
+			loop := &Loop{
+				Run: run, Model: model, Store: store, Registry: NewToolRegistry(),
+				SystemPrompt: tc.builder,
+			}
+			err := loop.Execute(ctx)
+			if !errors.Is(err, buildErr) {
+				t.Fatalf("Execute error = %v, want wrapped build error", err)
+			}
+			if !strings.Contains(err.Error(), "build system prompt:") {
+				t.Fatalf("Execute error lacks prompt build context: %v", err)
+			}
+			if run.State.Lifecycle != domain.LifecycleTerminal || run.State.Outcome != domain.OutcomeFailed {
+				t.Fatalf("run state = %+v, want terminal/failed", run.State)
+			}
+			if got := len(model.Calls()); got != 0 {
+				t.Fatalf("model calls = %d, want 0", got)
+			}
+			if len(run.Messages) != 1 || run.Messages[0].Role != domain.RoleUser {
+				t.Fatalf("prompt failure changed transcript: %+v", run.Messages)
+			}
+			events, err := store.LoadEvents(ctx, run.SessionID, 0)
+			if err != nil {
+				t.Fatalf("LoadEvents: %v", err)
+			}
+			failed := 0
+			for _, event := range events {
+				switch event.Type {
+				case domain.EventModelRequestStarted, domain.EventModelRequestHeader:
+					t.Fatalf("prompt failure emitted %s before a model request", event.Type)
+				case domain.EventRunFailed:
+					failed++
+				}
+			}
+			if failed != 1 {
+				t.Fatalf("persisted run.failed events = %d, want 1", failed)
+			}
+		})
 	}
 }
 
@@ -5007,6 +5048,78 @@ func TestSegmentBatchHonorsPerCallConcurrencyOptIn(t *testing.T) {
 		if sizes[i] != want[i] {
 			t.Fatalf("segments = %v, want %v", sizes, want)
 		}
+	}
+}
+
+type provenanceTool struct {
+	*fakes.FakeTool
+	store  *session.SQLiteStore
+	seen   chan domain.ToolContext
+	errors chan error
+}
+
+func (tool *provenanceTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
+	source := domain.ToolContextFrom(ctx)
+	events, err := tool.store.LoadEvents(ctx, source.SessionID, 0)
+	if err == nil && (len(events) == 0 || events[len(events)-1].Sequence != source.SourceVersion || events[len(events)-1].Type != domain.EventToolExecutionStarted) {
+		err = fmt.Errorf("tool provenance %+v does not match durable execution starts: %+v", source, events)
+	}
+	if err != nil {
+		tool.errors <- err
+	}
+	tool.seen <- source
+	return tool.FakeTool.Execute(ctx, prepared)
+}
+
+func TestToolContextCapturesPersistedExecutionStart(t *testing.T) {
+	for _, count := range []int{1, 2} {
+		t.Run(fmt.Sprintf("calls=%d", count), func(t *testing.T) {
+			ctx := t.Context()
+			store, err := session.OpenSQLiteStore(ctx, filepath.Join(t.TempDir(), "sessions.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = store.Close() })
+			run := newTestRun(domain.DefaultLimits())
+			if err := store.CreateSession(ctx, run.SessionID, domain.WorkspaceID{}); err != nil {
+				t.Fatal(err)
+			}
+			tool := &provenanceTool{FakeTool: fakes.EchoTool(), store: store, seen: make(chan domain.ToolContext, count), errors: make(chan error, count)}
+			var segment []preparedExec
+			for i := range count {
+				prepared, err := tool.Prepare(ctx, domain.ToolCall{ID: domain.NewToolCallID(), Name: "echo", Arguments: json.RawMessage(fmt.Sprintf(`{"text":"%d"}`, i))})
+				if err != nil {
+					t.Fatal(err)
+				}
+				segment = append(segment, preparedExec{tool: tool, prepared: prepared})
+			}
+			loop := &Loop{Run: run, Store: store}
+			if count == 1 {
+				err = loop.executeOne(ctx, segment[0])
+			} else {
+				err = loop.executeSegmentParallel(ctx, segment)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			close(tool.errors)
+			for err := range tool.errors {
+				t.Error(err)
+			}
+			for range count {
+				source := <-tool.seen
+				if source.SessionID != run.SessionID || source.SourceVersion != run.persistedVersion || source.SourceVersion == 0 {
+					t.Fatalf("source=%+v, persisted version=%d", source, run.persistedVersion)
+				}
+			}
+			// The results appended after execution cannot mutate captured context.
+			if run.Version <= run.persistedVersion {
+				t.Fatal("test must advance mutable Run after capturing provenance")
+			}
+		})
+	}
+	if source := domain.ToolContextFrom(t.Context()); source != (domain.ToolContext{}) {
+		t.Fatalf("context-free provenance = %+v", source)
 	}
 }
 

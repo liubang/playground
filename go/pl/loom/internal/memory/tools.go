@@ -1,19 +1,5 @@
 // Copyright (c) 2026 The Authors. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-// Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/08/02
+// SPDX-License-Identifier: Apache-2.0
 
 package memory
 
@@ -22,115 +8,63 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
-	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/toolkit"
 )
 
-// ToolMemory is the single memory tool: one definition, four actions
-// (list|read|search|add_note), risk graded per action.
-const ToolMemory = "memory"
-
-// Memory tool actions.
 const (
-	ActionList    = "list"
-	ActionRead    = "read"
-	ActionSearch  = "search"
-	ActionAddNote = "add_note"
+	ToolMemory              = "memory"
+	ActionList              = "list"
+	ActionRead              = "read"
+	ActionSearch            = "search"
+	ActionRemember          = "remember"
+	ActionForget            = "forget"
+	ActionAddNote           = "add_note" // Input compatibility; normalized to remember.
+	DefaultListMaxResults   = 50
+	DefaultSearchMaxResults = 20
+	DefaultReadMaxLines     = 100
+	SummaryTokenLimit       = 2500
+	maxToolBytes            = 32 * 1024
 )
 
-// Limits.
-const (
-	DefaultListMaxResults   = 200
-	DefaultSearchMaxResults = 200
-	// DefaultReadMaxLines bounds a read that passes no max_lines: memory
-	// files only grow, and an uncapped full read injects the whole store
-	// into context in one shot (observed: a 34KB MEMORY.md single read).
-	// The truncated hint tells the model how to page for the rest.
-	DefaultReadMaxLines = 200
-	SummaryTokenLimit   = 2500
-)
-
-// noteFilePattern validates ad-hoc note filenames.
-var noteFilePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-[a-z0-9][a-z0-9-]{0,79}\.md$`)
-
-// noteSlugPattern validates a bare note slug; the current UTC timestamp is
-// prepended automatically so the model never has to look up the date
-// (observed in live transcripts: an extra run_cmd date call per add_note).
-var noteSlugPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,79}\.md$`)
-
-// timestampedNoteFilename renders the canonical note filename for a slug.
-func timestampedNoteFilename(slug string) string {
-	return time.Now().UTC().Format("2006-01-02T15-04-05") + "-" + slug + ".md"
-}
-
-// resolveNoteFilename maps a validated filename onto the final note name,
-// prepending the current UTC timestamp to bare slugs. It runs at Execute
-// time, never Prepare: a timestamp baked into the signed canonical
-// arguments cannot survive the freshness re-Prepare, which runs after
-// approval — at a later second — and would mint a different name, so
-// every slug-form add_note would fail closed as a security error.
-func resolveNoteFilename(filename string) (string, error) {
-	switch {
-	case filename == "":
-		return timestampedNoteFilename("note"), nil
-	case noteFilePattern.MatchString(filename):
-		// Fully timestamped already; use as-is.
-		return filename, nil
-	case noteSlugPattern.MatchString(filename):
-		return timestampedNoteFilename(strings.TrimSuffix(filename, ".md")), nil
-	default:
-		return "", domain.NewError(domain.ErrInvalidInput,
-			"filename must be a slug like \"data-prefs.md\" (a UTC timestamp is prepended automatically) or fully timestamped YYYY-MM-DDTHH-MM-SS-slug.md")
-	}
-}
-
-// memoryArgs is the model-visible schema of the unified memory tool:
-// action selects the operation, the remaining fields are per-action.
 type memoryArgs struct {
 	Action     string `json:"action"`
-	Path       string `json:"path,omitempty"`
+	ID         string `json:"id,omitempty"`
+	Revision   int64  `json:"revision,omitzero"`
+	Scope      string `json:"scope,omitempty"`
+	Content    string `json:"content,omitempty"`
 	Query      string `json:"query,omitempty"`
-	Filename   string `json:"filename,omitempty"`
 	Note       string `json:"note,omitempty"`
-	LineOffset int    `json:"line_offset,omitempty"`
-	MaxLines   int    `json:"max_lines,omitempty"`
-	MaxResults int    `json:"max_results,omitempty"`
+	Filename   string `json:"filename,omitempty"`
+	ByteOffset int    `json:"byte_offset,omitzero"`
+	LineOffset int    `json:"line_offset,omitzero"`
+	MaxLines   int    `json:"max_lines,omitzero"`
+	MaxResults int    `json:"max_results,omitzero"`
 }
 
-// MemoryTool is the unified memory tool. The read actions (list, read,
-// search) are R1; add_note writes to the store and is R2. The definition
-// stays capability-free (static R0) so the per-action tier never sits
-// below the definition default — the agent loop's prepared-call drift
-// check fails closed on that (the browser/exec_session pattern).
+// MemoryTool exposes active records only. Approval signs the normalized mutation,
+// while the host-bound Store and ToolContext supply scope and source attribution.
 type MemoryTool struct {
 	def   domain.ToolDefinition
 	store *Store
 }
 
-// NewMemoryTool creates the memory tool.
 func NewMemoryTool(store *Store) (*MemoryTool, error) {
-	if store == nil {
-		return nil, domain.NewError(domain.ErrInvalidInput, "memory requires a non-nil store")
+	if store == nil || store.repo == nil {
+		return nil, domain.NewError(domain.ErrInvalidInput, "memory requires a repository")
 	}
 	def := domain.ToolDefinition{
-		Name: ToolMemory,
-		Description: "Read and update the persistent memory store. " +
-			"Actions: 'list' enumerates files and directories under path (default: root) — explore the memory " +
-			"hierarchy before reading; 'read' reads the memory file at path (required), paginating with " +
-			"line_offset/max_lines; 'search' finds substring matches for query (required) across memory files — " +
-			"use it before answering questions about prior work, user preferences, or project conventions; " +
-			"'add_note' appends a timestamped markdown note (note required) after the user explicitly " +
-			"asks to remember, forget, or update something — it is consolidated into the main memory later.",
-		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"action":{"type":"string","enum":["list","read","search","add_note"],"description":"The memory operation."},"path":{"type":"string","description":"Relative path within the memory store (list: default root; read: required)."},"query":{"type":"string","minLength":1,"maxLength":512,"description":"Search substring (search; required)."},"filename":{"type":"string","maxLength":128,"description":"Note filename slug, e.g. 'data-prefs.md' (add_note; optional, default 'note.md'). The current UTC timestamp YYYY-MM-DDTHH-MM-SS- is prepended automatically — no date lookup needed. A fully timestamped name is also accepted."},"note":{"type":"string","minLength":1,"maxLength":4096,"description":"The memory note content (add_note; required)."},"line_offset":{"type":"integer","minimum":1,"description":"1-indexed line offset to start reading from (read)."},"max_lines":{"type":"integer","minimum":1,"maximum":2000,"description":"Maximum lines to return (read; default 200 — paginate with line_offset for more)."},"max_results":{"type":"integer","minimum":1,"maximum":2000,"description":"Maximum entries/matches to return (list/search; default 200)."}},"required":["action"]}`),
+		Name:        ToolMemory,
+		Description: "Persistent cross-session memory. list returns active IDs/revisions; read reads an ID; search finds evidence before answering questions about prior work. remember stores an explicitly requested fact immediately (scope=global for personal preferences, workspace for project facts). To update, pass the existing id and revision. forget removes the specified id/revision immediately. Replacement/forget also clears automatic evidence in the affected scope; global changes affect all workspaces. Never claim to remember or forget unless this tool succeeds. add_note is a compatibility alias for remember.",
+		InputSchema: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"action":{"type":"string","enum":["list","read","search","remember","forget","add_note"]},"id":{"type":"string","description":"Active record ID (read/forget required; remember optional update)."},"revision":{"type":"integer","minimum":1,"description":"Current revision from read/list; required for update/forget."},"scope":{"type":"string","enum":["global","workspace"],"description":"Remember scope: default global. For update/forget use the scope of the target."},"content":{"type":"string","minLength":1,"maxLength":4096},"query":{"type":"string","minLength":1,"maxLength":512},"note":{"type":"string","description":"Legacy alias for content."},"filename":{"type":"string","description":"Legacy label accepted by add_note; not a storage path."},"byte_offset":{"type":"integer","minimum":0,"description":"Continue a byte-limited read using next_byte_offset."},"line_offset":{"type":"integer","minimum":1},"max_lines":{"type":"integer","minimum":1,"maximum":500},"max_results":{"type":"integer","minimum":1,"maximum":200}},"required":["action"]}`),
 		Source:      domain.ToolSourceBuiltin,
 	}
 	if err := def.Validate(); err != nil {
-		return nil, domain.NewError(domain.ErrInternal, "invalid tool definition", domain.WithCause(err))
+		return nil, err
 	}
 	return &MemoryTool{def: def, store: store}, nil
 }
@@ -138,62 +72,72 @@ func NewMemoryTool(store *Store) (*MemoryTool, error) {
 func (t *MemoryTool) Definition() domain.ToolDefinition { return t.def }
 func (t *MemoryTool) ConcurrentSafe() bool              { return true }
 
-// validate normalizes the call and reports the per-action risk: add_note
-// writes (R2), everything else reads (R1).
-func (args *memoryArgs) validate() (domain.RiskLevel, error) {
-	switch args.Action {
-	case ActionList:
-		if args.MaxResults <= 0 {
-			args.MaxResults = DefaultListMaxResults
+func (a *memoryArgs) validate() (domain.RiskLevel, error) {
+	invalid := func(message string) (domain.RiskLevel, error) {
+		return 0, domain.NewError(domain.ErrInvalidInput, message)
+	}
+	if a.Action == ActionAddNote {
+		a.Action = ActionRemember
+	}
+	if a.Note != "" {
+		if a.Content != "" && a.Content != a.Note {
+			return invalid("content and note disagree")
+		}
+		a.Content, a.Note = a.Note, ""
+	}
+	// Compatibility labels carry no persistence identity; tool call IDs do.
+	a.Filename = ""
+	a.Content = strings.TrimSpace(RedactSecrets(a.Content))
+	a.Query = strings.TrimSpace(a.Query)
+	if a.Scope != "" && a.Scope != "global" && a.Scope != "workspace" {
+		return invalid("scope must be global or workspace")
+	}
+	if a.MaxResults < 0 || a.MaxResults > 200 || a.MaxLines < 0 || a.MaxLines > 500 || a.LineOffset < 0 || a.ByteOffset < 0 || a.Revision < 0 {
+		return invalid("pagination or revision is out of range")
+	}
+	switch a.Action {
+	case ActionList, ActionSearch:
+		if a.Action == ActionSearch && (a.Query == "" || len(a.Query) > MaxQueryBytes) {
+			return invalid("search query must be between 1 and 512 bytes")
+		}
+		if a.MaxResults == 0 {
+			a.MaxResults = DefaultListMaxResults
+			if a.Action == ActionSearch {
+				a.MaxResults = DefaultSearchMaxResults
+			}
 		}
 		return domain.R1, nil
 	case ActionRead:
-		if args.Path == "" {
-			return 0, domain.NewError(domain.ErrInvalidInput, "path is required for action=read")
+		if a.ID == "" {
+			return invalid("read requires an ID; use list or search first")
+		}
+		if a.LineOffset == 0 {
+			a.LineOffset = 1
+		}
+		if a.MaxLines == 0 {
+			a.MaxLines = DefaultReadMaxLines
 		}
 		return domain.R1, nil
-	case ActionSearch:
-		if strings.TrimSpace(args.Query) == "" {
-			return 0, domain.NewError(domain.ErrInvalidInput, "query is required for action=search")
+	case ActionRemember, ActionForget:
+		if a.Scope == "" {
+			a.Scope = "global"
 		}
-		if args.MaxResults <= 0 {
-			args.MaxResults = DefaultSearchMaxResults
+		if a.ID != "" && a.Revision < 1 {
+			return invalid("update/forget requires the current revision")
 		}
-		return domain.R1, nil
-	case ActionAddNote:
-		args.Note = strings.TrimSpace(args.Note)
-		if args.Note == "" {
-			return 0, domain.NewError(domain.ErrInvalidInput, "note is required for action=add_note")
+		if a.Action == ActionForget {
+			if a.ID == "" || a.Content != "" {
+				return invalid("forget requires an ID and no content")
+			}
+		} else if a.Content == "" || len(a.Content) > MaxContentBytes || !utf8.ValidString(a.Content) {
+			return invalid("content must be valid UTF-8 and between 1 and 4096 bytes")
 		}
-		// Shape-check only: the timestamp is prepended at Execute time
-		// (resolveNoteFilename) so the signed canonical arguments stay
-		// stable across the freshness re-Prepare. The empty filename
-		// defaults to the bare slug — a deterministic, idempotent fill.
-		switch {
-		case args.Filename == "":
-			args.Filename = "note.md"
-		case noteFilePattern.MatchString(args.Filename), noteSlugPattern.MatchString(args.Filename):
-		default:
-			return 0, domain.NewError(domain.ErrInvalidInput,
-				"filename must be a slug like \"data-prefs.md\" (a UTC timestamp is prepended automatically) or fully timestamped YYYY-MM-DDTHH-MM-SS-slug.md")
+		if a.ID != "" {
+			return domain.R3, nil
 		}
 		return domain.R2, nil
 	default:
-		return 0, domain.NewError(domain.ErrInvalidInput,
-			fmt.Sprintf("unknown action %q (want list|read|search|add_note)", args.Action))
-	}
-}
-
-func (args memoryArgs) approvalDesc() string {
-	switch args.Action {
-	case ActionList:
-		return fmt.Sprintf("List memory files under %s", args.Path)
-	case ActionRead:
-		return fmt.Sprintf("Read memory file %s", args.Path)
-	case ActionSearch:
-		return fmt.Sprintf("Search memory for %q", toolkit.Ellipsize(args.Query, 40))
-	default:
-		return fmt.Sprintf("Add memory note %s", args.Filename)
+		return invalid("unknown memory action")
 	}
 }
 
@@ -206,124 +150,150 @@ func (t *MemoryTool) Prepare(_ context.Context, call domain.ToolCall) (domain.Pr
 	if err != nil {
 		return domain.PreparedCall{}, err
 	}
-	canonical, _ := json.Marshal(args)
-	// validate mutates the args (add_note filename defaulting, max_results
-	// defaults), so the canonical form — not the model's raw JSON — is
-	// what Execute must decode.
+	if args.Scope == "workspace" && t.store.workspace == "" {
+		return domain.PreparedCall{}, domain.NewError(domain.ErrInvalidInput, "no workspace is bound to this memory tool")
+	}
+	canonical, err := json.Marshal(args)
+	if err != nil {
+		return domain.PreparedCall{}, err
+	}
 	call.Arguments = canonical
-	return domain.PreparedCall{
-		Call:         call,
-		Definition:   t.def,
-		Risk:         risk,
-		ApprovalDesc: args.approvalDesc(),
-		ArgsHash:     toolkit.ArgsFingerprint(canonical),
-	}, nil
+	description := fmt.Sprintf("Memory %s (%s): %s", args.Action, args.Scope, toolkit.Ellipsize(args.Content+args.ID+args.Query, 120))
+	if args.ID != "" && risk == domain.R3 {
+		area := "this workspace"
+		if args.Scope == "global" {
+			area = "all workspaces"
+		}
+		description += "; invalidates all automatically inferred memories in " + area + " to prevent stale evidence from restoring this fact"
+	}
+	return domain.PreparedCall{Call: call, Definition: t.def, Risk: risk, ApprovalDesc: description, ArgsHash: toolkit.ArgsFingerprint(canonical)}, nil
 }
 
-func (t *MemoryTool) Execute(_ context.Context, prepared domain.PreparedCall) domain.ToolResult {
-	startedAt := time.Now()
-	var args memoryArgs
-	if err := json.Unmarshal(prepared.Call.Arguments, &args); err != nil {
-		return memoryToolError(prepared.Call.ID, startedAt, err)
+func (t *MemoryTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {
+	started := time.Now()
+	args, err := toolkit.DecodeLenient[memoryArgs](prepared.Call.Arguments)
+	if err == nil {
+		_, err = args.validate()
 	}
-
-	var payload map[string]any
-	var err error
-	switch args.Action {
-	case ActionList:
-		var entries any
-		maxResults := args.MaxResults
-		if maxResults <= 0 {
-			maxResults = DefaultListMaxResults
+	var payload any
+	if err == nil {
+		switch args.Action {
+		case ActionList:
+			var result SearchResult
+			result, err = t.store.repo.QueryMemory(ctx, t.store.workspace, "", args.MaxResults)
+			if err != nil {
+				break
+			}
+			for i := range result.Records {
+				// Listing IDs is cheap; full evidence is retrieved on demand.
+				result.Records[i].Content = utf8Prefix(result.Records[i].Content, 240)
+				result.Records[i].Rollout = ""
+			}
+			payload, err = boundedRecords(result)
+		case ActionRead:
+			var record Record
+			record, err = t.store.Read(ctx, args.ID)
+			if err != nil {
+				break
+			}
+			text := record.Content
+			if record.Rollout != "" {
+				text += "\n\n" + record.Rollout
+			}
+			lines := strings.Split(text, "\n")
+			start := min(args.LineOffset-1, len(lines))
+			end := min(start+args.MaxLines, len(lines))
+			byteStart := 0
+			for _, line := range lines[:start] {
+				byteStart += len(line) + 1
+			}
+			byteStart = min(byteStart, len(text))
+			chunk := strings.Join(lines[start:end], "\n")
+			if args.ByteOffset > 0 {
+				byteStart = min(args.ByteOffset, len(text))
+				if !utf8.ValidString(text[byteStart:]) {
+					err = domain.NewError(domain.ErrInvalidInput, "byte_offset must be a UTF-8 boundary")
+					break
+				}
+				chunk = text[byteStart:]
+			}
+			record.Content, record.Rollout = "", ""
+			page := map[string]any{"record": record, "content": "", "total_lines": len(lines), "total_bytes": len(text), "truncated": true, "next_byte_offset": byteStart}
+			if len(chunk) <= maxToolBytes/8 && args.ByteOffset == 0 {
+				page["next_line_offset"] = end + 1
+			}
+			chunk = utf8Prefix(chunk, maxToolBytes/8)
+			page["content"] = chunk
+			page["next_byte_offset"] = byteStart + len(chunk)
+			page["truncated"] = byteStart+len(chunk) < len(text)
+			payload = page
+		case ActionSearch:
+			var result SearchResult
+			result, err = t.store.Search(ctx, args.Query, args.MaxResults)
+			if err != nil {
+				break
+			}
+			for i := range result.Records {
+				result.Records[i].Content = utf8Prefix(result.Records[i].Content, 512)
+				result.Records[i].Rollout = ""
+			}
+			payload, err = boundedRecords(result)
+		case ActionRemember, ActionForget:
+			scope := ""
+			if args.Scope == "workspace" {
+				scope = t.store.workspace
+			}
+			origin := domain.ToolContextFrom(ctx)
+			var record Record
+			record, err = t.store.Mutate(ctx, Mutation{RequestID: prepared.Call.ID.String(), ID: args.ID, Revision: args.Revision, Scope: scope, Content: args.Content, Forget: args.Action == ActionForget, SessionID: origin.SessionID, SourceVersion: origin.SourceVersion})
+			if err != nil {
+				break
+			}
+			result := map[string]any{"record": record, "status": args.Action, "visible_immediately": true}
+			if args.ID != "" && record.Revision > args.Revision {
+				revocation := "workspace"
+				if scope == "" {
+					revocation = "all_workspaces"
+				}
+				result["automatic_evidence_revoked"] = revocation
+			}
+			payload = result
 		}
-		entries, err = t.store.List(args.Path, maxResults)
-		payload = map[string]any{"entries": entries}
-	case ActionRead:
-		maxLines := args.MaxLines
-		if maxLines <= 0 {
-			maxLines = DefaultReadMaxLines
-		}
-		var content string
-		var total int
-		content, total, err = t.store.ReadFile(args.Path, args.LineOffset, maxLines)
-		if errors.Is(err, fs.ErrNotExist) {
-			// Replace the raw os.PathError (which leaks the store's
-			// absolute root) with actionable guidance.
-			err = domain.NewError(domain.ErrInvalidInput,
-				fmt.Sprintf("memory file not found: %q — nothing is stored there; use action=list to browse what exists", args.Path))
-		}
-		start := args.LineOffset
-		if start < 1 {
-			start = 1
-		}
-		payload = map[string]any{"content": content, "total_lines": total}
-		if end := start - 1 + countLines(content); content != "" && end < total {
-			payload["truncated"] = true
-			payload["hint"] = fmt.Sprintf(
-				"showing lines %d-%d of %d; continue with line_offset=%d (or pass a larger max_lines, up to 2000)",
-				start, end, total, end+1,
-			)
-		}
-	case ActionSearch:
-		var matches any
-		maxResults := args.MaxResults
-		if maxResults <= 0 {
-			maxResults = DefaultSearchMaxResults
-		}
-		matches, err = t.store.Search(args.Query, maxResults)
-		payload = map[string]any{"matches": matches}
-	case ActionAddNote:
-		var filename string
-		filename, err = resolveNoteFilename(args.Filename)
-		if err == nil {
-			err = t.store.AddNote(filename, args.Note)
-		}
-		payload = map[string]any{
-			"path":   NotesDir + "/" + filename,
-			"status": "created",
-		}
-	default:
-		err = domain.NewError(domain.ErrInvalidInput,
-			fmt.Sprintf("unknown action %q (want list|read|search|add_note)", args.Action))
 	}
 	if err != nil {
-		return memoryToolError(prepared.Call.ID, startedAt, err)
+		return memoryToolError(prepared.Call.ID, started, err)
 	}
-	raw, _ := json.Marshal(payload)
-	return domain.ToolResult{
-		CallID:     prepared.Call.ID,
-		Status:     domain.ToolStatusSuccess,
-		Content:    []domain.ContentPart{{Kind: domain.PartText, Text: string(raw)}},
-		StartedAt:  startedAt,
-		FinishedAt: time.Now(),
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return memoryToolError(prepared.Call.ID, started, err)
 	}
+	return domain.ToolResult{CallID: prepared.Call.ID, Status: domain.ToolStatusSuccess, Content: []domain.ContentPart{{Kind: domain.PartText, Text: string(raw)}}, StartedAt: started, FinishedAt: time.Now()}
 }
 
-// countLines returns the number of lines in a non-empty read chunk.
-func countLines(content string) int {
-	if content == "" {
-		return 0
-	}
-	return strings.Count(content, "\n") + 1
-}
-
-func memoryToolError(callID domain.ToolCallID, startedAt time.Time, err error) domain.ToolResult {
-	code, message := "internal", err.Error()
-	retryable := true
-	var agentErr *domain.AgentError
-	if errors.As(err, &agentErr) {
-		code, message = string(agentErr.Code), agentErr.Message
-		// Invalid input errors are not retryable — the same call will
-		// fail the same way.
-		if agentErr.Code == domain.ErrInvalidInput {
-			retryable = false
+// boundedRecords budgets encoded JSON, not raw characters: escaping can expand
+// text several-fold. Truncation never splits an entry or returns malformed JSON.
+func boundedRecords(result SearchResult) (SearchResult, error) {
+	used := 64 // envelope and truncation flag
+	for i, record := range result.Records {
+		raw, err := json.Marshal(record)
+		if err != nil {
+			return SearchResult{}, err
 		}
+		if used+len(raw)+1 > maxToolBytes {
+			result.Records = result.Records[:i]
+			result.Truncated = true
+			break
+		}
+		used += len(raw) + 1
 	}
-	return domain.ToolResult{
-		CallID:     callID,
-		Status:     domain.ToolStatusError,
-		Error:      &domain.ToolError{Code: code, Message: message, Retryable: retryable},
-		StartedAt:  startedAt,
-		FinishedAt: time.Now(),
+	return result, nil
+}
+
+func memoryToolError(id domain.ToolCallID, started time.Time, err error) domain.ToolResult {
+	code, message, retryable := "internal", err.Error(), true
+	if agentErr, ok := errors.AsType[*domain.AgentError](err); ok {
+		code, message = string(agentErr.Code), agentErr.Message
+		retryable = agentErr.Code != domain.ErrInvalidInput && agentErr.Code != domain.ErrConflict
 	}
+	return domain.ToolResult{CallID: id, Status: domain.ToolStatusError, Error: &domain.ToolError{Code: code, Message: message, Retryable: retryable}, StartedAt: started, FinishedAt: time.Now()}
 }

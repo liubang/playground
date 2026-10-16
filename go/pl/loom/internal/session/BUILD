@@ -17,10 +17,16 @@
 
 load("@rules_go//go:def.bzl", "go_library", "go_test")
 
+exports_files(
+    ["sqlite_store.go"],
+    visibility = ["//go/pl/loom/scripts:__pkg__"],
+)
+
 go_library(
     name = "session_lib",
     srcs = [
         "memory_jobs.go",
+        "memory_records.go",
         "rewind.go",
         "sqlite_store.go",
         "transcript.go",
@@ -39,6 +45,7 @@ go_test(
     name = "session_test",
     srcs = [
         "memory_jobs_test.go",
+        "memory_records_test.go",
         "sqlite_store_test.go",
         "surface_directive_store_test.go",
         "transcript_test.go",

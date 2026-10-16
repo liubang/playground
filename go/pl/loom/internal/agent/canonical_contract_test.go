@@ -29,6 +29,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/memory"
 	"github.com/liubang/playground/go/pl/loom/internal/process"
+	"github.com/liubang/playground/go/pl/loom/internal/session"
 	"github.com/liubang/playground/go/pl/loom/internal/skill"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/builtin"
 	"github.com/liubang/playground/go/pl/loom/internal/tool/command"
@@ -89,10 +90,12 @@ func TestToolCanonicalContract(t *testing.T) {
 		t.Fatalf("NewRunner: %v", err)
 	}
 	book := workspacepkg.NewFileStateBook()
-	memStore, err := memory.OpenStore(filepath.Join(t.TempDir(), "memories"))
+	repo, err := session.OpenSQLiteStore(t.Context(), filepath.Join(t.TempDir(), "sessions.db"))
 	if err != nil {
-		t.Fatalf("memory.OpenStore: %v", err)
+		t.Fatalf("OpenSQLiteStore: %v", err)
 	}
+	t.Cleanup(func() { _ = repo.Close() })
+	memStore := memory.NewStore(repo).ForWorkspace(root)
 	sessionMgr, err := exsession.NewManager(runner, nil, time.Minute)
 	if err != nil {
 		t.Fatalf("exsession.NewManager: %v", err)
@@ -212,8 +215,11 @@ func TestToolCanonicalContract(t *testing.T) {
 		{"memory", memTool, nil, []string{
 			`{"action":"add_note","filename":"prefer-go.md","note":"User prefers Go"}`,
 			`{"action":"add_note","note":"no filename at all"}`,
-			`{"action":"list","path":null,"max_results":null}`,
-			`{"action":"read","path":"MEMORY.md"}`,
+			`{"action":"list","max_results":null}`,
+			`{"action":"read","id":"mem-contract"}`,
+			`{"action":"remember","content":"User prefers Go","scope":"workspace"}`,
+			`{"action":"search","query":"Go"}`,
+			`{"action":"forget","id":"mem-contract","revision":1}`,
 		}},
 		{"ask_user", askUser, nil, []string{
 			`{"question":"继续吗？","options":[{"label":"是"},{"label":"否"}],"allow_multiple":null}`,

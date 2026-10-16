@@ -156,6 +156,9 @@ func (s *SQLiteStore) DeleteWorkspace(ctx context.Context, id domain.WorkspaceID
 		return storeError("begin delete workspace transaction", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := revokeMemoryTx(ctx, tx, "kind = 'automatic' AND (source_session_id IN (SELECT session_id FROM sessions WHERE workspace_id = ?) OR scope IN (SELECT root_path FROM workspaces WHERE workspace_id = ?))", id.String(), id.String()); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx,
 		"DELETE FROM file_changes WHERE session_id IN (SELECT session_id FROM sessions WHERE workspace_id = ?)",
 		id.String()); err != nil {

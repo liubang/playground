@@ -18,11 +18,16 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -30,8 +35,285 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/artifact"
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/fakes"
+	"github.com/liubang/playground/go/pl/loom/internal/permission"
+	"github.com/liubang/playground/go/pl/loom/internal/prompt"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 )
+
+type memoryTestPrompt struct {
+	sections prompt.Sections
+	err      error
+}
+
+func (p memoryTestPrompt) Build(context.Context) (string, []domain.ContextRuleRef, error) {
+	return joinTexts(p.sections.Static, p.sections.Dynamic), p.sections.Refs, p.err
+}
+
+func (p memoryTestPrompt) BuildSections(context.Context) (prompt.Sections, error) {
+	return p.sections, p.err
+}
+
+// The adapter exposes only Build to exercise the legacy builder path too.
+type memoryTestLegacyPrompt struct{ inner memoryTestPrompt }
+
+func (p memoryTestLegacyPrompt) Build(ctx context.Context) (string, []domain.ContextRuleRef, error) {
+	return p.inner.Build(ctx)
+}
+
+func TestMemoryPromptFailurePreservesSystemPrompt(t *testing.T) {
+	ctx := t.Context()
+	cfg := testResolvedConfig(nil)
+	cfg.Storage.BaseDir = t.TempDir()
+	cfg.Memory.Enabled = true
+	if err := os.MkdirAll(cfg.Storage.SessionsDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	proc, err := NewProcessRuntime(ctx, cfg, ProcessRuntimeConfig{ArtifactDir: filepath.Join(t.TempDir(), "artifacts"), Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proc.Close)
+	b, err := NewWorkspaceBootstrap(ctx, proc, BootstrapConfig{WorkspaceRoot: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(b.Close)
+	wrapper := b.CurrentPrompt().(*memoryPromptWrapper)
+	inner := memoryTestPrompt{sections: prompt.Sections{Static: "base system prompt", Dynamic: "prior dynamic context", Refs: []domain.ContextRuleRef{{Source: "base", Hash: "base-hash"}}}}
+	wrapper.inner = inner
+	healthy, err := wrapper.BuildSections(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Closing the real SQLite repository produces a storage failure, not cancellation.
+	if err := proc.Store.(*session.SQLiteStore).Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, legacy := range []bool{false, true} {
+		t.Run(fmt.Sprintf("legacy=%v", legacy), func(t *testing.T) {
+			wrapper.inner = inner
+			if legacy {
+				wrapper.inner = memoryTestLegacyPrompt{inner: inner}
+			}
+			var logs bytes.Buffer
+			wrapper.logger = slog.New(slog.NewTextHandler(&logs, nil))
+			secs, err := wrapper.BuildSections(ctx)
+			if err != nil {
+				t.Fatalf("storage failure must degrade: %v", err)
+			}
+			if !strings.Contains(secs.Static, inner.sections.Static) || !strings.Contains(secs.Static, "You have durable memory shared across sessions, refreshed every turn.") || strings.Contains(secs.Static, "[MEMORY_UNAVAILABLE]") {
+				t.Fatalf("static instructions lost or failure marker cached: %q", secs.Static)
+			}
+			if !strings.Contains(secs.Dynamic, "[MEMORY_UNAVAILABLE] Memory is unavailable; use memory tools to verify prior context rather than assume it does not exist.") || !strings.Contains(joinTexts(secs.Static, secs.Dynamic), inner.sections.Dynamic) {
+				t.Fatalf("prior context or observable failure marker missing: %+v", secs)
+			}
+			if len(secs.Refs) != 2 || !slices.Equal(secs.Refs[:1], inner.sections.Refs) || secs.Refs[1].Hash == "" || secs.Refs[1].Hash == healthy.Refs[1].Hash {
+				t.Fatalf("base refs or failure-specific memory audit hash lost: %+v", secs.Refs)
+			}
+			if !strings.Contains(logs.String(), "level=WARN") || !strings.Contains(logs.String(), "memory prompt injection failed") || !strings.Contains(logs.String(), "error=") {
+				t.Fatalf("failure was not logged: %s", logs.String())
+			}
+			text, refs, err := wrapper.Build(ctx)
+			if err != nil || !strings.Contains(text, "base system prompt") || !strings.Contains(text, "[MEMORY_UNAVAILABLE]") || !slices.Equal(refs, secs.Refs) {
+				t.Fatalf("Build lost degraded system prompt: %q %+v %v", text, refs, err)
+			}
+			for _, deadline := range []bool{false, true} {
+				cancelled, cancel := context.WithCancel(ctx)
+				want := context.Canceled
+				if deadline {
+					cancel()
+					cancelled, cancel = context.WithDeadline(ctx, time.Now().Add(-time.Second))
+					want = context.DeadlineExceeded
+				} else {
+					cancel()
+				}
+				defer cancel()
+				if _, _, err := wrapper.Build(cancelled); !errors.Is(err, want) {
+					t.Fatalf("parent cancellation swallowed: %v", err)
+				}
+			}
+			failure := errors.New("inner prompt failed")
+			innerFailure := inner
+			innerFailure.err = failure
+			wrapper.inner = innerFailure
+			if legacy {
+				wrapper.inner = memoryTestLegacyPrompt{inner: innerFailure}
+			}
+			if _, _, err := wrapper.Build(ctx); !errors.Is(err, failure) {
+				t.Fatalf("inner error swallowed: %v", err)
+			}
+		})
+	}
+}
+
+type memoryPipelineTestLog struct {
+	slog.Handler
+	completed chan slog.Record
+}
+
+func (h *memoryPipelineTestLog) Handle(ctx context.Context, record slog.Record) error {
+	if record.Message == "memory pipeline pass complete" {
+		h.completed <- record.Clone()
+	}
+	return h.Handler.Handle(ctx, record)
+}
+
+func TestMemoryBootstrapWithOnlyConsolidationModel(t *testing.T) {
+	ctx := t.Context()
+	model := fakes.NewFakeModel()
+	cfg := testResolvedConfig(model)
+	cfg.Storage.BaseDir = t.TempDir()
+	cfg.Memory.Enabled = true
+	// Hand-assembled configuration deliberately leaves extraction unresolved;
+	// normal config resolution validates these references before assembly.
+	cfg.Default = config.ProviderModelRef{Provider: "missing", Model: "missing"}
+	cfg.Memory.ConsolidationModel = new(config.ProviderModelRef{Provider: "test", Model: "test-model"})
+	cfg.Memory.RunInterval = 0
+	if err := os.MkdirAll(cfg.Storage.SessionsDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	handler := &memoryPipelineTestLog{Handler: slog.NewTextHandler(io.Discard, nil), completed: make(chan slog.Record, 1)}
+	proc, err := NewProcessRuntime(ctx, cfg, ProcessRuntimeConfig{ArtifactDir: filepath.Join(t.TempDir(), "artifacts"), Logger: slog.New(handler)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proc.Close)
+	if proc.MemoryStore == nil || proc.MemoryJobQueue == nil || proc.MemoryExtractor != nil || proc.MemoryConsolidator == nil || proc.memoryPipelineStop == nil {
+		t.Fatal("consolidation-only model must start the shared pipeline without extraction")
+	}
+	select {
+	case record := <-handler.completed:
+		var phase2 bool
+		record.Attrs(func(attr slog.Attr) bool {
+			if attr.Key == "phase2_ran" {
+				phase2 = attr.Value.Bool()
+			}
+			return true
+		})
+		if !phase2 {
+			t.Fatal("startup pass did not execute consolidation")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("consolidation-only pipeline did not run its startup pass")
+	}
+	if calls := model.Calls(); len(calls) != 0 {
+		t.Fatalf("empty memory must not call the model: %+v", calls)
+	}
+}
+
+func TestMemoryBootstrapWithoutModel(t *testing.T) {
+	for _, withProvider := range []bool{false, true} {
+		t.Run(fmt.Sprintf("provider=%v", withProvider), func(t *testing.T) {
+			ctx := t.Context()
+			cfg := testResolvedConfig(nil)
+			if !withProvider {
+				cfg.Providers = nil
+			}
+			cfg.Storage.BaseDir = t.TempDir()
+			cfg.Memory.Enabled = true
+			// Entry points prepare the storage directories before assembly.
+			if err := os.MkdirAll(cfg.Storage.SessionsDir(), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			proc, err := NewProcessRuntime(ctx, cfg, ProcessRuntimeConfig{
+				ArtifactDir: filepath.Join(t.TempDir(), "artifacts"),
+				Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(proc.Close)
+			if proc.MemoryStore == nil || proc.MemoryJobQueue == nil || proc.MemoryExtractor != nil || proc.MemoryConsolidator != nil || proc.memoryPipelineStop != nil {
+				t.Fatal("explicit memory must remain available without starting model work")
+			}
+			repo := proc.Store.(*session.SQLiteStore)
+			root, otherRoot := t.TempDir(), t.TempDir()
+			bootstrap := func(root string) *Bootstrap {
+				t.Helper()
+				b, err := NewWorkspaceBootstrap(ctx, proc, BootstrapConfig{WorkspaceRoot: root})
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(b.Close)
+				return b
+			}
+			first := bootstrap(root)
+			mutate := func(b *Bootstrap, args string) {
+				t.Helper()
+				tool, ok := b.Registry.Lookup("memory")
+				if !ok {
+					t.Fatal("memory tool missing without provider")
+				}
+				call, err := tool.Prepare(ctx, domain.ToolCall{ID: domain.NewToolCallID(), Name: "memory", Arguments: json.RawMessage(args)})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if result := tool.Execute(ctx, call); result.Status != domain.ToolStatusSuccess {
+					t.Fatalf("memory Execute: %+v", result)
+				}
+			}
+			mutate(first, `{"action":"remember","content":"workspace preference alpha","scope":"workspace"}`)
+			mutate(first, `{"action":"remember","content":"global preference beta","scope":"global"}`)
+			second, other := bootstrap(root), bootstrap(otherRoot)
+			checkPrompt := func(b *Bootstrap, present, absent string) {
+				t.Helper()
+				text, _, err := b.CurrentPrompt().Build(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(text, present) || (absent != "" && strings.Contains(text, absent)) {
+					t.Fatalf("prompt visibility: want %q, exclude %q: %s", present, absent, text)
+				}
+			}
+			checkPrompt(second, "workspace preference alpha", "")
+			checkPrompt(other, "global preference beta", "workspace preference alpha")
+			snapshot, err := repo.MemorySnapshot(ctx, root)
+			if err != nil || len(snapshot.Records) != 1 {
+				t.Fatalf("workspace snapshot: %+v, %v", snapshot, err)
+			}
+			record := snapshot.Records[0]
+			tool, _ := first.Registry.Lookup("memory")
+			for _, args := range []string{
+				fmt.Sprintf(`{"action":"remember","id":%q,"revision":%d,"content":"replacement","scope":"workspace"}`, record.ID, record.Revision),
+				fmt.Sprintf(`{"action":"forget","id":%q,"revision":%d,"scope":"workspace"}`, record.ID, record.Revision),
+				fmt.Sprintf(`{"action":"forget","id":%q,"revision":%d,"scope":"global"}`, record.ID, record.Revision),
+			} {
+				prepared, err := tool.Prepare(ctx, domain.ToolCall{ID: domain.NewToolCallID(), Name: "memory", Arguments: json.RawMessage(args)})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if prepared.Risk != domain.R3 {
+					t.Fatalf("destructive memory must prepare R3: %+v", prepared)
+				}
+				for _, mode := range []permission.ApprovalMode{permission.ModeOnRequest, permission.ModeDangerOnly, permission.ModeNever} {
+					if err := first.SetApprovalMode(ctx, mode); err != nil {
+						t.Fatal(err)
+					}
+					want := domain.DecisionAsk
+					if mode == permission.ModeNever {
+						want = domain.DecisionDeny
+					}
+					if verdict := first.CurrentPolicy().Evaluate(prepared); verdict.Decision != want {
+						t.Fatalf("bootstrap memory policy in mode %s: %+v, want %s", mode, verdict, want)
+					}
+				}
+			}
+			mutate(first, fmt.Sprintf(`{"action":"remember","id":%q,"revision":%d,"content":"workspace preference gamma","scope":"workspace"}`, record.ID, record.Revision))
+			checkPrompt(second, "workspace preference gamma", "workspace preference alpha")
+			mutate(first, fmt.Sprintf(`{"action":"forget","id":%q,"revision":%d,"scope":"workspace"}`, record.ID, record.Revision+1))
+			checkPrompt(second, "global preference beta", "workspace preference gamma")
+			cancelled, cancel := context.WithCancel(ctx)
+			cancel()
+			if _, _, err := second.CurrentPrompt().Build(cancelled); !errors.Is(err, context.Canceled) {
+				t.Fatalf("cancelled memory read error was swallowed: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(cfg.Storage.BaseDir, "memories")); !os.IsNotExist(err) {
+				t.Fatalf("memory should not create a filesystem store: %v", err)
+			}
+		})
+	}
+}
 
 // One sweep pass purges sessions archived beyond gc_archived_after (and
 // notifies the purge hook), collects orphaned artifacts past the grace

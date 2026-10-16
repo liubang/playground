@@ -391,13 +391,21 @@ FROM file_changes WHERE session_id = ? AND rowid > ? ORDER BY rowid ASC`,
 	if err := recomputeArtifactRefs(ctx, tx, sessionID); err != nil {
 		return RewindResult{}, err
 	}
+	if err := revokeMemoryTx(ctx, tx, "source_session_id = ? AND source_version > ?", sessionID.String(), checkpointSequence); err != nil {
+		return RewindResult{}, err
+	}
+	// Forgotten records may have only a receipt left; replaying a removed
+	// tool call must not report a success from the discarded timeline.
+	if _, err := tx.ExecContext(ctx, "DELETE FROM memory_requests WHERE source_session_id = ? AND source_version > ?", sessionID.String(), checkpointSequence); err != nil {
+		return RewindResult{}, storeError("delete rewound memory requests", err)
+	}
 	// Review M29: a memory extraction whose extracted_version covers events
 	// the rewind just deleted is stale (its memories may describe turns
 	// that no longer exist), and an in-flight claim is reading the
-	// pre-rewind transcript. Reset those jobs to pending with no extracted
-	// version so the pipeline re-extracts from the rewound transcript.
-	// Jobs that only observed retained events (extracted_version <= the
-	// rewind point) stay untouched, as do fresh pending jobs.
+	// pre-rewind transcript. Reset those jobs to pending, retaining only
+	// the watermark supported by surviving automatic records.
+	// Failed/abandoned attempts that observed deleted events also need a
+	// fresh retry budget. Jobs that only observed retained events stay untouched.
 	if _, err := tx.ExecContext(ctx, `
 UPDATE memory_jobs SET
     status = 'pending',
@@ -405,11 +413,13 @@ UPDATE memory_jobs SET
     claimed_at_unix_nano = 0,
     next_retry_at_unix_nano = 0,
     attempts = 0,
-    extracted_version = -1,
+    extracted_version = CASE WHEN extracted_version > ? THEN
+      COALESCE((SELECT MAX(source_version) FROM memory_records WHERE source_session_id = memory_jobs.session_id AND kind = 'automatic'), -1)
+      ELSE extracted_version END,
     last_error = '',
     updated_at = ?, updated_at_unix_nano = ?
-WHERE session_id = ? AND (extracted_version > ? OR status = 'claimed')`,
-		formatTime(now), now.UnixNano(), sessionID.String(), checkpointSequence); err != nil {
+WHERE session_id = ? AND (extracted_version > ? OR attempt_version > ? OR status = 'claimed')`,
+		checkpointSequence, formatTime(now), now.UnixNano(), sessionID.String(), checkpointSequence, checkpointSequence); err != nil {
 		return RewindResult{}, storeError("reset stale memory jobs", err)
 	}
 	result, err := tx.ExecContext(ctx, `

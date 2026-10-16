@@ -20,6 +20,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -597,7 +598,10 @@ func TestEffectiveMessagesInjectsPlanNote(t *testing.T) {
 	loop := &Loop{Run: run}
 
 	// No plan: messages pass through untouched.
-	messages, _, _ := loop.effectiveMessages(context.Background())
+	messages, _, _, err := loop.effectiveMessages(t.Context())
+	if err != nil {
+		t.Fatalf("effectiveMessages without plan: %v", err)
+	}
 	if len(messages) != 1 {
 		t.Fatalf("messages = %d without plan, want 1", len(messages))
 	}
@@ -607,7 +611,10 @@ func TestEffectiveMessagesInjectsPlanNote(t *testing.T) {
 		{Index: 1, Goal: "step two", Status: domain.PlanItemInProgress},
 		{Index: 2, Goal: "step three", Status: domain.PlanItemPending},
 	}}
-	messages, _, _ = loop.effectiveMessages(context.Background())
+	messages, _, _, err = loop.effectiveMessages(t.Context())
+	if err != nil {
+		t.Fatalf("effectiveMessages with plan: %v", err)
+	}
 	if len(messages) != 2 {
 		t.Fatalf("messages = %d with plan, want 2", len(messages))
 	}
@@ -629,9 +636,89 @@ func TestEffectiveMessagesInjectsPlanNote(t *testing.T) {
 	// A complete plan is not re-injected.
 	run.Plan.Items[1].Status = domain.PlanItemCompleted
 	run.Plan.Items[2].Status = domain.PlanItemCompleted
-	messages, _, _ = loop.effectiveMessages(context.Background())
+	messages, _, _, err = loop.effectiveMessages(t.Context())
+	if err != nil {
+		t.Fatalf("effectiveMessages with complete plan: %v", err)
+	}
 	if len(messages) != 1 {
 		t.Fatalf("messages = %d with complete plan, want 1", len(messages))
+	}
+}
+
+func TestReadOnlyEstimatesRetainPlanAndSchemasWhenPromptBuildFails(t *testing.T) {
+	buildErr := errors.New("prompt unavailable")
+	refs := []domain.ContextRuleRef{{Source: "loom://partial", Hash: "sha256:partial"}}
+	for _, tc := range []struct {
+		name    string
+		builder PromptBuilder
+	}{
+		{name: "legacy", builder: stubPromptBuilder{text: "partial prompt", rules: refs, err: buildErr}},
+		{name: "sectioned", builder: stubSectionedPromptBuilder{
+			static: "partial static", dynamic: "partial dynamic", rules: refs, err: buildErr,
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, status := range []domain.PlanItemStatus{domain.PlanItemInProgress, domain.PlanItemCompleted} {
+				t.Run(string(status), func(t *testing.T) {
+					ctx := t.Context()
+					run := newTestRun(domain.DefaultLimits())
+					run.AddUserMessage(domain.Message{
+						ID: domain.NewMessageID(), Role: domain.RoleUser,
+						Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: "question"}},
+						CreatedAt: run.Clock.Now(),
+					})
+					run.Plan = domain.Plan{Items: []domain.PlanItem{
+						{Index: 0, Goal: "finish the task", Status: status},
+					}}
+					tool, _ := newPlanTool(t)
+					registry := NewToolRegistry()
+					if err := registry.Register(tool); err != nil {
+						t.Fatalf("Register: %v", err)
+					}
+					loop := &Loop{Run: run, Registry: registry, SystemPrompt: tc.builder}
+					state, version, eventCount := run.State, run.Version, len(run.PendingEvents())
+					messageID := run.Messages[0].ID
+					planTokens := 0
+					wantPrefix := 0
+					if status == domain.PlanItemInProgress {
+						planTokens = len(planStatusNote(run.Plan)) / 4
+						wantPrefix = 1
+					}
+					prefix, rules, systemText, err := requestPrefix(ctx, tc.builder, "", run.Clock, run.Plan)
+					if !errors.Is(err, buildErr) {
+						t.Fatalf("requestPrefix error = %v, want build error", err)
+					}
+					if len(prefix) != wantPrefix || len(rules) != 0 || systemText != "" {
+						t.Fatalf("failed prefix = %+v, rules = %+v, system = %q", prefix, rules, systemText)
+					}
+					if wantPrefix == 1 && (prefix[0].Role != domain.RoleSystem ||
+						strings.Join(prefix[0].TextParts(), "") != planStatusNote(run.Plan)) {
+						t.Fatalf("failed build lost plan note: %+v", prefix)
+					}
+					tools := registry.List()
+					schemaBytes := 0
+					for _, def := range tools {
+						schemaBytes += len(def.Name) + len(def.Description) + len(def.InputSchema)
+					}
+					schemaTokens := schemaBytes / 4
+					if schemaTokens == 0 {
+						t.Fatal("test requires a nonzero schema estimate")
+					}
+					wantOverhead := planTokens + schemaTokens
+					if got := EstimateOverheadTokens(ctx, tc.builder, "", run.Clock, run.Plan, tools); got != wantOverhead {
+						t.Fatalf("overhead = %d, want plan + schemas = %d", got, wantOverhead)
+					}
+					wantRequest := wantOverhead + len("question")/4
+					if got := loop.requestEstimate(ctx); got != wantRequest {
+						t.Fatalf("request estimate = %d, want plan + schemas + transcript = %d", got, wantRequest)
+					}
+					if run.State != state || run.Version != version || len(run.PendingEvents()) != eventCount ||
+						len(run.Messages) != 1 || run.Messages[0].ID != messageID || run.Plan.Items[0].Status != status {
+						t.Fatal("read-only estimates changed run state, events, transcript or plan")
+					}
+				})
+			}
+		})
 	}
 }
 

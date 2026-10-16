@@ -22,6 +22,23 @@ import (
 	"testing"
 )
 
+func TestToolContextRoundTrip(t *testing.T) {
+	ctx := t.Context()
+	if got := ToolContextFrom(ctx); got != (ToolContext{}) {
+		t.Fatalf("unbound context = %+v", got)
+	}
+	source := ToolContext{SessionID: NewSessionID(), SourceVersion: 42}
+	bound := WithToolContext(ctx, source)
+	source.SourceVersion++
+	if got := ToolContextFrom(bound); got.SourceVersion != 42 || got.SessionID != source.SessionID {
+		t.Fatalf("context did not capture value: %+v", got)
+	}
+	child := WithToolContext(bound, ToolContext{SessionID: NewSessionID(), SourceVersion: 7})
+	if ToolContextFrom(child).SourceVersion != 7 || ToolContextFrom(bound).SourceVersion != 42 {
+		t.Fatal("child context changed parent provenance")
+	}
+}
+
 func TestContextManifestCanonicalizeDeterministic(t *testing.T) {
 	draft := ContextManifest{
 		Rules:         []ContextRuleRef{{Source: "CLAUDE.md", Hash: "sha256:rule"}},

@@ -1690,6 +1690,7 @@ func (c *Controller) onTurnFinished(turnID uint64, turn int, err error) {
 		return
 	}
 	sessionID, runID := c.sessionID, c.runID
+	delegated := c.delegated
 	c.turnCtx = nil
 	c.cancelTurn = nil
 	if c.state != ControllerStateClosed {
@@ -1722,6 +1723,7 @@ func (c *Controller) onTurnFinished(turnID uint64, turn int, err error) {
 	case len(changes) > 0:
 		payload = runtimeevent.TurnFinishedPayload{Changes: changes}
 	}
+	c.enqueueMemoryJob(sessionID, delegated)
 	c.publishDurable(sessionID, runID, turn, runtimeevent.KindTurnFinished, payload)
 
 	c.relayPendingSteers()
@@ -1847,7 +1849,7 @@ func (c *Controller) rememberApprovalRule(binding ApprovalBinding, trust string)
 		// call: there is nothing trustworthy to derive memory from.
 		return ""
 	}
-	rule, ok := c.rulesApprover.RememberCall(card.ToolName, card.Source, card.Arguments, trust)
+	rule, ok := c.rulesApprover.RememberCall(card.ToolName, card.Source, card.Risk, card.Arguments, trust)
 	if !ok {
 		return ""
 	}
@@ -2260,13 +2262,7 @@ func (c *Controller) handleShutdown() {
 	// upsert is all the shutdown path pays for; the startup/interval
 	// pipeline drains the queue. Sub-agent sessions are skipped — their
 	// content rolls up into the parent's transcript.
-	if c.bootstrap.MemoryJobQueue != nil && !c.sessionID.IsZero() && !delegated {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		if err := c.bootstrap.MemoryJobQueue.EnqueueMemoryJob(ctx, c.sessionID, c.bootstrap.WorkspaceRoot); err != nil {
-			c.logger.Warn("memory job enqueue failed", "error", err)
-		}
-		cancel()
-	}
+	c.enqueueMemoryJob(c.sessionID, delegated)
 
 	// Cancel session context
 	if cancelSession != nil {
@@ -2274,6 +2270,19 @@ func (c *Controller) handleShutdown() {
 	}
 
 	c.logger.Info("controller shutting down")
+}
+
+// enqueueMemoryJob is a bounded SQL upsert, never a model call. Callers must
+// release c.mu first; the turn boundary and shutdown fallback share this path.
+func (c *Controller) enqueueMemoryJob(sessionID domain.SessionID, delegated bool) {
+	if c.bootstrap.MemoryJobQueue == nil || sessionID.IsZero() || delegated {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := c.bootstrap.MemoryJobQueue.EnqueueMemoryJob(ctx, sessionID, c.bootstrap.WorkspaceRoot); err != nil {
+		c.logger.Warn("memory job enqueue failed", "session_id", sessionID.String(), "error", err)
+	}
 }
 
 func (c *Controller) publishDurable(sessionID domain.SessionID, runID domain.RunID, turn int, kind runtimeevent.RuntimeEventKind, payload any) {
@@ -2599,7 +2608,7 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 			// L2 trust option for escalated calls, and the derived consequence
 			// description — what the operation DOES, not its text. One
 			// derivation feeds all three projections.
-			d := permission.DeriveRawArgs(payload.Tool, payload.Source, card.Arguments, s.controller.deriveEnv())
+			d := permission.DeriveRawArgs(payload.Tool, payload.Source, payload.Risk, card.Arguments, s.controller.deriveEnv())
 			if preview, ok := ApprovalRulePreview(d); ok {
 				card.RulePreview = preview
 			}

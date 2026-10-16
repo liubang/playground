@@ -20,9 +20,12 @@ package session
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
 	"github.com/liubang/playground/go/pl/loom/internal/memory"
@@ -120,7 +123,7 @@ func TestEnqueueSkipsAlreadyExtractedVersion(t *testing.T) {
 	if err != nil || len(jobs) != 1 {
 		t.Fatalf("claim: %v (n=%d)", err, len(jobs))
 	}
-	if err := store.CompleteMemoryJob(ctx, sessionID, jobs[0].ClaimToken, memory.JobSucceeded, jobs[0].SessionVersion); err != nil {
+	if err := store.CompleteMemoryExtraction(ctx, jobs[0], nil); err != nil {
 		t.Fatalf("complete: %v", err)
 	}
 
@@ -212,7 +215,7 @@ func TestClaimReclaimsExpiredLease(t *testing.T) {
 	}
 
 	// The stale token can no longer complete the job.
-	if err := store.CompleteMemoryJob(ctx, sessionID, jobs[0].ClaimToken, memory.JobSucceeded, 0); err == nil {
+	if err := store.CompleteMemoryExtraction(ctx, jobs[0], nil); err == nil {
 		t.Fatal("stale token completed the job; want token mismatch error")
 	}
 }
@@ -230,7 +233,7 @@ func TestFailMemoryJobBackoffAndAbandon(t *testing.T) {
 	}
 
 	// First failure: retryable, backoff not yet due.
-	if err := store.FailMemoryJob(ctx, sessionID, jobs[0].ClaimToken, errors.New("model exploded"), time.Hour, 2); err != nil {
+	if err := store.FailMemoryJob(ctx, jobs[0], errors.New("model exploded"), time.Hour, 2); err != nil {
 		t.Fatalf("fail: %v", err)
 	}
 	var status string
@@ -266,7 +269,7 @@ func TestFailMemoryJobBackoffAndAbandon(t *testing.T) {
 	if err != nil || len(jobs) != 1 {
 		t.Fatalf("re-claim: %v (n=%d)", err, len(jobs))
 	}
-	if err := store.FailMemoryJob(ctx, sessionID, jobs[0].ClaimToken, errors.New("boom again"), time.Hour, 2); err != nil {
+	if err := store.FailMemoryJob(ctx, jobs[0], errors.New("boom again"), time.Hour, 2); err != nil {
 		t.Fatalf("second fail: %v", err)
 	}
 	if err := store.db.QueryRow(
@@ -284,6 +287,372 @@ func TestFailMemoryJobBackoffAndAbandon(t *testing.T) {
 	}
 	if len(jobs) != 0 {
 		t.Fatalf("claimed abandoned job (%d), want 0", len(jobs))
+	}
+}
+
+type memoryJobRetryState struct {
+	status    string
+	token     string
+	attempts  int
+	version   int64
+	nextRetry int64
+}
+
+func readMemoryJobRetryState(t *testing.T, store *SQLiteStore, id domain.SessionID) memoryJobRetryState {
+	t.Helper()
+	var state memoryJobRetryState
+	if err := store.db.QueryRowContext(t.Context(), `SELECT status, claim_token, attempts, attempt_version, next_retry_at_unix_nano FROM memory_jobs WHERE session_id = ?`, id.String()).Scan(&state.status, &state.token, &state.attempts, &state.version, &state.nextRetry); err != nil {
+		t.Fatal(err)
+	}
+	return state
+}
+
+func forceMemoryRetryDue(t *testing.T, store *SQLiteStore, id domain.SessionID) {
+	t.Helper()
+	if _, err := store.db.ExecContext(t.Context(), "UPDATE memory_jobs SET next_retry_at_unix_nano = 0 WHERE session_id = ?", id.String()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMemoryConflictDoesNotExhaustVersionBudget(t *testing.T) {
+	for _, conflictKind := range []string{"wrapped", "version", "cutoff"} {
+		t.Run(conflictKind, func(t *testing.T) {
+			store := openMemoryJobTestStore(t)
+			id := createMemoryJobSession(t, store)
+			job := claimTestMemoryJob(t, store, id, "/ws")
+			for range 8 {
+				jobErr := errors.New("provider error with changed evidence")
+				switch conflictKind {
+				case "wrapped":
+					jobErr = fmt.Errorf("evidence read: %w", domain.NewError(domain.ErrConflict, "changed"))
+				case "version":
+					bumpSessionVersion(t, store, id, job.SessionVersion+1)
+				case "cutoff":
+					if _, err := store.db.ExecContext(t.Context(), `INSERT INTO memory_scope_state(scope, version, epoch, evidence_cutoff_unix_nano) VALUES ('/ws', 0, 0, 1) ON CONFLICT(scope) DO UPDATE SET evidence_cutoff_unix_nano = evidence_cutoff_unix_nano + 1`); err != nil {
+						t.Fatal(err)
+					}
+				}
+				before := time.Now()
+				if err := store.FailMemoryJob(t.Context(), job, jobErr, time.Hour, 1); errorCode(err) != domain.ErrConflict {
+					t.Fatalf("conflict settlement=%v", err)
+				}
+				state := readMemoryJobRetryState(t, store, id)
+				if state.status != "pending" || state.token != "" || state.attempts != 0 || state.version != job.SessionVersion || state.nextRetry <= before.UnixNano() || state.nextRetry > time.Now().Add(time.Second).UnixNano() {
+					t.Fatalf("conflict consumed budget or lost short backoff: %+v", state)
+				}
+				if err := store.EnqueueMemoryJob(t.Context(), id, "/ws"); err != nil {
+					t.Fatal(err)
+				}
+				if after := readMemoryJobRetryState(t, store, id); after != state {
+					t.Fatalf("enqueue erased conflict backoff: %+v -> %+v", state, after)
+				}
+				if jobs, err := store.ClaimMemoryJobs(t.Context(), 1, 0, 24*time.Hour, time.Hour, 1); err != nil || len(jobs) != 0 {
+					t.Fatalf("conflict retry ignored short backoff: jobs=%v err=%v", jobs, err)
+				}
+				forceMemoryRetryDue(t, store, id)
+				jobs, err := store.ClaimMemoryJobs(t.Context(), 1, 0, 24*time.Hour, time.Hour, 1)
+				if err != nil || len(jobs) != 1 {
+					t.Fatalf("conflict exhausted budget: jobs=%v err=%v", jobs, err)
+				}
+				job = jobs[0]
+			}
+			if err := store.FailMemoryJob(t.Context(), job, errors.New("real provider failure"), time.Hour, 1); err != nil {
+				t.Fatal(err)
+			}
+			state := readMemoryJobRetryState(t, store, id)
+			if state.attempts != 1 || state.status != "abandoned" {
+				t.Fatalf("provider failure not charged: %+v", state)
+			}
+		})
+	}
+}
+
+func TestMemoryConflictPreservesExistingProviderAttempts(t *testing.T) {
+	store := openMemoryJobTestStore(t)
+	id := createMemoryJobSession(t, store)
+	job := claimTestMemoryJob(t, store, id, "/ws")
+	if err := store.FailMemoryJob(t.Context(), job, errors.New("provider failed"), 0, 2); err != nil {
+		t.Fatal(err)
+	}
+	jobs, err := store.ClaimMemoryJobs(t.Context(), 1, 0, 24*time.Hour, time.Hour, 2)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("claim=%v err=%v", jobs, err)
+	}
+	for range 5 {
+		if err := store.FailMemoryJob(t.Context(), jobs[0], domain.NewError(domain.ErrConflict, "cutoff changed"), 0, 2); errorCode(err) != domain.ErrConflict {
+			t.Fatal(err)
+		}
+		if state := readMemoryJobRetryState(t, store, id); state.attempts != 1 || state.status != "pending" {
+			t.Fatalf("conflict changed provider budget: %+v", state)
+		}
+		jobs, err = store.ClaimMemoryJobs(t.Context(), 1, 0, 24*time.Hour, time.Hour, 2)
+		if err != nil || len(jobs) != 1 {
+			t.Fatalf("claim=%v err=%v", jobs, err)
+		}
+	}
+	if err := store.FailMemoryJob(t.Context(), jobs[0], errors.New("provider failed again"), 0, 2); err != nil {
+		t.Fatal(err)
+	}
+	if state := readMemoryJobRetryState(t, store, id); state.attempts != 2 || state.status != "abandoned" {
+		t.Fatalf("same-version budget reset: %+v", state)
+	}
+}
+
+func TestMemoryStaleFailureCannotTouchNewClaim(t *testing.T) {
+	store := openMemoryJobTestStore(t)
+	id := createMemoryJobSession(t, store)
+	old := claimTestMemoryJob(t, store, id, "/ws")
+	if _, err := store.db.ExecContext(t.Context(), "UPDATE memory_jobs SET claimed_at_unix_nano = 0 WHERE session_id = ?", id.String()); err != nil {
+		t.Fatal(err)
+	}
+	bumpSessionVersion(t, store, id, 1)
+	jobs, err := store.ClaimMemoryJobs(t.Context(), 1, 0, 24*time.Hour, time.Hour, 2)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("reclaim=%v err=%v", jobs, err)
+	}
+	before := readMemoryJobRetryState(t, store, id)
+	for _, failure := range []error{errors.New("old provider failure"), domain.NewError(domain.ErrConflict, "old evidence")} {
+		if err := store.FailMemoryJob(t.Context(), old, failure, time.Hour, 1); errorCode(err) != domain.ErrConflict {
+			t.Fatalf("stale failure=%v", err)
+		}
+		if after := readMemoryJobRetryState(t, store, id); after != before {
+			t.Fatalf("old worker changed new claim: %+v -> %+v", before, after)
+		}
+	}
+	forged := jobs[0]
+	forged.SessionVersion = old.SessionVersion
+	if err := store.FailMemoryJob(t.Context(), forged, errors.New("wrong version"), 0, 1); errorCode(err) != domain.ErrConflict {
+		t.Fatal(err)
+	}
+	if after := readMemoryJobRetryState(t, store, id); after != before {
+		t.Fatal("correct token with wrong version modified claim")
+	}
+}
+
+func TestMemoryNewVersionGetsFreshFailureBudget(t *testing.T) {
+	for _, initialStatus := range []string{"failed", "abandoned"} {
+		for _, reopen := range []string{"claim", "enqueue", "backfill"} {
+			t.Run(initialStatus+"/"+reopen, func(t *testing.T) {
+				store := openMemoryJobTestStore(t)
+				id := createMemoryJobSession(t, store)
+				job := claimTestMemoryJob(t, store, id, "/ws")
+				budget := 2
+				if initialStatus == "abandoned" {
+					budget = 1
+				}
+				if err := store.FailMemoryJob(t.Context(), job, errors.New("provider failure"), time.Hour, budget); err != nil {
+					t.Fatal(err)
+				}
+				before := readMemoryJobRetryState(t, store, id)
+				// Same-version enqueue must preserve both failure and abandonment.
+				if err := store.EnqueueMemoryJob(t.Context(), id, "/ws"); err != nil {
+					t.Fatal(err)
+				}
+				if after := readMemoryJobRetryState(t, store, id); after != before {
+					t.Fatalf("same-version enqueue reset budget: %+v", after)
+				}
+				if jobs, err := store.ClaimMemoryJobs(t.Context(), 1, 0, 24*time.Hour, time.Hour, budget); err != nil || len(jobs) != 0 {
+					t.Fatalf("same version reclaimed=%v err=%v", jobs, err)
+				}
+				if err := store.AppendEvents(t.Context(), id, 0, []domain.Event{newEvent(id, 1, domain.EventSessionCreated, nil)}); err != nil {
+					t.Fatal(err)
+				}
+				ageSession(t, store, id, 2*time.Hour)
+				switch reopen {
+				case "enqueue":
+					if err := store.EnqueueMemoryJob(t.Context(), id, "/ws"); err != nil {
+						t.Fatal(err)
+					}
+				case "backfill":
+					if err := store.BackfillMemoryJobs(t.Context(), 24*time.Hour); err != nil {
+						t.Fatal(err)
+					}
+				}
+				jobs, err := store.ClaimMemoryJobs(t.Context(), 1, time.Hour, 24*time.Hour, time.Hour, budget)
+				if err != nil || len(jobs) != 1 || jobs[0].SessionVersion != 1 {
+					t.Fatalf("new version not reopened: jobs=%v err=%v", jobs, err)
+				}
+				state := readMemoryJobRetryState(t, store, id)
+				if state.attempts != 0 || state.version != 1 {
+					t.Fatalf("old budget leaked to new version: %+v", state)
+				}
+				if err := store.FailMemoryJob(t.Context(), jobs[0], errors.New("new version provider failure"), time.Hour, 2); err != nil {
+					t.Fatal(err)
+				}
+				if state := readMemoryJobRetryState(t, store, id); state.attempts != 1 || state.status != "failed" || state.version != 1 {
+					t.Fatalf("new version budget incorrect: %+v", state)
+				}
+			})
+		}
+	}
+}
+
+func TestMemoryRetryStillRespectsAgeAndIdle(t *testing.T) {
+	store := openMemoryJobTestStore(t)
+	id := createMemoryJobSession(t, store)
+	job := claimTestMemoryJob(t, store, id, "/ws")
+	if err := store.FailMemoryJob(t.Context(), job, errors.New("provider failed"), 0, 1); err != nil {
+		t.Fatal(err)
+	}
+	bumpSessionVersion(t, store, id, 1)
+	for _, age := range []time.Duration{0, 48 * time.Hour} {
+		ageSession(t, store, id, age)
+		jobs, err := store.ClaimMemoryJobs(t.Context(), 1, time.Hour, 24*time.Hour, time.Hour, 1)
+		if err != nil || len(jobs) != 0 {
+			t.Fatalf("new-version retry bypassed age/idle: age=%v jobs=%v err=%v", age, jobs, err)
+		}
+	}
+	ageSession(t, store, id, 2*time.Hour)
+	jobs, err := store.ClaimMemoryJobs(t.Context(), 1, time.Hour, 24*time.Hour, time.Hour, 1)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("eligible retry=%v err=%v", jobs, err)
+	}
+}
+
+func TestMemoryActiveClaimSurvivesNewVersionEnqueueAndBackfill(t *testing.T) {
+	store := openMemoryJobTestStore(t)
+	id := createMemoryJobSession(t, store)
+	job := claimTestMemoryJob(t, store, id, "/ws")
+	if err := store.AppendEvents(t.Context(), id, 0, []domain.Event{newEvent(id, 1, domain.EventSessionCreated, nil)}); err != nil {
+		t.Fatal(err)
+	}
+	ageSession(t, store, id, 2*time.Hour)
+	before := readMemoryJobRetryState(t, store, id)
+	if err := store.EnqueueMemoryJob(t.Context(), id, "/other"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.BackfillMemoryJobs(t.Context(), 24*time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if after := readMemoryJobRetryState(t, store, id); after != before {
+		t.Fatalf("new activity replaced active lease: %+v -> %+v", before, after)
+	}
+	if jobs, err := store.ClaimMemoryJobs(t.Context(), 1, 0, 24*time.Hour, time.Hour, 1); err != nil || len(jobs) != 0 {
+		t.Fatalf("new version bypassed active lease: jobs=%v err=%v", jobs, err)
+	}
+	if err := store.FailMemoryJob(t.Context(), job, errors.New("old provider error"), 0, 1); errorCode(err) != domain.ErrConflict {
+		t.Fatalf("old provider settlement=%v", err)
+	}
+	jobs, err := store.ClaimMemoryJobs(t.Context(), 1, 0, 24*time.Hour, time.Hour, 1)
+	if err != nil || len(jobs) != 1 || jobs[0].SessionVersion != 1 {
+		t.Fatalf("released new version=%v err=%v", jobs, err)
+	}
+	if state := readMemoryJobRetryState(t, store, id); state.attempts != 0 {
+		t.Fatalf("old provider exhausted new version: %+v", state)
+	}
+}
+
+func TestBackfillPreservesSameVersionFailureAndClaim(t *testing.T) {
+	store := openMemoryJobTestStore(t)
+	id := createMemoryJobSession(t, store)
+	if err := store.AppendEvents(t.Context(), id, 0, []domain.Event{newEvent(id, 1, domain.EventSessionCreated, nil)}); err != nil {
+		t.Fatal(err)
+	}
+	ageSession(t, store, id, 2*time.Hour)
+	job := claimTestMemoryJob(t, store, id, "/ws")
+	before := readMemoryJobRetryState(t, store, id)
+	if err := store.BackfillMemoryJobs(t.Context(), 24*time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if after := readMemoryJobRetryState(t, store, id); after != before {
+		t.Fatal("backfill replaced active claim")
+	}
+	if err := store.FailMemoryJob(t.Context(), job, errors.New("provider failure"), time.Hour, 2); err != nil {
+		t.Fatal(err)
+	}
+	before = readMemoryJobRetryState(t, store, id)
+	for range 3 {
+		if err := store.BackfillMemoryJobs(t.Context(), 24*time.Hour); err != nil {
+			t.Fatal(err)
+		}
+		if after := readMemoryJobRetryState(t, store, id); after != before {
+			t.Fatalf("backfill erased same-version failure: %+v", after)
+		}
+	}
+}
+
+func TestRewindMemoryFailedAttemptRetriesSuccessfully(t *testing.T) {
+	for _, status := range []memory.JobStatus{memory.JobFailed, memory.JobAbandoned} {
+		t.Run(string(status), func(t *testing.T) {
+			store := openMemoryJobTestStore(t)
+			ctx := t.Context()
+			id := createMemoryJobSession(t, store)
+			if err := store.AppendEventsAndCheckpoint(ctx, id, 0, []domain.Event{newEvent(id, 1, domain.EventSessionCreated, nil)}, testCheckpoint(id, 1, time.Now().UTC())); err != nil {
+				t.Fatal(err)
+			}
+			seedMemoryUser(t, store, id, 2, "retained evidence", time.Now().UTC())
+			if err := store.SaveCheckpoint(ctx, testCheckpoint(id, 2, time.Now().UTC())); err != nil {
+				t.Fatal(err)
+			}
+			seedMemoryUser(t, store, id, 3, "discarded evidence", time.Now().UTC())
+			job := claimTestMemoryJob(t, store, id, "/ws")
+			budget := 2
+			if status == memory.JobAbandoned {
+				budget = 1
+			}
+			if err := store.FailMemoryJob(ctx, job, errors.New("provider failed"), time.Hour, budget); err != nil {
+				t.Fatal(err)
+			}
+			before := readMemoryJobRetryState(t, store, id)
+			if before.status != string(status) || before.version != 3 || before.attempts != 1 {
+				t.Fatalf("failed attempt=%+v", before)
+			}
+			if _, err := store.RewindSession(ctx, id, 2); err != nil {
+				t.Fatal(err)
+			}
+			state := readMemoryJobRetryState(t, store, id)
+			if state.status != "pending" || state.attempts != 0 || state.token != "" || state.nextRetry != 0 {
+				t.Fatalf("rewind did not reset failed attempt: %+v", state)
+			}
+			jobs, err := store.ClaimMemoryJobs(ctx, 1, 0, 24*time.Hour, time.Hour, 1)
+			if err != nil || len(jobs) != 1 || jobs[0].SessionVersion != 2 || jobs[0].ExtractedVersion != -1 {
+				t.Fatalf("retry=%+v err=%v", jobs, err)
+			}
+			evidence, err := store.LoadMemoryEvidence(ctx, jobs[0])
+			if err != nil || len(evidence) != 1 || strings.Join(evidence[0].TextParts(), "") != "retained evidence" {
+				t.Fatalf("rewound evidence=%+v err=%v", evidence, err)
+			}
+			if err := store.CompleteMemoryExtraction(ctx, jobs[0], &memory.ExtractionResult{RawMemory: "retry succeeded"}); err != nil {
+				t.Fatal(err)
+			}
+			snapshot := snapshotTestMemory(t, store, "/ws")
+			if len(snapshot.Records) != 1 || snapshot.Records[0].SourceVersion != 2 || snapshot.Records[0].Content != "retry succeeded" {
+				t.Fatalf("retry records=%+v", snapshot.Records)
+			}
+			var extracted int64
+			var lastError string
+			if err := store.db.QueryRowContext(ctx, "SELECT extracted_version, last_error FROM memory_jobs WHERE session_id = ?", id.String()).Scan(&extracted, &lastError); err != nil {
+				t.Fatal(err)
+			}
+			if state := readMemoryJobRetryState(t, store, id); state.status != "succeeded" || state.attempts != 0 || extracted != 2 || lastError != "" {
+				t.Fatalf("retry settlement=%+v extracted=%d last_error=%q", state, extracted, lastError)
+			}
+		})
+	}
+}
+
+func TestFailMemoryJobTruncatesLastErrorAtRuneBoundary(t *testing.T) {
+	for _, prefixBytes := range []int{509, 510, 511, 512} {
+		t.Run(fmt.Sprint(prefixBytes), func(t *testing.T) {
+			store := openMemoryJobTestStore(t)
+			id := createMemoryJobSession(t, store)
+			job := claimTestMemoryJob(t, store, id, "/ws")
+			prefix := strings.Repeat("x", prefixBytes)
+			if err := store.FailMemoryJob(t.Context(), job, errors.New(prefix+"界tail"), 0, 2); err != nil {
+				t.Fatal(err)
+			}
+			var lastError string
+			if err := store.db.QueryRowContext(t.Context(), "SELECT last_error FROM memory_jobs WHERE session_id = ?", id.String()).Scan(&lastError); err != nil {
+				t.Fatal(err)
+			}
+			want := prefix
+			if prefixBytes == 509 {
+				want += "界"
+			}
+			if !utf8.ValidString(lastError) || len(lastError) > 512 || lastError != want {
+				t.Fatalf("last_error bytes=%d valid=%v want=%q got=%q", len(lastError), utf8.ValidString(lastError), want, lastError)
+			}
+		})
 	}
 }
 
@@ -373,6 +742,7 @@ func TestRewindSessionResetsStaleMemoryJob(t *testing.T) {
 	}
 	extract := func(t *testing.T, sessionID domain.SessionID, extractedVersion int64) {
 		t.Helper()
+		bumpSessionVersion(t, store, sessionID, extractedVersion)
 		if err := store.EnqueueMemoryJob(ctx, sessionID, "/ws"); err != nil {
 			t.Fatalf("enqueue: %v", err)
 		}
@@ -380,9 +750,10 @@ func TestRewindSessionResetsStaleMemoryJob(t *testing.T) {
 		if err != nil || len(jobs) != 1 {
 			t.Fatalf("claim: %v (n=%d)", err, len(jobs))
 		}
-		if err := store.CompleteMemoryJob(ctx, sessionID, jobs[0].ClaimToken, memory.JobSucceeded, extractedVersion); err != nil {
+		if err := store.CompleteMemoryExtraction(ctx, jobs[0], &memory.ExtractionResult{RawMemory: "extracted evidence"}); err != nil {
 			t.Fatalf("complete: %v", err)
 		}
+		bumpSessionVersion(t, store, sessionID, 2)
 	}
 	jobState := func(t *testing.T, sessionID domain.SessionID) (string, int64) {
 		t.Helper()

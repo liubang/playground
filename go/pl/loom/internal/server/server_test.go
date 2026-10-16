@@ -793,37 +793,34 @@ func TestSessionListEnrichment(t *testing.T) {
 // per-workspace attention badge depend on non-idle states showing up here.
 func TestSessionListLiveState(t *testing.T) {
 	release := make(chan struct{})
+	started := make(chan struct{})
 	model := &gateModel{inner: fakes.NewFakeModel(
 		fakes.ScriptEntry{Text: "first", StopReason: domain.StopEndTurn},
-	), release: release}
+	), release: release, started: started}
 	ts, _ := newTestServer(t, model)
 	id := createTestSession(t, ts)
 
 	if status, body := doJSON(t, ts.Client(), "POST", ts.URL+"/v1/sessions/"+id+"/prompts", `{"prompt":"first"}`); status != http.StatusAccepted {
 		t.Fatalf("submit = (%d, %v)", status, body)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		_, listing := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/sessions", "")
-		sessions, _ := listing["sessions"].([]any)
-		if len(sessions) != 1 {
-			t.Fatalf("sessions = %v, want exactly 1", listing)
-		}
-		entry, _ := sessions[0].(map[string]any)
-		if entry["state"] == "running" {
-			// Busy alone must NOT hide the truncated-prompt fallback: only a
-			// session whose title sidecar is actually in flight suppresses
-			// it (this bare runtime wires none). Otherwise every later turn
-			// of a session whose generation failed would flicker its title.
-			if entry["title"] != "first" {
-				t.Fatalf("title = %v, want the truncated prompt visible while busy (no sidecar pending)", entry["title"])
-			}
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("state = %v, want running (busy live session)", entry["state"])
-		}
-		time.Sleep(20 * time.Millisecond)
+	// Running is set before the prompt is persisted; reaching Stream
+	// guarantees the fallback title exists while the turn remains gated.
+	<-started
+	_, listing := doJSON(t, ts.Client(), "GET", ts.URL+"/v1/sessions", "")
+	sessions, _ := listing["sessions"].([]any)
+	if len(sessions) != 1 {
+		t.Fatalf("sessions = %v, want exactly 1", listing)
+	}
+	entry, _ := sessions[0].(map[string]any)
+	if entry["state"] != "running" {
+		t.Fatalf("state = %v, want running (busy live session)", entry["state"])
+	}
+	// Busy alone must NOT hide the truncated-prompt fallback: only a
+	// session whose title sidecar is actually in flight suppresses
+	// it (this bare runtime wires none). Otherwise every later turn
+	// of a session whose generation failed would flicker its title.
+	if entry["title"] != "first" {
+		t.Fatalf("title = %v, want the truncated prompt visible while busy (no sidecar pending)", entry["title"])
 	}
 	close(release)
 	waitIdle(t, ts, id)
@@ -988,16 +985,20 @@ func TestSessionListAwaitingApproval(t *testing.T) {
 }
 
 // gateModel blocks its first Stream call until release closes, giving the
-// test a deterministic busy window.
+// test a deterministic busy window. If provided, started signals entry into Stream.
 type gateModel struct {
 	inner   *fakes.FakeModel
 	release chan struct{}
+	started chan struct{}
 	once    bool
 }
 
 func (m *gateModel) Stream(ctx context.Context, req domain.ModelRequest) (domain.ModelStream, error) {
 	if !m.once {
 		m.once = true
+		if m.started != nil {
+			close(m.started)
+		}
 		select {
 		case <-m.release:
 		case <-ctx.Done():

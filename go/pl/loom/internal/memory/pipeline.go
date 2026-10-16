@@ -78,6 +78,7 @@ type PipelineStats struct {
 	Succeeded     int
 	NoOutput      int
 	Failed        int
+	Conflicted    int // changed evidence, stale claim, or interrupted work; not a model failure
 	Phase2Ran     bool
 	Phase2Changed bool
 	Phase2Skipped bool // lease held by another process
@@ -89,22 +90,20 @@ type PipelineStats struct {
 // an interval afterwards, never on the session/process shutdown path.
 type Pipeline struct {
 	jobs         JobQueue
-	sessions     domain.SessionStore
 	extractor    *Extractor
 	consolidator *Consolidator
 	cfg          PipelineConfig
 	logger       *slog.Logger
 }
 
-// NewPipeline assembles the background memory worker. sessions is used to
-// load claimed sessions' checkpoints; jobs persists queue state.
-func NewPipeline(jobs JobQueue, sessions domain.SessionStore, extractor *Extractor, consolidator *Consolidator, cfg PipelineConfig, logger *slog.Logger) *Pipeline {
+// NewPipeline assembles the background worker. jobs is the sole source of
+// fixed evidence and owns atomic record publication plus queue settlement.
+func NewPipeline(jobs JobQueue, extractor *Extractor, consolidator *Consolidator, cfg PipelineConfig, logger *slog.Logger) *Pipeline {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &Pipeline{
 		jobs:         jobs,
-		sessions:     sessions,
 		extractor:    extractor,
 		consolidator: consolidator,
 		cfg:          cfg,
@@ -140,8 +139,11 @@ func (p *Pipeline) Start(ctx context.Context, interval time.Duration) {
 // best-effort background work and must never disturb the foreground.
 func (p *Pipeline) RunOnce(ctx context.Context) PipelineStats {
 	var stats PipelineStats
-	if p == nil || p.jobs == nil {
+	if p == nil || p.jobs == nil || ctx.Err() != nil {
 		return stats
+	}
+	if err := p.jobs.BackfillMemoryJobs(ctx, p.cfg.MaxAge); err != nil {
+		p.logger.Warn("memory pipeline: backfill failed", "error", err)
 	}
 	stats = p.runPhase1(ctx)
 	p.runPhase2(ctx, &stats)
@@ -151,6 +153,7 @@ func (p *Pipeline) RunOnce(ctx context.Context) PipelineStats {
 			"succeeded", stats.Succeeded,
 			"no_output", stats.NoOutput,
 			"failed", stats.Failed,
+			"conflicted", stats.Conflicted,
 			"phase2_ran", stats.Phase2Ran,
 			"phase2_changed", stats.Phase2Changed)
 	}
@@ -183,11 +186,12 @@ func (p *Pipeline) runPhase1(ctx context.Context) PipelineStats {
 		if ctx.Err() != nil {
 			break
 		}
-		job := job
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			sem <- struct{}{}
+		wg.Go(func() {
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
 			defer func() { <-sem }()
 			outcome := p.processJob(ctx, job)
 			mu.Lock()
@@ -196,11 +200,13 @@ func (p *Pipeline) runPhase1(ctx context.Context) PipelineStats {
 				stats.Succeeded++
 			case JobSucceededNoOutput:
 				stats.NoOutput++
+			case JobPending:
+				stats.Conflicted++
 			default:
 				stats.Failed++
 			}
 			mu.Unlock()
-		}()
+		})
 	}
 	wg.Wait()
 	return stats
@@ -212,69 +218,78 @@ func settleContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 10*time.Second)
 }
 
-// processJob runs Phase 1 for one claimed job and settles the claim.
+// processJob runs Phase 1 for one claimed job. Interrupted passes leave the
+// claim untouched until its lease expires, without consuming retry attempts.
 func (p *Pipeline) processJob(ctx context.Context, job Job) JobStatus {
 	fail := func(err error) JobStatus {
-		p.logger.Warn("memory extraction failed",
-			"session", job.SessionID, "error", err)
-		sctx, cancel := settleContext()
-		defer cancel()
-		if ferr := p.jobs.FailMemoryJob(sctx, job.SessionID, job.ClaimToken, err, p.cfg.RetryDelay, p.cfg.MaxAttempts); ferr != nil {
-			p.logger.Warn("memory job failure update failed",
-				"session", job.SessionID, "error", ferr)
+		if ctx.Err() != nil {
+			return JobPending // interrupted; preserve the claim for lease expiry
 		}
-		return JobFailed
-	}
-	complete := func(status JobStatus) JobStatus {
-		// Completion uses a fresh context: a cancelled pass must not lose
-		// the settlement write, or the job would stall until lease expiry.
 		sctx, cancel := settleContext()
 		defer cancel()
-		if err := p.jobs.CompleteMemoryJob(sctx, job.SessionID, job.ClaimToken, status, job.SessionVersion); err != nil {
-			p.logger.Warn("memory job completion update failed",
-				"session", job.SessionID, "error", err)
+		ferr := p.jobs.FailMemoryJob(sctx, job, err, p.cfg.RetryDelay, p.cfg.MaxAttempts)
+		isConflict := func(err error) bool {
+			agentErr, ok := errors.AsType[*domain.AgentError](err)
+			return ok && agentErr.Code == domain.ErrConflict
+		}
+		if ferr != nil && !isConflict(ferr) {
+			p.logger.Warn("memory job failure update failed", "session", job.SessionID, "error", ferr)
 			return JobFailed
 		}
-		return status
+		if isConflict(err) || isConflict(ferr) {
+			p.logger.Debug("memory evidence changed; extraction rescheduled", "session", job.SessionID)
+			return JobPending
+		}
+		p.logger.Warn("memory extraction failed", "session", job.SessionID, "error", err)
+		return JobFailed
+	}
+	complete := func(result *ExtractionResult) JobStatus {
+		if err := ctx.Err(); err != nil {
+			return fail(err)
+		}
+		// Only a normally completed extraction reaches publication. Bound
+		// its atomic settlement independently of a foreground request.
+		sctx, cancel := settleContext()
+		defer cancel()
+		if err := p.jobs.CompleteMemoryExtraction(sctx, job, result); err != nil {
+			return fail(err)
+		}
+		if result == nil {
+			return JobSucceededNoOutput
+		}
+		return JobSucceeded
 	}
 
 	if ctx.Err() != nil {
-		return JobFailed // pass cancelled; the lease expires and is reclaimed
+		return JobPending // pass cancelled; the lease expires and is reclaimed
 	}
 
 	jobCtx, cancel := context.WithTimeout(ctx, p.cfg.JobTimeout)
 	defer cancel()
 
-	ckpt, err := p.sessions.LoadLatestCheckpoint(jobCtx, job.SessionID)
+	messages, err := p.jobs.LoadMemoryEvidence(jobCtx, job)
 	if err != nil {
-		// "No checkpoint" (session created but never completed a turn) is a
-		// terminal no-output; any other failure (DB errors, decode
-		// failures) is retryable — settling it as no-output would lose the
-		// session's memory forever.
-		var ae *domain.AgentError
-		if errors.As(err, &ae) && ae.Code == domain.ErrInvalidInput {
-			return complete(JobSucceededNoOutput)
-		}
 		return fail(err)
 	}
-	if len(ckpt.Messages) == 0 {
-		return complete(JobSucceededNoOutput)
+	if err := jobCtx.Err(); err != nil {
+		return fail(err)
+	}
+	if len(messages) == 0 {
+		return complete(nil)
 	}
 
-	result, err := p.extractor.ExtractFromSession(jobCtx, job.SessionID, ckpt.Messages, job.WorkspaceRoot)
+	result, err := p.extractor.ExtractFromSession(jobCtx, job.SessionID, messages, job.WorkspaceRoot)
 	if err != nil {
 		return fail(err)
 	}
-	if result == nil {
-		return complete(JobSucceededNoOutput)
+	if err := jobCtx.Err(); err != nil {
+		return fail(err)
 	}
-	p.logger.Info("memory extraction completed",
-		"session", job.SessionID, "slug", result.RolloutSlug)
-	return complete(JobSucceeded)
+	return complete(result)
 }
 
 func (p *Pipeline) runPhase2(ctx context.Context, stats *PipelineStats) {
-	if p.consolidator == nil {
+	if p.consolidator == nil || ctx.Err() != nil {
 		return
 	}
 	token := newLeaseToken()
@@ -298,12 +313,11 @@ func (p *Pipeline) runPhase2(ctx context.Context, stats *PipelineStats) {
 	cctx, cancel := context.WithTimeout(ctx, p.cfg.ConsolidateTimeout)
 	defer cancel()
 	changed, err := p.consolidator.Consolidate(cctx)
-	if err != nil {
-		p.logger.Warn("memory consolidation failed", "error", err)
-		return
-	}
 	stats.Phase2Ran = true
 	stats.Phase2Changed = changed
+	if err != nil {
+		p.logger.Warn("memory consolidation failed", "error", err)
+	}
 }
 
 func newLeaseToken() string {

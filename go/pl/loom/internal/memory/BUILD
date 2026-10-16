@@ -23,6 +23,7 @@ go_library(
         "consolidate.go",
         "extract.go",
         "jobs.go",
+        "model.go",
         "pipeline.go",
         "prompt.go",
         "redact.go",

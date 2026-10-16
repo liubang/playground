@@ -105,12 +105,13 @@ type RememberedRule struct {
 // shells, eval forms, multi-step indicated shapes, ineligible tools).
 // The memory shape is derived from the call's DERIVATION
 // (permission.DeriveRawArgs) — this layer never switches on tool names.
-// The tool source preserves MCP identity across the approval boundary.
+// The tool source and actual risk are carried from the approval card,
+// preserving MCP identity and the producing Prepare classification.
 //
 // Persistence failures are reported, not swallowed: the session package
 // is already effective either way, and the user deserves an honest note
 // when the approval will not survive a restart.
-func (r *RuleApprover) RememberCall(toolName string, source domain.ToolSource, arguments json.RawMessage, trust string) (RememberedRule, bool) {
+func (r *RuleApprover) RememberCall(toolName string, source domain.ToolSource, risk domain.RiskLevel, arguments json.RawMessage, trust string) (RememberedRule, bool) {
 	if r.policy == nil {
 		return RememberedRule{}, false
 	}
@@ -118,7 +119,7 @@ func (r *RuleApprover) RememberCall(toolName string, source domain.ToolSource, a
 	if policy.Packages == nil {
 		return RememberedRule{}, false
 	}
-	d := permission.DeriveRawArgs(toolName, source, arguments, policy.Env)
+	d := permission.DeriveRawArgs(toolName, source, risk, arguments, policy.Env)
 	label, pkgs, ok := permission.MemoryPreviewLabel(d, trust)
 	if !ok {
 		return RememberedRule{}, false

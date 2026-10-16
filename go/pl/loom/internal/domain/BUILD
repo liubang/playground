@@ -37,6 +37,7 @@ go_library(
         "request_header.go",
         "surface_ops.go",
         "tool.go",
+        "tool_context.go",
         "workspace.go",
     ],
     importpath = "github.com/liubang/playground/go/pl/loom/internal/domain",
