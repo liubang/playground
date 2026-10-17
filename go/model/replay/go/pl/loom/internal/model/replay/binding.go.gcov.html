@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -118,11 +118,11 @@
 <span id="L47"><span class="lineNum">      47</span>                 :             : // loop about to run. The root loop passes a zero parentToolCallID;</span>
 <span id="L48"><span class="lineNum">      48</span>                 :             : // sub-agent loops pass the delegating tool call's ID.</span>
 <span id="L49"><span class="lineNum">      49</span>                 :             : func WithSessionRef(ctx context.Context, sessionID domain.SessionID, parentToolCallID domain.ToolCallID) context.Context {</span>
-<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC tlaBgGNC">         222 :         return context.WithValue(ctx, sessionRefContextKey{}, SessionRef{</span></span>
-<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">         222 :                 SessionID:        sessionID,</span></span>
-<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">         222 :                 ParentToolCallID: parentToolCallID,</span></span>
-<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">         222 :         })</span></span>
-<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">         222 : }</span></span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC tlaBgGNC">         230 :         return context.WithValue(ctx, sessionRefContextKey{}, SessionRef{</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">         230 :                 SessionID:        sessionID,</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">         230 :                 ParentToolCallID: parentToolCallID,</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">         230 :         })</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">         230 : }</span></span>
 <span id="L55"><span class="lineNum">      55</span>                 :             : </span>
 <span id="L56"><span class="lineNum">      56</span>                 :             : // SessionRefFrom extracts the session identity from a context.</span>
 <span id="L57"><span class="lineNum">      57</span>                 :             : func SessionRefFrom(ctx context.Context) (SessionRef, bool) {</span>

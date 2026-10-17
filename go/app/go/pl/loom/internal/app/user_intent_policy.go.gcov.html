@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -98,10 +98,10 @@
 <span id="L27"><span class="lineNum">      27</span>                 :             : // itself, wrapped in the transcript adapter when user-intent trust is</span>
 <span id="L28"><span class="lineNum">      28</span>                 :             : // enabled (approval.trust_user_urls).</span>
 <span id="L29"><span class="lineNum">      29</span>                 :             : func wirePolicy(policy permission.Policy) agent.Policy {</span>
-<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC tlaBgGNC">          34 :         if policy.UserIntent {</span></span>
+<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC tlaBgGNC">          61 :         if policy.UserIntent {</span></span>
 <span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC">          14 :                 return transcriptPolicy{policy: policy}</span></span>
 <span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC">          14 :         }</span></span>
-<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">          20 :         return policy</span></span>
+<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">          47 :         return policy</span></span>
 <span id="L34"><span class="lineNum">      34</span>                 :             : }</span>
 <span id="L35"><span class="lineNum">      35</span>                 :             : </span>
 <span id="L36"><span class="lineNum">      36</span>                 :             : // transcriptPolicy adapts a permission policy to</span>

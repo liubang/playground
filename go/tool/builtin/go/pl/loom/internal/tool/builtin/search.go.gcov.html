@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryMed">77.0&nbsp;%</td>
+            <td class="headerCovTableEntryMed">77.4&nbsp;%</td>
             <td class="headerCovTableEntry">261</td>
-            <td class="headerCovTableEntry">201</td>
+            <td class="headerCovTableEntry">202</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -144,10 +144,10 @@
 <span id="L73"><span class="lineNum">      73</span>                 :             : // clampMatchBudget resolves the effective match cap: 0 (unset) takes the</span>
 <span id="L74"><span class="lineNum">      74</span>                 :             : // default, and any explicit value stays within it.</span>
 <span id="L75"><span class="lineNum">      75</span>                 :             : func clampMatchBudget(headLimit int) int {</span>
-<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC tlaBgGNC">          19 :         if headLimit &lt;= 0 || headLimit &gt; maxSearchMatches {</span></span>
-<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">          19 :                 return maxSearchMatches</span></span>
-<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">          19 :         }</span></span>
-<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return headLimit</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC tlaBgGNC">          25 :         if headLimit &lt;= 0 || headLimit &gt; maxSearchMatches {</span></span>
+<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">          21 :                 return maxSearchMatches</span></span>
+<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">          21 :         }</span></span>
+<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">           4 :         return headLimit</span></span>
 <span id="L80"><span class="lineNum">      80</span>                 :             : }</span>
 <span id="L81"><span class="lineNum">      81</span>                 :             : </span>
 <span id="L82"><span class="lineNum">      82</span>                 :             : // rgTypeSet probes `rg --type-list` once per process and caches the valid</span>
@@ -155,7 +155,7 @@
 <span id="L84"><span class="lineNum">      84</span>                 :             : // failed); callers then fall back to syntax-only validation — acceptable</span>
 <span id="L85"><span class="lineNum">      85</span>                 :             : // because the Go fallback engine does not apply type filters either.</span>
 <span id="L86"><span class="lineNum">      86</span>                 :             : var rgTypeSet = sync.OnceValue(func() map[string]bool {</span>
-<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC tlaBgGNC">           1 :         path, ok := rgLocator()</span></span>
+<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC">           1 :         path, ok := rgLocator()</span></span>
 <span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">           1 :         if !ok {</span></span>
 <span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">           1 :                 return nil</span></span>
 <span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">           1 :         }</span></span>
@@ -179,13 +179,13 @@
 <span id="L108"><span class="lineNum">     108</span>                 :             : // quoting: some models serialize an unset field as the string &quot;null&quot;/&quot;none&quot;,</span>
 <span id="L109"><span class="lineNum">     109</span>                 :             : // or double-encode the value with literal quotes (e.g. &quot;\&quot;go\&quot;&quot;).</span>
 <span id="L110"><span class="lineNum">     110</span>                 :             : func normalizeTypeFilter(v string) string {</span>
-<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC tlaBgGNC">          19 :         v = strings.TrimSpace(v)</span></span>
-<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">          19 :         v = strings.Trim(v, `&quot;'`)</span></span>
-<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">          19 :         v = strings.TrimSpace(v)</span></span>
-<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">          19 :         if strings.EqualFold(v, &quot;null&quot;) || strings.EqualFold(v, &quot;none&quot;) {</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC tlaBgGNC">          25 :         v = strings.TrimSpace(v)</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">          25 :         v = strings.Trim(v, `&quot;'`)</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">          25 :         v = strings.TrimSpace(v)</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">          25 :         if strings.EqualFold(v, &quot;null&quot;) || strings.EqualFold(v, &quot;none&quot;) {</span></span>
 <span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">           4 :                 return &quot;&quot;</span></span>
 <span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">           4 :         }</span></span>
-<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">          15 :         return v</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">          21 :         return v</span></span>
 <span id="L118"><span class="lineNum">     118</span>                 :             : }</span>
 <span id="L119"><span class="lineNum">     119</span>                 :             : </span>
 <span id="L120"><span class="lineNum">     120</span>                 :             : // SearchTool implements content search with a ripgrep engine and a Go fallback.</span>
@@ -197,33 +197,33 @@
 <span id="L126"><span class="lineNum">     126</span>                 :             : // NewSearchTool creates a search tool. The runner enables the ripgrep engine</span>
 <span id="L127"><span class="lineNum">     127</span>                 :             : // through the sandboxed process runner; a nil runner forces the Go fallback.</span>
 <span id="L128"><span class="lineNum">     128</span>                 :             : func NewSearchTool(validator *workspacepkg.PathValidator, runner rgRunner) (*SearchTool, error) {</span>
-<span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC">          86 :         base, err := newBaseTool(domain.ToolDefinition{</span></span>
-<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">          86 :                 Name: &quot;grep&quot;,</span></span>
-<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">          86 :                 Description: &quot;Search file contents with ripgrep semantics. 'pattern' is a ripgrep regular expression &quot; +</span></span>
-<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">          86 :                         &quot;(fixed_strings=true for literal text). &quot; +</span></span>
-<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">          86 :                         &quot;'path' defaults to the workspace root and may point to a directory (searched recursively) or a single &quot; +</span></span>
-<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">          86 :                         &quot;file, including absolute paths outside the workspace (credential locations are always excluded). &quot; +</span></span>
-<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">          86 :                         &quot;Filter with glob (a pattern without '/' matches the file name at any depth, one with '/' matches the &quot; +</span></span>
-<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">          86 :                         &quot;workspace-relative path; prefix with '!' to exclude; multiple patterns union) or with type (a ripgrep &quot; +</span></span>
-<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">          86 :                         &quot;type name like 'go'; omit it when unsure — prefer glob for file-name filtering). &quot; +</span></span>
-<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">          86 :                         &quot;head_limit caps the number of returned matches (default &quot; + strconv.Itoa(maxSearchMatches) + &quot;); &quot; +</span></span>
-<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">          86 :                         &quot;context adds up to 5 surrounding lines per match. &quot; +</span></span>
-<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          86 :                         &quot;Files matched by .gitignore are skipped unless no_ignore=true. &quot; +</span></span>
-<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">          86 :                         &quot;Uses the ripgrep engine when available and falls back to a built-in literal search otherwise (the &quot; +</span></span>
-<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">          86 :                         &quot;fallback treats 'pattern' as literal text; unapplied filters are disclosed in the output's note).&quot;,</span></span>
-<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">          86 :                 InputSchema:  json.RawMessage(`{&quot;type&quot;:&quot;object&quot;,&quot;additionalProperties&quot;:false,&quot;properties&quot;:{&quot;pattern&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:4096},&quot;path&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1},&quot;glob&quot;:{&quot;type&quot;:&quot;array&quot;,&quot;maxItems&quot;:16,&quot;items&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:256}},&quot;type&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:64},&quot;context&quot;:{&quot;type&quot;:&quot;integer&quot;,&quot;minimum&quot;:0,&quot;maximum&quot;:5},&quot;head_limit&quot;:{&quot;type&quot;:&quot;integer&quot;,&quot;minimum&quot;:1,&quot;maximum&quot;:200},&quot;case_sensitive&quot;:{&quot;type&quot;:&quot;boolean&quot;},&quot;fixed_strings&quot;:{&quot;type&quot;:&quot;boolean&quot;},&quot;no_ignore&quot;:{&quot;type&quot;:&quot;boolean&quot;}},&quot;required&quot;:[&quot;pattern&quot;]}`),</span></span>
-<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">          86 :                 Capabilities: []domain.Capability{domain.CapFSRead},</span></span>
-<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">          86 :                 Source:       domain.ToolSourceBuiltin,</span></span>
-<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">          86 :         }, validator)</span></span>
-<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">          86 :         if err != nil {</span></span>
+<span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC">          96 :         base, err := newBaseTool(domain.ToolDefinition{</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">          96 :                 Name: &quot;grep&quot;,</span></span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">          96 :                 Description: &quot;Search file contents with ripgrep semantics. 'pattern' is a ripgrep regular expression &quot; +</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">          96 :                         &quot;(fixed_strings=true for literal text). &quot; +</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">          96 :                         &quot;'path' defaults to the workspace root and may point to a directory (searched recursively) or a single &quot; +</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">          96 :                         &quot;file, including absolute paths outside the workspace (credential locations are always excluded). &quot; +</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">          96 :                         &quot;Filter with glob (a pattern without '/' matches the file name at any depth, one with '/' matches the &quot; +</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">          96 :                         &quot;workspace-relative path; prefix with '!' to exclude; multiple patterns union) or with type (a ripgrep &quot; +</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">          96 :                         &quot;type name like 'go'; omit it when unsure — prefer glob for file-name filtering). &quot; +</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">          96 :                         &quot;head_limit caps the number of returned matches (default &quot; + strconv.Itoa(maxSearchMatches) + &quot;); &quot; +</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">          96 :                         &quot;context adds up to 5 surrounding lines per match. &quot; +</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          96 :                         &quot;Files matched by .gitignore are skipped unless no_ignore=true. &quot; +</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">          96 :                         &quot;Uses the ripgrep engine when available and falls back to a built-in literal search otherwise (the &quot; +</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">          96 :                         &quot;fallback treats 'pattern' as literal text; unapplied filters are disclosed in the output's note).&quot;,</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">          96 :                 InputSchema:  json.RawMessage(`{&quot;type&quot;:&quot;object&quot;,&quot;additionalProperties&quot;:false,&quot;properties&quot;:{&quot;pattern&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:4096},&quot;path&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1},&quot;glob&quot;:{&quot;type&quot;:&quot;array&quot;,&quot;maxItems&quot;:16,&quot;items&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:256}},&quot;type&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:64},&quot;context&quot;:{&quot;type&quot;:&quot;integer&quot;,&quot;minimum&quot;:0,&quot;maximum&quot;:5},&quot;head_limit&quot;:{&quot;type&quot;:&quot;integer&quot;,&quot;minimum&quot;:1,&quot;maximum&quot;:200},&quot;case_sensitive&quot;:{&quot;type&quot;:&quot;boolean&quot;},&quot;fixed_strings&quot;:{&quot;type&quot;:&quot;boolean&quot;},&quot;no_ignore&quot;:{&quot;type&quot;:&quot;boolean&quot;}},&quot;required&quot;:[&quot;pattern&quot;]}`),</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">          96 :                 Capabilities: []domain.Capability{domain.CapFSRead},</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">          96 :                 Source:       domain.ToolSourceBuiltin,</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">          96 :         }, validator)</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">          96 :         if err != nil {</span></span>
 <span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
 <span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC tlaBgGNC">          86 :         return &amp;SearchTool{base: base, runner: runner}, nil</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC tlaBgGNC">          96 :         return &amp;SearchTool{base: base, runner: runner}, nil</span></span>
 <span id="L151"><span class="lineNum">     151</span>                 :             : }</span>
 <span id="L152"><span class="lineNum">     152</span>                 :             : </span>
 <span id="L153"><span class="lineNum">     153</span>                 :             : func (t *SearchTool) Definition() domain.ToolDefinition {</span>
-<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">         242 :         return t.base.Def</span></span>
-<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">         242 : }</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">         267 :         return t.base.Def</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">         267 : }</span></span>
 <span id="L156"><span class="lineNum">     156</span>                 :             : </span>
 <span id="L157"><span class="lineNum">     157</span>                 :             : // ConcurrentSafe implements domain.ConcurrentSafely: each search spawns</span>
 <span id="L158"><span class="lineNum">     158</span>                 :             : // an independent rg process and shares no state across calls.</span>
@@ -233,21 +233,21 @@
 <span id="L162"><span class="lineNum">     162</span>                 :             : // a lone glob string) lives in the shared toolkit.DecodeLenient layer.</span>
 <span id="L163"><span class="lineNum">     163</span>                 :             : </span>
 <span id="L164"><span class="lineNum">     164</span>                 :             : func (t *SearchTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {</span>
-<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC tlaBgGNC">          14 :         args, err := decodeLenient[searchArgs](call.Arguments)</span></span>
-<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">          14 :         if err != nil {</span></span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC tlaBgGNC">          20 :         args, err := decodeLenient[searchArgs](call.Arguments)</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">          20 :         if err != nil {</span></span>
 <span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">           1 :                 return domain.PreparedCall{}, err</span></span>
 <span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">          13 :         args, pathInfo, err := validateSearchArgs(t.base.validator, args)</span></span>
-<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">          13 :         if err != nil {</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">          19 :         args, pathInfo, err := validateSearchArgs(t.base.validator, args)</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">          19 :         if err != nil {</span></span>
 <span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">           1 :                 return domain.PreparedCall{}, err</span></span>
 <span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">           1 :         }</span></span>
 <span id="L173"><span class="lineNum">     173</span>                 :             : </span>
-<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">          12 :         canonical, err := json.Marshal(args)</span></span>
-<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">          12 :         if err != nil {</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">          18 :         canonical, err := json.Marshal(args)</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">          18 :         if err != nil {</span></span>
 <span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, &quot;failed to encode canonical arguments&quot;, domain.WithCause(err))</span></span>
 <span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC tlaBgGNC">          12 :         approvalDesc := fmt.Sprintf(&quot;Grep %q under %s&quot;, args.Pattern, args.Path)</span></span>
-<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">          12 :         return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{ReadPaths: []string{pathInfo.Absolute}, ApprovalDesc: approvalDesc})</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC tlaBgGNC">          18 :         approvalDesc := fmt.Sprintf(&quot;Grep %q under %s&quot;, args.Pattern, args.Path)</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">          18 :         return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{ReadPaths: []string{pathInfo.Absolute}, ApprovalDesc: approvalDesc})</span></span>
 <span id="L180"><span class="lineNum">     180</span>                 :             : }</span>
 <span id="L181"><span class="lineNum">     181</span>                 :             : </span>
 <span id="L182"><span class="lineNum">     182</span>                 :             : func (t *SearchTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {</span>
@@ -281,24 +281,24 @@
 <span id="L210"><span class="lineNum">     210</span>                 :             : }</span>
 <span id="L211"><span class="lineNum">     211</span>                 :             : </span>
 <span id="L212"><span class="lineNum">     212</span>                 :             : func validateSearchArgs(validator *workspacepkg.PathValidator, args searchArgs) (searchArgs, pathResolution, error) {</span>
-<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaGNC">          20 :         if strings.TrimSpace(args.Pattern) == &quot;&quot; {</span></span>
+<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaGNC">          26 :         if strings.TrimSpace(args.Pattern) == &quot;&quot; {</span></span>
 <span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">           1 :                 return searchArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, &quot;pattern is required&quot;)</span></span>
 <span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">          19 :         if len(args.Pattern) &gt; maxSearchQueryBytes {</span></span>
+<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">          25 :         if len(args.Pattern) &gt; maxSearchQueryBytes {</span></span>
 <span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return searchArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf(&quot;pattern exceeds %d bytes&quot;, maxSearchQueryBytes))</span></span>
 <span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaGNC tlaBgGNC">          19 :         if args.Context &lt; 0 {</span></span>
+<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaGNC tlaBgGNC">          25 :         if args.Context &lt; 0 {</span></span>
 <span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 args.Context = 0</span></span>
 <span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaUNC">           0 :         }</span></span>
 <span id="L222"><span class="lineNum">     222</span>                 :             :         // Clamp rather than reject: models routinely probe a slightly larger</span>
 <span id="L223"><span class="lineNum">     223</span>                 :             :         // window, and clamping costs nothing the output header does not</span>
 <span id="L224"><span class="lineNum">     224</span>                 :             :         // already disclose (the read_file limit precedent).</span>
-<span id="L225"><span class="lineNum">     225</span>                 :<span class="tlaGNC tlaBgGNC">          19 :         if args.Context &gt; maxSearchContextLines {</span></span>
+<span id="L225"><span class="lineNum">     225</span>                 :<span class="tlaGNC tlaBgGNC">          25 :         if args.Context &gt; maxSearchContextLines {</span></span>
 <span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 args.Context = maxSearchContextLines</span></span>
 <span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC tlaBgGNC">          19 :         args.HeadLimit = clampMatchBudget(args.HeadLimit)</span></span>
-<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">          19 :         args.Type = normalizeTypeFilter(args.Type)</span></span>
-<span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">          19 :         if args.Type != &quot;&quot; {</span></span>
+<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC tlaBgGNC">          25 :         args.HeadLimit = clampMatchBudget(args.HeadLimit)</span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">          25 :         args.Type = normalizeTypeFilter(args.Type)</span></span>
+<span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">          25 :         if args.Type != &quot;&quot; {</span></span>
 <span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">           4 :                 if !typeNamePattern.MatchString(args.Type) {</span></span>
 <span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return searchArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, &quot;type must be an alphanumeric ripgrep type name&quot;)</span></span>
 <span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
@@ -310,25 +310,25 @@
 <span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return searchArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf(&quot;unknown ripgrep type %q; omit the type filter or use glob for file-name filtering (valid names: see `rg --type-list`)&quot;, args.Type))</span></span>
 <span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
 <span id="L241"><span class="lineNum">     241</span>                 :             :         }</span>
-<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC tlaBgGNC">          19 :         for i, g := range args.Glob {</span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC tlaBgGNC">          25 :         for i, g := range args.Glob {</span></span>
 <span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaGNC">           4 :                 if strings.TrimSpace(g) == &quot;&quot; || len(g) &gt; 256 {</span></span>
 <span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return searchArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf(&quot;glob[%d] must be 1..256 bytes&quot;, i))</span></span>
 <span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
 <span id="L246"><span class="lineNum">     246</span>                 :             :         }</span>
-<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC tlaBgGNC">          19 :         if args.Path == &quot;&quot; {</span></span>
-<span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaGNC">          14 :                 args.Path = &quot;.&quot;</span></span>
-<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">          14 :         }</span></span>
-<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">          19 :         pathInfo, err := resolveExistingPath(validator, args.Path)</span></span>
-<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">          19 :         if err != nil {</span></span>
+<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC tlaBgGNC">          25 :         if args.Path == &quot;&quot; {</span></span>
+<span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaGNC">          15 :                 args.Path = &quot;.&quot;</span></span>
+<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">          15 :         }</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">          25 :         pathInfo, err := resolveExistingPath(validator, args.Path)</span></span>
+<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">          25 :         if err != nil {</span></span>
 <span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return searchArgs{}, pathResolution{}, err</span></span>
 <span id="L253"><span class="lineNum">     253</span>                 :<span class="tlaUNC">           0 :         }</span></span>
 <span id="L254"><span class="lineNum">     254</span>                 :             :         // Accept single files as well as directories: models routinely scope a</span>
 <span id="L255"><span class="lineNum">     255</span>                 :             :         // search to one file (rg handles file targets natively).</span>
-<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC tlaBgGNC">          19 :         if !pathInfo.Info.IsDir() &amp;&amp; !pathInfo.Info.Mode().IsRegular() {</span></span>
+<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC tlaBgGNC">          25 :         if !pathInfo.Info.IsDir() &amp;&amp; !pathInfo.Info.Mode().IsRegular() {</span></span>
 <span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return searchArgs{}, pathResolution{}, domain.NewError(domain.ErrInvalidInput, &quot;path must refer to a file or directory&quot;)</span></span>
 <span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC tlaBgGNC">          19 :         args.Path = pathInfo.Display</span></span>
-<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaGNC">          19 :         return args, pathInfo, nil</span></span>
+<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC tlaBgGNC">          25 :         args.Path = pathInfo.Display</span></span>
+<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaGNC">          25 :         return args, pathInfo, nil</span></span>
 <span id="L261"><span class="lineNum">     261</span>                 :             : }</span>
 <span id="L262"><span class="lineNum">     262</span>                 :             : </span>
 <span id="L263"><span class="lineNum">     263</span>                 :             : // --- ripgrep engine ---</span>

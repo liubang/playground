@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -238,49 +238,49 @@
 <span id="L167"><span class="lineNum">     167</span>                 :             : // release func cancels the timeout and refreshes the instance idle timer;</span>
 <span id="L168"><span class="lineNum">     168</span>                 :             : // callers must defer it.</span>
 <span id="L169"><span class="lineNum">     169</span>                 :             : func (t *BrowserTool) pageFor(ctx context.Context, timeout time.Duration) (*rod.Page, func(), error) {</span>
-<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">          24 :         page, err := t.manager.Acquire()</span></span>
-<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">          24 :         if err != nil {</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">          23 :         page, err := t.manager.Acquire()</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">          23 :         if err != nil {</span></span>
 <span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">           3 :                 return nil, nil, err</span></span>
 <span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">           3 :         }</span></span>
-<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">          21 :         op := page.Context(ctx).Timeout(timeout)</span></span>
-<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">          21 :         return op, func() {</span></span>
-<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">          21 :                 op.CancelTimeout()</span></span>
-<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">          21 :                 t.manager.Touch()</span></span>
-<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">          21 :         }, nil</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">          20 :         op := page.Context(ctx).Timeout(timeout)</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">          20 :         return op, func() {</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">          20 :                 op.CancelTimeout()</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">          20 :                 t.manager.Touch()</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">          20 :         }, nil</span></span>
 <span id="L179"><span class="lineNum">     179</span>                 :             : }</span>
 <span id="L180"><span class="lineNum">     180</span>                 :             : </span>
 <span id="L181"><span class="lineNum">     181</span>                 :             : func (t *BrowserTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {</span>
-<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">          51 :         args, err := toolkit.DecodeLenient[browserArgs](call.Arguments)</span></span>
-<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">          51 :         if err != nil {</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">          50 :         args, err := toolkit.DecodeLenient[browserArgs](call.Arguments)</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">          50 :         if err != nil {</span></span>
 <span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.PreparedCall{}, err</span></span>
 <span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC tlaBgGNC">          51 :         args, err = validateBrowserArgs(args)</span></span>
-<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">          51 :         if err != nil {</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC tlaBgGNC">          50 :         args, err = validateBrowserArgs(args)</span></span>
+<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">          50 :         if err != nil {</span></span>
 <span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">           3 :                 return domain.PreparedCall{}, err</span></span>
 <span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">           3 :         }</span></span>
 <span id="L190"><span class="lineNum">     190</span>                 :             : </span>
-<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">          48 :         canonical, err := json.Marshal(args)</span></span>
-<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">          48 :         if err != nil {</span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">          47 :         canonical, err := json.Marshal(args)</span></span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">          47 :         if err != nil {</span></span>
 <span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, &quot;failed to encode canonical arguments&quot;, domain.WithCause(err))</span></span>
 <span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaUNC">           0 :         }</span></span>
 <span id="L195"><span class="lineNum">     195</span>                 :             : </span>
-<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC tlaBgGNC">          48 :         approvalDesc := fmt.Sprintf(&quot;browser %s&quot;, args.Action)</span></span>
-<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">          48 :         if args.URL != &quot;&quot; {</span></span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC tlaBgGNC">          47 :         approvalDesc := fmt.Sprintf(&quot;browser %s&quot;, args.Action)</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">          47 :         if args.URL != &quot;&quot; {</span></span>
 <span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC">          10 :                 approvalDesc = fmt.Sprintf(&quot;browser %s %s&quot;, args.Action, args.URL)</span></span>
 <span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaGNC">          10 :         }</span></span>
 <span id="L200"><span class="lineNum">     200</span>                 :             : </span>
 <span id="L201"><span class="lineNum">     201</span>                 :             :         // Only navigate carries a URLRequest for domain-rule evaluation.</span>
-<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">          48 :         var urlReq *domain.URLRequest</span></span>
-<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">          48 :         if args.URL != &quot;&quot; {</span></span>
+<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">          47 :         var urlReq *domain.URLRequest</span></span>
+<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">          47 :         if args.URL != &quot;&quot; {</span></span>
 <span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">          10 :                 urlReq = extractURLRequest(args.URL)</span></span>
 <span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">          10 :         }</span></span>
 <span id="L206"><span class="lineNum">     206</span>                 :             : </span>
-<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">          48 :         risk := riskForAction(args.Action)</span></span>
-<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">          48 :         return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{</span></span>
-<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC">          48 :                 ApprovalDesc: approvalDesc,</span></span>
-<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaGNC">          48 :                 Risk:         &amp;risk,</span></span>
-<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">          48 :                 URLRequest:   urlReq,</span></span>
-<span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaGNC">          48 :         })</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">          47 :         risk := riskForAction(args.Action)</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">          47 :         return t.base.PrepareCall(ctx, call, canonical, toolkit.PrepareOptions{</span></span>
+<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC">          47 :                 ApprovalDesc: approvalDesc,</span></span>
+<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaGNC">          47 :                 Risk:         &amp;risk,</span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">          47 :                 URLRequest:   urlReq,</span></span>
+<span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaGNC">          47 :         })</span></span>
 <span id="L213"><span class="lineNum">     213</span>                 :             : }</span>
 <span id="L214"><span class="lineNum">     214</span>                 :             : </span>
 <span id="L215"><span class="lineNum">     215</span>                 :             : // riskForAction grades the call's risk by action (docs/BROWSER_DESIGN.md</span>
@@ -292,37 +292,37 @@
 <span id="L221"><span class="lineNum">     221</span>                 :             : // what keeps the tool usable: a flat R3 would demand an approval for</span>
 <span id="L222"><span class="lineNum">     222</span>                 :             : // every single step of a browsing session.</span>
 <span id="L223"><span class="lineNum">     223</span>                 :             : func riskForAction(action string) domain.RiskLevel {</span>
-<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">          88 :         switch action {</span></span>
+<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">          86 :         switch action {</span></span>
 <span id="L225"><span class="lineNum">     225</span>                 :             :         case &quot;navigate&quot;, &quot;type&quot;:</span>
 <span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC">          28 :                 return domain.R3</span></span>
 <span id="L227"><span class="lineNum">     227</span>                 :             :         default:</span>
 <span id="L228"><span class="lineNum">     228</span>                 :             :                 // snapshot, screenshot, scroll, click, close. validateBrowserArgs</span>
 <span id="L229"><span class="lineNum">     229</span>                 :             :                 // has already rejected unknown actions by the time this runs.</span>
-<span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">          60 :                 return domain.R2</span></span>
+<span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">          58 :                 return domain.R2</span></span>
 <span id="L231"><span class="lineNum">     231</span>                 :             :         }</span>
 <span id="L232"><span class="lineNum">     232</span>                 :             : }</span>
 <span id="L233"><span class="lineNum">     233</span>                 :             : </span>
 <span id="L234"><span class="lineNum">     234</span>                 :             : func (t *BrowserTool) Execute(ctx context.Context, prepared domain.PreparedCall) domain.ToolResult {</span>
-<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC">          34 :         startedAt := time.Now()</span></span>
-<span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaGNC">          34 :         if err := t.base.verifyPreparedCall(prepared); err != nil {</span></span>
+<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC">          33 :         startedAt := time.Now()</span></span>
+<span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaGNC">          33 :         if err := t.base.verifyPreparedCall(prepared); err != nil {</span></span>
 <span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaGNC">           2 :                 return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)</span></span>
 <span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">           2 :         }</span></span>
-<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">          32 :         args, err := toolkit.DecodeStrict[browserArgs](prepared.Call.Arguments)</span></span>
-<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">          32 :         if err != nil {</span></span>
+<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">          31 :         args, err := toolkit.DecodeStrict[browserArgs](prepared.Call.Arguments)</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">          31 :         if err != nil {</span></span>
 <span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return toolkit.ErrorResult(prepared.Call.ID, startedAt, err)</span></span>
 <span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaUNC">           0 :         }</span></span>
 <span id="L243"><span class="lineNum">     243</span>                 :             : </span>
 <span id="L244"><span class="lineNum">     244</span>                 :             :         // Per-action timeout.</span>
-<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC tlaBgGNC">          32 :         timeout := t.navTimeout</span></span>
-<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">          32 :         if args.TimeoutMs &gt; 0 {</span></span>
+<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC tlaBgGNC">          31 :         timeout := t.navTimeout</span></span>
+<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">          31 :         if args.TimeoutMs &gt; 0 {</span></span>
 <span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 timeout = time.Duration(args.TimeoutMs) * time.Millisecond</span></span>
 <span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaUNC">           0 :         }</span></span>
 <span id="L249"><span class="lineNum">     249</span>                 :             : </span>
-<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC tlaBgGNC">          32 :         switch args.Action {</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC tlaBgGNC">          31 :         switch args.Action {</span></span>
 <span id="L251"><span class="lineNum">     251</span>                 :             :         case &quot;navigate&quot;:</span>
 <span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">           7 :                 return t.doNavigate(ctx, prepared.Call.ID, args, timeout, startedAt)</span></span>
 <span id="L253"><span class="lineNum">     253</span>                 :             :         case &quot;snapshot&quot;:</span>
-<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">           8 :                 return t.doSnapshot(ctx, prepared.Call.ID, timeout, startedAt)</span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">           7 :                 return t.doSnapshot(ctx, prepared.Call.ID, timeout, startedAt)</span></span>
 <span id="L255"><span class="lineNum">     255</span>                 :             :         case &quot;screenshot&quot;:</span>
 <span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">           2 :                 return t.doScreenshot(ctx, prepared.Call.ID, args, timeout, startedAt)</span></span>
 <span id="L257"><span class="lineNum">     257</span>                 :             :         case &quot;scroll&quot;:</span>
@@ -525,14 +525,14 @@
 <span id="L454"><span class="lineNum">     454</span>                 :             : </span>
 <span id="L455"><span class="lineNum">     455</span>                 :             : // validateBrowserArgs normalizes and validates the call arguments.</span>
 <span id="L456"><span class="lineNum">     456</span>                 :             : func validateBrowserArgs(args browserArgs) (browserArgs, error) {</span>
-<span id="L457"><span class="lineNum">     457</span>                 :<span class="tlaGNC">          88 :         switch args.Action {</span></span>
-<span id="L458"><span class="lineNum">     458</span>                 :<span class="tlaGNC">          85 :         case &quot;navigate&quot;, &quot;snapshot&quot;, &quot;screenshot&quot;, &quot;scroll&quot;, &quot;click&quot;, &quot;type&quot;, &quot;close&quot;:</span></span>
+<span id="L457"><span class="lineNum">     457</span>                 :<span class="tlaGNC">          87 :         switch args.Action {</span></span>
+<span id="L458"><span class="lineNum">     458</span>                 :<span class="tlaGNC">          84 :         case &quot;navigate&quot;, &quot;snapshot&quot;, &quot;screenshot&quot;, &quot;scroll&quot;, &quot;click&quot;, &quot;type&quot;, &quot;close&quot;:</span></span>
 <span id="L459"><span class="lineNum">     459</span>                 :             :         default:</span>
 <span id="L460"><span class="lineNum">     460</span>                 :<span class="tlaGNC">           3 :                 return browserArgs{}, domain.NewError(domain.ErrInvalidInput,</span></span>
 <span id="L461"><span class="lineNum">     461</span>                 :<span class="tlaGNC">           3 :                         fmt.Sprintf(&quot;action must be one of navigate, snapshot, screenshot, scroll, click, type, close; got %q&quot;, args.Action))</span></span>
 <span id="L462"><span class="lineNum">     462</span>                 :             :         }</span>
 <span id="L463"><span class="lineNum">     463</span>                 :             : </span>
-<span id="L464"><span class="lineNum">     464</span>                 :<span class="tlaGNC">          85 :         if args.Action == &quot;navigate&quot; {</span></span>
+<span id="L464"><span class="lineNum">     464</span>                 :<span class="tlaGNC">          84 :         if args.Action == &quot;navigate&quot; {</span></span>
 <span id="L465"><span class="lineNum">     465</span>                 :<span class="tlaGNC">          19 :                 if strings.TrimSpace(args.URL) == &quot;&quot; {</span></span>
 <span id="L466"><span class="lineNum">     466</span>                 :<span class="tlaGNC">           3 :                         return browserArgs{}, domain.NewError(domain.ErrInvalidInput, &quot;url is required for navigate action&quot;)</span></span>
 <span id="L467"><span class="lineNum">     467</span>                 :<span class="tlaGNC">           3 :                 }</span></span>
@@ -549,13 +549,13 @@
 <span id="L478"><span class="lineNum">     478</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
 <span id="L479"><span class="lineNum">     479</span>                 :             :         }</span>
 <span id="L480"><span class="lineNum">     480</span>                 :             : </span>
-<span id="L481"><span class="lineNum">     481</span>                 :<span class="tlaGNC">          79 :         if args.Action == &quot;click&quot; {</span></span>
+<span id="L481"><span class="lineNum">     481</span>                 :<span class="tlaGNC">          78 :         if args.Action == &quot;click&quot; {</span></span>
 <span id="L482"><span class="lineNum">     482</span>                 :<span class="tlaGNC">          13 :                 if strings.TrimSpace(args.Ref) == &quot;&quot; {</span></span>
 <span id="L483"><span class="lineNum">     483</span>                 :<span class="tlaGNC">           2 :                         return browserArgs{}, domain.NewError(domain.ErrInvalidInput, &quot;ref is required for click action&quot;)</span></span>
 <span id="L484"><span class="lineNum">     484</span>                 :<span class="tlaGNC">           2 :                 }</span></span>
 <span id="L485"><span class="lineNum">     485</span>                 :             :         }</span>
 <span id="L486"><span class="lineNum">     486</span>                 :             : </span>
-<span id="L487"><span class="lineNum">     487</span>                 :<span class="tlaGNC">          77 :         if args.Action == &quot;type&quot; {</span></span>
+<span id="L487"><span class="lineNum">     487</span>                 :<span class="tlaGNC">          76 :         if args.Action == &quot;type&quot; {</span></span>
 <span id="L488"><span class="lineNum">     488</span>                 :<span class="tlaGNC">           9 :                 if strings.TrimSpace(args.Ref) == &quot;&quot; {</span></span>
 <span id="L489"><span class="lineNum">     489</span>                 :<span class="tlaGNC">           1 :                         return browserArgs{}, domain.NewError(domain.ErrInvalidInput, &quot;ref is required for type action&quot;)</span></span>
 <span id="L490"><span class="lineNum">     490</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
@@ -569,26 +569,26 @@
 <span id="L498"><span class="lineNum">     498</span>                 :             :         // quirk normalizeNullStringArg handles for the git tools and</span>
 <span id="L499"><span class="lineNum">     499</span>                 :             :         // NormalizeJustification for run_cmd). Treat it as absent so the</span>
 <span id="L500"><span class="lineNum">     500</span>                 :             :         // default (png) applies.</span>
-<span id="L501"><span class="lineNum">     501</span>                 :<span class="tlaGNC">          74 :         if strings.EqualFold(strings.TrimSpace(args.Format), &quot;null&quot;) {</span></span>
+<span id="L501"><span class="lineNum">     501</span>                 :<span class="tlaGNC">          73 :         if strings.EqualFold(strings.TrimSpace(args.Format), &quot;null&quot;) {</span></span>
 <span id="L502"><span class="lineNum">     502</span>                 :<span class="tlaGNC">           1 :                 args.Format = &quot;&quot;</span></span>
 <span id="L503"><span class="lineNum">     503</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L504"><span class="lineNum">     504</span>                 :<span class="tlaGNC">          74 :         if args.Format != &quot;&quot; &amp;&amp; args.Format != &quot;png&quot; &amp;&amp; args.Format != &quot;jpeg&quot; {</span></span>
+<span id="L504"><span class="lineNum">     504</span>                 :<span class="tlaGNC">          73 :         if args.Format != &quot;&quot; &amp;&amp; args.Format != &quot;png&quot; &amp;&amp; args.Format != &quot;jpeg&quot; {</span></span>
 <span id="L505"><span class="lineNum">     505</span>                 :<span class="tlaGNC">           2 :                 return browserArgs{}, domain.NewError(domain.ErrInvalidInput,</span></span>
 <span id="L506"><span class="lineNum">     506</span>                 :<span class="tlaGNC">           2 :                         fmt.Sprintf(&quot;format must be png or jpeg; got %q&quot;, args.Format))</span></span>
 <span id="L507"><span class="lineNum">     507</span>                 :<span class="tlaGNC">           2 :         }</span></span>
 <span id="L508"><span class="lineNum">     508</span>                 :             : </span>
-<span id="L509"><span class="lineNum">     509</span>                 :<span class="tlaGNC">          72 :         if args.TimeoutMs != 0 &amp;&amp; (args.TimeoutMs &lt; 5000 || args.TimeoutMs &gt; maxNavTimeoutMs) {</span></span>
+<span id="L509"><span class="lineNum">     509</span>                 :<span class="tlaGNC">          71 :         if args.TimeoutMs != 0 &amp;&amp; (args.TimeoutMs &lt; 5000 || args.TimeoutMs &gt; maxNavTimeoutMs) {</span></span>
 <span id="L510"><span class="lineNum">     510</span>                 :<span class="tlaGNC">           2 :                 return browserArgs{}, domain.NewError(domain.ErrInvalidInput,</span></span>
 <span id="L511"><span class="lineNum">     511</span>                 :<span class="tlaGNC">           2 :                         fmt.Sprintf(&quot;timeout_ms must be between 5000 and %d&quot;, maxNavTimeoutMs))</span></span>
 <span id="L512"><span class="lineNum">     512</span>                 :<span class="tlaGNC">           2 :         }</span></span>
 <span id="L513"><span class="lineNum">     513</span>                 :             : </span>
-<span id="L514"><span class="lineNum">     514</span>                 :<span class="tlaGNC">          70 :         if args.Quality != 0 &amp;&amp; (args.Quality &lt; 10 || args.Quality &gt; 100) {</span></span>
+<span id="L514"><span class="lineNum">     514</span>                 :<span class="tlaGNC">          69 :         if args.Quality != 0 &amp;&amp; (args.Quality &lt; 10 || args.Quality &gt; 100) {</span></span>
 <span id="L515"><span class="lineNum">     515</span>                 :<span class="tlaGNC">           2 :                 return browserArgs{}, domain.NewError(domain.ErrInvalidInput,</span></span>
 <span id="L516"><span class="lineNum">     516</span>                 :<span class="tlaGNC">           2 :                         fmt.Sprintf(&quot;quality must be between 10 and 100&quot;))</span></span>
 <span id="L517"><span class="lineNum">     517</span>                 :<span class="tlaGNC">           2 :         }</span></span>
 <span id="L518"><span class="lineNum">     518</span>                 :             : </span>
 <span id="L519"><span class="lineNum">     519</span>                 :             :         // Normalize: empty action is invalid (already caught above).</span>
-<span id="L520"><span class="lineNum">     520</span>                 :<span class="tlaGNC">          68 :         return args, nil</span></span>
+<span id="L520"><span class="lineNum">     520</span>                 :<span class="tlaGNC">          67 :         return args, nil</span></span>
 <span id="L521"><span class="lineNum">     521</span>                 :             : }</span>
 <span id="L522"><span class="lineNum">     522</span>                 :             : </span>
 <span id="L523"><span class="lineNum">     523</span>                 :             : // mapBrowserError translates rod errors into domain errors.</span>

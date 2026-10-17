@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -508,11 +508,11 @@
 <span id="L437"><span class="lineNum">     437</span>                 :             : </span>
 <span id="L438"><span class="lineNum">     438</span>                 :             : // normalizeToolName validates and canonicalizes a tool name.</span>
 <span id="L439"><span class="lineNum">     439</span>                 :             : func normalizeToolName(name string) (string, error) {</span>
-<span id="L440"><span class="lineNum">     440</span>                 :<span class="tlaGNC">          18 :         n := strings.ToLower(strings.TrimSpace(name))</span></span>
-<span id="L441"><span class="lineNum">     441</span>                 :<span class="tlaGNC">          18 :         if !toolNameToken.MatchString(n) {</span></span>
+<span id="L440"><span class="lineNum">     440</span>                 :<span class="tlaGNC">          30 :         n := strings.ToLower(strings.TrimSpace(name))</span></span>
+<span id="L441"><span class="lineNum">     441</span>                 :<span class="tlaGNC">          30 :         if !toolNameToken.MatchString(n) {</span></span>
 <span id="L442"><span class="lineNum">     442</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;&quot;, fmt.Errorf(&quot;tool name %q is not a valid snake_case tool name&quot;, name)</span></span>
 <span id="L443"><span class="lineNum">     443</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L444"><span class="lineNum">     444</span>                 :<span class="tlaGNC tlaBgGNC">          18 :         return n, nil</span></span>
+<span id="L444"><span class="lineNum">     444</span>                 :<span class="tlaGNC tlaBgGNC">          30 :         return n, nil</span></span>
 <span id="L445"><span class="lineNum">     445</span>                 :             : }</span>
 <span id="L446"><span class="lineNum">     446</span>                 :             : </span>
 <span id="L447"><span class="lineNum">     447</span>                 :             : // toolMemoryEligible lists the tools whose approvals may be remembered</span>
@@ -532,17 +532,17 @@
 <span id="L461"><span class="lineNum">     461</span>                 :             : // ToolMemoryEligible reports whether a tool's &quot;allow always&quot; approval</span>
 <span id="L462"><span class="lineNum">     462</span>                 :             : // may be remembered by tool name, returning the canonical name.</span>
 <span id="L463"><span class="lineNum">     463</span>                 :             : func ToolMemoryEligible(name string) (canonical string, ok bool) {</span>
-<span id="L464"><span class="lineNum">     464</span>                 :<span class="tlaGNC">          15 :         n, err := normalizeToolName(name)</span></span>
-<span id="L465"><span class="lineNum">     465</span>                 :<span class="tlaGNC">          15 :         if err != nil {</span></span>
+<span id="L464"><span class="lineNum">     464</span>                 :<span class="tlaGNC">          27 :         n, err := normalizeToolName(name)</span></span>
+<span id="L465"><span class="lineNum">     465</span>                 :<span class="tlaGNC">          27 :         if err != nil {</span></span>
 <span id="L466"><span class="lineNum">     466</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;&quot;, false</span></span>
 <span id="L467"><span class="lineNum">     467</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L468"><span class="lineNum">     468</span>                 :<span class="tlaGNC tlaBgGNC">          15 :         if _, ok := toolMemoryEligible[n]; ok {</span></span>
+<span id="L468"><span class="lineNum">     468</span>                 :<span class="tlaGNC tlaBgGNC">          27 :         if _, ok := toolMemoryEligible[n]; ok {</span></span>
 <span id="L469"><span class="lineNum">     469</span>                 :<span class="tlaGNC">           3 :                 return n, true</span></span>
 <span id="L470"><span class="lineNum">     470</span>                 :<span class="tlaGNC">           3 :         }</span></span>
-<span id="L471"><span class="lineNum">     471</span>                 :<span class="tlaGNC">          12 :         if strings.HasPrefix(n, mcpToolPrefix) {</span></span>
-<span id="L472"><span class="lineNum">     472</span>                 :<span class="tlaGNC">           1 :                 return n, true</span></span>
-<span id="L473"><span class="lineNum">     473</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L474"><span class="lineNum">     474</span>                 :<span class="tlaGNC">          11 :         return &quot;&quot;, false</span></span>
+<span id="L471"><span class="lineNum">     471</span>                 :<span class="tlaGNC">          24 :         if strings.HasPrefix(n, mcpToolPrefix) {</span></span>
+<span id="L472"><span class="lineNum">     472</span>                 :<span class="tlaGNC">           7 :                 return n, true</span></span>
+<span id="L473"><span class="lineNum">     473</span>                 :<span class="tlaGNC">           7 :         }</span></span>
+<span id="L474"><span class="lineNum">     474</span>                 :<span class="tlaGNC">          17 :         return &quot;&quot;, false</span></span>
 <span id="L475"><span class="lineNum">     475</span>                 :             : }</span>
         </pre>
               </td>

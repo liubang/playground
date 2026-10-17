@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -120,9 +120,9 @@
 <span id="L49"><span class="lineNum">      49</span>                 :             : // ToolConcurrentSafe reports whether the tool opted into concurrent</span>
 <span id="L50"><span class="lineNum">      50</span>                 :             : // batch execution. Missing opt-in means serial — the safe default.</span>
 <span id="L51"><span class="lineNum">      51</span>                 :             : func ToolConcurrentSafe(t Tool) bool {</span>
-<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC tlaBgGNC">         257 :         cs, ok := t.(ConcurrentSafely)</span></span>
-<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">         257 :         return ok &amp;&amp; cs.ConcurrentSafe()</span></span>
-<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">         257 : }</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC tlaBgGNC">         260 :         cs, ok := t.(ConcurrentSafely)</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">         260 :         return ok &amp;&amp; cs.ConcurrentSafe()</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">         260 : }</span></span>
 <span id="L55"><span class="lineNum">      55</span>                 :             : </span>
 <span id="L56"><span class="lineNum">      56</span>                 :             : // CallConcurrentSafely is an optional opt-in interface for tools whose</span>
 <span id="L57"><span class="lineNum">      57</span>                 :             : // concurrency eligibility is decided PER CALL at Prepare time rather</span>
@@ -141,9 +141,9 @@
 <span id="L70"><span class="lineNum">      70</span>                 :             : // wins, otherwise the tool's per-call verdict applies. Missing opt-in on</span>
 <span id="L71"><span class="lineNum">      71</span>                 :             : // both levels means serial — the safe default.</span>
 <span id="L72"><span class="lineNum">      72</span>                 :             : func PreparedCallConcurrentSafe(t Tool, prepared PreparedCall) bool {</span>
-<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">         256 :         if ToolConcurrentSafe(t) {</span></span>
-<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">          95 :                 return true</span></span>
-<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">          95 :         }</span></span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">         259 :         if ToolConcurrentSafe(t) {</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">          98 :                 return true</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">          98 :         }</span></span>
 <span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">         161 :         cs, ok := t.(CallConcurrentSafely)</span></span>
 <span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">         161 :         return ok &amp;&amp; cs.CallConcurrentSafe(prepared)</span></span>
 <span id="L78"><span class="lineNum">      78</span>                 :             : }</span>
@@ -191,13 +191,13 @@
 <span id="L120"><span class="lineNum">     120</span>                 :             : // decides. Single home for what used to be duplicated in app and ui</span>
 <span id="L121"><span class="lineNum">     121</span>                 :             : // (REVIEW R8).</span>
 <span id="L122"><span class="lineNum">     122</span>                 :             : func (s ReasoningSpec) Label() string {</span>
-<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">          92 :         if s.Effort != &quot;&quot; {</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">          98 :         if s.Effort != &quot;&quot; {</span></span>
 <span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">          13 :                 return string(s.Effort)</span></span>
 <span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">          13 :         }</span></span>
-<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">          79 :         if s.BudgetTokens &gt; 0 {</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">          85 :         if s.BudgetTokens &gt; 0 {</span></span>
 <span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return fmt.Sprintf(&quot;budget:%d&quot;, s.BudgetTokens)</span></span>
 <span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC tlaBgGNC">          79 :         return &quot;&quot;</span></span>
+<span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC tlaBgGNC">          85 :         return &quot;&quot;</span></span>
 <span id="L130"><span class="lineNum">     130</span>                 :             : }</span>
 <span id="L131"><span class="lineNum">     131</span>                 :             : </span>
 <span id="L132"><span class="lineNum">     132</span>                 :             : // Enabled reports whether reasoning should be turned on for this call.</span>
@@ -363,85 +363,89 @@
 <span id="L292"><span class="lineNum">     292</span>                 :             :         // delegation edge persisted in the child's run.created event</span>
 <span id="L293"><span class="lineNum">     293</span>                 :             :         // (docs/SUBAGENT_DESIGN.md §6.1), surfaced for hierarchical pickers.</span>
 <span id="L294"><span class="lineNum">     294</span>                 :             :         ParentSessionID SessionID `json:&quot;parent_session_id&quot;`</span>
-<span id="L295"><span class="lineNum">     295</span>                 :             : }</span>
-<span id="L296"><span class="lineNum">     296</span>                 :             : </span>
-<span id="L297"><span class="lineNum">     297</span>                 :             : // SessionTranscript is the recovered message history of a session.</span>
-<span id="L298"><span class="lineNum">     298</span>                 :             : type SessionTranscript struct {</span>
-<span id="L299"><span class="lineNum">     299</span>                 :             :         SessionID         SessionID `json:&quot;session_id&quot;`</span>
-<span id="L300"><span class="lineNum">     300</span>                 :             :         Messages          []Message `json:&quot;messages&quot;`</span>
-<span id="L301"><span class="lineNum">     301</span>                 :             :         LastEventSequence int64     `json:&quot;last_event_sequence&quot;`</span>
-<span id="L302"><span class="lineNum">     302</span>                 :             : }</span>
-<span id="L303"><span class="lineNum">     303</span>                 :             : </span>
-<span id="L304"><span class="lineNum">     304</span>                 :             : // SessionInspection is a consistent read-only view of persisted session data.</span>
-<span id="L305"><span class="lineNum">     305</span>                 :             : type SessionInspection struct {</span>
-<span id="L306"><span class="lineNum">     306</span>                 :             :         Session    SessionSummary    `json:&quot;session&quot;`</span>
-<span id="L307"><span class="lineNum">     307</span>                 :             :         Checkpoint *Checkpoint       `json:&quot;checkpoint,omitempty&quot;`</span>
-<span id="L308"><span class="lineNum">     308</span>                 :             :         Transcript SessionTranscript `json:&quot;transcript&quot;`</span>
-<span id="L309"><span class="lineNum">     309</span>                 :             :         Events     []Event           `json:&quot;events&quot;`</span>
-<span id="L310"><span class="lineNum">     310</span>                 :             : }</span>
-<span id="L311"><span class="lineNum">     311</span>                 :             : </span>
-<span id="L312"><span class="lineNum">     312</span>                 :             : // --- SessionStore interface (§13.2) ---</span>
-<span id="L313"><span class="lineNum">     313</span>                 :             : </span>
-<span id="L314"><span class="lineNum">     314</span>                 :             : // Checkpoint is a snapshot of a session's state for efficient recovery.</span>
-<span id="L315"><span class="lineNum">     315</span>                 :             : type Checkpoint struct {</span>
-<span id="L316"><span class="lineNum">     316</span>                 :             :         ID        CheckpointID `json:&quot;id&quot;`</span>
-<span id="L317"><span class="lineNum">     317</span>                 :             :         SessionID SessionID    `json:&quot;session_id&quot;`</span>
-<span id="L318"><span class="lineNum">     318</span>                 :             :         Sequence  int64        `json:&quot;sequence&quot;` // last event sequence covered</span>
-<span id="L319"><span class="lineNum">     319</span>                 :             :         State     RunState     `json:&quot;state&quot;`</span>
-<span id="L320"><span class="lineNum">     320</span>                 :             :         Messages  []Message    `json:&quot;messages&quot;`</span>
-<span id="L321"><span class="lineNum">     321</span>                 :             :         Plan      Plan         `json:&quot;plan&quot;`</span>
-<span id="L322"><span class="lineNum">     322</span>                 :             :         Usage     Usage        `json:&quot;usage&quot;`</span>
-<span id="L323"><span class="lineNum">     323</span>                 :             :         // Goal carries the cross-turn objective (nil when none is active); it</span>
-<span id="L324"><span class="lineNum">     324</span>                 :             :         // survives prompt boundaries through the checkpoint like Plan does.</span>
-<span id="L325"><span class="lineNum">     325</span>                 :             :         Goal      *Goal     `json:&quot;goal,omitempty&quot;`</span>
-<span id="L326"><span class="lineNum">     326</span>                 :             :         CreatedAt time.Time `json:&quot;created_at&quot;`</span>
-<span id="L327"><span class="lineNum">     327</span>                 :             : }</span>
-<span id="L328"><span class="lineNum">     328</span>                 :             : </span>
-<span id="L329"><span class="lineNum">     329</span>                 :             : // SessionStore persists events and checkpoints.</span>
-<span id="L330"><span class="lineNum">     330</span>                 :             : type SessionStore interface {</span>
-<span id="L331"><span class="lineNum">     331</span>                 :             :         // CreateSession creates an empty session bound to workspaceID</span>
-<span id="L332"><span class="lineNum">     332</span>                 :             :         // (docs/WORKSPACE_DESIGN.md W1); workspaceID must be non-zero.</span>
-<span id="L333"><span class="lineNum">     333</span>                 :             :         CreateSession(ctx context.Context, sessionID SessionID, workspaceID WorkspaceID) error</span>
-<span id="L334"><span class="lineNum">     334</span>                 :             :         AppendEvents(ctx context.Context, sessionID SessionID, expectedVersion int64, events []Event) error</span>
-<span id="L335"><span class="lineNum">     335</span>                 :             :         AppendEventsAndCheckpoint(ctx context.Context, sessionID SessionID, expectedVersion int64, events []Event, checkpoint Checkpoint) error</span>
-<span id="L336"><span class="lineNum">     336</span>                 :             :         LoadEvents(ctx context.Context, sessionID SessionID, after int64) ([]Event, error)</span>
-<span id="L337"><span class="lineNum">     337</span>                 :             :         SaveCheckpoint(ctx context.Context, ckpt Checkpoint) error</span>
-<span id="L338"><span class="lineNum">     338</span>                 :             :         LoadLatestCheckpoint(ctx context.Context, sessionID SessionID) (Checkpoint, error)</span>
-<span id="L339"><span class="lineNum">     339</span>                 :             :         // RecordFileChange appends one file mutation to the session's change</span>
-<span id="L340"><span class="lineNum">     340</span>                 :             :         // ledger for checkpoint/rewind support. beforeContent may be nil (file</span>
-<span id="L341"><span class="lineNum">     341</span>                 :             :         // did not exist, or was not captured); beforeExisted distinguishes the</span>
-<span id="L342"><span class="lineNum">     342</span>                 :             :         // two cases. runID attributes the mutation to a turn: rewind ranges over</span>
-<span id="L343"><span class="lineNum">     343</span>                 :             :         // ledger positions regardless, while per-turn revert</span>
-<span id="L344"><span class="lineNum">     344</span>                 :             :         // (ListFileChangesForRun) selects by it.</span>
-<span id="L345"><span class="lineNum">     345</span>                 :             :         RecordFileChange(ctx context.Context, sessionID SessionID, runID RunID, path string, beforeExisted bool, beforeHash string, beforeContent []byte, afterHash string) error</span>
-<span id="L346"><span class="lineNum">     346</span>                 :             :         // InspectSession returns session metadata, its latest checkpoint, the</span>
-<span id="L347"><span class="lineNum">     347</span>                 :             :         // recovered transcript, and the complete event timeline from one</span>
-<span id="L348"><span class="lineNum">     348</span>                 :             :         // consistent read snapshot.</span>
-<span id="L349"><span class="lineNum">     349</span>                 :             :         InspectSession(ctx context.Context, sessionID SessionID) (SessionInspection, error)</span>
-<span id="L350"><span class="lineNum">     350</span>                 :             : }</span>
-<span id="L351"><span class="lineNum">     351</span>                 :             : </span>
-<span id="L352"><span class="lineNum">     352</span>                 :             : // --- Approver interface (§12.2) ---</span>
-<span id="L353"><span class="lineNum">     353</span>                 :             : </span>
-<span id="L354"><span class="lineNum">     354</span>                 :             : // Decision represents the outcome of an approval request.</span>
-<span id="L355"><span class="lineNum">     355</span>                 :             : type Decision string</span>
-<span id="L356"><span class="lineNum">     356</span>                 :             : </span>
-<span id="L357"><span class="lineNum">     357</span>                 :             : const (</span>
-<span id="L358"><span class="lineNum">     358</span>                 :             :         DecisionAllow Decision = &quot;allow&quot;</span>
-<span id="L359"><span class="lineNum">     359</span>                 :             :         DecisionDeny  Decision = &quot;deny&quot;</span>
-<span id="L360"><span class="lineNum">     360</span>                 :             :         DecisionAsk   Decision = &quot;ask&quot;</span>
-<span id="L361"><span class="lineNum">     361</span>                 :             : )</span>
-<span id="L362"><span class="lineNum">     362</span>                 :             : </span>
-<span id="L363"><span class="lineNum">     363</span>                 :             : // ApprovalRequest represents a request for user approval.</span>
-<span id="L364"><span class="lineNum">     364</span>                 :             : type ApprovalRequest struct {</span>
-<span id="L365"><span class="lineNum">     365</span>                 :             :         ID          EventID</span>
-<span id="L366"><span class="lineNum">     366</span>                 :             :         Call        PreparedCall</span>
-<span id="L367"><span class="lineNum">     367</span>                 :             :         Description string</span>
-<span id="L368"><span class="lineNum">     368</span>                 :             : }</span>
-<span id="L369"><span class="lineNum">     369</span>                 :             : </span>
-<span id="L370"><span class="lineNum">     370</span>                 :             : // Approver handles permission decisions.</span>
-<span id="L371"><span class="lineNum">     371</span>                 :             : type Approver interface {</span>
-<span id="L372"><span class="lineNum">     372</span>                 :             :         RequestApproval(ctx context.Context, req ApprovalRequest) (Decision, error)</span>
-<span id="L373"><span class="lineNum">     373</span>                 :             : }</span>
+<span id="L295"><span class="lineNum">     295</span>                 :             :         // Title is the model-generated picker title (schema v11), written once</span>
+<span id="L296"><span class="lineNum">     296</span>                 :             :         // by the first-turn title sidecar; empty until then — listings fall</span>
+<span id="L297"><span class="lineNum">     297</span>                 :             :         // back to the truncated first user prompt.</span>
+<span id="L298"><span class="lineNum">     298</span>                 :             :         Title string `json:&quot;title,omitempty&quot;`</span>
+<span id="L299"><span class="lineNum">     299</span>                 :             : }</span>
+<span id="L300"><span class="lineNum">     300</span>                 :             : </span>
+<span id="L301"><span class="lineNum">     301</span>                 :             : // SessionTranscript is the recovered message history of a session.</span>
+<span id="L302"><span class="lineNum">     302</span>                 :             : type SessionTranscript struct {</span>
+<span id="L303"><span class="lineNum">     303</span>                 :             :         SessionID         SessionID `json:&quot;session_id&quot;`</span>
+<span id="L304"><span class="lineNum">     304</span>                 :             :         Messages          []Message `json:&quot;messages&quot;`</span>
+<span id="L305"><span class="lineNum">     305</span>                 :             :         LastEventSequence int64     `json:&quot;last_event_sequence&quot;`</span>
+<span id="L306"><span class="lineNum">     306</span>                 :             : }</span>
+<span id="L307"><span class="lineNum">     307</span>                 :             : </span>
+<span id="L308"><span class="lineNum">     308</span>                 :             : // SessionInspection is a consistent read-only view of persisted session data.</span>
+<span id="L309"><span class="lineNum">     309</span>                 :             : type SessionInspection struct {</span>
+<span id="L310"><span class="lineNum">     310</span>                 :             :         Session    SessionSummary    `json:&quot;session&quot;`</span>
+<span id="L311"><span class="lineNum">     311</span>                 :             :         Checkpoint *Checkpoint       `json:&quot;checkpoint,omitempty&quot;`</span>
+<span id="L312"><span class="lineNum">     312</span>                 :             :         Transcript SessionTranscript `json:&quot;transcript&quot;`</span>
+<span id="L313"><span class="lineNum">     313</span>                 :             :         Events     []Event           `json:&quot;events&quot;`</span>
+<span id="L314"><span class="lineNum">     314</span>                 :             : }</span>
+<span id="L315"><span class="lineNum">     315</span>                 :             : </span>
+<span id="L316"><span class="lineNum">     316</span>                 :             : // --- SessionStore interface (§13.2) ---</span>
+<span id="L317"><span class="lineNum">     317</span>                 :             : </span>
+<span id="L318"><span class="lineNum">     318</span>                 :             : // Checkpoint is a snapshot of a session's state for efficient recovery.</span>
+<span id="L319"><span class="lineNum">     319</span>                 :             : type Checkpoint struct {</span>
+<span id="L320"><span class="lineNum">     320</span>                 :             :         ID        CheckpointID `json:&quot;id&quot;`</span>
+<span id="L321"><span class="lineNum">     321</span>                 :             :         SessionID SessionID    `json:&quot;session_id&quot;`</span>
+<span id="L322"><span class="lineNum">     322</span>                 :             :         Sequence  int64        `json:&quot;sequence&quot;` // last event sequence covered</span>
+<span id="L323"><span class="lineNum">     323</span>                 :             :         State     RunState     `json:&quot;state&quot;`</span>
+<span id="L324"><span class="lineNum">     324</span>                 :             :         Messages  []Message    `json:&quot;messages&quot;`</span>
+<span id="L325"><span class="lineNum">     325</span>                 :             :         Plan      Plan         `json:&quot;plan&quot;`</span>
+<span id="L326"><span class="lineNum">     326</span>                 :             :         Usage     Usage        `json:&quot;usage&quot;`</span>
+<span id="L327"><span class="lineNum">     327</span>                 :             :         // Goal carries the cross-turn objective (nil when none is active); it</span>
+<span id="L328"><span class="lineNum">     328</span>                 :             :         // survives prompt boundaries through the checkpoint like Plan does.</span>
+<span id="L329"><span class="lineNum">     329</span>                 :             :         Goal      *Goal     `json:&quot;goal,omitempty&quot;`</span>
+<span id="L330"><span class="lineNum">     330</span>                 :             :         CreatedAt time.Time `json:&quot;created_at&quot;`</span>
+<span id="L331"><span class="lineNum">     331</span>                 :             : }</span>
+<span id="L332"><span class="lineNum">     332</span>                 :             : </span>
+<span id="L333"><span class="lineNum">     333</span>                 :             : // SessionStore persists events and checkpoints.</span>
+<span id="L334"><span class="lineNum">     334</span>                 :             : type SessionStore interface {</span>
+<span id="L335"><span class="lineNum">     335</span>                 :             :         // CreateSession creates an empty session bound to workspaceID</span>
+<span id="L336"><span class="lineNum">     336</span>                 :             :         // (docs/WORKSPACE_DESIGN.md W1); workspaceID must be non-zero.</span>
+<span id="L337"><span class="lineNum">     337</span>                 :             :         CreateSession(ctx context.Context, sessionID SessionID, workspaceID WorkspaceID) error</span>
+<span id="L338"><span class="lineNum">     338</span>                 :             :         AppendEvents(ctx context.Context, sessionID SessionID, expectedVersion int64, events []Event) error</span>
+<span id="L339"><span class="lineNum">     339</span>                 :             :         AppendEventsAndCheckpoint(ctx context.Context, sessionID SessionID, expectedVersion int64, events []Event, checkpoint Checkpoint) error</span>
+<span id="L340"><span class="lineNum">     340</span>                 :             :         LoadEvents(ctx context.Context, sessionID SessionID, after int64) ([]Event, error)</span>
+<span id="L341"><span class="lineNum">     341</span>                 :             :         SaveCheckpoint(ctx context.Context, ckpt Checkpoint) error</span>
+<span id="L342"><span class="lineNum">     342</span>                 :             :         LoadLatestCheckpoint(ctx context.Context, sessionID SessionID) (Checkpoint, error)</span>
+<span id="L343"><span class="lineNum">     343</span>                 :             :         // RecordFileChange appends one file mutation to the session's change</span>
+<span id="L344"><span class="lineNum">     344</span>                 :             :         // ledger for checkpoint/rewind support. beforeContent may be nil (file</span>
+<span id="L345"><span class="lineNum">     345</span>                 :             :         // did not exist, or was not captured); beforeExisted distinguishes the</span>
+<span id="L346"><span class="lineNum">     346</span>                 :             :         // two cases. runID attributes the mutation to a turn: rewind ranges over</span>
+<span id="L347"><span class="lineNum">     347</span>                 :             :         // ledger positions regardless, while per-turn revert</span>
+<span id="L348"><span class="lineNum">     348</span>                 :             :         // (ListFileChangesForRun) selects by it.</span>
+<span id="L349"><span class="lineNum">     349</span>                 :             :         RecordFileChange(ctx context.Context, sessionID SessionID, runID RunID, path string, beforeExisted bool, beforeHash string, beforeContent []byte, afterHash string) error</span>
+<span id="L350"><span class="lineNum">     350</span>                 :             :         // InspectSession returns session metadata, its latest checkpoint, the</span>
+<span id="L351"><span class="lineNum">     351</span>                 :             :         // recovered transcript, and the complete event timeline from one</span>
+<span id="L352"><span class="lineNum">     352</span>                 :             :         // consistent read snapshot.</span>
+<span id="L353"><span class="lineNum">     353</span>                 :             :         InspectSession(ctx context.Context, sessionID SessionID) (SessionInspection, error)</span>
+<span id="L354"><span class="lineNum">     354</span>                 :             : }</span>
+<span id="L355"><span class="lineNum">     355</span>                 :             : </span>
+<span id="L356"><span class="lineNum">     356</span>                 :             : // --- Approver interface (§12.2) ---</span>
+<span id="L357"><span class="lineNum">     357</span>                 :             : </span>
+<span id="L358"><span class="lineNum">     358</span>                 :             : // Decision represents the outcome of an approval request.</span>
+<span id="L359"><span class="lineNum">     359</span>                 :             : type Decision string</span>
+<span id="L360"><span class="lineNum">     360</span>                 :             : </span>
+<span id="L361"><span class="lineNum">     361</span>                 :             : const (</span>
+<span id="L362"><span class="lineNum">     362</span>                 :             :         DecisionAllow Decision = &quot;allow&quot;</span>
+<span id="L363"><span class="lineNum">     363</span>                 :             :         DecisionDeny  Decision = &quot;deny&quot;</span>
+<span id="L364"><span class="lineNum">     364</span>                 :             :         DecisionAsk   Decision = &quot;ask&quot;</span>
+<span id="L365"><span class="lineNum">     365</span>                 :             : )</span>
+<span id="L366"><span class="lineNum">     366</span>                 :             : </span>
+<span id="L367"><span class="lineNum">     367</span>                 :             : // ApprovalRequest represents a request for user approval.</span>
+<span id="L368"><span class="lineNum">     368</span>                 :             : type ApprovalRequest struct {</span>
+<span id="L369"><span class="lineNum">     369</span>                 :             :         ID          EventID</span>
+<span id="L370"><span class="lineNum">     370</span>                 :             :         Call        PreparedCall</span>
+<span id="L371"><span class="lineNum">     371</span>                 :             :         Description string</span>
+<span id="L372"><span class="lineNum">     372</span>                 :             : }</span>
+<span id="L373"><span class="lineNum">     373</span>                 :             : </span>
+<span id="L374"><span class="lineNum">     374</span>                 :             : // Approver handles permission decisions.</span>
+<span id="L375"><span class="lineNum">     375</span>                 :             : type Approver interface {</span>
+<span id="L376"><span class="lineNum">     376</span>                 :             :         RequestApproval(ctx context.Context, req ApprovalRequest) (Decision, error)</span>
+<span id="L377"><span class="lineNum">     377</span>                 :             : }</span>
         </pre>
               </td>
             </tr>

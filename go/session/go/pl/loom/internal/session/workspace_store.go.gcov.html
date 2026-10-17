@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryLo">65.3&nbsp;%</td>
-            <td class="headerCovTableEntry">150</td>
-            <td class="headerCovTableEntry">98</td>
+            <td class="headerCovTableEntryLo">64.7&nbsp;%</td>
+            <td class="headerCovTableEntry">153</td>
+            <td class="headerCovTableEntry">99</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -102,27 +102,27 @@
 <span id="L31"><span class="lineNum">      31</span>                 :             : // incoming name refreshes the stored name; the stored ID and timestamps are</span>
 <span id="L32"><span class="lineNum">      32</span>                 :             : // otherwise preserved.</span>
 <span id="L33"><span class="lineNum">      33</span>                 :             : func (s *SQLiteStore) UpsertWorkspace(ctx context.Context, ws domain.Workspace) (domain.Workspace, error) {</span>
-<span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaGNC tlaBgGNC">          29 :         if ws.ID.IsZero() {</span></span>
+<span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaGNC tlaBgGNC">          30 :         if ws.ID.IsZero() {</span></span>
 <span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.Workspace{}, domain.NewError(domain.ErrInvalidInput, &quot;workspace ID is required&quot;)</span></span>
 <span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC tlaBgGNC">          29 :         if ws.RootPath == &quot;&quot; {</span></span>
+<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC tlaBgGNC">          30 :         if ws.RootPath == &quot;&quot; {</span></span>
 <span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.Workspace{}, domain.NewError(domain.ErrInvalidInput, &quot;workspace root path is required&quot;)</span></span>
 <span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC tlaBgGNC">          29 :         now := time.Now().UTC()</span></span>
-<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">          29 :         created := ws.CreatedAt</span></span>
-<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">          29 :         if created.IsZero() {</span></span>
-<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">          29 :                 created = now</span></span>
-<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC">          29 :         }</span></span>
-<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">          29 :         _, err := s.db.ExecContext(ctx, `</span></span>
-<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">          29 : INSERT INTO workspaces(workspace_id, name, root_path, created_at, created_at_unix_nano, updated_at, updated_at_unix_nano)</span></span>
-<span id="L47"><span class="lineNum">      47</span>                 :<span class="tlaGNC">          29 : VALUES (?, ?, ?, ?, ?, ?, ?)`,</span></span>
-<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">          29 :                 ws.ID.String(), ws.Name, ws.RootPath, formatTime(created), created.UnixNano(), formatTime(now), now.UnixNano())</span></span>
-<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">          29 :         switch {</span></span>
+<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC tlaBgGNC">          30 :         now := time.Now().UTC()</span></span>
+<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">          30 :         created := ws.CreatedAt</span></span>
+<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">          30 :         if created.IsZero() {</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">          30 :                 created = now</span></span>
+<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC">          30 :         }</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">          30 :         _, err := s.db.ExecContext(ctx, `</span></span>
+<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">          30 : INSERT INTO workspaces(workspace_id, name, root_path, created_at, created_at_unix_nano, updated_at, updated_at_unix_nano)</span></span>
+<span id="L47"><span class="lineNum">      47</span>                 :<span class="tlaGNC">          30 : VALUES (?, ?, ?, ?, ?, ?, ?)`,</span></span>
+<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">          30 :                 ws.ID.String(), ws.Name, ws.RootPath, formatTime(created), created.UnixNano(), formatTime(now), now.UnixNano())</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">          30 :         switch {</span></span>
 <span id="L50"><span class="lineNum">      50</span>                 :             :         case err == nil:</span>
-<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">          28 :                 stored := ws</span></span>
-<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">          28 :                 stored.CreatedAt = created</span></span>
-<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">          28 :                 stored.UpdatedAt = now</span></span>
-<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">          28 :                 return stored, nil</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">          29 :                 stored := ws</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">          29 :                 stored.CreatedAt = created</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">          29 :                 stored.UpdatedAt = now</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">          29 :                 return stored, nil</span></span>
 <span id="L55"><span class="lineNum">      55</span>                 :             :         case isUniqueConstraint(err):</span>
 <span id="L56"><span class="lineNum">      56</span>                 :             :                 // Root already registered: reuse it (and refresh the name when the</span>
 <span id="L57"><span class="lineNum">      57</span>                 :             :                 // caller supplied a new one).</span>
@@ -219,91 +219,94 @@
 <span id="L148"><span class="lineNum">     148</span>                 :             : // workspace behind. The on-disk root directory is never touched. A missing</span>
 <span id="L149"><span class="lineNum">     149</span>                 :             : // row is an error, mirroring DeleteSession.</span>
 <span id="L150"><span class="lineNum">     150</span>                 :             : func (s *SQLiteStore) DeleteWorkspace(ctx context.Context, id domain.WorkspaceID) error {</span>
-<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">           8 :         if id.IsZero() {</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">           9 :         if id.IsZero() {</span></span>
 <span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.NewError(domain.ErrInvalidInput, &quot;workspace ID is required&quot;)</span></span>
 <span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC tlaBgGNC">           8 :         tx, err := s.db.BeginTx(ctx, nil)</span></span>
-<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">           8 :         if err != nil {</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         tx, err := s.db.BeginTx(ctx, nil)</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">           9 :         if err != nil {</span></span>
 <span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;begin delete workspace transaction&quot;, err)</span></span>
 <span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC tlaBgGNC">           8 :         defer func() { _ = tx.Rollback() }()</span></span>
-<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaGNC">           8 :         if _, err := tx.ExecContext(ctx,</span></span>
-<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">           8 :                 &quot;DELETE FROM file_changes WHERE session_id IN (SELECT session_id FROM sessions WHERE workspace_id = ?)&quot;,</span></span>
-<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">           8 :                 id.String()); err != nil {</span></span>
-<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;delete workspace file changes&quot;, err)</span></span>
-<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC tlaBgGNC">           8 :         if _, err := tx.ExecContext(ctx,</span></span>
-<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">           8 :                 &quot;DELETE FROM memory_jobs WHERE session_id IN (SELECT session_id FROM sessions WHERE workspace_id = ?)&quot;,</span></span>
-<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">           8 :                 id.String()); err != nil {</span></span>
-<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;delete workspace memory jobs&quot;, err)</span></span>
-<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC tlaBgGNC">           8 :         if _, err := tx.ExecContext(ctx,</span></span>
-<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">           8 :                 &quot;DELETE FROM sessions WHERE workspace_id = ?&quot;, id.String()); err != nil {</span></span>
-<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;delete workspace sessions&quot;, err)</span></span>
-<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC tlaBgGNC">           8 :         res, err := tx.ExecContext(ctx,</span></span>
-<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">           8 :                 &quot;DELETE FROM workspaces WHERE workspace_id = ?&quot;, id.String())</span></span>
-<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">           8 :         if err != nil {</span></span>
-<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;delete workspace&quot;, err)</span></span>
-<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC tlaBgGNC">           8 :         affected, err := res.RowsAffected()</span></span>
-<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">           8 :         if err != nil {</span></span>
-<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;delete workspace result&quot;, err)</span></span>
-<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC tlaBgGNC">           8 :         if affected == 0 {</span></span>
-<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">           2 :                 return domain.NewError(domain.ErrUnavailable, &quot;workspace not found&quot;)</span></span>
-<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">           2 :         }</span></span>
-<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">           6 :         if err := tx.Commit(); err != nil {</span></span>
-<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;commit delete workspace transaction&quot;, err)</span></span>
-<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC tlaBgGNC">           6 :         return nil</span></span>
-<span id="L189"><span class="lineNum">     189</span>                 :             : }</span>
-<span id="L190"><span class="lineNum">     190</span>                 :             : </span>
-<span id="L191"><span class="lineNum">     191</span>                 :             : // SessionWorkspace returns the owning workspace of a session without loading</span>
-<span id="L192"><span class="lineNum">     192</span>                 :             : // its events (docs/WORKSPACE_DESIGN.md §7.3).</span>
-<span id="L193"><span class="lineNum">     193</span>                 :             : func (s *SQLiteStore) SessionWorkspace(ctx context.Context, sessionID domain.SessionID) (domain.WorkspaceID, error) {</span>
-<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">           8 :         if sessionID.IsZero() {</span></span>
-<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.WorkspaceID{}, domain.NewError(domain.ErrInvalidInput, &quot;session ID is required&quot;)</span></span>
-<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC tlaBgGNC">           8 :         var raw string</span></span>
-<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC">           8 :         err := s.db.QueryRowContext(ctx,</span></span>
-<span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaGNC">           8 :                 &quot;SELECT workspace_id FROM sessions WHERE session_id = ?&quot;, sessionID.String()).Scan(&amp;raw)</span></span>
-<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaGNC">           8 :         if errors.Is(err, sql.ErrNoRows) {</span></span>
-<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC">           3 :                 return domain.WorkspaceID{}, domain.NewError(domain.ErrUnavailable, &quot;session not found&quot;)</span></span>
-<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">           3 :         }</span></span>
-<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">           5 :         if err != nil {</span></span>
-<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.WorkspaceID{}, storeError(&quot;load session workspace&quot;, err)</span></span>
-<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC tlaBgGNC">           5 :         return domain.ParseWorkspaceID(raw)</span></span>
-<span id="L207"><span class="lineNum">     207</span>                 :             : }</span>
-<span id="L208"><span class="lineNum">     208</span>                 :             : </span>
-<span id="L209"><span class="lineNum">     209</span>                 :             : // CountSessionsPerWorkspace returns per-workspace session counts (all</span>
-<span id="L210"><span class="lineNum">     210</span>                 :             : // sessions, archived included) for the list-workspaces endpoint.</span>
-<span id="L211"><span class="lineNum">     211</span>                 :             : func (s *SQLiteStore) CountSessionsPerWorkspace(ctx context.Context) (map[domain.WorkspaceID]int, error) {</span>
-<span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaGNC">           3 :         rows, err := s.db.QueryContext(ctx, `</span></span>
-<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaGNC">           3 : SELECT workspace_id, COUNT(*) FROM sessions WHERE workspace_id != '' GROUP BY workspace_id`)</span></span>
-<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">           3 :         if err != nil {</span></span>
-<span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, storeError(&quot;count sessions per workspace&quot;, err)</span></span>
-<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         defer rows.Close()</span></span>
-<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaGNC">           3 :         result := make(map[domain.WorkspaceID]int)</span></span>
-<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaGNC">           3 :         for rows.Next() {</span></span>
-<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC">           2 :                 var raw string</span></span>
-<span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaGNC">           2 :                 var n int</span></span>
-<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">           2 :                 if err := rows.Scan(&amp;raw, &amp;n); err != nil {</span></span>
-<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return nil, storeError(&quot;scan workspace session count&quot;, err)</span></span>
-<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
-<span id="L225"><span class="lineNum">     225</span>                 :<span class="tlaGNC tlaBgGNC">           2 :                 id, err := domain.ParseWorkspaceID(raw)</span></span>
-<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC">           2 :                 if err != nil {</span></span>
-<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return nil, storeError(&quot;decode workspace ID in session count&quot;, err)</span></span>
-<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
-<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC tlaBgGNC">           2 :                 result[id] = n</span></span>
-<span id="L230"><span class="lineNum">     230</span>                 :             :         }</span>
-<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">           3 :         if err := rows.Err(); err != nil {</span></span>
-<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, storeError(&quot;iterate workspace session counts&quot;, err)</span></span>
-<span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         return result, nil</span></span>
-<span id="L235"><span class="lineNum">     235</span>                 :             : }</span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         defer func() { _ = tx.Rollback() }()</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaGNC">           9 :         if err := revokeMemoryTx(ctx, tx, &quot;kind = 'automatic' AND (source_session_id IN (SELECT session_id FROM sessions WHERE workspace_id = ?) OR scope IN (SELECT root_path FROM workspaces WHERE workspace_id = ?))&quot;, id.String(), id.String()); err != nil {</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return err</span></span>
+<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         if _, err := tx.ExecContext(ctx,</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">           9 :                 &quot;DELETE FROM file_changes WHERE session_id IN (SELECT session_id FROM sessions WHERE workspace_id = ?)&quot;,</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">           9 :                 id.String()); err != nil {</span></span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;delete workspace file changes&quot;, err)</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         if _, err := tx.ExecContext(ctx,</span></span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">           9 :                 &quot;DELETE FROM memory_jobs WHERE session_id IN (SELECT session_id FROM sessions WHERE workspace_id = ?)&quot;,</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">           9 :                 id.String()); err != nil {</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;delete workspace memory jobs&quot;, err)</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         if _, err := tx.ExecContext(ctx,</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">           9 :                 &quot;DELETE FROM sessions WHERE workspace_id = ?&quot;, id.String()); err != nil {</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;delete workspace sessions&quot;, err)</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         res, err := tx.ExecContext(ctx,</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">           9 :                 &quot;DELETE FROM workspaces WHERE workspace_id = ?&quot;, id.String())</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">           9 :         if err != nil {</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;delete workspace&quot;, err)</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         affected, err := res.RowsAffected()</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">           9 :         if err != nil {</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;delete workspace result&quot;, err)</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         if affected == 0 {</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">           2 :                 return domain.NewError(domain.ErrUnavailable, &quot;workspace not found&quot;)</span></span>
+<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">           7 :         if err := tx.Commit(); err != nil {</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;commit delete workspace transaction&quot;, err)</span></span>
+<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC tlaBgGNC">           7 :         return nil</span></span>
+<span id="L192"><span class="lineNum">     192</span>                 :             : }</span>
+<span id="L193"><span class="lineNum">     193</span>                 :             : </span>
+<span id="L194"><span class="lineNum">     194</span>                 :             : // SessionWorkspace returns the owning workspace of a session without loading</span>
+<span id="L195"><span class="lineNum">     195</span>                 :             : // its events (docs/WORKSPACE_DESIGN.md §7.3).</span>
+<span id="L196"><span class="lineNum">     196</span>                 :             : func (s *SQLiteStore) SessionWorkspace(ctx context.Context, sessionID domain.SessionID) (domain.WorkspaceID, error) {</span>
+<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">           8 :         if sessionID.IsZero() {</span></span>
+<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.WorkspaceID{}, domain.NewError(domain.ErrInvalidInput, &quot;session ID is required&quot;)</span></span>
+<span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaGNC tlaBgGNC">           8 :         var raw string</span></span>
+<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC">           8 :         err := s.db.QueryRowContext(ctx,</span></span>
+<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">           8 :                 &quot;SELECT workspace_id FROM sessions WHERE session_id = ?&quot;, sessionID.String()).Scan(&amp;raw)</span></span>
+<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">           8 :         if errors.Is(err, sql.ErrNoRows) {</span></span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">           3 :                 return domain.WorkspaceID{}, domain.NewError(domain.ErrUnavailable, &quot;session not found&quot;)</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">           3 :         }</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">           5 :         if err != nil {</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.WorkspaceID{}, storeError(&quot;load session workspace&quot;, err)</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC tlaBgGNC">           5 :         return domain.ParseWorkspaceID(raw)</span></span>
+<span id="L210"><span class="lineNum">     210</span>                 :             : }</span>
+<span id="L211"><span class="lineNum">     211</span>                 :             : </span>
+<span id="L212"><span class="lineNum">     212</span>                 :             : // CountSessionsPerWorkspace returns per-workspace session counts (all</span>
+<span id="L213"><span class="lineNum">     213</span>                 :             : // sessions, archived included) for the list-workspaces endpoint.</span>
+<span id="L214"><span class="lineNum">     214</span>                 :             : func (s *SQLiteStore) CountSessionsPerWorkspace(ctx context.Context) (map[domain.WorkspaceID]int, error) {</span>
+<span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaGNC">           3 :         rows, err := s.db.QueryContext(ctx, `</span></span>
+<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">           3 : SELECT workspace_id, COUNT(*) FROM sessions WHERE workspace_id != '' GROUP BY workspace_id`)</span></span>
+<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">           3 :         if err != nil {</span></span>
+<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, storeError(&quot;count sessions per workspace&quot;, err)</span></span>
+<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         defer rows.Close()</span></span>
+<span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaGNC">           3 :         result := make(map[domain.WorkspaceID]int)</span></span>
+<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">           3 :         for rows.Next() {</span></span>
+<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC">           2 :                 var raw string</span></span>
+<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">           2 :                 var n int</span></span>
+<span id="L225"><span class="lineNum">     225</span>                 :<span class="tlaGNC">           2 :                 if err := rows.Scan(&amp;raw, &amp;n); err != nil {</span></span>
+<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return nil, storeError(&quot;scan workspace session count&quot;, err)</span></span>
+<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC tlaBgGNC">           2 :                 id, err := domain.ParseWorkspaceID(raw)</span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">           2 :                 if err != nil {</span></span>
+<span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return nil, storeError(&quot;decode workspace ID in session count&quot;, err)</span></span>
+<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC tlaBgGNC">           2 :                 result[id] = n</span></span>
+<span id="L233"><span class="lineNum">     233</span>                 :             :         }</span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC">           3 :         if err := rows.Err(); err != nil {</span></span>
+<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, storeError(&quot;iterate workspace session counts&quot;, err)</span></span>
+<span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         return result, nil</span></span>
+<span id="L238"><span class="lineNum">     238</span>                 :             : }</span>
         </pre>
               </td>
             </tr>

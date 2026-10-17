@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -161,10 +161,10 @@
 <span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC tlaBgGNC">          26 :         var mu sync.Mutex</span></span>
 <span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">          26 :         var cachedRaw, cachedCanonical string</span></span>
 <span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaGNC">          26 :         return func() string {</span></span>
-<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">         476 :                 home, err := os.UserHomeDir()</span></span>
-<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">         476 :                 if err != nil || home == &quot;&quot; {</span></span>
-<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">         177 :                         return &quot;&quot;</span></span>
-<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">         177 :                 }</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">         494 :                 home, err := os.UserHomeDir()</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">         494 :                 if err != nil || home == &quot;&quot; {</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">         195 :                         return &quot;&quot;</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">         195 :                 }</span></span>
 <span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">         299 :                 mu.Lock()</span></span>
 <span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC">         299 :                 defer mu.Unlock()</span></span>
 <span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">         299 :                 if home == cachedRaw {</span></span>
@@ -198,29 +198,29 @@
 <span id="L127"><span class="lineNum">     127</span>                 :             : // IsSensitive reports whether a single path component (a base name) is on</span>
 <span id="L128"><span class="lineNum">     128</span>                 :             : // the sensitive component list.</span>
 <span id="L129"><span class="lineNum">     129</span>                 :             : func IsSensitive(path string) bool {</span>
-<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC tlaBgGNC">        2636 :         base := filepath.Base(path)</span></span>
-<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">        2636 :         for _, s := range sensitiveComponents {</span></span>
-<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">       18268 :                 if base == s {</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC tlaBgGNC">        2733 :         base := filepath.Base(path)</span></span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">        2733 :         for _, s := range sensitiveComponents {</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">       18947 :                 if base == s {</span></span>
 <span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">          41 :                         return true</span></span>
 <span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">          41 :                 }</span></span>
 <span id="L135"><span class="lineNum">     135</span>                 :             :         }</span>
-<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">        2595 :         return false</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">        2692 :         return false</span></span>
 <span id="L137"><span class="lineNum">     137</span>                 :             : }</span>
 <span id="L138"><span class="lineNum">     138</span>                 :             : </span>
 <span id="L139"><span class="lineNum">     139</span>                 :             : // ContainsSensitiveComponent reports whether any component of the path is</span>
 <span id="L140"><span class="lineNum">     140</span>                 :             : // on the sensitive list (see IsSensitive). Tool packages must call this</span>
 <span id="L141"><span class="lineNum">     141</span>                 :             : // instead of keeping their own copy of the list (REVIEW R4).</span>
 <span id="L142"><span class="lineNum">     142</span>                 :             : func ContainsSensitiveComponent(path string) bool {</span>
-<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">         563 :         clean := filepath.Clean(path)</span></span>
-<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">         563 :         if clean == &quot;.&quot; || clean == string(filepath.Separator) {</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">         594 :         clean := filepath.Clean(path)</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">         594 :         if clean == &quot;.&quot; || clean == string(filepath.Separator) {</span></span>
 <span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">           1 :                 return false</span></span>
 <span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">         562 :         for _, part := range strings.Split(clean, string(filepath.Separator)) {</span></span>
-<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">        2569 :                 if IsSensitive(part) {</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">         593 :         for _, part := range strings.Split(clean, string(filepath.Separator)) {</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">        2660 :                 if IsSensitive(part) {</span></span>
 <span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">          30 :                         return true</span></span>
 <span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">          30 :                 }</span></span>
 <span id="L151"><span class="lineNum">     151</span>                 :             :         }</span>
-<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">         532 :         return false</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">         563 :         return false</span></span>
 <span id="L153"><span class="lineNum">     153</span>                 :             : }</span>
 <span id="L154"><span class="lineNum">     154</span>                 :             : </span>
 <span id="L155"><span class="lineNum">     155</span>                 :             : // IsSensitiveAbsolute reports whether a canonical absolute path (one</span>
@@ -230,13 +230,13 @@
 <span id="L159"><span class="lineNum">     159</span>                 :             : // It is the gate for paths OUTSIDE the workspace roots, where the</span>
 <span id="L160"><span class="lineNum">     160</span>                 :             : // workspace-relative component check does not apply.</span>
 <span id="L161"><span class="lineNum">     161</span>                 :             : func IsSensitiveAbsolute(path string) bool {</span>
-<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">         465 :         if !filepath.IsAbs(path) {</span></span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">         483 :         if !filepath.IsAbs(path) {</span></span>
 <span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">           1 :                 return false</span></span>
 <span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">         464 :         if ContainsSensitiveComponent(path) {</span></span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">         482 :         if ContainsSensitiveComponent(path) {</span></span>
 <span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">          21 :                 return true</span></span>
 <span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">          21 :         }</span></span>
-<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">         443 :         return IsSensitiveHomeLocation(path)</span></span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">         461 :         return IsSensitiveHomeLocation(path)</span></span>
 <span id="L169"><span class="lineNum">     169</span>                 :             : }</span>
 <span id="L170"><span class="lineNum">     170</span>                 :             : </span>
 <span id="L171"><span class="lineNum">     171</span>                 :             : // IsSensitiveHomeLocation reports whether a canonical absolute path lands</span>
@@ -245,13 +245,13 @@
 <span id="L174"><span class="lineNum">     174</span>                 :             : // positional components — callers that scan components themselves (with</span>
 <span id="L175"><span class="lineNum">     175</span>                 :             : // their own exemptions, e.g. &quot;.git&quot;) compose this for the home half.</span>
 <span id="L176"><span class="lineNum">     176</span>                 :             : func IsSensitiveHomeLocation(path string) bool {</span>
-<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">         461 :         if !filepath.IsAbs(path) {</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">         479 :         if !filepath.IsAbs(path) {</span></span>
 <span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">           9 :                 return false</span></span>
 <span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">           9 :         }</span></span>
-<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">         452 :         home := SensitiveHome()</span></span>
-<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">         452 :         if home == &quot;&quot; {</span></span>
-<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">         169 :                 return false</span></span>
-<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">         169 :         }</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">         470 :         home := SensitiveHome()</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">         470 :         if home == &quot;&quot; {</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">         187 :                 return false</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">         187 :         }</span></span>
 <span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">         283 :         for _, rel := range sensitiveHomeSubpaths {</span></span>
 <span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">        2778 :                 if isUnderRoot(path, filepath.Join(home, rel)) {</span></span>
 <span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">          11 :                         return true</span></span>

@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryLo">70.0&nbsp;%</td>
+            <td class="headerCovTableEntryMed">78.3&nbsp;%</td>
             <td class="headerCovTableEntry">60</td>
-            <td class="headerCovTableEntry">42</td>
+            <td class="headerCovTableEntry">47</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -117,8 +117,8 @@
 <span id="L46"><span class="lineNum">      46</span>                 :             : // remembered packages are always seen. A nil inner approver makes</span>
 <span id="L47"><span class="lineNum">      47</span>                 :             : // every call deny (useful in tests).</span>
 <span id="L48"><span class="lineNum">      48</span>                 :             : func NewRuleApprover(inner domain.Approver, policy func() permission.Policy, store *permission.RememberedStore) *RuleApprover {</span>
-<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC tlaBgGNC">         180 :         return &amp;RuleApprover{inner: inner, policy: policy, store: store}</span></span>
-<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">         180 : }</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC tlaBgGNC">         188 :         return &amp;RuleApprover{inner: inner, policy: policy, store: store}</span></span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">         188 : }</span></span>
 <span id="L51"><span class="lineNum">      51</span>                 :             : </span>
 <span id="L52"><span class="lineNum">      52</span>                 :             : // RequestApproval re-evaluates the call against the (possibly freshly</span>
 <span id="L53"><span class="lineNum">      53</span>                 :             : // enriched) capability set before bothering the user; everything else</span>
@@ -176,87 +176,88 @@
 <span id="L105"><span class="lineNum">     105</span>                 :             : // shells, eval forms, multi-step indicated shapes, ineligible tools).</span>
 <span id="L106"><span class="lineNum">     106</span>                 :             : // The memory shape is derived from the call's DERIVATION</span>
 <span id="L107"><span class="lineNum">     107</span>                 :             : // (permission.DeriveRawArgs) — this layer never switches on tool names.</span>
-<span id="L108"><span class="lineNum">     108</span>                 :             : // The tool source preserves MCP identity across the approval boundary.</span>
-<span id="L109"><span class="lineNum">     109</span>                 :             : //</span>
-<span id="L110"><span class="lineNum">     110</span>                 :             : // Persistence failures are reported, not swallowed: the session package</span>
-<span id="L111"><span class="lineNum">     111</span>                 :             : // is already effective either way, and the user deserves an honest note</span>
-<span id="L112"><span class="lineNum">     112</span>                 :             : // when the approval will not survive a restart.</span>
-<span id="L113"><span class="lineNum">     113</span>                 :             : func (r *RuleApprover) RememberCall(toolName string, source domain.ToolSource, arguments json.RawMessage, trust string) (RememberedRule, bool) {</span>
-<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">          19 :         if r.policy == nil {</span></span>
-<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RememberedRule{}, false</span></span>
-<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC tlaBgGNC">          19 :         policy := r.policy()</span></span>
-<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">          19 :         if policy.Packages == nil {</span></span>
-<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RememberedRule{}, false</span></span>
-<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC tlaBgGNC">          19 :         d := permission.DeriveRawArgs(toolName, source, arguments, policy.Env)</span></span>
-<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">          19 :         label, pkgs, ok := permission.MemoryPreviewLabel(d, trust)</span></span>
-<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">          19 :         if !ok {</span></span>
-<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">           7 :                 return RememberedRule{}, false</span></span>
-<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">           7 :         }</span></span>
-<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">          12 :         persistErr := false</span></span>
-<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">          12 :         for _, pkg := range pkgs {</span></span>
-<span id="L128"><span class="lineNum">     128</span>                 :             :                 // The capability set is process-shared: session memory belongs</span>
-<span id="L129"><span class="lineNum">     129</span>                 :             :                 // to THIS workspace, never to a neighbor workspace's calls.</span>
-<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">          13 :                 pkg.Workspace = policy.Workspace</span></span>
-<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">          13 :                 policy.Packages.RememberSession(pkg)</span></span>
-<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">          13 :                 if r.store != nil {</span></span>
-<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)</span></span>
-<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaUNC">           0 :                         err := r.store.Remember(ctx, pkg)</span></span>
-<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaUNC">           0 :                         cancel()</span></span>
-<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaUNC">           0 :                         persistErr = persistErr || err != nil</span></span>
-<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
-<span id="L138"><span class="lineNum">     138</span>                 :             :         }</span>
-<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC tlaBgGNC">          12 :         return RememberedRule{Label: label, Packages: pkgs, PersistFailed: persistErr}, true</span></span>
-<span id="L140"><span class="lineNum">     140</span>                 :             : }</span>
-<span id="L141"><span class="lineNum">     141</span>                 :             : </span>
-<span id="L142"><span class="lineNum">     142</span>                 :             : // ApprovalRulePreview renders the packages that &quot;allow always&quot; would</span>
-<span id="L143"><span class="lineNum">     143</span>                 :             : // record for an already-derived call, for display in the approval</span>
-<span id="L144"><span class="lineNum">     144</span>                 :             : // overlay: categorical argv prefixes (&quot;go test&quot;), an exact host, a</span>
-<span id="L145"><span class="lineNum">     145</span>                 :             : // writable directory, or a bare tool name. ok=false means the call</span>
-<span id="L146"><span class="lineNum">     146</span>                 :             : // cannot be remembered — for escalated calls the minimal flavor is</span>
-<span id="L147"><span class="lineNum">     147</span>                 :             : // hidden by design (only the explicit unsandboxed trust option is</span>
-<span id="L148"><span class="lineNum">     148</span>                 :             : // offered).</span>
-<span id="L149"><span class="lineNum">     149</span>                 :             : func ApprovalRulePreview(d permission.Derivation) (preview string, ok bool) {</span>
-<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">          18 :         if d.Effect.Unsandboxed {</span></span>
-<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">           1 :                 return &quot;&quot;, false</span></span>
-<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">          17 :         label, pkgs, ok := permission.MemoryPreviewLabel(d, &quot;&quot;)</span></span>
-<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">          17 :         if !ok || len(pkgs) == 0 {</span></span>
-<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">           9 :                 return &quot;&quot;, false</span></span>
-<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">           9 :         }</span></span>
-<span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC">           8 :         return label, true</span></span>
-<span id="L158"><span class="lineNum">     158</span>                 :             : }</span>
-<span id="L159"><span class="lineNum">     159</span>                 :             : </span>
-<span id="L160"><span class="lineNum">     160</span>                 :             : // RunCmdTrustPreview reports whether the approval overlay should offer</span>
-<span id="L161"><span class="lineNum">     161</span>                 :             : // the &quot;always trust (unsandboxed)&quot; option for an already-derived call:</span>
-<span id="L162"><span class="lineNum">     162</span>                 :             : // escalated exec calls whose memory shape is derivable.</span>
-<span id="L163"><span class="lineNum">     163</span>                 :             : func RunCmdTrustPreview(d permission.Derivation) bool {</span>
-<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">           6 :         if !d.Effect.Unsandboxed {</span></span>
-<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">           3 :                 return false</span></span>
-<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">           3 :         }</span></span>
-<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">           3 :         _, ok := permission.MemoryPackages(d, TrustUnsandboxed)</span></span>
-<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">           3 :         return ok</span></span>
-<span id="L169"><span class="lineNum">     169</span>                 :             : }</span>
-<span id="L170"><span class="lineNum">     170</span>                 :             : </span>
-<span id="L171"><span class="lineNum">     171</span>                 :             : // approvalConsequence renders the consequence-oriented summary of an</span>
-<span id="L172"><span class="lineNum">     172</span>                 :             : // already-derived call's effect for the approval card: what the</span>
-<span id="L173"><span class="lineNum">     173</span>                 :             : // operation DOES (plus any danger indicators), empty when the call is</span>
-<span id="L174"><span class="lineNum">     174</span>                 :             : // fully confined.</span>
-<span id="L175"><span class="lineNum">     175</span>                 :             : func approvalConsequence(d permission.Derivation) string {</span>
-<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">           1 :         e := d.Effect</span></span>
-<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">           1 :         if !e.CrossesBoundary() &amp;&amp; e.Consequence == permission.ConsequenceConfined &amp;&amp; len(e.Indicators) == 0 &amp;&amp; e.Proven {</span></span>
-<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">           1 :                 return &quot;&quot;</span></span>
-<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         desc := e.Describe()</span></span>
-<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaUNC">           0 :         if len(e.Indicators) &gt; 0 {</span></span>
-<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaUNC">           0 :                 desc += &quot; ⚠ &quot; + e.Indicators[0]</span></span>
-<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaUNC">           0 :                 if len(e.Indicators) &gt; 1 {</span></span>
-<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaUNC">           0 :                         desc += &quot; 等&quot;</span></span>
-<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
-<span id="L186"><span class="lineNum">     186</span>                 :             :         }</span>
-<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaUNC">           0 :         return desc</span></span>
-<span id="L188"><span class="lineNum">     188</span>                 :             : }</span>
+<span id="L108"><span class="lineNum">     108</span>                 :             : // The tool source and actual risk are carried from the approval card,</span>
+<span id="L109"><span class="lineNum">     109</span>                 :             : // preserving MCP identity and the producing Prepare classification.</span>
+<span id="L110"><span class="lineNum">     110</span>                 :             : //</span>
+<span id="L111"><span class="lineNum">     111</span>                 :             : // Persistence failures are reported, not swallowed: the session package</span>
+<span id="L112"><span class="lineNum">     112</span>                 :             : // is already effective either way, and the user deserves an honest note</span>
+<span id="L113"><span class="lineNum">     113</span>                 :             : // when the approval will not survive a restart.</span>
+<span id="L114"><span class="lineNum">     114</span>                 :             : func (r *RuleApprover) RememberCall(toolName string, source domain.ToolSource, risk domain.RiskLevel, arguments json.RawMessage, trust string) (RememberedRule, bool) {</span>
+<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">          23 :         if r.policy == nil {</span></span>
+<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RememberedRule{}, false</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC tlaBgGNC">          23 :         policy := r.policy()</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">          23 :         if policy.Packages == nil {</span></span>
+<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RememberedRule{}, false</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC tlaBgGNC">          23 :         d := permission.DeriveRawArgs(toolName, source, risk, arguments, policy.Env)</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">          23 :         label, pkgs, ok := permission.MemoryPreviewLabel(d, trust)</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">          23 :         if !ok {</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">           9 :                 return RememberedRule{}, false</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">           9 :         }</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">          14 :         persistErr := false</span></span>
+<span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaGNC">          14 :         for _, pkg := range pkgs {</span></span>
+<span id="L129"><span class="lineNum">     129</span>                 :             :                 // The capability set is process-shared: session memory belongs</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             :                 // to THIS workspace, never to a neighbor workspace's calls.</span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">          15 :                 pkg.Workspace = policy.Workspace</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">          15 :                 policy.Packages.RememberSession(pkg)</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">          15 :                 if r.store != nil {</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaUNC">           0 :                         err := r.store.Remember(ctx, pkg)</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaUNC">           0 :                         cancel()</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaUNC">           0 :                         persistErr = persistErr || err != nil</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :             :         }</span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC tlaBgGNC">          14 :         return RememberedRule{Label: label, Packages: pkgs, PersistFailed: persistErr}, true</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :             : }</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             : </span>
+<span id="L143"><span class="lineNum">     143</span>                 :             : // ApprovalRulePreview renders the packages that &quot;allow always&quot; would</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             : // record for an already-derived call, for display in the approval</span>
+<span id="L145"><span class="lineNum">     145</span>                 :             : // overlay: categorical argv prefixes (&quot;go test&quot;), an exact host, a</span>
+<span id="L146"><span class="lineNum">     146</span>                 :             : // writable directory, or a bare tool name. ok=false means the call</span>
+<span id="L147"><span class="lineNum">     147</span>                 :             : // cannot be remembered — for escalated calls the minimal flavor is</span>
+<span id="L148"><span class="lineNum">     148</span>                 :             : // hidden by design (only the explicit unsandboxed trust option is</span>
+<span id="L149"><span class="lineNum">     149</span>                 :             : // offered).</span>
+<span id="L150"><span class="lineNum">     150</span>                 :             : func ApprovalRulePreview(d permission.Derivation) (preview string, ok bool) {</span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">          22 :         if d.Effect.Unsandboxed {</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">           1 :                 return &quot;&quot;, false</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">          21 :         label, pkgs, ok := permission.MemoryPreviewLabel(d, &quot;&quot;)</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">          21 :         if !ok || len(pkgs) == 0 {</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">          11 :                 return &quot;&quot;, false</span></span>
+<span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC">          11 :         }</span></span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">          10 :         return label, true</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :             : }</span>
+<span id="L160"><span class="lineNum">     160</span>                 :             : </span>
+<span id="L161"><span class="lineNum">     161</span>                 :             : // RunCmdTrustPreview reports whether the approval overlay should offer</span>
+<span id="L162"><span class="lineNum">     162</span>                 :             : // the &quot;always trust (unsandboxed)&quot; option for an already-derived call:</span>
+<span id="L163"><span class="lineNum">     163</span>                 :             : // escalated exec calls whose memory shape is derivable.</span>
+<span id="L164"><span class="lineNum">     164</span>                 :             : func RunCmdTrustPreview(d permission.Derivation) bool {</span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">          10 :         if !d.Effect.Unsandboxed {</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">           7 :                 return false</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">           7 :         }</span></span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">           3 :         _, ok := permission.MemoryPackages(d, TrustUnsandboxed)</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">           3 :         return ok</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :             : }</span>
+<span id="L171"><span class="lineNum">     171</span>                 :             : </span>
+<span id="L172"><span class="lineNum">     172</span>                 :             : // approvalConsequence renders the consequence-oriented summary of an</span>
+<span id="L173"><span class="lineNum">     173</span>                 :             : // already-derived call's effect for the approval card: what the</span>
+<span id="L174"><span class="lineNum">     174</span>                 :             : // operation DOES (plus any danger indicators), empty when the call is</span>
+<span id="L175"><span class="lineNum">     175</span>                 :             : // fully confined.</span>
+<span id="L176"><span class="lineNum">     176</span>                 :             : func approvalConsequence(d permission.Derivation) string {</span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">           9 :         e := d.Effect</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">           9 :         if !e.CrossesBoundary() &amp;&amp; e.Consequence == permission.ConsequenceConfined &amp;&amp; len(e.Indicators) == 0 &amp;&amp; e.Proven {</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">           3 :                 return &quot;&quot;</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">           3 :         }</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">           6 :         desc := e.Describe()</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">           6 :         if len(e.Indicators) &gt; 0 {</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">           2 :                 desc += &quot; ⚠ &quot; + e.Indicators[0]</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">           2 :                 if len(e.Indicators) &gt; 1 {</span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         desc += &quot; 等&quot;</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L187"><span class="lineNum">     187</span>                 :             :         }</span>
+<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC tlaBgGNC">           6 :         return desc</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :             : }</span>
         </pre>
               </td>
             </tr>

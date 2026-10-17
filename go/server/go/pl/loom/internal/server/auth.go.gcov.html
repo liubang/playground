@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -104,10 +104,10 @@
 <span id="L33"><span class="lineNum">      33</span>                 :             : // URL is no more exposed than the desktop bootstrap fragment that already</span>
 <span id="L34"><span class="lineNum">      34</span>                 :             : // hands the token to the webview, and it never lands in cookies or history.</span>
 <span id="L35"><span class="lineNum">      35</span>                 :             : func (s *Server) authorized(r *http.Request) bool {</span>
-<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC tlaBgGNC">         226 :         const prefix = &quot;Bearer &quot;</span></span>
-<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">         226 :         if header := r.Header.Get(&quot;Authorization&quot;); strings.HasPrefix(header, prefix) {</span></span>
-<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">         217 :                 return subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(header, prefix)), []byte(s.cfg.Token)) == 1</span></span>
-<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">         217 :         }</span></span>
+<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC tlaBgGNC">         234 :         const prefix = &quot;Bearer &quot;</span></span>
+<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">         234 :         if header := r.Header.Get(&quot;Authorization&quot;); strings.HasPrefix(header, prefix) {</span></span>
+<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">         225 :                 return subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(header, prefix)), []byte(s.cfg.Token)) == 1</span></span>
+<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">         225 :         }</span></span>
 <span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">           9 :         if isWebSocketUpgrade(r) &amp;&amp; isEventsRoute(r.URL.Path) {</span></span>
 <span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">           4 :                 return subtle.ConstantTimeCompare([]byte(r.URL.Query().Get(&quot;token&quot;)), []byte(s.cfg.Token)) == 1</span></span>
 <span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">           4 :         }</span></span>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -132,7 +132,7 @@
 <span id="L61"><span class="lineNum">      61</span>                 :             : }</span>
 <span id="L62"><span class="lineNum">      62</span>                 :             : </span>
 <span id="L63"><span class="lineNum">      63</span>                 :             : // IsZero reports whether no network is required.</span>
-<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">         103 : func (h HostSet) IsZero() bool { return !h.Any &amp;&amp; len(h.Hosts) == 0 }</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">         137 : func (h HostSet) IsZero() bool { return !h.Any &amp;&amp; len(h.Hosts) == 0 }</span></span>
 <span id="L65"><span class="lineNum">      65</span>                 :             : </span>
 <span id="L66"><span class="lineNum">      66</span>                 :             : // PathSet is a write-path requirement with the same zero/Any/enumerated</span>
 <span id="L67"><span class="lineNum">      67</span>                 :             : // contract as HostSet. Paths are canonical absolute paths.</span>
@@ -145,7 +145,7 @@
 <span id="L74"><span class="lineNum">      74</span>                 :             : // required. Writes INSIDE the sandbox boundary (workspace, scratch,</span>
 <span id="L75"><span class="lineNum">      75</span>                 :             : // toolchain caches) are not requirements at all — the default sandbox</span>
 <span id="L76"><span class="lineNum">      76</span>                 :             : // already covers them — so they never appear here.</span>
-<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">         129 : func (p PathSet) IsZero() bool { return !p.Any &amp;&amp; len(p.Paths) == 0 }</span></span>
+<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">         137 : func (p PathSet) IsZero() bool { return !p.Any &amp;&amp; len(p.Paths) == 0 }</span></span>
 <span id="L78"><span class="lineNum">      78</span>                 :             : </span>
 <span id="L79"><span class="lineNum">      79</span>                 :             : // Consequence classifies what an operation does to the world, ordered by</span>
 <span id="L80"><span class="lineNum">      80</span>                 :             : // severity. Unlike the old blacklist's text patterns, the class is</span>
@@ -259,8 +259,8 @@
 <span id="L188"><span class="lineNum">     188</span>                 :             : // CrossesBoundary reports whether the effect needs anything beyond the</span>
 <span id="L189"><span class="lineNum">     189</span>                 :             : // default sandbox (network, extra writes, GUI, or no sandbox at all).</span>
 <span id="L190"><span class="lineNum">     190</span>                 :             : func (e Effect) CrossesBoundary() bool {</span>
-<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">           3 :         return e.Unsandboxed || e.GUIOpen || !e.Network.IsZero() || !e.Writes.IsZero()</span></span>
-<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">           3 : }</span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">          11 :         return e.Unsandboxed || e.GUIOpen || !e.Network.IsZero() || !e.Writes.IsZero()</span></span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">          11 : }</span></span>
 <span id="L193"><span class="lineNum">     193</span>                 :             : </span>
 <span id="L194"><span class="lineNum">     194</span>                 :             : // GapGrant computes the execution grant that answers this effect's</span>
 <span id="L195"><span class="lineNum">     195</span>                 :             : // capability needs — what an approval must carry so the approved call</span>
@@ -269,53 +269,53 @@
 <span id="L198"><span class="lineNum">     198</span>                 :             : // network grant: the sandbox's network switch is all-or-nothing; host</span>
 <span id="L199"><span class="lineNum">     199</span>                 :             : // granularity lives in the policy layer (capability packages).</span>
 <span id="L200"><span class="lineNum">     200</span>                 :             : func (e Effect) GapGrant() domain.ExecGrant {</span>
-<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC">          51 :         if e.Unsandboxed {</span></span>
+<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC">          65 :         if e.Unsandboxed {</span></span>
 <span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">           3 :                 return domain.ExecGrant{Unsandboxed: true}</span></span>
 <span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">           3 :         }</span></span>
-<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">          48 :         g := domain.ExecGrant{</span></span>
-<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">          48 :                 NetworkFull:   !e.Network.IsZero(),</span></span>
-<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">          48 :                 GUIOpen:       e.GUIOpen,</span></span>
-<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">          48 :                 WritablePaths: append([]string(nil), e.Writes.Paths...),</span></span>
-<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">          48 :         }</span></span>
-<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC">          48 :         return g</span></span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">          62 :         g := domain.ExecGrant{</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">          62 :                 NetworkFull:   !e.Network.IsZero(),</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">          62 :                 GUIOpen:       e.GUIOpen,</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">          62 :                 WritablePaths: append([]string(nil), e.Writes.Paths...),</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">          62 :         }</span></span>
+<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC">          62 :         return g</span></span>
 <span id="L210"><span class="lineNum">     210</span>                 :             : }</span>
 <span id="L211"><span class="lineNum">     211</span>                 :             : </span>
 <span id="L212"><span class="lineNum">     212</span>                 :             : // Describe renders the consequence-oriented approval summary: what the</span>
 <span id="L213"><span class="lineNum">     213</span>                 :             : // operation DOES, not what its text looks like.</span>
 <span id="L214"><span class="lineNum">     214</span>                 :             : func (e Effect) Describe() string {</span>
-<span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaGNC">          24 :         var parts []string</span></span>
-<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">          24 :         switch e.Consequence {</span></span>
+<span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaGNC">          30 :         var parts []string</span></span>
+<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">          30 :         switch e.Consequence {</span></span>
 <span id="L217"><span class="lineNum">     217</span>                 :             :         case ConsequenceLocalDestructive:</span>
 <span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaGNC">           3 :                 parts = append(parts, &quot;将不可恢复地破坏本地数据&quot;)</span></span>
 <span id="L219"><span class="lineNum">     219</span>                 :             :         case ConsequenceSharedState:</span>
 <span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC">           6 :                 parts = append(parts, &quot;将变更他人可见的共享状态&quot;)</span></span>
 <span id="L221"><span class="lineNum">     221</span>                 :             :         case ConsequenceSharedDestructive:</span>
-<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">           3 :                 parts = append(parts, &quot;将覆写或删除共享状态（他人可见，不可恢复）&quot;)</span></span>
+<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">           5 :                 parts = append(parts, &quot;将覆写或删除共享状态（他人可见，不可恢复）&quot;)</span></span>
 <span id="L223"><span class="lineNum">     223</span>                 :             :         }</span>
-<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">          24 :         if e.Unsandboxed {</span></span>
+<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">          30 :         if e.Unsandboxed {</span></span>
 <span id="L225"><span class="lineNum">     225</span>                 :<span class="tlaGNC">           1 :                 parts = append(parts, &quot;将在沙箱外以完整用户权限执行&quot;)</span></span>
 <span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC">           1 :         } else {</span></span>
-<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">          23 :                 if e.Network.Any {</span></span>
+<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">          29 :                 if e.Network.Any {</span></span>
 <span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">          12 :                         parts = append(parts, &quot;需要访问外网（目标不可静态证明）&quot;)</span></span>
-<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">          12 :                 } else if len(e.Network.Hosts) &gt; 0 {</span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">          18 :                 } else if len(e.Network.Hosts) &gt; 0 {</span></span>
 <span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">           4 :                         parts = append(parts, &quot;需要访问 &quot;+strings.Join(e.Network.Hosts, &quot;, &quot;))</span></span>
 <span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">           4 :                 }</span></span>
-<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">          23 :                 if e.Writes.Any {</span></span>
+<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">          29 :                 if e.Writes.Any {</span></span>
 <span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         parts = append(parts, &quot;需要写入工作区外的路径（目标不可静态证明）&quot;)</span></span>
-<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC tlaBgGNC">          23 :                 } else if len(e.Writes.Paths) &gt; 0 {</span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC tlaBgGNC">          29 :                 } else if len(e.Writes.Paths) &gt; 0 {</span></span>
 <span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC">           4 :                         parts = append(parts, &quot;需要写入 &quot;+strings.Join(e.Writes.Paths, &quot;, &quot;))</span></span>
 <span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaGNC">           4 :                 }</span></span>
-<span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaGNC">          23 :                 if e.GUIOpen {</span></span>
+<span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaGNC">          29 :                 if e.GUIOpen {</span></span>
 <span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">           1 :                         parts = append(parts, &quot;需要驱动 GUI 应用（macOS open / Apple Events）&quot;)</span></span>
 <span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
 <span id="L240"><span class="lineNum">     240</span>                 :             :         }</span>
-<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">          24 :         if !e.Proven {</span></span>
-<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">           5 :                 parts = append(parts, &quot;行为不可静态证明（&quot;+e.Reason+&quot;）&quot;)</span></span>
-<span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaGNC">           5 :         }</span></span>
-<span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaGNC">          24 :         if len(parts) == 0 {</span></span>
+<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">          30 :         if !e.Proven {</span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">           9 :                 parts = append(parts, &quot;行为不可静态证明（&quot;+e.Reason+&quot;）&quot;)</span></span>
+<span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaGNC">           9 :         }</span></span>
+<span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaGNC">          30 :         if len(parts) == 0 {</span></span>
 <span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;操作完全限制在默认沙箱边界内&quot;</span></span>
 <span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC tlaBgGNC">          24 :         return strings.Join(parts, &quot;；&quot;)</span></span>
+<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC tlaBgGNC">          30 :         return strings.Join(parts, &quot;；&quot;)</span></span>
 <span id="L248"><span class="lineNum">     248</span>                 :             : }</span>
 <span id="L249"><span class="lineNum">     249</span>                 :             : </span>
 <span id="L250"><span class="lineNum">     250</span>                 :             : // joinEffects merges the effects of a composed invocation (every step of</span>

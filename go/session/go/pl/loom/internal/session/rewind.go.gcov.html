@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryLo">64.5&nbsp;%</td>
-            <td class="headerCovTableEntry">327</td>
-            <td class="headerCovTableEntry">211</td>
+            <td class="headerCovTableEntryLo">64.2&nbsp;%</td>
+            <td class="headerCovTableEntry">335</td>
+            <td class="headerCovTableEntry">215</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -233,13 +233,13 @@
 <span id="L162"><span class="lineNum">     162</span>                 :             : // after-hash — the projection restoration applies and conflict detection</span>
 <span id="L163"><span class="lineNum">     163</span>                 :             : // compares against.</span>
 <span id="L164"><span class="lineNum">     164</span>                 :             : func dedupeFileChangesForRestore(all []FileChange) []FileChange {</span>
-<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         latestAfter := make(map[string]string, len(all))</span></span>
-<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">           9 :         for _, change := range all {</span></span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         latestAfter := make(map[string]string, len(all))</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">          13 :         for _, change := range all {</span></span>
 <span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">           6 :                 latestAfter[change.Path] = change.AfterHash</span></span>
 <span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">           6 :         }</span></span>
-<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">           9 :         seen := make(map[string]bool, len(all))</span></span>
-<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">           9 :         changes := make([]FileChange, 0, len(all))</span></span>
-<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">           9 :         for _, change := range all {</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">          13 :         seen := make(map[string]bool, len(all))</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">          13 :         changes := make([]FileChange, 0, len(all))</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">          13 :         for _, change := range all {</span></span>
 <span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">           6 :                 if seen[change.Path] {</span></span>
 <span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">           1 :                         continue</span></span>
 <span id="L174"><span class="lineNum">     174</span>                 :             :                 }</span>
@@ -247,20 +247,20 @@
 <span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">           5 :                 change.LatestAfterHash = latestAfter[change.Path]</span></span>
 <span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">           5 :                 changes = append(changes, change)</span></span>
 <span id="L178"><span class="lineNum">     178</span>                 :             :         }</span>
-<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">           9 :         return changes</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">          13 :         return changes</span></span>
 <span id="L180"><span class="lineNum">     180</span>                 :             : }</span>
 <span id="L181"><span class="lineNum">     181</span>                 :             : </span>
 <span id="L182"><span class="lineNum">     182</span>                 :             : // ledgerPositionTx returns the current change-ledger position (max rowid)</span>
 <span id="L183"><span class="lineNum">     183</span>                 :             : // for a session inside a transaction; checkpoints snapshot it so rewind</span>
 <span id="L184"><span class="lineNum">     184</span>                 :             : // knows exactly which changes postdate them.</span>
 <span id="L185"><span class="lineNum">     185</span>                 :             : func ledgerPositionTx(ctx context.Context, tx *sql.Tx, sessionID domain.SessionID) (int64, error) {</span>
-<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">         598 :         var position int64</span></span>
-<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">         598 :         if err := tx.QueryRowContext(ctx,</span></span>
-<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">         598 :                 &quot;SELECT COALESCE(MAX(rowid), 0) FROM file_changes WHERE session_id = ?&quot;,</span></span>
-<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">         598 :                 sessionID.String()).Scan(&amp;position); err != nil {</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">         639 :         var position int64</span></span>
+<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">         639 :         if err := tx.QueryRowContext(ctx,</span></span>
+<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">         639 :                 &quot;SELECT COALESCE(MAX(rowid), 0) FROM file_changes WHERE session_id = ?&quot;,</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">         639 :                 sessionID.String()).Scan(&amp;position); err != nil {</span></span>
 <span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return 0, storeError(&quot;read file change ledger position&quot;, err)</span></span>
 <span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC tlaBgGNC">         598 :         return position, nil</span></span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC tlaBgGNC">         639 :         return position, nil</span></span>
 <span id="L193"><span class="lineNum">     193</span>                 :             : }</span>
 <span id="L194"><span class="lineNum">     194</span>                 :             : </span>
 <span id="L195"><span class="lineNum">     195</span>                 :             : // ListCheckpoints returns the session's persisted checkpoints ordered by</span>
@@ -312,15 +312,15 @@
 <span id="L241"><span class="lineNum">     241</span>                 :             : // checkpointLabel derives a display label from a serialized checkpoint:</span>
 <span id="L242"><span class="lineNum">     242</span>                 :             : // the text of the last user message (truncated) and the user-turn count.</span>
 <span id="L243"><span class="lineNum">     243</span>                 :             : func checkpointLabel(data []byte) (string, int) {</span>
-<span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaGNC">          20 :         var checkpoint domain.Checkpoint</span></span>
-<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">          20 :         if err := json.Unmarshal(data, &amp;checkpoint); err != nil {</span></span>
+<span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaGNC">          24 :         var checkpoint domain.Checkpoint</span></span>
+<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">          24 :         if err := json.Unmarshal(data, &amp;checkpoint); err != nil {</span></span>
 <span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;&quot;, 0</span></span>
 <span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaGNC tlaBgGNC">          20 :         turns := 0</span></span>
-<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">          20 :         label := &quot;&quot;</span></span>
-<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">          20 :         for _, msg := range checkpoint.Messages {</span></span>
-<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">          31 :                 if msg.Role != domain.RoleUser {</span></span>
-<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">          21 :                         continue</span></span>
+<span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaGNC tlaBgGNC">          24 :         turns := 0</span></span>
+<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">          24 :         label := &quot;&quot;</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">          24 :         for _, msg := range checkpoint.Messages {</span></span>
+<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">          35 :                 if msg.Role != domain.RoleUser {</span></span>
+<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">          25 :                         continue</span></span>
 <span id="L253"><span class="lineNum">     253</span>                 :             :                 }</span>
 <span id="L254"><span class="lineNum">     254</span>                 :             :                 // Steer/budget system notes ride the user role too; only consider</span>
 <span id="L255"><span class="lineNum">     255</span>                 :             :                 // messages with real text.</span>
@@ -331,11 +331,11 @@
 <span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaGNC tlaBgGNC">          10 :                 turns++</span></span>
 <span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">          10 :                 label = text</span></span>
 <span id="L262"><span class="lineNum">     262</span>                 :             :         }</span>
-<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC">          20 :         runes := []rune(label)</span></span>
-<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">          20 :         if len(runes) &gt; 80 {</span></span>
+<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC">          24 :         runes := []rune(label)</span></span>
+<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">          24 :         if len(runes) &gt; 80 {</span></span>
 <span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 label = string(runes[:80]) + &quot;…&quot;</span></span>
 <span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC tlaBgGNC">          20 :         return label, turns</span></span>
+<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC tlaBgGNC">          24 :         return label, turns</span></span>
 <span id="L268"><span class="lineNum">     268</span>                 :             : }</span>
 <span id="L269"><span class="lineNum">     269</span>                 :             : </span>
 <span id="L270"><span class="lineNum">     270</span>                 :             : // RewindSession truncates the session back to the checkpoint covering</span>
@@ -350,26 +350,26 @@
 <span id="L279"><span class="lineNum">     279</span>                 :             : // file restoration happens afterwards and is idempotent</span>
 <span id="L280"><span class="lineNum">     280</span>                 :             : // (content-addressed snapshots).</span>
 <span id="L281"><span class="lineNum">     281</span>                 :             : func (s *SQLiteStore) RewindSession(ctx context.Context, sessionID domain.SessionID, checkpointSequence int64) (RewindResult, error) {</span>
-<span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaGNC">          13 :         if sessionID.IsZero() {</span></span>
+<span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaGNC">          17 :         if sessionID.IsZero() {</span></span>
 <span id="L283"><span class="lineNum">     283</span>                 :<span class="tlaGNC">           1 :                 return RewindResult{}, domain.NewError(domain.ErrInvalidInput, &quot;session ID is required&quot;)</span></span>
 <span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaGNC">          12 :         if checkpointSequence &lt;= 0 {</span></span>
+<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaGNC">          16 :         if checkpointSequence &lt;= 0 {</span></span>
 <span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaGNC">           1 :                 return RewindResult{}, domain.NewError(domain.ErrInvalidInput, &quot;checkpoint sequence must be positive&quot;)</span></span>
 <span id="L287"><span class="lineNum">     287</span>                 :<span class="tlaGNC">           1 :         }</span></span>
 <span id="L288"><span class="lineNum">     288</span>                 :             : </span>
-<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">          11 :         tx, err := s.db.BeginTx(ctx, nil)</span></span>
-<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC">          11 :         if err != nil {</span></span>
+<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">          15 :         tx, err := s.db.BeginTx(ctx, nil)</span></span>
+<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC">          15 :         if err != nil {</span></span>
 <span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;begin rewind transaction&quot;, err)</span></span>
 <span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC tlaBgGNC">          11 :         defer func() { _ = tx.Rollback() }()</span></span>
+<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC tlaBgGNC">          15 :         defer func() { _ = tx.Rollback() }()</span></span>
 <span id="L294"><span class="lineNum">     294</span>                 :             : </span>
-<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">          11 :         var summary domain.SessionSummary</span></span>
-<span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaGNC">          11 :         var version int64</span></span>
-<span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaGNC">          11 :         var id, createdAt, updatedAt string</span></span>
-<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaGNC">          11 :         var archivedAt sql.NullInt64</span></span>
-<span id="L299"><span class="lineNum">     299</span>                 :<span class="tlaGNC">          11 :         if err := tx.QueryRowContext(ctx,</span></span>
-<span id="L300"><span class="lineNum">     300</span>                 :<span class="tlaGNC">          11 :                 &quot;SELECT session_id, version, created_at, updated_at, archived_at_unix_nano FROM sessions WHERE session_id = ?&quot;,</span></span>
-<span id="L301"><span class="lineNum">     301</span>                 :<span class="tlaGNC">          11 :                 sessionID.String()).Scan(&amp;id, &amp;version, &amp;createdAt, &amp;updatedAt, &amp;archivedAt); err != nil {</span></span>
+<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">          15 :         var summary domain.SessionSummary</span></span>
+<span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaGNC">          15 :         var version int64</span></span>
+<span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaGNC">          15 :         var id, createdAt, updatedAt string</span></span>
+<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaGNC">          15 :         var archivedAt sql.NullInt64</span></span>
+<span id="L299"><span class="lineNum">     299</span>                 :<span class="tlaGNC">          15 :         if err := tx.QueryRowContext(ctx,</span></span>
+<span id="L300"><span class="lineNum">     300</span>                 :<span class="tlaGNC">          15 :                 &quot;SELECT session_id, version, created_at, updated_at, archived_at_unix_nano FROM sessions WHERE session_id = ?&quot;,</span></span>
+<span id="L301"><span class="lineNum">     301</span>                 :<span class="tlaGNC">          15 :                 sessionID.String()).Scan(&amp;id, &amp;version, &amp;createdAt, &amp;updatedAt, &amp;archivedAt); err != nil {</span></span>
 <span id="L302"><span class="lineNum">     302</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 if errors.Is(err, sql.ErrNoRows) {</span></span>
 <span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaUNC">           0 :                         return RewindResult{}, domain.NewError(domain.ErrInvalidInput, &quot;session not found&quot;)</span></span>
 <span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
@@ -377,30 +377,30 @@
 <span id="L306"><span class="lineNum">     306</span>                 :             :         }</span>
 <span id="L307"><span class="lineNum">     307</span>                 :             :         // Archived sessions are read-only: rewinding rewrites history, so it</span>
 <span id="L308"><span class="lineNum">     308</span>                 :             :         // is rejected until the session is explicitly unarchived.</span>
-<span id="L309"><span class="lineNum">     309</span>                 :<span class="tlaGNC tlaBgGNC">          11 :         if archivedAt.Valid {</span></span>
+<span id="L309"><span class="lineNum">     309</span>                 :<span class="tlaGNC tlaBgGNC">          15 :         if archivedAt.Valid {</span></span>
 <span id="L310"><span class="lineNum">     310</span>                 :<span class="tlaGNC">           1 :                 return RewindResult{}, domain.NewError(domain.ErrSessionArchived,</span></span>
 <span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC">           1 :                         &quot;session is archived (read-only); unarchive it to rewind&quot;)</span></span>
 <span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L313"><span class="lineNum">     313</span>                 :<span class="tlaGNC">          10 :         summary.ID = sessionID</span></span>
-<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">          10 :         summary.Version = version</span></span>
-<span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaGNC">          10 : </span></span>
+<span id="L313"><span class="lineNum">     313</span>                 :<span class="tlaGNC">          14 :         summary.ID = sessionID</span></span>
+<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">          14 :         summary.Version = version</span></span>
+<span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaGNC">          14 : </span></span>
 <span id="L316"><span class="lineNum">     316</span>                 :             :         // The target checkpoint must exist and must not be newer than the</span>
 <span id="L317"><span class="lineNum">     317</span>                 :             :         // current version (a future sequence would resurrect deleted history).</span>
-<span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaGNC">          10 :         var checkpointID, checkpointCreated string</span></span>
-<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">          10 :         var checkpointData []byte</span></span>
-<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC">          10 :         err = tx.QueryRowContext(ctx, `</span></span>
-<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">          10 : SELECT checkpoint_id, data, created_at FROM checkpoints</span></span>
-<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC">          10 : WHERE session_id = ? AND sequence = ?</span></span>
-<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">          10 : ORDER BY created_at_unix_nano DESC, checkpoint_id DESC LIMIT 1`,</span></span>
-<span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaGNC">          10 :                 sessionID.String(), checkpointSequence).Scan(&amp;checkpointID, &amp;checkpointData, &amp;checkpointCreated)</span></span>
-<span id="L325"><span class="lineNum">     325</span>                 :<span class="tlaGNC">          10 :         if err != nil {</span></span>
+<span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaGNC">          14 :         var checkpointID, checkpointCreated string</span></span>
+<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">          14 :         var checkpointData []byte</span></span>
+<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC">          14 :         err = tx.QueryRowContext(ctx, `</span></span>
+<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">          14 : SELECT checkpoint_id, data, created_at FROM checkpoints</span></span>
+<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC">          14 : WHERE session_id = ? AND sequence = ?</span></span>
+<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">          14 : ORDER BY created_at_unix_nano DESC, checkpoint_id DESC LIMIT 1`,</span></span>
+<span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaGNC">          14 :                 sessionID.String(), checkpointSequence).Scan(&amp;checkpointID, &amp;checkpointData, &amp;checkpointCreated)</span></span>
+<span id="L325"><span class="lineNum">     325</span>                 :<span class="tlaGNC">          14 :         if err != nil {</span></span>
 <span id="L326"><span class="lineNum">     326</span>                 :<span class="tlaGNC">           1 :                 if errors.Is(err, sql.ErrNoRows) {</span></span>
 <span id="L327"><span class="lineNum">     327</span>                 :<span class="tlaGNC">           1 :                         return RewindResult{}, domain.NewError(domain.ErrInvalidInput,</span></span>
 <span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaGNC">           1 :                                 fmt.Sprintf(&quot;no checkpoint at sequence %d&quot;, checkpointSequence))</span></span>
 <span id="L329"><span class="lineNum">     329</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
 <span id="L330"><span class="lineNum">     330</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;load rewind checkpoint&quot;, err)</span></span>
 <span id="L331"><span class="lineNum">     331</span>                 :             :         }</span>
-<span id="L332"><span class="lineNum">     332</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         if checkpointSequence &gt; version {</span></span>
+<span id="L332"><span class="lineNum">     332</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         if checkpointSequence &gt; version {</span></span>
 <span id="L333"><span class="lineNum">     333</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, domain.NewError(domain.ErrInvalidInput,</span></span>
 <span id="L334"><span class="lineNum">     334</span>                 :<span class="tlaUNC">           0 :                         fmt.Sprintf(&quot;checkpoint sequence %d exceeds session version %d&quot;, checkpointSequence, version))</span></span>
 <span id="L335"><span class="lineNum">     335</span>                 :<span class="tlaUNC">           0 :         }</span></span>
@@ -408,25 +408,25 @@
 <span id="L337"><span class="lineNum">     337</span>                 :             :         // The ledger position the checkpoint covers: prefer the snapshot taken</span>
 <span id="L338"><span class="lineNum">     338</span>                 :             :         // at checkpoint-write time; legacy checkpoints (column default 0)</span>
 <span id="L339"><span class="lineNum">     339</span>                 :             :         // rewind every recorded change, which is the safe direction.</span>
-<span id="L340"><span class="lineNum">     340</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         var ledgerSeq int64</span></span>
-<span id="L341"><span class="lineNum">     341</span>                 :<span class="tlaGNC">           9 :         if err := tx.QueryRowContext(ctx, `</span></span>
-<span id="L342"><span class="lineNum">     342</span>                 :<span class="tlaGNC">           9 : SELECT COALESCE(MAX(ledger_seq), 0) FROM checkpoints</span></span>
-<span id="L343"><span class="lineNum">     343</span>                 :<span class="tlaGNC">           9 : WHERE session_id = ? AND sequence = ?`, sessionID.String(), checkpointSequence).Scan(&amp;ledgerSeq); err != nil {</span></span>
+<span id="L340"><span class="lineNum">     340</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         var ledgerSeq int64</span></span>
+<span id="L341"><span class="lineNum">     341</span>                 :<span class="tlaGNC">          13 :         if err := tx.QueryRowContext(ctx, `</span></span>
+<span id="L342"><span class="lineNum">     342</span>                 :<span class="tlaGNC">          13 : SELECT COALESCE(MAX(ledger_seq), 0) FROM checkpoints</span></span>
+<span id="L343"><span class="lineNum">     343</span>                 :<span class="tlaGNC">          13 : WHERE session_id = ? AND sequence = ?`, sessionID.String(), checkpointSequence).Scan(&amp;ledgerSeq); err != nil {</span></span>
 <span id="L344"><span class="lineNum">     344</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;read checkpoint ledger position&quot;, err)</span></span>
 <span id="L345"><span class="lineNum">     345</span>                 :<span class="tlaUNC">           0 :         }</span></span>
 <span id="L346"><span class="lineNum">     346</span>                 :             : </span>
 <span id="L347"><span class="lineNum">     347</span>                 :             :         // Collect the changes to revert: everything recorded after the</span>
 <span id="L348"><span class="lineNum">     348</span>                 :             :         // checkpoint's ledger position, ordered ascending so the caller can</span>
 <span id="L349"><span class="lineNum">     349</span>                 :             :         // keep the earliest state per path.</span>
-<span id="L350"><span class="lineNum">     350</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         rows, err := tx.QueryContext(ctx, `</span></span>
-<span id="L351"><span class="lineNum">     351</span>                 :<span class="tlaGNC">           9 : SELECT rowid, path, before_existed, before_hash, before_content, after_hash, restorable</span></span>
-<span id="L352"><span class="lineNum">     352</span>                 :<span class="tlaGNC">           9 : FROM file_changes WHERE session_id = ? AND rowid &gt; ? ORDER BY rowid ASC`,</span></span>
-<span id="L353"><span class="lineNum">     353</span>                 :<span class="tlaGNC">           9 :                 sessionID.String(), ledgerSeq)</span></span>
-<span id="L354"><span class="lineNum">     354</span>                 :<span class="tlaGNC">           9 :         if err != nil {</span></span>
+<span id="L350"><span class="lineNum">     350</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         rows, err := tx.QueryContext(ctx, `</span></span>
+<span id="L351"><span class="lineNum">     351</span>                 :<span class="tlaGNC">          13 : SELECT rowid, path, before_existed, before_hash, before_content, after_hash, restorable</span></span>
+<span id="L352"><span class="lineNum">     352</span>                 :<span class="tlaGNC">          13 : FROM file_changes WHERE session_id = ? AND rowid &gt; ? ORDER BY rowid ASC`,</span></span>
+<span id="L353"><span class="lineNum">     353</span>                 :<span class="tlaGNC">          13 :                 sessionID.String(), ledgerSeq)</span></span>
+<span id="L354"><span class="lineNum">     354</span>                 :<span class="tlaGNC">          13 :         if err != nil {</span></span>
 <span id="L355"><span class="lineNum">     355</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;load file changes for rewind&quot;, err)</span></span>
 <span id="L356"><span class="lineNum">     356</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L357"><span class="lineNum">     357</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         var all []FileChange</span></span>
-<span id="L358"><span class="lineNum">     358</span>                 :<span class="tlaGNC">           9 :         for rows.Next() {</span></span>
+<span id="L357"><span class="lineNum">     357</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         var all []FileChange</span></span>
+<span id="L358"><span class="lineNum">     358</span>                 :<span class="tlaGNC">          13 :         for rows.Next() {</span></span>
 <span id="L359"><span class="lineNum">     359</span>                 :<span class="tlaGNC">           6 :                 var change FileChange</span></span>
 <span id="L360"><span class="lineNum">     360</span>                 :<span class="tlaGNC">           6 :                 if err := rows.Scan(&amp;change.ID, &amp;change.Path, &amp;change.BeforeExisted, &amp;change.BeforeHash,</span></span>
 <span id="L361"><span class="lineNum">     361</span>                 :<span class="tlaGNC">           6 :                         &amp;change.BeforeContent, &amp;change.AfterHash, &amp;change.Restorable); err != nil {</span></span>
@@ -435,167 +435,177 @@
 <span id="L364"><span class="lineNum">     364</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
 <span id="L365"><span class="lineNum">     365</span>                 :<span class="tlaGNC tlaBgGNC">           6 :                 all = append(all, change)</span></span>
 <span id="L366"><span class="lineNum">     366</span>                 :             :         }</span>
-<span id="L367"><span class="lineNum">     367</span>                 :<span class="tlaGNC">           9 :         if err := rows.Err(); err != nil {</span></span>
+<span id="L367"><span class="lineNum">     367</span>                 :<span class="tlaGNC">          13 :         if err := rows.Err(); err != nil {</span></span>
 <span id="L368"><span class="lineNum">     368</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 _ = rows.Close()</span></span>
 <span id="L369"><span class="lineNum">     369</span>                 :<span class="tlaUNC">           0 :                 return RewindResult{}, storeError(&quot;iterate file changes&quot;, err)</span></span>
 <span id="L370"><span class="lineNum">     370</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L371"><span class="lineNum">     371</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         _ = rows.Close()</span></span>
-<span id="L372"><span class="lineNum">     372</span>                 :<span class="tlaGNC">           9 : </span></span>
-<span id="L373"><span class="lineNum">     373</span>                 :<span class="tlaGNC">           9 :         if _, err := tx.ExecContext(ctx,</span></span>
-<span id="L374"><span class="lineNum">     374</span>                 :<span class="tlaGNC">           9 :                 &quot;DELETE FROM file_changes WHERE session_id = ? AND rowid &gt; ?&quot;, sessionID.String(), ledgerSeq); err != nil {</span></span>
+<span id="L371"><span class="lineNum">     371</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         _ = rows.Close()</span></span>
+<span id="L372"><span class="lineNum">     372</span>                 :<span class="tlaGNC">          13 : </span></span>
+<span id="L373"><span class="lineNum">     373</span>                 :<span class="tlaGNC">          13 :         if _, err := tx.ExecContext(ctx,</span></span>
+<span id="L374"><span class="lineNum">     374</span>                 :<span class="tlaGNC">          13 :                 &quot;DELETE FROM file_changes WHERE session_id = ? AND rowid &gt; ?&quot;, sessionID.String(), ledgerSeq); err != nil {</span></span>
 <span id="L375"><span class="lineNum">     375</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;delete rewound file changes&quot;, err)</span></span>
 <span id="L376"><span class="lineNum">     376</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L377"><span class="lineNum">     377</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         if _, err := tx.ExecContext(ctx,</span></span>
-<span id="L378"><span class="lineNum">     378</span>                 :<span class="tlaGNC">           9 :                 &quot;DELETE FROM events WHERE session_id = ? AND sequence &gt; ?&quot;, sessionID.String(), checkpointSequence); err != nil {</span></span>
+<span id="L377"><span class="lineNum">     377</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         if _, err := tx.ExecContext(ctx,</span></span>
+<span id="L378"><span class="lineNum">     378</span>                 :<span class="tlaGNC">          13 :                 &quot;DELETE FROM events WHERE session_id = ? AND sequence &gt; ?&quot;, sessionID.String(), checkpointSequence); err != nil {</span></span>
 <span id="L379"><span class="lineNum">     379</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;delete rewound events&quot;, err)</span></span>
 <span id="L380"><span class="lineNum">     380</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L381"><span class="lineNum">     381</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         if _, err := tx.ExecContext(ctx,</span></span>
-<span id="L382"><span class="lineNum">     382</span>                 :<span class="tlaGNC">           9 :                 &quot;DELETE FROM checkpoints WHERE session_id = ? AND sequence &gt; ?&quot;, sessionID.String(), checkpointSequence); err != nil {</span></span>
+<span id="L381"><span class="lineNum">     381</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         if _, err := tx.ExecContext(ctx,</span></span>
+<span id="L382"><span class="lineNum">     382</span>                 :<span class="tlaGNC">          13 :                 &quot;DELETE FROM checkpoints WHERE session_id = ? AND sequence &gt; ?&quot;, sessionID.String(), checkpointSequence); err != nil {</span></span>
 <span id="L383"><span class="lineNum">     383</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;delete rewound checkpoints&quot;, err)</span></span>
 <span id="L384"><span class="lineNum">     384</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L385"><span class="lineNum">     385</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         now := time.Now().UTC()</span></span>
-<span id="L386"><span class="lineNum">     386</span>                 :<span class="tlaGNC">           9 :         // Review M29: artifact_refs rows are registered per checkpoint and the</span></span>
+<span id="L385"><span class="lineNum">     385</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         now := time.Now().UTC()</span></span>
+<span id="L386"><span class="lineNum">     386</span>                 :<span class="tlaGNC">          13 :         // Review M29: artifact_refs rows are registered per checkpoint and the</span></span>
 <span id="L387"><span class="lineNum">     387</span>                 :             :         // deleted checkpoints may be an artifact's only referrer — leaving</span>
 <span id="L388"><span class="lineNum">     388</span>                 :             :         // their rows behind pins the artifact forever (the GC never collects</span>
 <span id="L389"><span class="lineNum">     389</span>                 :             :         // it). Rebuild the session's references from the SURVIVING checkpoints</span>
 <span id="L390"><span class="lineNum">     390</span>                 :             :         // inside the same transaction.</span>
-<span id="L391"><span class="lineNum">     391</span>                 :<span class="tlaGNC">           9 :         if err := recomputeArtifactRefs(ctx, tx, sessionID); err != nil {</span></span>
+<span id="L391"><span class="lineNum">     391</span>                 :<span class="tlaGNC">          13 :         if err := recomputeArtifactRefs(ctx, tx, sessionID); err != nil {</span></span>
 <span id="L392"><span class="lineNum">     392</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, err</span></span>
 <span id="L393"><span class="lineNum">     393</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L394"><span class="lineNum">     394</span>                 :             :         // Review M29: a memory extraction whose extracted_version covers events</span>
-<span id="L395"><span class="lineNum">     395</span>                 :             :         // the rewind just deleted is stale (its memories may describe turns</span>
-<span id="L396"><span class="lineNum">     396</span>                 :             :         // that no longer exist), and an in-flight claim is reading the</span>
-<span id="L397"><span class="lineNum">     397</span>                 :             :         // pre-rewind transcript. Reset those jobs to pending with no extracted</span>
-<span id="L398"><span class="lineNum">     398</span>                 :             :         // version so the pipeline re-extracts from the rewound transcript.</span>
-<span id="L399"><span class="lineNum">     399</span>                 :             :         // Jobs that only observed retained events (extracted_version &lt;= the</span>
-<span id="L400"><span class="lineNum">     400</span>                 :             :         // rewind point) stay untouched, as do fresh pending jobs.</span>
-<span id="L401"><span class="lineNum">     401</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         if _, err := tx.ExecContext(ctx, `</span></span>
-<span id="L402"><span class="lineNum">     402</span>                 :<span class="tlaGNC">           9 : UPDATE memory_jobs SET</span></span>
-<span id="L403"><span class="lineNum">     403</span>                 :<span class="tlaGNC">           9 :     status = 'pending',</span></span>
-<span id="L404"><span class="lineNum">     404</span>                 :<span class="tlaGNC">           9 :     claim_token = '',</span></span>
-<span id="L405"><span class="lineNum">     405</span>                 :<span class="tlaGNC">           9 :     claimed_at_unix_nano = 0,</span></span>
-<span id="L406"><span class="lineNum">     406</span>                 :<span class="tlaGNC">           9 :     next_retry_at_unix_nano = 0,</span></span>
-<span id="L407"><span class="lineNum">     407</span>                 :<span class="tlaGNC">           9 :     attempts = 0,</span></span>
-<span id="L408"><span class="lineNum">     408</span>                 :<span class="tlaGNC">           9 :     extracted_version = -1,</span></span>
-<span id="L409"><span class="lineNum">     409</span>                 :<span class="tlaGNC">           9 :     last_error = '',</span></span>
-<span id="L410"><span class="lineNum">     410</span>                 :<span class="tlaGNC">           9 :     updated_at = ?, updated_at_unix_nano = ?</span></span>
-<span id="L411"><span class="lineNum">     411</span>                 :<span class="tlaGNC">           9 : WHERE session_id = ? AND (extracted_version &gt; ? OR status = 'claimed')`,</span></span>
-<span id="L412"><span class="lineNum">     412</span>                 :<span class="tlaGNC">           9 :                 formatTime(now), now.UnixNano(), sessionID.String(), checkpointSequence); err != nil {</span></span>
-<span id="L413"><span class="lineNum">     413</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;reset stale memory jobs&quot;, err)</span></span>
-<span id="L414"><span class="lineNum">     414</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L415"><span class="lineNum">     415</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         result, err := tx.ExecContext(ctx, `</span></span>
-<span id="L416"><span class="lineNum">     416</span>                 :<span class="tlaGNC">           9 : UPDATE sessions SET version = ?, updated_at = ?, updated_at_unix_nano = ?</span></span>
-<span id="L417"><span class="lineNum">     417</span>                 :<span class="tlaGNC">           9 : WHERE session_id = ? AND version = ?`,</span></span>
-<span id="L418"><span class="lineNum">     418</span>                 :<span class="tlaGNC">           9 :                 checkpointSequence, formatTime(now), now.UnixNano(), sessionID.String(), version)</span></span>
-<span id="L419"><span class="lineNum">     419</span>                 :<span class="tlaGNC">           9 :         if err != nil {</span></span>
-<span id="L420"><span class="lineNum">     420</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;reset session version&quot;, err)</span></span>
-<span id="L421"><span class="lineNum">     421</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L422"><span class="lineNum">     422</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         if affected, err := result.RowsAffected(); err != nil {</span></span>
-<span id="L423"><span class="lineNum">     423</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;inspect session version reset&quot;, err)</span></span>
-<span id="L424"><span class="lineNum">     424</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         } else if affected != 1 {</span></span>
-<span id="L425"><span class="lineNum">     425</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, domain.NewError(domain.ErrConflict, &quot;session version changed while rewinding&quot;)</span></span>
-<span id="L426"><span class="lineNum">     426</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L427"><span class="lineNum">     427</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         if err := tx.Commit(); err != nil {</span></span>
-<span id="L428"><span class="lineNum">     428</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;commit rewind transaction&quot;, err)</span></span>
-<span id="L429"><span class="lineNum">     429</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L430"><span class="lineNum">     430</span>                 :             : </span>
-<span id="L431"><span class="lineNum">     431</span>                 :             :         // Deduplicate by path, keeping the EARLIEST post-checkpoint change per</span>
-<span id="L432"><span class="lineNum">     432</span>                 :             :         // path — its before-state is the content the checkpoint observed —</span>
-<span id="L433"><span class="lineNum">     433</span>                 :             :         // annotated with the LATEST after-hash so the restore can detect</span>
-<span id="L434"><span class="lineNum">     434</span>                 :             :         // modifications that happened outside the recorded history.</span>
-<span id="L435"><span class="lineNum">     435</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         changes := dedupeFileChangesForRestore(all)</span></span>
-<span id="L436"><span class="lineNum">     436</span>                 :<span class="tlaGNC">           9 : </span></span>
-<span id="L437"><span class="lineNum">     437</span>                 :<span class="tlaGNC">           9 :         parsedID, err := domain.ParseCheckpointID(checkpointID)</span></span>
-<span id="L438"><span class="lineNum">     438</span>                 :<span class="tlaGNC">           9 :         if err != nil {</span></span>
-<span id="L439"><span class="lineNum">     439</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;decode rewind checkpoint ID&quot;, err)</span></span>
-<span id="L440"><span class="lineNum">     440</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L441"><span class="lineNum">     441</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         created, err := time.Parse(time.RFC3339Nano, checkpointCreated)</span></span>
-<span id="L442"><span class="lineNum">     442</span>                 :<span class="tlaGNC">           9 :         if err != nil {</span></span>
-<span id="L443"><span class="lineNum">     443</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;decode rewind checkpoint time&quot;, err)</span></span>
-<span id="L444"><span class="lineNum">     444</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L445"><span class="lineNum">     445</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         label, turns := checkpointLabel([]byte(checkpointData))</span></span>
-<span id="L446"><span class="lineNum">     446</span>                 :<span class="tlaGNC">           9 :         return RewindResult{</span></span>
-<span id="L447"><span class="lineNum">     447</span>                 :<span class="tlaGNC">           9 :                 Checkpoint: CheckpointSummary{</span></span>
-<span id="L448"><span class="lineNum">     448</span>                 :<span class="tlaGNC">           9 :                         ID: parsedID, Sequence: checkpointSequence, CreatedAt: created,</span></span>
-<span id="L449"><span class="lineNum">     449</span>                 :<span class="tlaGNC">           9 :                         Label: label, Turns: turns,</span></span>
-<span id="L450"><span class="lineNum">     450</span>                 :<span class="tlaGNC">           9 :                 },</span></span>
-<span id="L451"><span class="lineNum">     451</span>                 :<span class="tlaGNC">           9 :                 Changes: changes,</span></span>
-<span id="L452"><span class="lineNum">     452</span>                 :<span class="tlaGNC">           9 :         }, nil</span></span>
-<span id="L453"><span class="lineNum">     453</span>                 :             : }</span>
-<span id="L454"><span class="lineNum">     454</span>                 :             : </span>
-<span id="L455"><span class="lineNum">     455</span>                 :             : // recomputeArtifactRefs rebuilds a session's artifact_refs rows from its</span>
-<span id="L456"><span class="lineNum">     456</span>                 :             : // surviving checkpoints. Rewind calls it after truncating the log:</span>
-<span id="L457"><span class="lineNum">     457</span>                 :             : // references registered by deleted checkpoints must not outlive them, or</span>
-<span id="L458"><span class="lineNum">     458</span>                 :             : // the artifacts they pin leak past the GC forever (review M29).</span>
-<span id="L459"><span class="lineNum">     459</span>                 :             : func recomputeArtifactRefs(ctx context.Context, tx *sql.Tx, sessionID domain.SessionID) error {</span>
-<span id="L460"><span class="lineNum">     460</span>                 :<span class="tlaGNC">           9 :         if _, err := tx.ExecContext(ctx,</span></span>
-<span id="L461"><span class="lineNum">     461</span>                 :<span class="tlaGNC">           9 :                 &quot;DELETE FROM artifact_refs WHERE session_id = ?&quot;, sessionID.String()); err != nil {</span></span>
-<span id="L462"><span class="lineNum">     462</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;reset rewound artifact references&quot;, err)</span></span>
-<span id="L463"><span class="lineNum">     463</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L464"><span class="lineNum">     464</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         rows, err := tx.QueryContext(ctx,</span></span>
-<span id="L465"><span class="lineNum">     465</span>                 :<span class="tlaGNC">           9 :                 &quot;SELECT data FROM checkpoints WHERE session_id = ?&quot;, sessionID.String())</span></span>
-<span id="L466"><span class="lineNum">     466</span>                 :<span class="tlaGNC">           9 :         if err != nil {</span></span>
-<span id="L467"><span class="lineNum">     467</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;load surviving checkpoints for artifact references&quot;, err)</span></span>
-<span id="L468"><span class="lineNum">     468</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L469"><span class="lineNum">     469</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         refs := make(map[domain.ArtifactID]int64)</span></span>
-<span id="L470"><span class="lineNum">     470</span>                 :<span class="tlaGNC">           9 :         for rows.Next() {</span></span>
-<span id="L471"><span class="lineNum">     471</span>                 :<span class="tlaGNC">           9 :                 var data []byte</span></span>
-<span id="L472"><span class="lineNum">     472</span>                 :<span class="tlaGNC">           9 :                 if err := rows.Scan(&amp;data); err != nil {</span></span>
-<span id="L473"><span class="lineNum">     473</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         _ = rows.Close()</span></span>
-<span id="L474"><span class="lineNum">     474</span>                 :<span class="tlaUNC">           0 :                         return storeError(&quot;scan checkpoint for artifact references&quot;, err)</span></span>
-<span id="L475"><span class="lineNum">     475</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
-<span id="L476"><span class="lineNum">     476</span>                 :<span class="tlaGNC tlaBgGNC">           9 :                 var checkpoint domain.Checkpoint</span></span>
-<span id="L477"><span class="lineNum">     477</span>                 :<span class="tlaGNC">           9 :                 if err := json.Unmarshal(data, &amp;checkpoint); err != nil {</span></span>
-<span id="L478"><span class="lineNum">     478</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         _ = rows.Close()</span></span>
-<span id="L479"><span class="lineNum">     479</span>                 :<span class="tlaUNC">           0 :                         return storeError(&quot;decode checkpoint for artifact references&quot;, err)</span></span>
-<span id="L480"><span class="lineNum">     480</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
-<span id="L481"><span class="lineNum">     481</span>                 :<span class="tlaGNC tlaBgGNC">           9 :                 for id, size := range checkpointArtifactRefs(checkpoint) {</span></span>
-<span id="L482"><span class="lineNum">     482</span>                 :<span class="tlaGNC">           1 :                         if old, ok := refs[id]; !ok || size &gt; old {</span></span>
-<span id="L483"><span class="lineNum">     483</span>                 :<span class="tlaGNC">           1 :                                 refs[id] = size</span></span>
-<span id="L484"><span class="lineNum">     484</span>                 :<span class="tlaGNC">           1 :                         }</span></span>
-<span id="L485"><span class="lineNum">     485</span>                 :             :                 }</span>
-<span id="L486"><span class="lineNum">     486</span>                 :             :         }</span>
-<span id="L487"><span class="lineNum">     487</span>                 :<span class="tlaGNC">           9 :         if err := rows.Err(); err != nil {</span></span>
-<span id="L488"><span class="lineNum">     488</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 _ = rows.Close()</span></span>
-<span id="L489"><span class="lineNum">     489</span>                 :<span class="tlaUNC">           0 :                 return storeError(&quot;iterate checkpoints for artifact references&quot;, err)</span></span>
-<span id="L490"><span class="lineNum">     490</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L491"><span class="lineNum">     491</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         if err := rows.Close(); err != nil {</span></span>
-<span id="L492"><span class="lineNum">     492</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;close checkpoints for artifact references&quot;, err)</span></span>
-<span id="L493"><span class="lineNum">     493</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L494"><span class="lineNum">     494</span>                 :             :         // Surviving directive events pin their artifacts too: the reference</span>
-<span id="L495"><span class="lineNum">     495</span>                 :             :         // graph must stay complete even if the checkpoints that carried the</span>
-<span id="L496"><span class="lineNum">     496</span>                 :             :         // same references were truncated (docs/SURFACE_DESIGN.md §4.6).</span>
-<span id="L497"><span class="lineNum">     497</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         directiveRows, err := tx.QueryContext(ctx,</span></span>
-<span id="L498"><span class="lineNum">     498</span>                 :<span class="tlaGNC">           9 :                 `SELECT type, payload FROM events WHERE session_id = ? AND type IN ('context.masked', 'context.archived')`,</span></span>
-<span id="L499"><span class="lineNum">     499</span>                 :<span class="tlaGNC">           9 :                 sessionID.String())</span></span>
-<span id="L500"><span class="lineNum">     500</span>                 :<span class="tlaGNC">           9 :         if err != nil {</span></span>
-<span id="L501"><span class="lineNum">     501</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;load surviving directive events for artifact references&quot;, err)</span></span>
-<span id="L502"><span class="lineNum">     502</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L503"><span class="lineNum">     503</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         for directiveRows.Next() {</span></span>
-<span id="L504"><span class="lineNum">     504</span>                 :<span class="tlaGNC">           1 :                 var evtType string</span></span>
-<span id="L505"><span class="lineNum">     505</span>                 :<span class="tlaGNC">           1 :                 var payload []byte</span></span>
-<span id="L506"><span class="lineNum">     506</span>                 :<span class="tlaGNC">           1 :                 if err := directiveRows.Scan(&amp;evtType, &amp;payload); err != nil {</span></span>
-<span id="L507"><span class="lineNum">     507</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         _ = directiveRows.Close()</span></span>
-<span id="L508"><span class="lineNum">     508</span>                 :<span class="tlaUNC">           0 :                         return storeError(&quot;scan directive event for artifact references&quot;, err)</span></span>
-<span id="L509"><span class="lineNum">     509</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
-<span id="L510"><span class="lineNum">     510</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                 directiveRefs, err := surfaceDirectiveArtifactRefs(domain.Event{Type: domain.EventType(evtType), Payload: payload})</span></span>
-<span id="L511"><span class="lineNum">     511</span>                 :<span class="tlaGNC">           1 :                 if err != nil {</span></span>
-<span id="L512"><span class="lineNum">     512</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         _ = directiveRows.Close()</span></span>
-<span id="L513"><span class="lineNum">     513</span>                 :<span class="tlaUNC">           0 :                         return storeError(&quot;scan directive artifact references&quot;, err)</span></span>
-<span id="L514"><span class="lineNum">     514</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
-<span id="L515"><span class="lineNum">     515</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                 for _, ref := range directiveRefs {</span></span>
-<span id="L516"><span class="lineNum">     516</span>                 :<span class="tlaGNC">           1 :                         addArtifactRef(refs, ref)</span></span>
-<span id="L517"><span class="lineNum">     517</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
-<span id="L518"><span class="lineNum">     518</span>                 :             :         }</span>
-<span id="L519"><span class="lineNum">     519</span>                 :<span class="tlaGNC">           9 :         if err := directiveRows.Err(); err != nil {</span></span>
-<span id="L520"><span class="lineNum">     520</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 _ = directiveRows.Close()</span></span>
-<span id="L521"><span class="lineNum">     521</span>                 :<span class="tlaUNC">           0 :                 return storeError(&quot;iterate directive events for artifact references&quot;, err)</span></span>
-<span id="L522"><span class="lineNum">     522</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L523"><span class="lineNum">     523</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         if err := directiveRows.Close(); err != nil {</span></span>
-<span id="L524"><span class="lineNum">     524</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;close directive events for artifact references&quot;, err)</span></span>
-<span id="L525"><span class="lineNum">     525</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L526"><span class="lineNum">     526</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         return addArtifactRefs(ctx, tx, sessionID, refs)</span></span>
-<span id="L527"><span class="lineNum">     527</span>                 :             : }</span>
+<span id="L394"><span class="lineNum">     394</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         if err := revokeMemoryTx(ctx, tx, &quot;source_session_id = ? AND source_version &gt; ?&quot;, sessionID.String(), checkpointSequence); err != nil {</span></span>
+<span id="L395"><span class="lineNum">     395</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, err</span></span>
+<span id="L396"><span class="lineNum">     396</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L397"><span class="lineNum">     397</span>                 :             :         // Forgotten records may have only a receipt left; replaying a removed</span>
+<span id="L398"><span class="lineNum">     398</span>                 :             :         // tool call must not report a success from the discarded timeline.</span>
+<span id="L399"><span class="lineNum">     399</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         if _, err := tx.ExecContext(ctx, &quot;DELETE FROM memory_requests WHERE source_session_id = ? AND source_version &gt; ?&quot;, sessionID.String(), checkpointSequence); err != nil {</span></span>
+<span id="L400"><span class="lineNum">     400</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;delete rewound memory requests&quot;, err)</span></span>
+<span id="L401"><span class="lineNum">     401</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L402"><span class="lineNum">     402</span>                 :             :         // Review M29: a memory extraction whose extracted_version covers events</span>
+<span id="L403"><span class="lineNum">     403</span>                 :             :         // the rewind just deleted is stale (its memories may describe turns</span>
+<span id="L404"><span class="lineNum">     404</span>                 :             :         // that no longer exist), and an in-flight claim is reading the</span>
+<span id="L405"><span class="lineNum">     405</span>                 :             :         // pre-rewind transcript. Reset those jobs to pending, retaining only</span>
+<span id="L406"><span class="lineNum">     406</span>                 :             :         // the watermark supported by surviving automatic records.</span>
+<span id="L407"><span class="lineNum">     407</span>                 :             :         // Failed/abandoned attempts that observed deleted events also need a</span>
+<span id="L408"><span class="lineNum">     408</span>                 :             :         // fresh retry budget. Jobs that only observed retained events stay untouched.</span>
+<span id="L409"><span class="lineNum">     409</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         if _, err := tx.ExecContext(ctx, `</span></span>
+<span id="L410"><span class="lineNum">     410</span>                 :<span class="tlaGNC">          13 : UPDATE memory_jobs SET</span></span>
+<span id="L411"><span class="lineNum">     411</span>                 :<span class="tlaGNC">          13 :     status = 'pending',</span></span>
+<span id="L412"><span class="lineNum">     412</span>                 :<span class="tlaGNC">          13 :     claim_token = '',</span></span>
+<span id="L413"><span class="lineNum">     413</span>                 :<span class="tlaGNC">          13 :     claimed_at_unix_nano = 0,</span></span>
+<span id="L414"><span class="lineNum">     414</span>                 :<span class="tlaGNC">          13 :     next_retry_at_unix_nano = 0,</span></span>
+<span id="L415"><span class="lineNum">     415</span>                 :<span class="tlaGNC">          13 :     attempts = 0,</span></span>
+<span id="L416"><span class="lineNum">     416</span>                 :<span class="tlaGNC">          13 :     extracted_version = CASE WHEN extracted_version &gt; ? THEN</span></span>
+<span id="L417"><span class="lineNum">     417</span>                 :<span class="tlaGNC">          13 :       COALESCE((SELECT MAX(source_version) FROM memory_records WHERE source_session_id = memory_jobs.session_id AND kind = 'automatic'), -1)</span></span>
+<span id="L418"><span class="lineNum">     418</span>                 :<span class="tlaGNC">          13 :       ELSE extracted_version END,</span></span>
+<span id="L419"><span class="lineNum">     419</span>                 :<span class="tlaGNC">          13 :     last_error = '',</span></span>
+<span id="L420"><span class="lineNum">     420</span>                 :<span class="tlaGNC">          13 :     updated_at = ?, updated_at_unix_nano = ?</span></span>
+<span id="L421"><span class="lineNum">     421</span>                 :<span class="tlaGNC">          13 : WHERE session_id = ? AND (extracted_version &gt; ? OR attempt_version &gt; ? OR status = 'claimed')`,</span></span>
+<span id="L422"><span class="lineNum">     422</span>                 :<span class="tlaGNC">          13 :                 checkpointSequence, formatTime(now), now.UnixNano(), sessionID.String(), checkpointSequence, checkpointSequence); err != nil {</span></span>
+<span id="L423"><span class="lineNum">     423</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;reset stale memory jobs&quot;, err)</span></span>
+<span id="L424"><span class="lineNum">     424</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L425"><span class="lineNum">     425</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         result, err := tx.ExecContext(ctx, `</span></span>
+<span id="L426"><span class="lineNum">     426</span>                 :<span class="tlaGNC">          13 : UPDATE sessions SET version = ?, updated_at = ?, updated_at_unix_nano = ?</span></span>
+<span id="L427"><span class="lineNum">     427</span>                 :<span class="tlaGNC">          13 : WHERE session_id = ? AND version = ?`,</span></span>
+<span id="L428"><span class="lineNum">     428</span>                 :<span class="tlaGNC">          13 :                 checkpointSequence, formatTime(now), now.UnixNano(), sessionID.String(), version)</span></span>
+<span id="L429"><span class="lineNum">     429</span>                 :<span class="tlaGNC">          13 :         if err != nil {</span></span>
+<span id="L430"><span class="lineNum">     430</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;reset session version&quot;, err)</span></span>
+<span id="L431"><span class="lineNum">     431</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L432"><span class="lineNum">     432</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         if affected, err := result.RowsAffected(); err != nil {</span></span>
+<span id="L433"><span class="lineNum">     433</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;inspect session version reset&quot;, err)</span></span>
+<span id="L434"><span class="lineNum">     434</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         } else if affected != 1 {</span></span>
+<span id="L435"><span class="lineNum">     435</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, domain.NewError(domain.ErrConflict, &quot;session version changed while rewinding&quot;)</span></span>
+<span id="L436"><span class="lineNum">     436</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L437"><span class="lineNum">     437</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         if err := tx.Commit(); err != nil {</span></span>
+<span id="L438"><span class="lineNum">     438</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;commit rewind transaction&quot;, err)</span></span>
+<span id="L439"><span class="lineNum">     439</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L440"><span class="lineNum">     440</span>                 :             : </span>
+<span id="L441"><span class="lineNum">     441</span>                 :             :         // Deduplicate by path, keeping the EARLIEST post-checkpoint change per</span>
+<span id="L442"><span class="lineNum">     442</span>                 :             :         // path — its before-state is the content the checkpoint observed —</span>
+<span id="L443"><span class="lineNum">     443</span>                 :             :         // annotated with the LATEST after-hash so the restore can detect</span>
+<span id="L444"><span class="lineNum">     444</span>                 :             :         // modifications that happened outside the recorded history.</span>
+<span id="L445"><span class="lineNum">     445</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         changes := dedupeFileChangesForRestore(all)</span></span>
+<span id="L446"><span class="lineNum">     446</span>                 :<span class="tlaGNC">          13 : </span></span>
+<span id="L447"><span class="lineNum">     447</span>                 :<span class="tlaGNC">          13 :         parsedID, err := domain.ParseCheckpointID(checkpointID)</span></span>
+<span id="L448"><span class="lineNum">     448</span>                 :<span class="tlaGNC">          13 :         if err != nil {</span></span>
+<span id="L449"><span class="lineNum">     449</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;decode rewind checkpoint ID&quot;, err)</span></span>
+<span id="L450"><span class="lineNum">     450</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L451"><span class="lineNum">     451</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         created, err := time.Parse(time.RFC3339Nano, checkpointCreated)</span></span>
+<span id="L452"><span class="lineNum">     452</span>                 :<span class="tlaGNC">          13 :         if err != nil {</span></span>
+<span id="L453"><span class="lineNum">     453</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return RewindResult{}, storeError(&quot;decode rewind checkpoint time&quot;, err)</span></span>
+<span id="L454"><span class="lineNum">     454</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L455"><span class="lineNum">     455</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         label, turns := checkpointLabel([]byte(checkpointData))</span></span>
+<span id="L456"><span class="lineNum">     456</span>                 :<span class="tlaGNC">          13 :         return RewindResult{</span></span>
+<span id="L457"><span class="lineNum">     457</span>                 :<span class="tlaGNC">          13 :                 Checkpoint: CheckpointSummary{</span></span>
+<span id="L458"><span class="lineNum">     458</span>                 :<span class="tlaGNC">          13 :                         ID: parsedID, Sequence: checkpointSequence, CreatedAt: created,</span></span>
+<span id="L459"><span class="lineNum">     459</span>                 :<span class="tlaGNC">          13 :                         Label: label, Turns: turns,</span></span>
+<span id="L460"><span class="lineNum">     460</span>                 :<span class="tlaGNC">          13 :                 },</span></span>
+<span id="L461"><span class="lineNum">     461</span>                 :<span class="tlaGNC">          13 :                 Changes: changes,</span></span>
+<span id="L462"><span class="lineNum">     462</span>                 :<span class="tlaGNC">          13 :         }, nil</span></span>
+<span id="L463"><span class="lineNum">     463</span>                 :             : }</span>
+<span id="L464"><span class="lineNum">     464</span>                 :             : </span>
+<span id="L465"><span class="lineNum">     465</span>                 :             : // recomputeArtifactRefs rebuilds a session's artifact_refs rows from its</span>
+<span id="L466"><span class="lineNum">     466</span>                 :             : // surviving checkpoints. Rewind calls it after truncating the log:</span>
+<span id="L467"><span class="lineNum">     467</span>                 :             : // references registered by deleted checkpoints must not outlive them, or</span>
+<span id="L468"><span class="lineNum">     468</span>                 :             : // the artifacts they pin leak past the GC forever (review M29).</span>
+<span id="L469"><span class="lineNum">     469</span>                 :             : func recomputeArtifactRefs(ctx context.Context, tx *sql.Tx, sessionID domain.SessionID) error {</span>
+<span id="L470"><span class="lineNum">     470</span>                 :<span class="tlaGNC">          13 :         if _, err := tx.ExecContext(ctx,</span></span>
+<span id="L471"><span class="lineNum">     471</span>                 :<span class="tlaGNC">          13 :                 &quot;DELETE FROM artifact_refs WHERE session_id = ?&quot;, sessionID.String()); err != nil {</span></span>
+<span id="L472"><span class="lineNum">     472</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;reset rewound artifact references&quot;, err)</span></span>
+<span id="L473"><span class="lineNum">     473</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L474"><span class="lineNum">     474</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         rows, err := tx.QueryContext(ctx,</span></span>
+<span id="L475"><span class="lineNum">     475</span>                 :<span class="tlaGNC">          13 :                 &quot;SELECT data FROM checkpoints WHERE session_id = ?&quot;, sessionID.String())</span></span>
+<span id="L476"><span class="lineNum">     476</span>                 :<span class="tlaGNC">          13 :         if err != nil {</span></span>
+<span id="L477"><span class="lineNum">     477</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;load surviving checkpoints for artifact references&quot;, err)</span></span>
+<span id="L478"><span class="lineNum">     478</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L479"><span class="lineNum">     479</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         refs := make(map[domain.ArtifactID]int64)</span></span>
+<span id="L480"><span class="lineNum">     480</span>                 :<span class="tlaGNC">          13 :         for rows.Next() {</span></span>
+<span id="L481"><span class="lineNum">     481</span>                 :<span class="tlaGNC">          15 :                 var data []byte</span></span>
+<span id="L482"><span class="lineNum">     482</span>                 :<span class="tlaGNC">          15 :                 if err := rows.Scan(&amp;data); err != nil {</span></span>
+<span id="L483"><span class="lineNum">     483</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         _ = rows.Close()</span></span>
+<span id="L484"><span class="lineNum">     484</span>                 :<span class="tlaUNC">           0 :                         return storeError(&quot;scan checkpoint for artifact references&quot;, err)</span></span>
+<span id="L485"><span class="lineNum">     485</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L486"><span class="lineNum">     486</span>                 :<span class="tlaGNC tlaBgGNC">          15 :                 var checkpoint domain.Checkpoint</span></span>
+<span id="L487"><span class="lineNum">     487</span>                 :<span class="tlaGNC">          15 :                 if err := json.Unmarshal(data, &amp;checkpoint); err != nil {</span></span>
+<span id="L488"><span class="lineNum">     488</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         _ = rows.Close()</span></span>
+<span id="L489"><span class="lineNum">     489</span>                 :<span class="tlaUNC">           0 :                         return storeError(&quot;decode checkpoint for artifact references&quot;, err)</span></span>
+<span id="L490"><span class="lineNum">     490</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L491"><span class="lineNum">     491</span>                 :<span class="tlaGNC tlaBgGNC">          15 :                 for id, size := range checkpointArtifactRefs(checkpoint) {</span></span>
+<span id="L492"><span class="lineNum">     492</span>                 :<span class="tlaGNC">           1 :                         if old, ok := refs[id]; !ok || size &gt; old {</span></span>
+<span id="L493"><span class="lineNum">     493</span>                 :<span class="tlaGNC">           1 :                                 refs[id] = size</span></span>
+<span id="L494"><span class="lineNum">     494</span>                 :<span class="tlaGNC">           1 :                         }</span></span>
+<span id="L495"><span class="lineNum">     495</span>                 :             :                 }</span>
+<span id="L496"><span class="lineNum">     496</span>                 :             :         }</span>
+<span id="L497"><span class="lineNum">     497</span>                 :<span class="tlaGNC">          13 :         if err := rows.Err(); err != nil {</span></span>
+<span id="L498"><span class="lineNum">     498</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 _ = rows.Close()</span></span>
+<span id="L499"><span class="lineNum">     499</span>                 :<span class="tlaUNC">           0 :                 return storeError(&quot;iterate checkpoints for artifact references&quot;, err)</span></span>
+<span id="L500"><span class="lineNum">     500</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L501"><span class="lineNum">     501</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         if err := rows.Close(); err != nil {</span></span>
+<span id="L502"><span class="lineNum">     502</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;close checkpoints for artifact references&quot;, err)</span></span>
+<span id="L503"><span class="lineNum">     503</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L504"><span class="lineNum">     504</span>                 :             :         // Surviving directive events pin their artifacts too: the reference</span>
+<span id="L505"><span class="lineNum">     505</span>                 :             :         // graph must stay complete even if the checkpoints that carried the</span>
+<span id="L506"><span class="lineNum">     506</span>                 :             :         // same references were truncated (docs/SURFACE_DESIGN.md §4.6).</span>
+<span id="L507"><span class="lineNum">     507</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         directiveRows, err := tx.QueryContext(ctx,</span></span>
+<span id="L508"><span class="lineNum">     508</span>                 :<span class="tlaGNC">          13 :                 `SELECT type, payload FROM events WHERE session_id = ? AND type IN ('context.masked', 'context.archived')`,</span></span>
+<span id="L509"><span class="lineNum">     509</span>                 :<span class="tlaGNC">          13 :                 sessionID.String())</span></span>
+<span id="L510"><span class="lineNum">     510</span>                 :<span class="tlaGNC">          13 :         if err != nil {</span></span>
+<span id="L511"><span class="lineNum">     511</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;load surviving directive events for artifact references&quot;, err)</span></span>
+<span id="L512"><span class="lineNum">     512</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L513"><span class="lineNum">     513</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         for directiveRows.Next() {</span></span>
+<span id="L514"><span class="lineNum">     514</span>                 :<span class="tlaGNC">           1 :                 var evtType string</span></span>
+<span id="L515"><span class="lineNum">     515</span>                 :<span class="tlaGNC">           1 :                 var payload []byte</span></span>
+<span id="L516"><span class="lineNum">     516</span>                 :<span class="tlaGNC">           1 :                 if err := directiveRows.Scan(&amp;evtType, &amp;payload); err != nil {</span></span>
+<span id="L517"><span class="lineNum">     517</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         _ = directiveRows.Close()</span></span>
+<span id="L518"><span class="lineNum">     518</span>                 :<span class="tlaUNC">           0 :                         return storeError(&quot;scan directive event for artifact references&quot;, err)</span></span>
+<span id="L519"><span class="lineNum">     519</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L520"><span class="lineNum">     520</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                 directiveRefs, err := surfaceDirectiveArtifactRefs(domain.Event{Type: domain.EventType(evtType), Payload: payload})</span></span>
+<span id="L521"><span class="lineNum">     521</span>                 :<span class="tlaGNC">           1 :                 if err != nil {</span></span>
+<span id="L522"><span class="lineNum">     522</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         _ = directiveRows.Close()</span></span>
+<span id="L523"><span class="lineNum">     523</span>                 :<span class="tlaUNC">           0 :                         return storeError(&quot;scan directive artifact references&quot;, err)</span></span>
+<span id="L524"><span class="lineNum">     524</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L525"><span class="lineNum">     525</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                 for _, ref := range directiveRefs {</span></span>
+<span id="L526"><span class="lineNum">     526</span>                 :<span class="tlaGNC">           1 :                         addArtifactRef(refs, ref)</span></span>
+<span id="L527"><span class="lineNum">     527</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
+<span id="L528"><span class="lineNum">     528</span>                 :             :         }</span>
+<span id="L529"><span class="lineNum">     529</span>                 :<span class="tlaGNC">          13 :         if err := directiveRows.Err(); err != nil {</span></span>
+<span id="L530"><span class="lineNum">     530</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 _ = directiveRows.Close()</span></span>
+<span id="L531"><span class="lineNum">     531</span>                 :<span class="tlaUNC">           0 :                 return storeError(&quot;iterate directive events for artifact references&quot;, err)</span></span>
+<span id="L532"><span class="lineNum">     532</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L533"><span class="lineNum">     533</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         if err := directiveRows.Close(); err != nil {</span></span>
+<span id="L534"><span class="lineNum">     534</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return storeError(&quot;close directive events for artifact references&quot;, err)</span></span>
+<span id="L535"><span class="lineNum">     535</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L536"><span class="lineNum">     536</span>                 :<span class="tlaGNC tlaBgGNC">          13 :         return addArtifactRefs(ctx, tx, sessionID, refs)</span></span>
+<span id="L537"><span class="lineNum">     537</span>                 :             : }</span>
         </pre>
               </td>
             </tr>

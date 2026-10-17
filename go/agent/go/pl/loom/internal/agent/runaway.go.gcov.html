@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -131,16 +131,16 @@
 <span id="L60"><span class="lineNum">      60</span>                 :             : // resolveRunawayConfig resolves the effective thresholds: an entirely</span>
 <span id="L61"><span class="lineNum">      61</span>                 :             : // zero struct means &quot;not configured&quot; and falls back to the defaults.</span>
 <span id="L62"><span class="lineNum">      62</span>                 :             : func resolveRunawayConfig(cfg domain.RunawayConfig) domain.RunawayConfig {</span>
-<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC tlaBgGNC">        1445 :         if cfg == (domain.RunawayConfig{}) {</span></span>
-<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">        1225 :                 return domain.DefaultRunawayConfig()</span></span>
-<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">        1225 :         }</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC tlaBgGNC">        1466 :         if cfg == (domain.RunawayConfig{}) {</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">        1246 :                 return domain.DefaultRunawayConfig()</span></span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">        1246 :         }</span></span>
 <span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">         220 :         return cfg</span></span>
 <span id="L67"><span class="lineNum">      67</span>                 :             : }</span>
 <span id="L68"><span class="lineNum">      68</span>                 :             : </span>
 <span id="L69"><span class="lineNum">      69</span>                 :             : // runawayConfig resolves the loop's configured thresholds.</span>
 <span id="L70"><span class="lineNum">      70</span>                 :             : func (l *Loop) runawayConfig() domain.RunawayConfig {</span>
-<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">        1445 :         return resolveRunawayConfig(l.Runaway)</span></span>
-<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">        1445 : }</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">        1466 :         return resolveRunawayConfig(l.Runaway)</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">        1466 : }</span></span>
 <span id="L73"><span class="lineNum">      73</span>                 :             : </span>
 <span id="L74"><span class="lineNum">      74</span>                 :             : // rawArgsHash fingerprints tool-call arguments (canonical JSON for</span>
 <span id="L75"><span class="lineNum">      75</span>                 :             : // prepared calls, raw JSON otherwise). It deliberately does NOT use</span>
@@ -149,13 +149,13 @@
 <span id="L78"><span class="lineNum">      78</span>                 :             : // would never collide (found via E2E: the repeated-call detector never</span>
 <span id="L79"><span class="lineNum">      79</span>                 :             : // fired with real tools).</span>
 <span id="L80"><span class="lineNum">      80</span>                 :             : func rawArgsHash(raw json.RawMessage) string {</span>
-<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">         272 :         return toolkit.ArgsFingerprint(raw)</span></span>
-<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">         272 : }</span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">         274 :         return toolkit.ArgsFingerprint(raw)</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">         274 : }</span></span>
 <span id="L83"><span class="lineNum">      83</span>                 :             : </span>
 <span id="L84"><span class="lineNum">      84</span>                 :             : // callSignature identifies one logical tool action for repeat detection.</span>
 <span id="L85"><span class="lineNum">      85</span>                 :             : func callSignature(tool string, args json.RawMessage) string {</span>
-<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">         256 :         return tool + &quot;\x00&quot; + rawArgsHash(args)</span></span>
-<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC">         256 : }</span></span>
+<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">         258 :         return tool + &quot;\x00&quot; + rawArgsHash(args)</span></span>
+<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC">         258 : }</span></span>
 <span id="L88"><span class="lineNum">      88</span>                 :             : </span>
 <span id="L89"><span class="lineNum">      89</span>                 :             : // trackToolCall feeds the runaway detectors with one routed tool call</span>
 <span id="L90"><span class="lineNum">      90</span>                 :             : // (prepared or failed-to-prepare). It returns the termination reason when</span>
@@ -163,26 +163,26 @@
 <span id="L92"><span class="lineNum">      92</span>                 :             : // and terminates the run. The repeat just below the threshold earns a</span>
 <span id="L93"><span class="lineNum">      93</span>                 :             : // queued warning so the model gets one chance to change strategy.</span>
 <span id="L94"><span class="lineNum">      94</span>                 :             : func (d *runawayDetector) trackToolCall(cfg domain.RunawayConfig, tool string, args json.RawMessage, notices *noticeCenter, clock domain.Clock) string {</span>
-<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">         256 :         sig := callSignature(tool, args)</span></span>
-<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">         256 :         if sig == d.lastCallSig {</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">         258 :         sig := callSignature(tool, args)</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">         258 :         if sig == d.lastCallSig {</span></span>
 <span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">          18 :                 d.repeatedCallCount++</span></span>
 <span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC">          18 :         } else {</span></span>
-<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">         238 :                 d.lastCallSig = sig</span></span>
-<span id="L100"><span class="lineNum">     100</span>                 :<span class="tlaGNC">         238 :                 d.repeatedCallCount = 1</span></span>
-<span id="L101"><span class="lineNum">     101</span>                 :<span class="tlaGNC">         238 :         }</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">         240 :                 d.lastCallSig = sig</span></span>
+<span id="L100"><span class="lineNum">     100</span>                 :<span class="tlaGNC">         240 :                 d.repeatedCallCount = 1</span></span>
+<span id="L101"><span class="lineNum">     101</span>                 :<span class="tlaGNC">         240 :         }</span></span>
 <span id="L102"><span class="lineNum">     102</span>                 :             :         // A first-seen signature is a progress signal (the model is fetching</span>
 <span id="L103"><span class="lineNum">     103</span>                 :             :         // new information or producing new effects); repeats are not.</span>
-<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaGNC">         256 :         if d.seenCallSigs == nil {</span></span>
-<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC">          86 :                 d.seenCallSigs = make(map[string]struct{})</span></span>
-<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">          86 :         }</span></span>
-<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">         256 :         if _, seen := d.seenCallSigs[sig]; !seen {</span></span>
-<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">         238 :                 d.seenCallSigs[sig] = struct{}{}</span></span>
-<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">         238 :                 d.markProgress(clock)</span></span>
-<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">         238 :         }</span></span>
-<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">         256 :         if cfg.MaxRepeatedCalls &lt;= 0 {</span></span>
+<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaGNC">         258 :         if d.seenCallSigs == nil {</span></span>
+<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC">          87 :                 d.seenCallSigs = make(map[string]struct{})</span></span>
+<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">          87 :         }</span></span>
+<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">         258 :         if _, seen := d.seenCallSigs[sig]; !seen {</span></span>
+<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">         240 :                 d.seenCallSigs[sig] = struct{}{}</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">         240 :                 d.markProgress(clock)</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">         240 :         }</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">         258 :         if cfg.MaxRepeatedCalls &lt;= 0 {</span></span>
 <span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;&quot;</span></span>
 <span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC tlaBgGNC">         256 :         switch {</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC tlaBgGNC">         258 :         switch {</span></span>
 <span id="L115"><span class="lineNum">     115</span>                 :             :         case d.repeatedCallCount &gt;= cfg.MaxRepeatedCalls:</span>
 <span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">           3 :                 return fmt.Sprintf(&quot;runaway detected: tool %q was called with identical arguments %d times in a row&quot;, tool, d.repeatedCallCount)</span></span>
 <span id="L117"><span class="lineNum">     117</span>                 :             :         case d.repeatedCallCount == cfg.MaxRepeatedCalls-1 &amp;&amp; notices.fireOnce(dimensionRunaway+&quot;:&quot;+sig, 1):</span>
@@ -195,7 +195,7 @@
 <span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">           4 :                         ), clock.Now()),</span></span>
 <span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">           4 :                 })</span></span>
 <span id="L126"><span class="lineNum">     126</span>                 :             :         }</span>
-<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">         253 :         return &quot;&quot;</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">         255 :         return &quot;&quot;</span></span>
 <span id="L128"><span class="lineNum">     128</span>                 :             : }</span>
 <span id="L129"><span class="lineNum">     129</span>                 :             : </span>
 <span id="L130"><span class="lineNum">     130</span>                 :             : // trackExecResult feeds the consecutive-execution-failure detector and</span>
@@ -204,23 +204,23 @@
 <span id="L133"><span class="lineNum">     133</span>                 :             : // struggling with a schema (covered by repeat detection instead), and</span>
 <span id="L134"><span class="lineNum">     134</span>                 :             : // successful calls reset the streak.</span>
 <span id="L135"><span class="lineNum">     135</span>                 :             : func (d *runawayDetector) trackExecResult(cfg domain.RunawayConfig, result domain.ToolResult) string {</span>
-<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">         232 :         if result.Status == domain.ToolStatusError {</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">         237 :         if result.Status == domain.ToolStatusError {</span></span>
 <span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">           6 :                 d.consecutiveExecFailures++</span></span>
 <span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">           6 :         } else {</span></span>
-<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">         226 :                 d.consecutiveExecFailures = 0</span></span>
-<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">         226 :         }</span></span>
-<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">         232 :         if cfg.MaxConsecutiveFailures &gt; 0 &amp;&amp; d.consecutiveExecFailures &gt;= cfg.MaxConsecutiveFailures {</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">         231 :                 d.consecutiveExecFailures = 0</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">         231 :         }</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">         237 :         if cfg.MaxConsecutiveFailures &gt; 0 &amp;&amp; d.consecutiveExecFailures &gt;= cfg.MaxConsecutiveFailures {</span></span>
 <span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">           1 :                 return fmt.Sprintf(&quot;runaway detected: %d consecutive tool executions failed&quot;, d.consecutiveExecFailures)</span></span>
 <span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">         231 :         return &quot;&quot;</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">         236 :         return &quot;&quot;</span></span>
 <span id="L145"><span class="lineNum">     145</span>                 :             : }</span>
 <span id="L146"><span class="lineNum">     146</span>                 :             : </span>
 <span id="L147"><span class="lineNum">     147</span>                 :             : // markProgress records a progress signal: it arms the per-turn stall</span>
 <span id="L148"><span class="lineNum">     148</span>                 :             : // counter and re-anchors the stall watchdog's active-time baseline.</span>
 <span id="L149"><span class="lineNum">     149</span>                 :             : func (d *runawayDetector) markProgress(clock domain.Clock) {</span>
-<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">         444 :         d.progressThisTurn = true</span></span>
-<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">         444 :         d.lastProgressAt = clock.Now()</span></span>
-<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">         444 : }</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">         449 :         d.progressThisTurn = true</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">         449 :         d.lastProgressAt = clock.Now()</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">         449 : }</span></span>
 <span id="L153"><span class="lineNum">     153</span>                 :             : </span>
 <span id="L154"><span class="lineNum">     154</span>                 :             : // compensateSuspend shifts the stall watchdog's baseline forward by the</span>
 <span id="L155"><span class="lineNum">     155</span>                 :             : // time spent suspended (approval waits, user-interactive tools): user</span>
@@ -240,31 +240,31 @@
 <span id="L169"><span class="lineNum">     169</span>                 :             : func (d *runawayDetector) trackStall(cfg domain.RunawayConfig, run *Run, notices *noticeCenter) {</span>
 <span id="L170"><span class="lineNum">     170</span>                 :             :         // Anchor the watchdog baseline at the first prepare even when the</span>
 <span id="L171"><span class="lineNum">     171</span>                 :             :         // turns-based warning is disabled: the two detectors are orthogonal.</span>
-<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">         474 :         if d.lastProgressAt.IsZero() {</span></span>
-<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">         216 :                 d.lastProgressAt = run.Clock.Now()</span></span>
-<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">         216 :         }</span></span>
-<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">         474 :         if cfg.StallWarnTurns &lt;= 0 {</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">         481 :         if d.lastProgressAt.IsZero() {</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">         222 :                 d.lastProgressAt = run.Clock.Now()</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">         222 :         }</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">         481 :         if cfg.StallWarnTurns &lt;= 0 {</span></span>
 <span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 d.progressThisTurn = false</span></span>
 <span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaUNC">           0 :                 return</span></span>
 <span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaUNC">           0 :         }</span></span>
 <span id="L179"><span class="lineNum">     179</span>                 :             :         // The first prepare has no previous turn to judge — consume the flag</span>
 <span id="L180"><span class="lineNum">     180</span>                 :             :         // without counting.</span>
-<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC tlaBgGNC">         474 :         if run.Usage.Turns &lt;= 1 {</span></span>
-<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">         216 :                 d.progressThisTurn = false</span></span>
-<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">         216 :                 return</span></span>
-<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">         216 :         }</span></span>
-<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">         258 :         if d.progressThisTurn {</span></span>
-<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">         242 :                 d.stallTurns = 0</span></span>
-<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">         242 :         } else {</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC tlaBgGNC">         481 :         if run.Usage.Turns &lt;= 1 {</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">         222 :                 d.progressThisTurn = false</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">         222 :                 return</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">         222 :         }</span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">         259 :         if d.progressThisTurn {</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">         243 :                 d.stallTurns = 0</span></span>
+<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">         243 :         } else {</span></span>
 <span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">          16 :                 d.stallTurns++</span></span>
 <span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">          16 :         }</span></span>
-<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">         258 :         d.progressThisTurn = false</span></span>
-<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">         258 :         // The streak keeps growing after each reminder so the level</span></span>
+<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">         259 :         d.progressThisTurn = false</span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">         259 :         // The streak keeps growing after each reminder so the level</span></span>
 <span id="L192"><span class="lineNum">     192</span>                 :             :         // (stallTurns/StallWarnTurns) advances — resetting it here would pin</span>
 <span id="L193"><span class="lineNum">     193</span>                 :             :         // the level at 1 and fireOnce would suppress every later</span>
 <span id="L194"><span class="lineNum">     194</span>                 :             :         // reminder, defeating the &quot;every stall_warn_turns&quot; contract</span>
 <span id="L195"><span class="lineNum">     195</span>                 :             :         // (REVIEW H15).</span>
-<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">         258 :         if d.stallTurns &gt;= cfg.StallWarnTurns {</span></span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">         259 :         if d.stallTurns &gt;= cfg.StallWarnTurns {</span></span>
 <span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">           5 :                 level := d.stallTurns / cfg.StallWarnTurns</span></span>
 <span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC">           5 :                 if notices.fireOnce(dimensionRunaway+&quot;:stall&quot;, level) {</span></span>
 <span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaGNC">           3 :                         run.AddBudgetNotice(domain.BudgetNoticePayload{</span></span>
@@ -285,10 +285,10 @@
 <span id="L214"><span class="lineNum">     214</span>                 :             : // (docs/CONTEXT_DESIGN.md §4.4.3). A zero baseline — no prepare has run</span>
 <span id="L215"><span class="lineNum">     215</span>                 :             : // yet — reports no stall.</span>
 <span id="L216"><span class="lineNum">     216</span>                 :             : func (d *runawayDetector) stallActiveDuration(clock domain.Clock) time.Duration {</span>
-<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">         460 :         if d.lastProgressAt.IsZero() {</span></span>
-<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaGNC">         215 :                 return 0</span></span>
-<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaGNC">         215 :         }</span></span>
-<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC">         245 :         return max(clock.Since(d.lastProgressAt), 0)</span></span>
+<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">         467 :         if d.lastProgressAt.IsZero() {</span></span>
+<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaGNC">         221 :                 return 0</span></span>
+<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaGNC">         221 :         }</span></span>
+<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC">         246 :         return max(clock.Since(d.lastProgressAt), 0)</span></span>
 <span id="L221"><span class="lineNum">     221</span>                 :             : }</span>
 <span id="L222"><span class="lineNum">     222</span>                 :             : </span>
 <span id="L223"><span class="lineNum">     223</span>                 :             : // stallExpired reports whether the stall watchdog fired: the active time</span>
@@ -299,8 +299,8 @@
 <span id="L228"><span class="lineNum">     228</span>                 :             : // wrap-up) then enters the soft-landing wrap-up (dimension stall)</span>
 <span id="L229"><span class="lineNum">     229</span>                 :             : // instead of letting the run spin forever.</span>
 <span id="L230"><span class="lineNum">     230</span>                 :             : func (d *runawayDetector) stallExpired(cfg domain.RunawayConfig, clock domain.Clock) bool {</span>
-<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">         482 :         return cfg.StallTimeout &gt; 0 &amp;&amp; d.stallActiveDuration(clock) &gt;= cfg.StallTimeout</span></span>
-<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">         482 : }</span></span>
+<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">         489 :         return cfg.StallTimeout &gt; 0 &amp;&amp; d.stallActiveDuration(clock) &gt;= cfg.StallTimeout</span></span>
+<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">         489 : }</span></span>
         </pre>
               </td>
             </tr>

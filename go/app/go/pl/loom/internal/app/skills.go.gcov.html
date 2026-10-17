@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -136,12 +136,12 @@
 <span id="L65"><span class="lineNum">      65</span>                 :             :         systemPromptDisabled bool,</span>
 <span id="L66"><span class="lineNum">      66</span>                 :             :         logger *slog.Logger,</span>
 <span id="L67"><span class="lineNum">      67</span>                 :             : ) (prompt.Option, *SkillsHandle, error) {</span>
-<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC tlaBgGNC">          35 :         if registry == nil {</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC tlaBgGNC">          44 :         if registry == nil {</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, nil, fmt.Errorf(&quot;tool registry is required&quot;)</span></span>
 <span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC tlaBgGNC">          35 :         if !cfg.Enabled || systemPromptDisabled {</span></span>
-<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">          19 :                 return nil, nil, nil</span></span>
-<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">          19 :         }</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC tlaBgGNC">          44 :         if !cfg.Enabled || systemPromptDisabled {</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">          28 :                 return nil, nil, nil</span></span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">          28 :         }</span></span>
 <span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">          16 :         loader := skill.NewLoader(workspaceRoot, skillUserRoots(cfg, loomSkillsDir), logger)</span></span>
 <span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">          16 :         loader.SetDisabled(cfg.Disabled)</span></span>
 <span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">          16 :         catalog := &amp;skill.AtomicCatalog{}</span></span>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -127,10 +127,10 @@
 <span id="L56"><span class="lineNum">      56</span>                 :             : // model and to model outputs before they are written to the memory store,</span>
 <span id="L57"><span class="lineNum">      57</span>                 :             : // so secrets can neither leak to the provider nor persist on disk.</span>
 <span id="L58"><span class="lineNum">      58</span>                 :             : func RedactSecrets(s string) string {</span>
-<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC tlaBgGNC">          29 :         for _, p := range secretPatterns {</span></span>
-<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">         261 :                 s = p.re.ReplaceAllString(s, p.repl)</span></span>
-<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">         261 :         }</span></span>
-<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">          29 :         return s</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC tlaBgGNC">        1758 :         for _, p := range secretPatterns {</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">       15822 :                 s = p.re.ReplaceAllString(s, p.repl)</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">       15822 :         }</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">        1758 :         return s</span></span>
 <span id="L63"><span class="lineNum">      63</span>                 :             : }</span>
         </pre>
               </td>

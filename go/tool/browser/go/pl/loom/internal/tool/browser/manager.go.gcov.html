@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -201,17 +201,17 @@
 <span id="L130"><span class="lineNum">     130</span>                 :             : // The caller must call Touch after each operation to refresh the idle</span>
 <span id="L131"><span class="lineNum">     131</span>                 :             : // timer — pageFor in browser.go folds both into one helper.</span>
 <span id="L132"><span class="lineNum">     132</span>                 :             : func (m *Manager) Acquire() (*rod.Page, error) {</span>
-<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">          25 :         m.mu.Lock()</span></span>
-<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">          25 :         defer m.mu.Unlock()</span></span>
-<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">          25 : </span></span>
-<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">          25 :         if m.closed {</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">          24 :         m.mu.Lock()</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">          24 :         defer m.mu.Unlock()</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">          24 : </span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">          24 :         if m.closed {</span></span>
 <span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">           1 :                 return nil, domain.NewError(domain.ErrUnavailable, &quot;browser manager is closed&quot;)</span></span>
 <span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">           1 :         }</span></span>
 <span id="L139"><span class="lineNum">     139</span>                 :             : </span>
-<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          24 :         if m.instance != nil {</span></span>
-<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">          16 :                 if m.instance.alive() {</span></span>
-<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">          16 :                         return m.instance.page, nil</span></span>
-<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">          16 :                 }</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          23 :         if m.instance != nil {</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">          15 :                 if m.instance.alive() {</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">          15 :                         return m.instance.page, nil</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">          15 :                 }</span></span>
 <span id="L144"><span class="lineNum">     144</span>                 :             :                 // The browser died (crash, kill, remote endpoint gone): drop the</span>
 <span id="L145"><span class="lineNum">     145</span>                 :             :                 // corpse and start fresh instead of failing every future action.</span>
 <span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 m.instance.stop()</span></span>
@@ -228,11 +228,11 @@
 <span id="L157"><span class="lineNum">     157</span>                 :             : </span>
 <span id="L158"><span class="lineNum">     158</span>                 :             : // Touch refreshes the last-used timestamp of the current instance.</span>
 <span id="L159"><span class="lineNum">     159</span>                 :             : func (m *Manager) Touch() {</span>
-<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">          22 :         m.mu.Lock()</span></span>
-<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">          22 :         defer m.mu.Unlock()</span></span>
-<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">          22 :         if m.instance != nil {</span></span>
-<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">          21 :                 m.instance.usedAt = time.Now()</span></span>
-<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">          21 :         }</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">          21 :         m.mu.Lock()</span></span>
+<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">          21 :         defer m.mu.Unlock()</span></span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">          21 :         if m.instance != nil {</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">          20 :                 m.instance.usedAt = time.Now()</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">          20 :         }</span></span>
 <span id="L165"><span class="lineNum">     165</span>                 :             : }</span>
 <span id="L166"><span class="lineNum">     166</span>                 :             : </span>
 <span id="L167"><span class="lineNum">     167</span>                 :             : // CloseInstance forcibly closes the current browser instance. Used by</span>
@@ -339,9 +339,9 @@
 <span id="L268"><span class="lineNum">     268</span>                 :             : // browser (crashed process, closed remote endpoint) fails the probe and</span>
 <span id="L269"><span class="lineNum">     269</span>                 :             : // the instance is replaced on the next Acquire.</span>
 <span id="L270"><span class="lineNum">     270</span>                 :             : func (i *instance) alive() bool {</span>
-<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">          16 :         _, err := proto.BrowserGetVersion{}.Call(i.browser)</span></span>
-<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">          16 :         return err == nil</span></span>
-<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">          16 : }</span></span>
+<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">          15 :         _, err := proto.BrowserGetVersion{}.Call(i.browser)</span></span>
+<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">          15 :         return err == nil</span></span>
+<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">          15 : }</span></span>
 <span id="L274"><span class="lineNum">     274</span>                 :             : </span>
 <span id="L275"><span class="lineNum">     275</span>                 :             : // stop tears the instance down without ever blocking the Manager mutex.</span>
 <span id="L276"><span class="lineNum">     276</span>                 :             : // Remote mode closes only our tab — the shared browser stays alive — with</span>
@@ -363,13 +363,13 @@
 <span id="L292"><span class="lineNum">     292</span>                 :             : // reaper periodically checks for idle browser instances and closes</span>
 <span id="L293"><span class="lineNum">     293</span>                 :             : // ones that have not been used within the idle TTL.</span>
 <span id="L294"><span class="lineNum">     294</span>                 :             : func (m *Manager) reaper() {</span>
-<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">          45 :         ticker := time.NewTicker(m.idleTTL / 2)</span></span>
-<span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaGNC">          45 :         defer ticker.Stop()</span></span>
-<span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaGNC">          45 : </span></span>
-<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaGNC">          45 :         for {</span></span>
-<span id="L299"><span class="lineNum">     299</span>                 :<span class="tlaGNC">          45 :                 select {</span></span>
+<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">          43 :         ticker := time.NewTicker(m.idleTTL / 2)</span></span>
+<span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaGNC">          43 :         defer ticker.Stop()</span></span>
+<span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaGNC">          43 : </span></span>
+<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaGNC">          43 :         for {</span></span>
+<span id="L299"><span class="lineNum">     299</span>                 :<span class="tlaGNC">          43 :                 select {</span></span>
 <span id="L300"><span class="lineNum">     300</span>                 :             :                 case &lt;-m.reaperDone:</span>
-<span id="L301"><span class="lineNum">     301</span>                 :<span class="tlaGNC">          45 :                         return</span></span>
+<span id="L301"><span class="lineNum">     301</span>                 :<span class="tlaGNC">          42 :                         return</span></span>
 <span id="L302"><span class="lineNum">     302</span>                 :             :                 case &lt;-ticker.C:</span>
 <span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         m.mu.Lock()</span></span>
 <span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaUNC">           0 :                         if m.instance != nil &amp;&amp; time.Since(m.instance.usedAt) &gt; m.idleTTL {</span></span>

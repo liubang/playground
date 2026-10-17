@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryLo">73.5&nbsp;%</td>
-            <td class="headerCovTableEntry">536</td>
-            <td class="headerCovTableEntry">394</td>
+            <td class="headerCovTableEntryLo">73.6&nbsp;%</td>
+            <td class="headerCovTableEntry">537</td>
+            <td class="headerCovTableEntry">395</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -1021,56 +1021,60 @@
 <span id="L950"><span class="lineNum">     950</span>                 :<span class="tlaGNC">           3 :         if err != nil {</span></span>
 <span id="L951"><span class="lineNum">     951</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
 <span id="L952"><span class="lineNum">     952</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L953"><span class="lineNum">     953</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         title := &quot;&quot;</span></span>
-<span id="L954"><span class="lineNum">     954</span>                 :<span class="tlaGNC">           3 :         if titles, err := sqlite.FirstUserMessageTexts(ctx, []domain.SessionID{id}); err == nil {</span></span>
-<span id="L955"><span class="lineNum">     955</span>                 :<span class="tlaGNC">           3 :                 title = summarizeSessionTitle(titles[id])</span></span>
-<span id="L956"><span class="lineNum">     956</span>                 :<span class="tlaGNC">           3 :         }</span></span>
-<span id="L957"><span class="lineNum">     957</span>                 :<span class="tlaGNC">           3 :         running := false</span></span>
-<span id="L958"><span class="lineNum">     958</span>                 :<span class="tlaGNC">           3 :         if h, ok := s.Get(id); ok {</span></span>
-<span id="L959"><span class="lineNum">     959</span>                 :<span class="tlaGNC">           3 :                 switch h.Controller.State() {</span></span>
-<span id="L960"><span class="lineNum">     960</span>                 :             :                 case ControllerStateRunning, ControllerStateCancelling, ControllerStateBooting:</span>
-<span id="L961"><span class="lineNum">     961</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         running = true</span></span>
-<span id="L962"><span class="lineNum">     962</span>                 :             :                 }</span>
-<span id="L963"><span class="lineNum">     963</span>                 :             :         }</span>
-<span id="L964"><span class="lineNum">     964</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         children := s.mazeChildrenFor(ctx, sqlite, inspection.Events)</span></span>
-<span id="L965"><span class="lineNum">     965</span>                 :<span class="tlaGNC">           3 :         return BuildMaze(id, title, inspection.Events, children, time.Now().UTC(), running), nil</span></span>
-<span id="L966"><span class="lineNum">     966</span>                 :             : }</span>
-<span id="L967"><span class="lineNum">     967</span>                 :             : </span>
-<span id="L968"><span class="lineNum">     968</span>                 :             : func (s *SessionService) mazeStore() (*session.SQLiteStore, error) {</span>
-<span id="L969"><span class="lineNum">     969</span>                 :<span class="tlaGNC">           3 :         sqlite, ok := s.proc.Store.(*session.SQLiteStore)</span></span>
-<span id="L970"><span class="lineNum">     970</span>                 :<span class="tlaGNC">           3 :         if !ok {</span></span>
-<span id="L971"><span class="lineNum">     971</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, fmt.Errorf(&quot;maze is unavailable for this store&quot;)</span></span>
-<span id="L972"><span class="lineNum">     972</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L973"><span class="lineNum">     973</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         return sqlite, nil</span></span>
-<span id="L974"><span class="lineNum">     974</span>                 :             : }</span>
-<span id="L975"><span class="lineNum">     975</span>                 :             : </span>
-<span id="L976"><span class="lineNum">     976</span>                 :             : // Maze builds the trace-maze payload for a session (authenticated path).</span>
-<span id="L977"><span class="lineNum">     977</span>                 :             : func (s *SessionService) Maze(ctx context.Context, id domain.SessionID) (*MazeData, error) {</span>
-<span id="L978"><span class="lineNum">     978</span>                 :<span class="tlaGNC">           2 :         sqlite, err := s.mazeStore()</span></span>
-<span id="L979"><span class="lineNum">     979</span>                 :<span class="tlaGNC">           2 :         if err != nil {</span></span>
-<span id="L980"><span class="lineNum">     980</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
-<span id="L981"><span class="lineNum">     981</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L982"><span class="lineNum">     982</span>                 :<span class="tlaGNC tlaBgGNC">           2 :         return s.mazeForSession(ctx, sqlite, id)</span></span>
-<span id="L983"><span class="lineNum">     983</span>                 :             : }</span>
-<span id="L984"><span class="lineNum">     984</span>                 :             : </span>
-<span id="L985"><span class="lineNum">     985</span>                 :             : // SharedMaze builds the trace-maze payload through a public share token.</span>
-<span id="L986"><span class="lineNum">     986</span>                 :             : // The data is a timing/verdict projection of the same transcript the share</span>
-<span id="L987"><span class="lineNum">     987</span>                 :             : // view already exposes — no privilege is widened.</span>
-<span id="L988"><span class="lineNum">     988</span>                 :             : func (s *SessionService) SharedMaze(ctx context.Context, token string) (*MazeData, error) {</span>
-<span id="L989"><span class="lineNum">     989</span>                 :<span class="tlaGNC">           2 :         store, err := s.shareStore()</span></span>
-<span id="L990"><span class="lineNum">     990</span>                 :<span class="tlaGNC">           2 :         if err != nil {</span></span>
-<span id="L991"><span class="lineNum">     991</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
-<span id="L992"><span class="lineNum">     992</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L993"><span class="lineNum">     993</span>                 :<span class="tlaGNC tlaBgGNC">           2 :         sessionID, err := s.resolveShare(ctx, store, token)</span></span>
+<span id="L953"><span class="lineNum">     953</span>                 :             :         // Same title rule as the session listing: the persisted sidecar title</span>
+<span id="L954"><span class="lineNum">     954</span>                 :             :         // wins, the truncated first user prompt is the fallback.</span>
+<span id="L955"><span class="lineNum">     955</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         title := inspection.Session.Title</span></span>
+<span id="L956"><span class="lineNum">     956</span>                 :<span class="tlaGNC">           3 :         if title == &quot;&quot; {</span></span>
+<span id="L957"><span class="lineNum">     957</span>                 :<span class="tlaGNC">           3 :                 if titles, err := sqlite.FirstUserMessageTexts(ctx, []domain.SessionID{id}); err == nil {</span></span>
+<span id="L958"><span class="lineNum">     958</span>                 :<span class="tlaGNC">           3 :                         title = summarizeSessionTitle(titles[id])</span></span>
+<span id="L959"><span class="lineNum">     959</span>                 :<span class="tlaGNC">           3 :                 }</span></span>
+<span id="L960"><span class="lineNum">     960</span>                 :             :         }</span>
+<span id="L961"><span class="lineNum">     961</span>                 :<span class="tlaGNC">           3 :         running := false</span></span>
+<span id="L962"><span class="lineNum">     962</span>                 :<span class="tlaGNC">           3 :         if h, ok := s.Get(id); ok {</span></span>
+<span id="L963"><span class="lineNum">     963</span>                 :<span class="tlaGNC">           3 :                 switch h.Controller.State() {</span></span>
+<span id="L964"><span class="lineNum">     964</span>                 :             :                 case ControllerStateRunning, ControllerStateCancelling, ControllerStateBooting:</span>
+<span id="L965"><span class="lineNum">     965</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         running = true</span></span>
+<span id="L966"><span class="lineNum">     966</span>                 :             :                 }</span>
+<span id="L967"><span class="lineNum">     967</span>                 :             :         }</span>
+<span id="L968"><span class="lineNum">     968</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         children := s.mazeChildrenFor(ctx, sqlite, inspection.Events)</span></span>
+<span id="L969"><span class="lineNum">     969</span>                 :<span class="tlaGNC">           3 :         return BuildMaze(id, title, inspection.Events, children, time.Now().UTC(), running), nil</span></span>
+<span id="L970"><span class="lineNum">     970</span>                 :             : }</span>
+<span id="L971"><span class="lineNum">     971</span>                 :             : </span>
+<span id="L972"><span class="lineNum">     972</span>                 :             : func (s *SessionService) mazeStore() (*session.SQLiteStore, error) {</span>
+<span id="L973"><span class="lineNum">     973</span>                 :<span class="tlaGNC">           3 :         sqlite, ok := s.proc.Store.(*session.SQLiteStore)</span></span>
+<span id="L974"><span class="lineNum">     974</span>                 :<span class="tlaGNC">           3 :         if !ok {</span></span>
+<span id="L975"><span class="lineNum">     975</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, fmt.Errorf(&quot;maze is unavailable for this store&quot;)</span></span>
+<span id="L976"><span class="lineNum">     976</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L977"><span class="lineNum">     977</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         return sqlite, nil</span></span>
+<span id="L978"><span class="lineNum">     978</span>                 :             : }</span>
+<span id="L979"><span class="lineNum">     979</span>                 :             : </span>
+<span id="L980"><span class="lineNum">     980</span>                 :             : // Maze builds the trace-maze payload for a session (authenticated path).</span>
+<span id="L981"><span class="lineNum">     981</span>                 :             : func (s *SessionService) Maze(ctx context.Context, id domain.SessionID) (*MazeData, error) {</span>
+<span id="L982"><span class="lineNum">     982</span>                 :<span class="tlaGNC">           2 :         sqlite, err := s.mazeStore()</span></span>
+<span id="L983"><span class="lineNum">     983</span>                 :<span class="tlaGNC">           2 :         if err != nil {</span></span>
+<span id="L984"><span class="lineNum">     984</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
+<span id="L985"><span class="lineNum">     985</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L986"><span class="lineNum">     986</span>                 :<span class="tlaGNC tlaBgGNC">           2 :         return s.mazeForSession(ctx, sqlite, id)</span></span>
+<span id="L987"><span class="lineNum">     987</span>                 :             : }</span>
+<span id="L988"><span class="lineNum">     988</span>                 :             : </span>
+<span id="L989"><span class="lineNum">     989</span>                 :             : // SharedMaze builds the trace-maze payload through a public share token.</span>
+<span id="L990"><span class="lineNum">     990</span>                 :             : // The data is a timing/verdict projection of the same transcript the share</span>
+<span id="L991"><span class="lineNum">     991</span>                 :             : // view already exposes — no privilege is widened.</span>
+<span id="L992"><span class="lineNum">     992</span>                 :             : func (s *SessionService) SharedMaze(ctx context.Context, token string) (*MazeData, error) {</span>
+<span id="L993"><span class="lineNum">     993</span>                 :<span class="tlaGNC">           2 :         store, err := s.shareStore()</span></span>
 <span id="L994"><span class="lineNum">     994</span>                 :<span class="tlaGNC">           2 :         if err != nil {</span></span>
-<span id="L995"><span class="lineNum">     995</span>                 :<span class="tlaGNC">           1 :                 return nil, err</span></span>
-<span id="L996"><span class="lineNum">     996</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L997"><span class="lineNum">     997</span>                 :<span class="tlaGNC">           1 :         sqlite, err := s.mazeStore()</span></span>
-<span id="L998"><span class="lineNum">     998</span>                 :<span class="tlaGNC">           1 :         if err != nil {</span></span>
-<span id="L999"><span class="lineNum">     999</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
-<span id="L1000"><span class="lineNum">    1000</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L1001"><span class="lineNum">    1001</span>                 :<span class="tlaGNC tlaBgGNC">           1 :         return s.mazeForSession(ctx, sqlite, sessionID)</span></span>
-<span id="L1002"><span class="lineNum">    1002</span>                 :             : }</span>
+<span id="L995"><span class="lineNum">     995</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
+<span id="L996"><span class="lineNum">     996</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L997"><span class="lineNum">     997</span>                 :<span class="tlaGNC tlaBgGNC">           2 :         sessionID, err := s.resolveShare(ctx, store, token)</span></span>
+<span id="L998"><span class="lineNum">     998</span>                 :<span class="tlaGNC">           2 :         if err != nil {</span></span>
+<span id="L999"><span class="lineNum">     999</span>                 :<span class="tlaGNC">           1 :                 return nil, err</span></span>
+<span id="L1000"><span class="lineNum">    1000</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L1001"><span class="lineNum">    1001</span>                 :<span class="tlaGNC">           1 :         sqlite, err := s.mazeStore()</span></span>
+<span id="L1002"><span class="lineNum">    1002</span>                 :<span class="tlaGNC">           1 :         if err != nil {</span></span>
+<span id="L1003"><span class="lineNum">    1003</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
+<span id="L1004"><span class="lineNum">    1004</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L1005"><span class="lineNum">    1005</span>                 :<span class="tlaGNC tlaBgGNC">           1 :         return s.mazeForSession(ctx, sqlite, sessionID)</span></span>
+<span id="L1006"><span class="lineNum">    1006</span>                 :             : }</span>
         </pre>
               </td>
             </tr>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -223,21 +223,21 @@
 <span id="L152"><span class="lineNum">     152</span>                 :             : </span>
 <span id="L153"><span class="lineNum">     153</span>                 :             : // Validate ensures the ContentPart is well-formed.</span>
 <span id="L154"><span class="lineNum">     154</span>                 :             : func (p ContentPart) Validate() error {</span>
-<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC tlaBgGNC">        9867 :         if p.PartIndex &lt; 0 {</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC tlaBgGNC">        8737 :         if p.PartIndex &lt; 0 {</span></span>
 <span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">           1 :                 return fmt.Errorf(&quot;part_index must be non-negative&quot;)</span></span>
 <span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">        9866 :         if p.PresentOnly &amp;&amp; p.Kind != PartArtifact {</span></span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">        8736 :         if p.PresentOnly &amp;&amp; p.Kind != PartArtifact {</span></span>
 <span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return fmt.Errorf(&quot;present_only is only valid on artifact parts&quot;)</span></span>
 <span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC tlaBgGNC">        9866 :         if p.ModelOnly &amp;&amp; p.Kind != PartArtifact {</span></span>
+<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC tlaBgGNC">        8736 :         if p.ModelOnly &amp;&amp; p.Kind != PartArtifact {</span></span>
 <span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">           1 :                 return fmt.Errorf(&quot;model_only is only valid on artifact parts&quot;)</span></span>
 <span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">        9865 :         if p.PresentOnly &amp;&amp; p.ModelOnly {</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">        8735 :         if p.PresentOnly &amp;&amp; p.ModelOnly {</span></span>
 <span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">           1 :                 return fmt.Errorf(&quot;present_only and model_only are mutually exclusive&quot;)</span></span>
 <span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">        9864 :         switch p.Kind {</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">        8734 :         switch p.Kind {</span></span>
 <span id="L168"><span class="lineNum">     168</span>                 :             :         case PartText:</span>
-<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">        9559 :                 if p.ToolCall != nil || p.ToolResult != nil || p.Artifact != nil || p.Reasoning != nil || p.Image != nil {</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">        8421 :                 if p.ToolCall != nil || p.ToolResult != nil || p.Artifact != nil || p.Reasoning != nil || p.Image != nil {</span></span>
 <span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">           1 :                         return fmt.Errorf(&quot;text part must not have tool_call/tool_result/artifact/reasoning/image&quot;)</span></span>
 <span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
 <span id="L172"><span class="lineNum">     172</span>                 :             :         case PartReasoning:</span>
@@ -248,11 +248,11 @@
 <span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return fmt.Errorf(&quot;redacted reasoning part must not carry text&quot;)</span></span>
 <span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
 <span id="L179"><span class="lineNum">     179</span>                 :             :         case PartToolCall:</span>
-<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC tlaBgGNC">         115 :                 if p.ToolCall == nil {</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC tlaBgGNC">         119 :                 if p.ToolCall == nil {</span></span>
 <span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">           1 :                         return fmt.Errorf(&quot;tool_call part must have ToolCall set&quot;)</span></span>
 <span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
 <span id="L183"><span class="lineNum">     183</span>                 :             :         case PartToolResult:</span>
-<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">         153 :                 if p.ToolResult == nil {</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">         157 :                 if p.ToolResult == nil {</span></span>
 <span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">           1 :                         return fmt.Errorf(&quot;tool_result part must have ToolResult set&quot;)</span></span>
 <span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
 <span id="L187"><span class="lineNum">     187</span>                 :             :         case PartArtifact:</span>
@@ -272,7 +272,7 @@
 <span id="L201"><span class="lineNum">     201</span>                 :             :         default:</span>
 <span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                 return fmt.Errorf(&quot;unknown part kind %q&quot;, p.Kind)</span></span>
 <span id="L203"><span class="lineNum">     203</span>                 :             :         }</span>
-<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">        9857 :         return nil</span></span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">        8727 :         return nil</span></span>
 <span id="L205"><span class="lineNum">     205</span>                 :             : }</span>
 <span id="L206"><span class="lineNum">     206</span>                 :             : </span>
 <span id="L207"><span class="lineNum">     207</span>                 :             : // MetadataCompactedArtifacts is the Message.Metadata key under which a</span>
@@ -297,92 +297,92 @@
 <span id="L226"><span class="lineNum">     226</span>                 :             : </span>
 <span id="L227"><span class="lineNum">     227</span>                 :             : // Validate checks the message is well-formed.</span>
 <span id="L228"><span class="lineNum">     228</span>                 :             : func (m Message) Validate() error {</span>
-<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">        5261 :         if m.ID.IsZero() {</span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">        4731 :         if m.ID.IsZero() {</span></span>
 <span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">           4 :                 return fmt.Errorf(&quot;message ID required&quot;)</span></span>
 <span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">           4 :         }</span></span>
-<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">        5257 :         if m.Sequence &lt; 0 {</span></span>
+<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">        4727 :         if m.Sequence &lt; 0 {</span></span>
 <span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return fmt.Errorf(&quot;message sequence must be non-negative&quot;)</span></span>
 <span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC tlaBgGNC">        5257 :         switch m.Role {</span></span>
-<span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaGNC">        5256 :         case RoleSystem, RoleUser, RoleAssistant:</span></span>
+<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC tlaBgGNC">        4727 :         switch m.Role {</span></span>
+<span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaGNC">        4726 :         case RoleSystem, RoleUser, RoleAssistant:</span></span>
 <span id="L237"><span class="lineNum">     237</span>                 :             :         default:</span>
 <span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">           1 :                 return fmt.Errorf(&quot;invalid role %q&quot;, m.Role)</span></span>
 <span id="L239"><span class="lineNum">     239</span>                 :             :         }</span>
-<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">        5256 :         if m.Status != &quot;&quot; {</span></span>
-<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">        5231 :                 switch m.Status {</span></span>
-<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">        5230 :                 case MessageStatusDraft, MessageStatusFinal, MessageStatusInterrupted:</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">        4726 :         if m.Status != &quot;&quot; {</span></span>
+<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">        4701 :                 switch m.Status {</span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">        4700 :                 case MessageStatusDraft, MessageStatusFinal, MessageStatusInterrupted:</span></span>
 <span id="L243"><span class="lineNum">     243</span>                 :             :                 default:</span>
 <span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaGNC">           1 :                         return fmt.Errorf(&quot;invalid message status %q&quot;, m.Status)</span></span>
 <span id="L245"><span class="lineNum">     245</span>                 :             :                 }</span>
 <span id="L246"><span class="lineNum">     246</span>                 :             :         }</span>
-<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC">        5255 :         if m.Revision &lt; 0 {</span></span>
+<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC">        4725 :         if m.Revision &lt; 0 {</span></span>
 <span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return fmt.Errorf(&quot;message revision must be non-negative&quot;)</span></span>
 <span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC tlaBgGNC">        5255 :         if len(m.Parts) == 0 {</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC tlaBgGNC">        4725 :         if len(m.Parts) == 0 {</span></span>
 <span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">           1 :                 return fmt.Errorf(&quot;message must have at least one part&quot;)</span></span>
 <span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L253"><span class="lineNum">     253</span>                 :<span class="tlaGNC">        5254 :         allImplicitIndexes := len(m.Parts) &gt; 0</span></span>
-<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">        5254 :         for i, p := range m.Parts {</span></span>
-<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC">        5286 :                 if err := p.Validate(); err != nil {</span></span>
+<span id="L253"><span class="lineNum">     253</span>                 :<span class="tlaGNC">        4724 :         allImplicitIndexes := len(m.Parts) &gt; 0</span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">        4724 :         for i, p := range m.Parts {</span></span>
+<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC">        4757 :                 if err := p.Validate(); err != nil {</span></span>
 <span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return fmt.Errorf(&quot;part[%d]: %w&quot;, i, err)</span></span>
 <span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
-<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC tlaBgGNC">        5286 :                 if p.PartIndex != 0 {</span></span>
-<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">          31 :                         allImplicitIndexes = false</span></span>
-<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaGNC">          31 :                 }</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC tlaBgGNC">        4757 :                 if p.PartIndex != 0 {</span></span>
+<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">          32 :                         allImplicitIndexes = false</span></span>
+<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaGNC">          32 :                 }</span></span>
 <span id="L261"><span class="lineNum">     261</span>                 :             :         }</span>
-<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">        5254 :         if allImplicitIndexes {</span></span>
-<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC">        5227 :                 return nil</span></span>
-<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">        5227 :         }</span></span>
-<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaGNC">          27 :         seenPartIndexes := make(map[int]struct{}, len(m.Parts))</span></span>
-<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaGNC">          27 :         for i, p := range m.Parts {</span></span>
-<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">          57 :                 if _, ok := seenPartIndexes[p.PartIndex]; ok {</span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">        4724 :         if allImplicitIndexes {</span></span>
+<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC">        4696 :                 return nil</span></span>
+<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">        4696 :         }</span></span>
+<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaGNC">          28 :         seenPartIndexes := make(map[int]struct{}, len(m.Parts))</span></span>
+<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaGNC">          28 :         for i, p := range m.Parts {</span></span>
+<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">          59 :                 if _, ok := seenPartIndexes[p.PartIndex]; ok {</span></span>
 <span id="L268"><span class="lineNum">     268</span>                 :<span class="tlaGNC">           1 :                         return fmt.Errorf(&quot;part[%d]: duplicate part_index %d&quot;, i, p.PartIndex)</span></span>
 <span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
-<span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaGNC">          56 :                 seenPartIndexes[p.PartIndex] = struct{}{}</span></span>
+<span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaGNC">          58 :                 seenPartIndexes[p.PartIndex] = struct{}{}</span></span>
 <span id="L271"><span class="lineNum">     271</span>                 :             :         }</span>
-<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">          26 :         return nil</span></span>
+<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">          27 :         return nil</span></span>
 <span id="L273"><span class="lineNum">     273</span>                 :             : }</span>
 <span id="L274"><span class="lineNum">     274</span>                 :             : </span>
 <span id="L275"><span class="lineNum">     275</span>                 :             : // ArtifactRefs returns every artifact reference carried by the message:</span>
 <span id="L276"><span class="lineNum">     276</span>                 :             : // direct part references and tool-result content references. Session</span>
 <span id="L277"><span class="lineNum">     277</span>                 :             : // persistence uses it to keep referenced artifacts alive for GC.</span>
 <span id="L278"><span class="lineNum">     278</span>                 :             : func (m Message) ArtifactRefs() []ArtifactRef {</span>
-<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">        2871 :         var refs []ArtifactRef</span></span>
-<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC">        2871 :         for _, part := range m.Parts {</span></span>
-<span id="L281"><span class="lineNum">     281</span>                 :<span class="tlaGNC">        2967 :                 if part.Artifact != nil {</span></span>
+<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">        3296 :         var refs []ArtifactRef</span></span>
+<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC">        3296 :         for _, part := range m.Parts {</span></span>
+<span id="L281"><span class="lineNum">     281</span>                 :<span class="tlaGNC">        3398 :                 if part.Artifact != nil {</span></span>
 <span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaGNC">          15 :                         refs = append(refs, *part.Artifact)</span></span>
 <span id="L283"><span class="lineNum">     283</span>                 :<span class="tlaGNC">          15 :                 }</span></span>
-<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">        2967 :                 if part.ToolResult != nil {</span></span>
-<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaGNC">         119 :                         for _, content := range part.ToolResult.Content {</span></span>
-<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaGNC">         120 :                                 if content.Artifact != nil {</span></span>
+<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">        3398 :                 if part.ToolResult != nil {</span></span>
+<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaGNC">         127 :                         for _, content := range part.ToolResult.Content {</span></span>
+<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaGNC">         128 :                                 if content.Artifact != nil {</span></span>
 <span id="L287"><span class="lineNum">     287</span>                 :<span class="tlaGNC">           1 :                                         refs = append(refs, *content.Artifact)</span></span>
 <span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC">           1 :                                 }</span></span>
 <span id="L289"><span class="lineNum">     289</span>                 :             :                         }</span>
 <span id="L290"><span class="lineNum">     290</span>                 :             :                 }</span>
 <span id="L291"><span class="lineNum">     291</span>                 :             :         }</span>
-<span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaGNC">        2871 :         return refs</span></span>
+<span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaGNC">        3296 :         return refs</span></span>
 <span id="L293"><span class="lineNum">     293</span>                 :             : }</span>
 <span id="L294"><span class="lineNum">     294</span>                 :             : </span>
 <span id="L295"><span class="lineNum">     295</span>                 :             : // TextParts returns all text content from the message.</span>
 <span id="L296"><span class="lineNum">     296</span>                 :             : func (m Message) TextParts() []string {</span>
-<span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaGNC">         932 :         var out []string</span></span>
-<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaGNC">         932 :         for _, p := range m.Parts {</span></span>
-<span id="L299"><span class="lineNum">     299</span>                 :<span class="tlaGNC">         966 :                 if p.Kind == PartText {</span></span>
-<span id="L300"><span class="lineNum">     300</span>                 :<span class="tlaGNC">         612 :                         out = append(out, p.Text)</span></span>
-<span id="L301"><span class="lineNum">     301</span>                 :<span class="tlaGNC">         612 :                 }</span></span>
+<span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaGNC">        1043 :         var out []string</span></span>
+<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaGNC">        1043 :         for _, p := range m.Parts {</span></span>
+<span id="L299"><span class="lineNum">     299</span>                 :<span class="tlaGNC">        1079 :                 if p.Kind == PartText {</span></span>
+<span id="L300"><span class="lineNum">     300</span>                 :<span class="tlaGNC">         719 :                         out = append(out, p.Text)</span></span>
+<span id="L301"><span class="lineNum">     301</span>                 :<span class="tlaGNC">         719 :                 }</span></span>
 <span id="L302"><span class="lineNum">     302</span>                 :             :         }</span>
-<span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaGNC">         932 :         return out</span></span>
+<span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaGNC">        1043 :         return out</span></span>
 <span id="L304"><span class="lineNum">     304</span>                 :             : }</span>
 <span id="L305"><span class="lineNum">     305</span>                 :             : </span>
 <span id="L306"><span class="lineNum">     306</span>                 :             : // ToolCalls returns all tool calls from the message.</span>
 <span id="L307"><span class="lineNum">     307</span>                 :             : func (m Message) ToolCalls() []ToolCall {</span>
-<span id="L308"><span class="lineNum">     308</span>                 :<span class="tlaGNC">       10006 :         var out []ToolCall</span></span>
-<span id="L309"><span class="lineNum">     309</span>                 :<span class="tlaGNC">       10006 :         for _, p := range m.Parts {</span></span>
-<span id="L310"><span class="lineNum">     310</span>                 :<span class="tlaGNC">       10103 :                 if p.Kind == PartToolCall &amp;&amp; p.ToolCall != nil {</span></span>
-<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC">        4743 :                         out = append(out, *p.ToolCall)</span></span>
-<span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC">        4743 :                 }</span></span>
+<span id="L308"><span class="lineNum">     308</span>                 :<span class="tlaGNC">       10048 :         var out []ToolCall</span></span>
+<span id="L309"><span class="lineNum">     309</span>                 :<span class="tlaGNC">       10048 :         for _, p := range m.Parts {</span></span>
+<span id="L310"><span class="lineNum">     310</span>                 :<span class="tlaGNC">       10151 :                 if p.Kind == PartToolCall &amp;&amp; p.ToolCall != nil {</span></span>
+<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC">        4755 :                         out = append(out, *p.ToolCall)</span></span>
+<span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC">        4755 :                 }</span></span>
 <span id="L313"><span class="lineNum">     313</span>                 :             :         }</span>
-<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">       10006 :         return out</span></span>
+<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">       10048 :         return out</span></span>
 <span id="L315"><span class="lineNum">     315</span>                 :             : }</span>
         </pre>
               </td>

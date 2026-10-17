@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -192,9 +192,9 @@
 <span id="L121"><span class="lineNum">     121</span>                 :             : </span>
 <span id="L122"><span class="lineNum">     122</span>                 :             : // IsZero reports whether the grant opens nothing (default sandbox).</span>
 <span id="L123"><span class="lineNum">     123</span>                 :             : func (g PackageGrant) IsZero() bool {</span>
-<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">        1520 :         return !g.Unsandboxed &amp;&amp; !g.NetworkFull &amp;&amp; len(g.NetworkHosts) == 0 &amp;&amp;</span></span>
-<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">        1520 :                 len(g.WritablePaths) == 0 &amp;&amp; !g.GUIOpen</span></span>
-<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">        1520 : }</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">        1526 :         return !g.Unsandboxed &amp;&amp; !g.NetworkFull &amp;&amp; len(g.NetworkHosts) == 0 &amp;&amp;</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">        1526 :                 len(g.WritablePaths) == 0 &amp;&amp; !g.GUIOpen</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">        1526 : }</span></span>
 <span id="L127"><span class="lineNum">     127</span>                 :             : </span>
 <span id="L128"><span class="lineNum">     128</span>                 :             : // Package is one entry of the capability set: a binding, a decision, and</span>
 <span id="L129"><span class="lineNum">     129</span>                 :             : // (for allow) the granted capabilities plus the consequence ceiling the</span>
@@ -255,54 +255,54 @@
 <span id="L184"><span class="lineNum">     184</span>                 :             : // covered by an argv package, because the sandbox bounds what the</span>
 <span id="L185"><span class="lineNum">     185</span>                 :             : // unknown program can do with the granted capabilities.</span>
 <span id="L186"><span class="lineNum">     186</span>                 :             : func (p Package) covers(e Effect) bool {</span>
-<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">         107 :         if p.Decision != domain.DecisionAllow {</span></span>
+<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">         110 :         if p.Decision != domain.DecisionAllow {</span></span>
 <span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return false</span></span>
 <span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC tlaBgGNC">         107 :         if p.Implicit &amp;&amp; len(e.Indicators) &gt; 0 {</span></span>
+<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC tlaBgGNC">         110 :         if p.Implicit &amp;&amp; len(e.Indicators) &gt; 0 {</span></span>
 <span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">           1 :                 return false</span></span>
 <span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">         106 :         if e.Consequence &gt; p.MaxConsequence {</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">         109 :         if e.Consequence &gt; p.MaxConsequence {</span></span>
 <span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">          24 :                 return false</span></span>
 <span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">          24 :         }</span></span>
-<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">          82 :         g := p.Grant</span></span>
-<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">          82 :         if g.Unsandboxed {</span></span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">          85 :         g := p.Grant</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">          85 :         if g.Unsandboxed {</span></span>
 <span id="L198"><span class="lineNum">     198</span>                 :             :                 // L2 covers every capability requirement; the consequence</span>
 <span id="L199"><span class="lineNum">     199</span>                 :             :                 // ceiling above still applies.</span>
 <span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaGNC">           5 :                 return true</span></span>
 <span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC">           5 :         }</span></span>
-<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">          77 :         if e.Unsandboxed {</span></span>
+<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">          80 :         if e.Unsandboxed {</span></span>
 <span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">           3 :                 return false</span></span>
 <span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">           3 :         }</span></span>
-<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">          74 :         if e.GUIOpen &amp;&amp; !g.GUIOpen {</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">          77 :         if e.GUIOpen &amp;&amp; !g.GUIOpen {</span></span>
 <span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">           3 :                 return false</span></span>
 <span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">           3 :         }</span></span>
-<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">          71 :         switch {</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">          74 :         switch {</span></span>
 <span id="L209"><span class="lineNum">     209</span>                 :             :         case e.Network.Any:</span>
 <span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaGNC">          17 :                 if !g.NetworkFull {</span></span>
 <span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">           8 :                         return false</span></span>
 <span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaGNC">           8 :                 }</span></span>
 <span id="L213"><span class="lineNum">     213</span>                 :             :         default:</span>
-<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">          54 :                 for _, h := range e.Network.Hosts {</span></span>
+<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">          57 :                 for _, h := range e.Network.Hosts {</span></span>
 <span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaGNC">           5 :                         if !g.NetworkFull &amp;&amp; !hostCoveredBy(g.NetworkHosts, h) {</span></span>
 <span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">           5 :                                 return false</span></span>
 <span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">           5 :                         }</span></span>
 <span id="L218"><span class="lineNum">     218</span>                 :             :                 }</span>
 <span id="L219"><span class="lineNum">     219</span>                 :             :         }</span>
-<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC">          58 :         if e.Writes.Any {</span></span>
+<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC">          61 :         if e.Writes.Any {</span></span>
 <span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return false</span></span>
 <span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC tlaBgGNC">          58 :         writable := g.WritablePaths</span></span>
-<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">          58 :         if p.Bind.Kind == BindPath {</span></span>
+<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC tlaBgGNC">          61 :         writable := g.WritablePaths</span></span>
+<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">          61 :         if p.Bind.Kind == BindPath {</span></span>
 <span id="L225"><span class="lineNum">     225</span>                 :             :                 // A path-bound package's grant IS the bound directory:</span>
 <span id="L226"><span class="lineNum">     226</span>                 :             :                 // &quot;always allow writing under X&quot; needs no separate grant.</span>
 <span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">           3 :                 writable = append(append([]string(nil), g.WritablePaths...), p.Bind.Path)</span></span>
 <span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">           3 :         }</span></span>
-<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">          58 :         for _, w := range e.Writes.Paths {</span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">          61 :         for _, w := range e.Writes.Paths {</span></span>
 <span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">          10 :                 if !writablePathCovered(writable, w) {</span></span>
 <span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">           8 :                         return false</span></span>
 <span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">           8 :                 }</span></span>
 <span id="L233"><span class="lineNum">     233</span>                 :             :         }</span>
-<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC">          50 :         return true</span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC">          53 :         return true</span></span>
 <span id="L235"><span class="lineNum">     235</span>                 :             : }</span>
 <span id="L236"><span class="lineNum">     236</span>                 :             : </span>
 <span id="L237"><span class="lineNum">     237</span>                 :             : // hostCoveredBy reports whether host h matches any of the package's host</span>
@@ -363,7 +363,7 @@
 <span id="L292"><span class="lineNum">     292</span>                 :             : }</span>
 <span id="L293"><span class="lineNum">     293</span>                 :             : </span>
 <span id="L294"><span class="lineNum">     294</span>                 :             : // NewPackageSet creates an empty set.</span>
-<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">         233 : func NewPackageSet() *PackageSet { return &amp;PackageSet{} }</span></span>
+<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">         254 : func NewPackageSet() *PackageSet { return &amp;PackageSet{} }</span></span>
 <span id="L296"><span class="lineNum">     296</span>                 :             : </span>
 <span id="L297"><span class="lineNum">     297</span>                 :             : // Add appends packages (load-time assembly).</span>
 <span id="L298"><span class="lineNum">     298</span>                 :             : func (s *PackageSet) Add(pkgs ...Package) {</span>

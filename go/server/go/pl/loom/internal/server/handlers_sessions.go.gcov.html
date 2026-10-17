@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -111,26 +111,26 @@
 <span id="L40"><span class="lineNum">      40</span>                 :             : // used by routes that accept larger payloads (e.g. prompts with inline</span>
 <span id="L41"><span class="lineNum">      41</span>                 :             : // base64 images, whose 4/3 expansion dwarfs the global cap).</span>
 <span id="L42"><span class="lineNum">      42</span>                 :             : func decodeBodyLimit(w http.ResponseWriter, r *http.Request, v any, limit int64) error {</span>
-<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">          56 :         r.Body = http.MaxBytesReader(w, r.Body, limit)</span></span>
-<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC">          56 :         decoder := json.NewDecoder(r.Body)</span></span>
-<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">          56 :         decoder.DisallowUnknownFields()</span></span>
-<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">          56 :         if err := decoder.Decode(v); err != nil {</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">          57 :         r.Body = http.MaxBytesReader(w, r.Body, limit)</span></span>
+<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC">          57 :         decoder := json.NewDecoder(r.Body)</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">          57 :         decoder.DisallowUnknownFields()</span></span>
+<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">          57 :         if err := decoder.Decode(v); err != nil {</span></span>
 <span id="L47"><span class="lineNum">      47</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return invalidInput(&quot;invalid request body: &quot; + err.Error())</span></span>
 <span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC tlaBgGNC">          56 :         return nil</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC tlaBgGNC">          57 :         return nil</span></span>
 <span id="L50"><span class="lineNum">      50</span>                 :             : }</span>
 <span id="L51"><span class="lineNum">      51</span>                 :             : </span>
 <span id="L52"><span class="lineNum">      52</span>                 :             : // auditf writes one audit record.</span>
 <span id="L53"><span class="lineNum">      53</span>                 :             : func (s *Server) auditf(action string, sessionID domain.SessionID, kv ...any) {</span>
-<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">          76 :         args := append([]any{&quot;action&quot;, action, &quot;session_id&quot;, sessionID.String()}, kv...)</span></span>
-<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">          76 :         s.audit.Info(&quot;audit&quot;, args...)</span></span>
-<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">          76 : }</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">          78 :         args := append([]any{&quot;action&quot;, action, &quot;session_id&quot;, sessionID.String()}, kv...)</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">          78 :         s.audit.Info(&quot;audit&quot;, args...)</span></span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">          78 : }</span></span>
 <span id="L57"><span class="lineNum">      57</span>                 :             : </span>
 <span id="L58"><span class="lineNum">      58</span>                 :             : // --- session lifecycle ---</span>
 <span id="L59"><span class="lineNum">      59</span>                 :             : </span>
 <span id="L60"><span class="lineNum">      60</span>                 :             : func (s *Server) handleListSessions(w http.ResponseWriter, r *http.Request) {</span>
-<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">          10 :         limit := 100</span></span>
-<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">          10 :         if raw := r.URL.Query().Get(&quot;limit&quot;); raw != &quot;&quot; {</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">          14 :         limit := 100</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">          14 :         if raw := r.URL.Query().Get(&quot;limit&quot;); raw != &quot;&quot; {</span></span>
 <span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 n, err := strconv.Atoi(raw)</span></span>
 <span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaUNC">           0 :                 if err != nil || n &lt;= 0 {</span></span>
 <span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaUNC">           0 :                         writeError(w, invalidInput(&quot;limit must be a positive integer&quot;))</span></span>
@@ -138,15 +138,15 @@
 <span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
 <span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaUNC">           0 :                 limit = n</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :             :         }</span>
-<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC tlaBgGNC">          10 :         cursor := r.URL.Query().Get(&quot;cursor&quot;)</span></span>
-<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">          10 :         archived := r.URL.Query().Get(&quot;archived&quot;) == &quot;1&quot;</span></span>
-<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">          10 :         // workspace_id 三态（docs/WORKSPACE_DESIGN.md §8.1）：缺省 = default</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC tlaBgGNC">          14 :         cursor := r.URL.Query().Get(&quot;cursor&quot;)</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">          14 :         archived := r.URL.Query().Get(&quot;archived&quot;) == &quot;1&quot;</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">          14 :         // workspace_id 三态（docs/WORKSPACE_DESIGN.md §8.1）：缺省 = default</span></span>
 <span id="L73"><span class="lineNum">      73</span>                 :             :         // workspace（单 workspace 前端，如 TUI 的 picker）；&quot;all&quot; = 全部（多</span>
 <span id="L74"><span class="lineNum">      74</span>                 :             :         // workspace 树形）；&lt;id&gt; = 指定 workspace。</span>
-<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">          10 :         var wsID domain.WorkspaceID</span></span>
-<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">          10 :         switch raw := r.URL.Query().Get(&quot;workspace_id&quot;); raw {</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">          14 :         var wsID domain.WorkspaceID</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">          14 :         switch raw := r.URL.Query().Get(&quot;workspace_id&quot;); raw {</span></span>
 <span id="L77"><span class="lineNum">      77</span>                 :             :         case &quot;&quot;:</span>
-<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">           7 :                 wsID = s.svc.DefaultWorkspaceID()</span></span>
+<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">          11 :                 wsID = s.svc.DefaultWorkspaceID()</span></span>
 <span id="L79"><span class="lineNum">      79</span>                 :             :         case &quot;all&quot;:</span>
 <span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">           2 :                 wsID = domain.WorkspaceID{}</span></span>
 <span id="L81"><span class="lineNum">      81</span>                 :             :         default:</span>
@@ -157,12 +157,12 @@
 <span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaUNC">           0 :                         return</span></span>
 <span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
 <span id="L88"><span class="lineNum">      88</span>                 :             :         }</span>
-<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC tlaBgGNC">          10 :         summaries, nextCursor, err := s.svc.ListSessions(r.Context(), cursor, limit, archived, wsID)</span></span>
-<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">          10 :         if err != nil {</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC tlaBgGNC">          14 :         summaries, nextCursor, err := s.svc.ListSessions(r.Context(), cursor, limit, archived, wsID)</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">          14 :         if err != nil {</span></span>
 <span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 writeError(w, err)</span></span>
 <span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaUNC">           0 :                 return</span></span>
 <span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC tlaBgGNC">          10 :         writeJSON(w, http.StatusOK, map[string]any{&quot;sessions&quot;: summaries, &quot;next_cursor&quot;: nextCursor})</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC tlaBgGNC">          14 :         writeJSON(w, http.StatusOK, map[string]any{&quot;sessions&quot;: summaries, &quot;next_cursor&quot;: nextCursor})</span></span>
 <span id="L95"><span class="lineNum">      95</span>                 :             : }</span>
 <span id="L96"><span class="lineNum">      96</span>                 :             : </span>
 <span id="L97"><span class="lineNum">      97</span>                 :             : type createSessionRequest struct {</span>
@@ -216,15 +216,15 @@
 <span id="L145"><span class="lineNum">     145</span>                 :             : }</span>
 <span id="L146"><span class="lineNum">     146</span>                 :             : </span>
 <span id="L147"><span class="lineNum">     147</span>                 :             : func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {</span>
-<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">          38 :         var req createSessionRequest</span></span>
-<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">          38 :         // An empty body means &quot;new session&quot;; a body may carry a resume target.</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">          39 :         var req createSessionRequest</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">          39 :         // An empty body means &quot;new session&quot;; a body may carry a resume target.</span></span>
 <span id="L150"><span class="lineNum">     150</span>                 :             :         // ContentLength is not a reliable emptiness signal on every transport —</span>
 <span id="L151"><span class="lineNum">     151</span>                 :             :         // chunked/HTTP2 clients and in-process mounts (the Wails AssetServer)</span>
 <span id="L152"><span class="lineNum">     152</span>                 :             :         // report -1 — so decide on the actual bytes.</span>
-<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">          38 :         if body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes)); err != nil {</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">          39 :         if body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes)); err != nil {</span></span>
 <span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 writeError(w, invalidInput(&quot;invalid request body: &quot;+err.Error()))</span></span>
 <span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaUNC">           0 :                 return</span></span>
-<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC tlaBgGNC">          38 :         } else if len(bytes.TrimSpace(body)) &gt; 0 {</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC tlaBgGNC">          39 :         } else if len(bytes.TrimSpace(body)) &gt; 0 {</span></span>
 <span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC">          10 :                 decoder := json.NewDecoder(bytes.NewReader(body))</span></span>
 <span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">          10 :                 decoder.DisallowUnknownFields()</span></span>
 <span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaGNC">          10 :                 if err := decoder.Decode(&amp;req); err != nil {</span></span>
@@ -232,7 +232,7 @@
 <span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaUNC">           0 :                         return</span></span>
 <span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
 <span id="L163"><span class="lineNum">     163</span>                 :             :         }</span>
-<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC tlaBgGNC">          38 :         if req.Resume != &quot;&quot; {</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC tlaBgGNC">          39 :         if req.Resume != &quot;&quot; {</span></span>
 <span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">           3 :                 id, err := domain.ParseSessionID(req.Resume)</span></span>
 <span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">           3 :                 if err != nil || !domain.HasPrefix(id, &quot;sess_&quot;) {</span></span>
 <span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         writeError(w, invalidInput(&quot;invalid resume session id&quot;))</span></span>
@@ -251,18 +251,18 @@
 <span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaUNC">           0 :                 writeJSON(w, http.StatusCreated, map[string]any{&quot;session_id&quot;: h.ID, &quot;state&quot;: h.Controller.State(), &quot;workspace_id&quot;: h.WorkspaceID.String()})</span></span>
 <span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaUNC">           0 :                 return</span></span>
 <span id="L182"><span class="lineNum">     182</span>                 :             :         }</span>
-<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC tlaBgGNC">          35 :         wsID, err := parseWorkspaceIDParam(req.WorkspaceID)</span></span>
-<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">          35 :         if err != nil {</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC tlaBgGNC">          36 :         wsID, err := parseWorkspaceIDParam(req.WorkspaceID)</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">          36 :         if err != nil {</span></span>
 <span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">           1 :                 writeError(w, err)</span></span>
 <span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">           1 :                 return</span></span>
 <span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">          34 :         h, err := s.svc.CreateSession(r.Context(), wsID)</span></span>
-<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">          34 :         if err != nil {</span></span>
+<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">          35 :         h, err := s.svc.CreateSession(r.Context(), wsID)</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC">          35 :         if err != nil {</span></span>
 <span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">           2 :                 writeError(w, err)</span></span>
 <span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">           2 :                 return</span></span>
 <span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">           2 :         }</span></span>
-<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">          32 :         s.auditf(&quot;session.create&quot;, h.ID, &quot;workspace_id&quot;, h.WorkspaceID.String())</span></span>
-<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">          32 :         writeJSON(w, http.StatusCreated, map[string]any{&quot;session_id&quot;: h.ID, &quot;state&quot;: h.Controller.State(), &quot;workspace_id&quot;: h.WorkspaceID.String()})</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">          33 :         s.auditf(&quot;session.create&quot;, h.ID, &quot;workspace_id&quot;, h.WorkspaceID.String())</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">          33 :         writeJSON(w, http.StatusCreated, map[string]any{&quot;session_id&quot;: h.ID, &quot;state&quot;: h.Controller.State(), &quot;workspace_id&quot;: h.WorkspaceID.String()})</span></span>
 <span id="L195"><span class="lineNum">     195</span>                 :             : }</span>
 <span id="L196"><span class="lineNum">     196</span>                 :             : </span>
 <span id="L197"><span class="lineNum">     197</span>                 :             : func (s *Server) handleInspectSession(w http.ResponseWriter, r *http.Request) {</span>
@@ -307,17 +307,17 @@
 <span id="L236"><span class="lineNum">     236</span>                 :             : }</span>
 <span id="L237"><span class="lineNum">     237</span>                 :             : </span>
 <span id="L238"><span class="lineNum">     238</span>                 :             : func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {</span>
-<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">          36 :         id, err := parseSessionParam(r)</span></span>
-<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">          36 :         if err != nil {</span></span>
+<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">          38 :         id, err := parseSessionParam(r)</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">          38 :         if err != nil {</span></span>
 <span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 writeError(w, err)</span></span>
 <span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaUNC">           0 :                 return</span></span>
 <span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaGNC tlaBgGNC">          36 :         snap, err := s.svc.Snapshot(r.Context(), id)</span></span>
-<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">          36 :         if err != nil {</span></span>
+<span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaGNC tlaBgGNC">          38 :         snap, err := s.svc.Snapshot(r.Context(), id)</span></span>
+<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">          38 :         if err != nil {</span></span>
 <span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 writeError(w, err)</span></span>
 <span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaUNC">           0 :                 return</span></span>
 <span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC tlaBgGNC">          36 :         writeJSON(w, http.StatusOK, snap)</span></span>
+<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC tlaBgGNC">          38 :         writeJSON(w, http.StatusOK, snap)</span></span>
 <span id="L250"><span class="lineNum">     250</span>                 :             : }</span>
 <span id="L251"><span class="lineNum">     251</span>                 :             : </span>
 <span id="L252"><span class="lineNum">     252</span>                 :             : // handleExportSession serves GET /v1/sessions/{id}/export — the raw event</span>
@@ -356,42 +356,42 @@
 <span id="L285"><span class="lineNum">     285</span>                 :             : }</span>
 <span id="L286"><span class="lineNum">     286</span>                 :             : </span>
 <span id="L287"><span class="lineNum">     287</span>                 :             : func (s *Server) handleSubmitPrompt(w http.ResponseWriter, r *http.Request) {</span>
-<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC tlaBgGNC">          19 :         id, err := parseSessionParam(r)</span></span>
-<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">          19 :         if err != nil {</span></span>
+<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC tlaBgGNC">          20 :         id, err := parseSessionParam(r)</span></span>
+<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">          20 :         if err != nil {</span></span>
 <span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 writeError(w, err)</span></span>
 <span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaUNC">           0 :                 return</span></span>
 <span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC tlaBgGNC">          19 :         var req submitPromptRequest</span></span>
-<span id="L294"><span class="lineNum">     294</span>                 :<span class="tlaGNC">          19 :         if err := decodeBodyLimit(w, r, &amp;req, maxPromptBodyBytes); err != nil {</span></span>
+<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC tlaBgGNC">          20 :         var req submitPromptRequest</span></span>
+<span id="L294"><span class="lineNum">     294</span>                 :<span class="tlaGNC">          20 :         if err := decodeBodyLimit(w, r, &amp;req, maxPromptBodyBytes); err != nil {</span></span>
 <span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 writeError(w, err)</span></span>
 <span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaUNC">           0 :                 return</span></span>
 <span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaGNC tlaBgGNC">          19 :         if req.Prompt == &quot;&quot; &amp;&amp; len(req.Images) == 0 {</span></span>
+<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaGNC tlaBgGNC">          20 :         if req.Prompt == &quot;&quot; &amp;&amp; len(req.Images) == 0 {</span></span>
 <span id="L299"><span class="lineNum">     299</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 writeError(w, invalidInput(&quot;prompt is required&quot;))</span></span>
 <span id="L300"><span class="lineNum">     300</span>                 :<span class="tlaUNC">           0 :                 return</span></span>
 <span id="L301"><span class="lineNum">     301</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L302"><span class="lineNum">     302</span>                 :<span class="tlaGNC tlaBgGNC">          19 :         idemKey := r.Header.Get(&quot;Idempotency-Key&quot;)</span></span>
-<span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaGNC">          19 :         if idemKey == &quot;&quot; {</span></span>
-<span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaGNC">          17 :                 idemKey = req.IdempotencyKey</span></span>
-<span id="L305"><span class="lineNum">     305</span>                 :<span class="tlaGNC">          17 :         }</span></span>
-<span id="L306"><span class="lineNum">     306</span>                 :<span class="tlaGNC">          19 :         result, deduplicated, err := s.svc.SubmitPrompt(r.Context(), id, req.Prompt, req.Images, idemKey, req.Followup)</span></span>
-<span id="L307"><span class="lineNum">     307</span>                 :<span class="tlaGNC">          19 :         if err != nil {</span></span>
+<span id="L302"><span class="lineNum">     302</span>                 :<span class="tlaGNC tlaBgGNC">          20 :         idemKey := r.Header.Get(&quot;Idempotency-Key&quot;)</span></span>
+<span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaGNC">          20 :         if idemKey == &quot;&quot; {</span></span>
+<span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaGNC">          18 :                 idemKey = req.IdempotencyKey</span></span>
+<span id="L305"><span class="lineNum">     305</span>                 :<span class="tlaGNC">          18 :         }</span></span>
+<span id="L306"><span class="lineNum">     306</span>                 :<span class="tlaGNC">          20 :         result, deduplicated, err := s.svc.SubmitPrompt(r.Context(), id, req.Prompt, req.Images, idemKey, req.Followup)</span></span>
+<span id="L307"><span class="lineNum">     307</span>                 :<span class="tlaGNC">          20 :         if err != nil {</span></span>
 <span id="L308"><span class="lineNum">     308</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 writeError(w, err)</span></span>
 <span id="L309"><span class="lineNum">     309</span>                 :<span class="tlaUNC">           0 :                 return</span></span>
 <span id="L310"><span class="lineNum">     310</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC tlaBgGNC">          19 :         promptHash := sha256.Sum256([]byte(req.Prompt))</span></span>
-<span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC">          19 :         s.auditf(&quot;prompt.submit&quot;, id, &quot;prompt_len&quot;, len(req.Prompt), &quot;prompt_hash&quot;, hex.EncodeToString(promptHash[:8]), &quot;steered&quot;, result.Steered, &quot;followup&quot;, result.Followup, &quot;deduplicated&quot;, deduplicated)</span></span>
-<span id="L313"><span class="lineNum">     313</span>                 :<span class="tlaGNC">          19 :         status := http.StatusAccepted</span></span>
-<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">          19 :         if deduplicated {</span></span>
+<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC tlaBgGNC">          20 :         promptHash := sha256.Sum256([]byte(req.Prompt))</span></span>
+<span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC">          20 :         s.auditf(&quot;prompt.submit&quot;, id, &quot;prompt_len&quot;, len(req.Prompt), &quot;prompt_hash&quot;, hex.EncodeToString(promptHash[:8]), &quot;steered&quot;, result.Steered, &quot;followup&quot;, result.Followup, &quot;deduplicated&quot;, deduplicated)</span></span>
+<span id="L313"><span class="lineNum">     313</span>                 :<span class="tlaGNC">          20 :         status := http.StatusAccepted</span></span>
+<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">          20 :         if deduplicated {</span></span>
 <span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaGNC">           1 :                 status = http.StatusOK</span></span>
 <span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaGNC">          19 :         writeJSON(w, status, map[string]any{</span></span>
-<span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaGNC">          19 :                 &quot;turn&quot;:         result.Turn,</span></span>
-<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">          19 :                 &quot;steered&quot;:      result.Steered,</span></span>
-<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC">          19 :                 &quot;followup&quot;:     result.Followup,</span></span>
-<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">          19 :                 &quot;queue_len&quot;:    result.QueueLen,</span></span>
-<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC">          19 :                 &quot;deduplicated&quot;: deduplicated,</span></span>
-<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">          19 :         })</span></span>
+<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaGNC">          20 :         writeJSON(w, status, map[string]any{</span></span>
+<span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaGNC">          20 :                 &quot;turn&quot;:         result.Turn,</span></span>
+<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">          20 :                 &quot;steered&quot;:      result.Steered,</span></span>
+<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC">          20 :                 &quot;followup&quot;:     result.Followup,</span></span>
+<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">          20 :                 &quot;queue_len&quot;:    result.QueueLen,</span></span>
+<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC">          20 :                 &quot;deduplicated&quot;: deduplicated,</span></span>
+<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">          20 :         })</span></span>
 <span id="L324"><span class="lineNum">     324</span>                 :             : }</span>
 <span id="L325"><span class="lineNum">     325</span>                 :             : </span>
 <span id="L326"><span class="lineNum">     326</span>                 :             : func (s *Server) handleCancelTurn(w http.ResponseWriter, r *http.Request) {</span>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -181,32 +181,32 @@
 <span id="L110"><span class="lineNum">     110</span>                 :             : </span>
 <span id="L111"><span class="lineNum">     111</span>                 :             : // Canonicalize derives the stable manifest hash and identifier.</span>
 <span id="L112"><span class="lineNum">     112</span>                 :             : func (m ContextManifest) Canonicalize() (ContextManifest, error) {</span>
-<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC tlaBgGNC">         482 :         bodyJSON, body, err := m.canonicalBodyJSON()</span></span>
-<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">         482 :         if err != nil {</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC tlaBgGNC">         489 :         bodyJSON, body, err := m.canonicalBodyJSON()</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">         489 :         if err != nil {</span></span>
 <span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">           1 :                 return ContextManifest{}, err</span></span>
 <span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">           1 :         }</span></span>
 <span id="L117"><span class="lineNum">     117</span>                 :             : </span>
-<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">         481 :         hash := sha256.Sum256(bodyJSON)</span></span>
-<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">         481 :         canonical := ContextManifest{</span></span>
-<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">         481 :                 ID:            contextManifestIDPrefix + hex.EncodeToString(hash[:12]),</span></span>
-<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">         481 :                 Hash:          hex.EncodeToString(hash[:]),</span></span>
-<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">         481 :                 Rules:         body.Rules,</span></span>
-<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">         481 :                 MessageRanges: body.MessageRanges,</span></span>
-<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">         481 :                 CodeRefs:      body.CodeRefs,</span></span>
-<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">         481 :                 ArtifactRefs:  body.ArtifactRefs,</span></span>
-<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">         481 :                 SummaryRefs:   body.SummaryRefs,</span></span>
-<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">         481 :                 Tokenizer:     body.Tokenizer,</span></span>
-<span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaGNC">         481 :                 BudgetBuckets: body.BudgetBuckets,</span></span>
-<span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC">         481 :                 Truncations:   body.Truncations,</span></span>
-<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">         481 :                 PromptHash:    body.PromptHash,</span></span>
-<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">         481 :         }</span></span>
-<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">         481 :         return canonical, nil</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">         488 :         hash := sha256.Sum256(bodyJSON)</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">         488 :         canonical := ContextManifest{</span></span>
+<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">         488 :                 ID:            contextManifestIDPrefix + hex.EncodeToString(hash[:12]),</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">         488 :                 Hash:          hex.EncodeToString(hash[:]),</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">         488 :                 Rules:         body.Rules,</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">         488 :                 MessageRanges: body.MessageRanges,</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">         488 :                 CodeRefs:      body.CodeRefs,</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">         488 :                 ArtifactRefs:  body.ArtifactRefs,</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">         488 :                 SummaryRefs:   body.SummaryRefs,</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">         488 :                 Tokenizer:     body.Tokenizer,</span></span>
+<span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaGNC">         488 :                 BudgetBuckets: body.BudgetBuckets,</span></span>
+<span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC">         488 :                 Truncations:   body.Truncations,</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">         488 :                 PromptHash:    body.PromptHash,</span></span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">         488 :         }</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">         488 :         return canonical, nil</span></span>
 <span id="L133"><span class="lineNum">     133</span>                 :             : }</span>
 <span id="L134"><span class="lineNum">     134</span>                 :             : </span>
 <span id="L135"><span class="lineNum">     135</span>                 :             : // NewContextManifest canonicalizes a draft manifest and derives stable ID/hash.</span>
 <span id="L136"><span class="lineNum">     136</span>                 :             : func NewContextManifest(draft ContextManifest) (ContextManifest, error) {</span>
-<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">         476 :         return draft.Canonicalize()</span></span>
-<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">         476 : }</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">         483 :         return draft.Canonicalize()</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">         483 : }</span></span>
 <span id="L139"><span class="lineNum">     139</span>                 :             : </span>
 <span id="L140"><span class="lineNum">     140</span>                 :             : // CanonicalJSON renders the manifest with deterministic JSON.</span>
 <span id="L141"><span class="lineNum">     141</span>                 :             : func (m ContextManifest) CanonicalJSON() ([]byte, error) {</span>
@@ -239,51 +239,51 @@
 <span id="L168"><span class="lineNum">     168</span>                 :             : }</span>
 <span id="L169"><span class="lineNum">     169</span>                 :             : </span>
 <span id="L170"><span class="lineNum">     170</span>                 :             : func (m ContextManifest) canonicalBodyJSON() ([]byte, contextManifestBody, error) {</span>
-<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">         482 :         body := contextManifestBody{</span></span>
-<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">         482 :                 Rules:         append([]ContextRuleRef(nil), m.Rules...),</span></span>
-<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">         482 :                 MessageRanges: append([]ContextMessageRange(nil), m.MessageRanges...),</span></span>
-<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">         482 :                 CodeRefs:      append([]ContextCodeRef(nil), m.CodeRefs...),</span></span>
-<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">         482 :                 ArtifactRefs:  append([]ContextArtifactRef(nil), m.ArtifactRefs...),</span></span>
-<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">         482 :                 SummaryRefs:   append([]ContextSummaryRef(nil), m.SummaryRefs...),</span></span>
-<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">         482 :                 Tokenizer:     m.Tokenizer,</span></span>
-<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">         482 :                 BudgetBuckets: append([]BudgetBucket(nil), m.BudgetBuckets...),</span></span>
-<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">         482 :                 Truncations:   append([]ContextTruncation(nil), m.Truncations...),</span></span>
-<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">         482 :                 PromptHash:    m.PromptHash,</span></span>
-<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">         482 :         }</span></span>
-<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">         482 :         if err := validateContextManifestBody(body); err != nil {</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">         489 :         body := contextManifestBody{</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">         489 :                 Rules:         append([]ContextRuleRef(nil), m.Rules...),</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">         489 :                 MessageRanges: append([]ContextMessageRange(nil), m.MessageRanges...),</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">         489 :                 CodeRefs:      append([]ContextCodeRef(nil), m.CodeRefs...),</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">         489 :                 ArtifactRefs:  append([]ContextArtifactRef(nil), m.ArtifactRefs...),</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">         489 :                 SummaryRefs:   append([]ContextSummaryRef(nil), m.SummaryRefs...),</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">         489 :                 Tokenizer:     m.Tokenizer,</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">         489 :                 BudgetBuckets: append([]BudgetBucket(nil), m.BudgetBuckets...),</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">         489 :                 Truncations:   append([]ContextTruncation(nil), m.Truncations...),</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">         489 :                 PromptHash:    m.PromptHash,</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">         489 :         }</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">         489 :         if err := validateContextManifestBody(body); err != nil {</span></span>
 <span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">           1 :                 return nil, contextManifestBody{}, err</span></span>
 <span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">         481 :         data, err := json.Marshal(body)</span></span>
-<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">         481 :         if err != nil {</span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">         488 :         data, err := json.Marshal(body)</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">         488 :         if err != nil {</span></span>
 <span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, contextManifestBody{}, err</span></span>
 <span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC tlaBgGNC">         481 :         return data, body, nil</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC tlaBgGNC">         488 :         return data, body, nil</span></span>
 <span id="L190"><span class="lineNum">     190</span>                 :             : }</span>
 <span id="L191"><span class="lineNum">     191</span>                 :             : </span>
 <span id="L192"><span class="lineNum">     192</span>                 :             : func validateContextManifestBody(body contextManifestBody) error {</span>
-<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">         482 :         for i, rule := range body.Rules {</span></span>
-<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">         159 :                 if rule.Source == &quot;&quot; {</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">         489 :         for i, rule := range body.Rules {</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">         186 :                 if rule.Source == &quot;&quot; {</span></span>
 <span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return fmt.Errorf(&quot;rules[%d]: source required&quot;, i)</span></span>
 <span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
-<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC tlaBgGNC">         159 :                 if rule.Hash == &quot;&quot; {</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC tlaBgGNC">         186 :                 if rule.Hash == &quot;&quot; {</span></span>
 <span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return fmt.Errorf(&quot;rules[%d]: hash required&quot;, i)</span></span>
 <span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
 <span id="L200"><span class="lineNum">     200</span>                 :             :         }</span>
-<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC tlaBgGNC">         482 :         for i, rng := range body.MessageRanges {</span></span>
-<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">        8732 :                 if rng.MessageID.IsZero() &amp;&amp; rng.Sequence &lt; 0 {</span></span>
+<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC tlaBgGNC">         489 :         for i, rng := range body.MessageRanges {</span></span>
+<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">        8872 :                 if rng.MessageID.IsZero() &amp;&amp; rng.Sequence &lt; 0 {</span></span>
 <span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return fmt.Errorf(&quot;message_ranges[%d]: sequence must be non-negative&quot;, i)</span></span>
 <span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
-<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC tlaBgGNC">        8732 :                 if rng.StartPart &lt; 0 {</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC tlaBgGNC">        8872 :                 if rng.StartPart &lt; 0 {</span></span>
 <span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return fmt.Errorf(&quot;message_ranges[%d]: start_part must be non-negative&quot;, i)</span></span>
 <span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
-<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC tlaBgGNC">        8732 :                 if rng.EndPart &lt; 0 {</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC tlaBgGNC">        8872 :                 if rng.EndPart &lt; 0 {</span></span>
 <span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return fmt.Errorf(&quot;message_ranges[%d]: end_part must be non-negative&quot;, i)</span></span>
 <span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
-<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC tlaBgGNC">        8732 :                 if rng.EndPart != 0 &amp;&amp; rng.EndPart &lt; rng.StartPart {</span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC tlaBgGNC">        8872 :                 if rng.EndPart != 0 &amp;&amp; rng.EndPart &lt; rng.StartPart {</span></span>
 <span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return fmt.Errorf(&quot;message_ranges[%d]: end_part must be &gt;= start_part&quot;, i)</span></span>
 <span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
 <span id="L214"><span class="lineNum">     214</span>                 :             :         }</span>
-<span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaGNC tlaBgGNC">         482 :         for i, ref := range body.CodeRefs {</span></span>
+<span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaGNC tlaBgGNC">         489 :         for i, ref := range body.CodeRefs {</span></span>
 <span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">           5 :                 if ref.Path == &quot;&quot; {</span></span>
 <span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return fmt.Errorf(&quot;code_refs[%d]: path required&quot;, i)</span></span>
 <span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
@@ -297,12 +297,12 @@
 <span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return fmt.Errorf(&quot;code_refs[%d]: end_line must be &gt;= start_line&quot;, i)</span></span>
 <span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
 <span id="L228"><span class="lineNum">     228</span>                 :             :         }</span>
-<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC tlaBgGNC">         482 :         for i, ref := range body.ArtifactRefs {</span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC tlaBgGNC">         489 :         for i, ref := range body.ArtifactRefs {</span></span>
 <span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">           5 :                 if ref.ArtifactID.IsZero() &amp;&amp; ref.SummaryHash == &quot;&quot; {</span></span>
 <span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return fmt.Errorf(&quot;artifact_refs[%d]: artifact_id or summary_hash required&quot;, i)</span></span>
 <span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
 <span id="L233"><span class="lineNum">     233</span>                 :             :         }</span>
-<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC tlaBgGNC">         482 :         for i, ref := range body.SummaryRefs {</span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC tlaBgGNC">         489 :         for i, ref := range body.SummaryRefs {</span></span>
 <span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC">           5 :                 if ref.ID == &quot;&quot; {</span></span>
 <span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return fmt.Errorf(&quot;summary_refs[%d]: id required&quot;, i)</span></span>
 <span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
@@ -315,10 +315,10 @@
 <span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaUNC">           0 :                         }</span></span>
 <span id="L245"><span class="lineNum">     245</span>                 :             :                 }</span>
 <span id="L246"><span class="lineNum">     246</span>                 :             :         }</span>
-<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC tlaBgGNC">         482 :         if body.Tokenizer.Name == &quot;&quot; {</span></span>
+<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC tlaBgGNC">         489 :         if body.Tokenizer.Name == &quot;&quot; {</span></span>
 <span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaGNC">           1 :                 return fmt.Errorf(&quot;tokenizer name required&quot;)</span></span>
 <span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">         481 :         for i, bucket := range body.BudgetBuckets {</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">         488 :         for i, bucket := range body.BudgetBuckets {</span></span>
 <span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">          10 :                 if bucket.Name == &quot;&quot; {</span></span>
 <span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return fmt.Errorf(&quot;budget_buckets[%d]: name required&quot;, i)</span></span>
 <span id="L253"><span class="lineNum">     253</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
@@ -326,15 +326,15 @@
 <span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return fmt.Errorf(&quot;budget_buckets[%d]: tokens must be non-negative&quot;, i)</span></span>
 <span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
 <span id="L257"><span class="lineNum">     257</span>                 :             :         }</span>
-<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC tlaBgGNC">         481 :         for i, truncation := range body.Truncations {</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC tlaBgGNC">         488 :         for i, truncation := range body.Truncations {</span></span>
 <span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">           5 :                 if truncation.Reason == &quot;&quot; {</span></span>
 <span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return fmt.Errorf(&quot;truncations[%d]: reason required&quot;, i)</span></span>
 <span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
 <span id="L262"><span class="lineNum">     262</span>                 :             :         }</span>
-<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC tlaBgGNC">         481 :         if body.PromptHash == &quot;&quot; {</span></span>
+<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC tlaBgGNC">         488 :         if body.PromptHash == &quot;&quot; {</span></span>
 <span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return fmt.Errorf(&quot;prompt hash required&quot;)</span></span>
 <span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaGNC tlaBgGNC">         481 :         return nil</span></span>
+<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaGNC tlaBgGNC">         488 :         return nil</span></span>
 <span id="L267"><span class="lineNum">     267</span>                 :             : }</span>
         </pre>
               </td>

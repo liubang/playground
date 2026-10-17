@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -135,11 +135,11 @@
 <span id="L64"><span class="lineNum">      64</span>                 :             : // catalog, appending resolved content in a loom-context block. Unresolvable</span>
 <span id="L65"><span class="lineNum">      65</span>                 :             : // references are left as plain text (never an error).</span>
 <span id="L66"><span class="lineNum">      66</span>                 :             : func enrichPromptWithReferences(b *Bootstrap, prompt string, logger *slog.Logger) string {</span>
-<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC tlaBgGNC">         139 :         var catalog *skill.AtomicCatalog</span></span>
-<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">         139 :         if b.Skills != nil {</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC tlaBgGNC">         142 :         var catalog *skill.AtomicCatalog</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">         142 :         if b.Skills != nil {</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">           6 :                 catalog = b.Skills.Catalog</span></span>
 <span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">           6 :         }</span></span>
-<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">         139 :         return resolvePromptRefs(b.WorkspaceRoot, catalog, prompt, logger)</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">         142 :         return resolvePromptRefs(b.WorkspaceRoot, catalog, prompt, logger)</span></span>
 <span id="L72"><span class="lineNum">      72</span>                 :             : }</span>
 <span id="L73"><span class="lineNum">      73</span>                 :             : </span>
 <span id="L74"><span class="lineNum">      74</span>                 :             : // resolvePromptRefs is the dependency-narrow core (unit-testable without a</span>
@@ -149,17 +149,17 @@
 <span id="L78"><span class="lineNum">      78</span>                 :             :         // non-canonical root from a caller (e.g. the macOS /var → /private/var</span>
 <span id="L79"><span class="lineNum">      79</span>                 :             :         // symlink) would make every containment check misfire against the</span>
 <span id="L80"><span class="lineNum">      80</span>                 :             :         // Canonicalize'd file paths.</span>
-<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">         147 :         if resolved, err := filepath.EvalSymlinks(root); err == nil {</span></span>
-<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">         147 :                 root = resolved</span></span>
-<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">         147 :         }</span></span>
-<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">         147 :         var sb strings.Builder</span></span>
-<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">         147 :         total := 0</span></span>
-<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">         147 :         files := 0</span></span>
-<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC">         147 : </span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">         150 :         if resolved, err := filepath.EvalSymlinks(root); err == nil {</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">         150 :                 root = resolved</span></span>
+<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">         150 :         }</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">         150 :         var sb strings.Builder</span></span>
+<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">         150 :         total := 0</span></span>
+<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">         150 :         files := 0</span></span>
+<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC">         150 : </span></span>
 <span id="L88"><span class="lineNum">      88</span>                 :             :         // --- @file references (deduped; directories inject a one-level listing,</span>
 <span id="L89"><span class="lineNum">      89</span>                 :             :         // files their content) ---</span>
-<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">         147 :         seen := map[string]bool{}</span></span>
-<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">         147 :         for _, m := range atRefRe.FindAllStringSubmatch(prompt, -1) {</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">         150 :         seen := map[string]bool{}</span></span>
+<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">         150 :         for _, m := range atRefRe.FindAllStringSubmatch(prompt, -1) {</span></span>
 <span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaGNC">           6 :                 tok := strings.TrimRight(m[1], refTrailers)</span></span>
 <span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">           6 :                 if tok == &quot;&quot; || seen[tok] || files &gt;= maxRefFiles {</span></span>
 <span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         continue</span></span>
@@ -178,16 +178,16 @@
 <span id="L107"><span class="lineNum">     107</span>                 :             :         }</span>
 <span id="L108"><span class="lineNum">     108</span>                 :             : </span>
 <span id="L109"><span class="lineNum">     109</span>                 :             :         // --- leading-/ skill trigger ---</span>
-<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">         147 :         skillBlock := &quot;&quot;</span></span>
-<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">         147 :         if m := skillRefRe.FindStringSubmatch(prompt); m != nil &amp;&amp; catalog != nil {</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">         150 :         skillBlock := &quot;&quot;</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">         150 :         if m := skillRefRe.FindStringSubmatch(prompt); m != nil &amp;&amp; catalog != nil {</span></span>
 <span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">           2 :                 if block, size := resolveSkillRef(catalog, m[1]); block != &quot;&quot; &amp;&amp; total+size &lt;= maxRefTotalBytes {</span></span>
 <span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">           1 :                         skillBlock = block</span></span>
 <span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
 <span id="L115"><span class="lineNum">     115</span>                 :             :         }</span>
 <span id="L116"><span class="lineNum">     116</span>                 :             : </span>
-<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">         147 :         if files == 0 &amp;&amp; skillBlock == &quot;&quot; {</span></span>
-<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">         142 :                 return prompt</span></span>
-<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">         142 :         }</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">         150 :         if files == 0 &amp;&amp; skillBlock == &quot;&quot; {</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">         145 :                 return prompt</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">         145 :         }</span></span>
 <span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">           5 :         if logger != nil {</span></span>
 <span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 logger.Debug(&quot;prompt references resolved&quot;, &quot;files&quot;, files, &quot;skill&quot;, skillBlock != &quot;&quot;)</span></span>
 <span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaUNC">           0 :         }</span></span>

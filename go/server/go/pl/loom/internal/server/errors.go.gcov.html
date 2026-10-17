@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -127,12 +127,12 @@
 <span id="L56"><span class="lineNum">      56</span>                 :             : </span>
 <span id="L57"><span class="lineNum">      57</span>                 :             : // writeJSON serializes v as the response body.</span>
 <span id="L58"><span class="lineNum">      58</span>                 :             : func writeJSON(w http.ResponseWriter, status int, v any) {</span>
-<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">         225 :         w.Header().Set(&quot;Content-Type&quot;, &quot;application/json; charset=utf-8&quot;)</span></span>
-<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">         225 :         w.WriteHeader(status)</span></span>
-<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">         225 :         encoder := json.NewEncoder(w)</span></span>
-<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">         225 :         encoder.SetEscapeHTML(false)</span></span>
-<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">         225 :         _ = encoder.Encode(v)</span></span>
-<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">         225 : }</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">         233 :         w.Header().Set(&quot;Content-Type&quot;, &quot;application/json; charset=utf-8&quot;)</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">         233 :         w.WriteHeader(status)</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">         233 :         encoder := json.NewEncoder(w)</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">         233 :         encoder.SetEscapeHTML(false)</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">         233 :         _ = encoder.Encode(v)</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">         233 : }</span></span>
 <span id="L65"><span class="lineNum">      65</span>                 :             : </span>
 <span id="L66"><span class="lineNum">      66</span>                 :             : // writeError renders an error in the unified model. It accepts *statusError</span>
 <span id="L67"><span class="lineNum">      67</span>                 :             : // directly or maps application-layer errors via mapError.</span>
@@ -238,20 +238,20 @@
 <span id="L167"><span class="lineNum">     167</span>                 :             : </span>
 <span id="L168"><span class="lineNum">     168</span>                 :             : // parseSessionParam validates a {id} path value as a session ID.</span>
 <span id="L169"><span class="lineNum">     169</span>                 :             : func parseSessionParam(r *http.Request) (domain.SessionID, error) {</span>
-<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">          90 :         raw := r.PathValue(&quot;id&quot;)</span></span>
-<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">          90 :         id, err := domain.ParseSessionID(raw)</span></span>
-<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">          90 :         if err != nil || !domain.HasPrefix(id, &quot;sess_&quot;) {</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">          93 :         raw := r.PathValue(&quot;id&quot;)</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">          93 :         id, err := domain.ParseSessionID(raw)</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">          93 :         if err != nil || !domain.HasPrefix(id, &quot;sess_&quot;) {</span></span>
 <span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.SessionID{}, invalidInput(&quot;invalid session id&quot;)</span></span>
 <span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC tlaBgGNC">          90 :         return id, nil</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC tlaBgGNC">          93 :         return id, nil</span></span>
 <span id="L176"><span class="lineNum">     176</span>                 :             : }</span>
 <span id="L177"><span class="lineNum">     177</span>                 :             : </span>
 <span id="L178"><span class="lineNum">     178</span>                 :             : // parseWorkspaceIDParam validates an optional workspace-ID query/body value;</span>
 <span id="L179"><span class="lineNum">     179</span>                 :             : // empty maps to the zero ID (callers then use the default workspace).</span>
 <span id="L180"><span class="lineNum">     180</span>                 :             : func parseWorkspaceIDParam(raw string) (domain.WorkspaceID, error) {</span>
-<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">          54 :         if strings.TrimSpace(raw) == &quot;&quot; {</span></span>
-<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">          29 :                 return domain.WorkspaceID{}, nil</span></span>
-<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">          29 :         }</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">          55 :         if strings.TrimSpace(raw) == &quot;&quot; {</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">          30 :                 return domain.WorkspaceID{}, nil</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">          30 :         }</span></span>
 <span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">          25 :         id, err := domain.ParseWorkspaceID(raw)</span></span>
 <span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">          25 :         if err != nil || !domain.HasPrefix(id, &quot;ws_&quot;) {</span></span>
 <span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">           2 :                 return domain.WorkspaceID{}, invalidInput(&quot;invalid workspace id&quot;)</span></span>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -209,18 +209,18 @@
 <span id="L138"><span class="lineNum">     138</span>                 :             : type noopRun struct{}</span>
 <span id="L139"><span class="lineNum">     139</span>                 :             : </span>
 <span id="L140"><span class="lineNum">     140</span>                 :             : // Noop returns a recorder that discards everything.</span>
-<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC tlaBgGNC">         227 : func Noop() Recorder { return noopRecorder{} }</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC tlaBgGNC">         238 : func Noop() Recorder { return noopRecorder{} }</span></span>
 <span id="L142"><span class="lineNum">     142</span>                 :             : </span>
 <span id="L143"><span class="lineNum">     143</span>                 :             : func (noopRecorder) StartRun(ctx context.Context, _ RunMeta) (context.Context, RunHandle) {</span>
-<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">         213 :         return ctx, noopRun{}</span></span>
-<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">         213 : }</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">         221 :         return ctx, noopRun{}</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">         221 : }</span></span>
 <span id="L146"><span class="lineNum">     146</span>                 :             : </span>
-<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">         472 : func (noopRun) RecordGeneration(context.Context, GenerationRecord)     {}</span></span>
-<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">         254 : func (noopRun) RecordTool(context.Context, ToolRecord)                 {}</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">         480 : func (noopRun) RecordGeneration(context.Context, GenerationRecord)     {}</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">         256 : func (noopRun) RecordTool(context.Context, ToolRecord)                 {}</span></span>
 <span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">          34 : func (noopRun) RecordEvent(context.Context, string, map[string]string) {}</span></span>
-<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">         188 : func (noopRun) Score(context.Context, string, float64, string)         {}</span></span>
-<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">         212 : func (noopRun) TraceID() string                                        { return &quot;&quot; }</span></span>
-<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">         212 : func (noopRun) End(RunResult)                                          {}</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">         193 : func (noopRun) Score(context.Context, string, float64, string)         {}</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">         220 : func (noopRun) TraceID() string                                        { return &quot;&quot; }</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">         220 : func (noopRun) End(RunResult)                                          {}</span></span>
 <span id="L153"><span class="lineNum">     153</span>                 :             : </span>
 <span id="L154"><span class="lineNum">     154</span>                 :             : func (noopRecorder) ScoreTrace(context.Context, string, string, float64, string) bool {</span>
 <span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">           1 :         return false</span></span>

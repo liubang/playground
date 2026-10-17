@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -113,30 +113,30 @@
 <span id="L42"><span class="lineNum">      42</span>                 :             : // validator. The artifact store is required: it is the image's only</span>
 <span id="L43"><span class="lineNum">      43</span>                 :             : // delivery channel.</span>
 <span id="L44"><span class="lineNum">      44</span>                 :             : func NewPresentImageTool(validator *workspacepkg.PathValidator, artifacts domain.ArtifactStore) (*PresentImageTool, error) {</span>
-<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC tlaBgGNC">          30 :         if artifacts == nil {</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC tlaBgGNC">          39 :         if artifacts == nil {</span></span>
 <span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, domain.NewError(domain.ErrInvalidInput, &quot;present_image artifact store is required&quot;)</span></span>
 <span id="L47"><span class="lineNum">      47</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC tlaBgGNC">          30 :         base, err := newBaseTool(domain.ToolDefinition{</span></span>
-<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">          30 :                 Name: &quot;present_image&quot;,</span></span>
-<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">          30 :                 Description: &quot;Display a local image file (png, jpeg, gif, webp) to the user, e.g. a plot, diagram, &quot; +</span></span>
-<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">          30 :                         &quot;or render you just produced. The image is shown in the user's transcript; you do NOT see it &quot; +</span></span>
-<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">          30 :                         &quot;yourself and it does not enter your context. Use this whenever the goal is to show an image &quot; +</span></span>
-<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">          30 :                         &quot;rather than to inspect one; use view_image when you need to look at an image. Relative paths &quot; +</span></span>
-<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">          30 :                         &quot;resolve inside the workspace; absolute paths outside the workspace work too (credential &quot; +</span></span>
-<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">          30 :                         &quot;locations are always denied).&quot;,</span></span>
-<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">          30 :                 InputSchema:  json.RawMessage(`{&quot;type&quot;:&quot;object&quot;,&quot;additionalProperties&quot;:false,&quot;properties&quot;:{&quot;path&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:4096}},&quot;required&quot;:[&quot;path&quot;]}`),</span></span>
-<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">          30 :                 Capabilities: []domain.Capability{domain.CapFSRead},</span></span>
-<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">          30 :                 Source:       domain.ToolSourceBuiltin,</span></span>
-<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">          30 :         }, validator)</span></span>
-<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">          30 :         if err != nil {</span></span>
+<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC tlaBgGNC">          39 :         base, err := newBaseTool(domain.ToolDefinition{</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">          39 :                 Name: &quot;present_image&quot;,</span></span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">          39 :                 Description: &quot;Display a local image file (png, jpeg, gif, webp) to the user, e.g. a plot, diagram, &quot; +</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">          39 :                         &quot;or render you just produced. The image is shown in the user's transcript; you do NOT see it &quot; +</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">          39 :                         &quot;yourself and it does not enter your context. Use this whenever the goal is to show an image &quot; +</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">          39 :                         &quot;rather than to inspect one; use view_image when you need to look at an image. Relative paths &quot; +</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">          39 :                         &quot;resolve inside the workspace; absolute paths outside the workspace work too (credential &quot; +</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">          39 :                         &quot;locations are always denied).&quot;,</span></span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">          39 :                 InputSchema:  json.RawMessage(`{&quot;type&quot;:&quot;object&quot;,&quot;additionalProperties&quot;:false,&quot;properties&quot;:{&quot;path&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:4096}},&quot;required&quot;:[&quot;path&quot;]}`),</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">          39 :                 Capabilities: []domain.Capability{domain.CapFSRead},</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">          39 :                 Source:       domain.ToolSourceBuiltin,</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">          39 :         }, validator)</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">          39 :         if err != nil {</span></span>
 <span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
 <span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC tlaBgGNC">          30 :         return &amp;PresentImageTool{base: base, artifacts: artifacts}, nil</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC tlaBgGNC">          39 :         return &amp;PresentImageTool{base: base, artifacts: artifacts}, nil</span></span>
 <span id="L64"><span class="lineNum">      64</span>                 :             : }</span>
 <span id="L65"><span class="lineNum">      65</span>                 :             : </span>
 <span id="L66"><span class="lineNum">      66</span>                 :             : func (t *PresentImageTool) Definition() domain.ToolDefinition {</span>
-<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">          59 :         return t.base.Def</span></span>
-<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">          59 : }</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">          77 :         return t.base.Def</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">          77 : }</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :             : </span>
 <span id="L70"><span class="lineNum">      70</span>                 :             : // ConcurrentSafe implements domain.ConcurrentSafely: reads are independent.</span>
 <span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaUNC tlaBgUNC">           0 : func (t *PresentImageTool) ConcurrentSafe() bool { return true }</span></span>

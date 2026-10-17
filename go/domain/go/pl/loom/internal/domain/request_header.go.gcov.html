@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -139,12 +139,12 @@
 <span id="L68"><span class="lineNum">      68</span>                 :             : // encoding (Go's encoding/json sorts map keys, so the encoding is</span>
 <span id="L69"><span class="lineNum">      69</span>                 :             : // deterministic for the same content).</span>
 <span id="L70"><span class="lineNum">      70</span>                 :             : func (h RequestHeader) CanonicalHash() string {</span>
-<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC tlaBgGNC">         479 :         data, err := json.Marshal(h)</span></span>
-<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">         479 :         if err != nil {</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC tlaBgGNC">         486 :         data, err := json.Marshal(h)</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">         486 :         if err != nil {</span></span>
 <span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;&quot;</span></span>
 <span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC tlaBgGNC">         479 :         sum := sha256.Sum256(data)</span></span>
-<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">         479 :         return hex.EncodeToString(sum[:])</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC tlaBgGNC">         486 :         sum := sha256.Sum256(data)</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">         486 :         return hex.EncodeToString(sum[:])</span></span>
 <span id="L77"><span class="lineNum">      77</span>                 :             : }</span>
 <span id="L78"><span class="lineNum">      78</span>                 :             : </span>
 <span id="L79"><span class="lineNum">      79</span>                 :             : // RequestHeaderPayload is the EventModelRequestHeader payload.</span>

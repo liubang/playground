@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -134,22 +134,22 @@
 <span id="L63"><span class="lineNum">      63</span>                 :             : // (sess_2e5c16c02e285ee4e608d0b136e7d4e9). The byte budget is derived</span>
 <span id="L64"><span class="lineNum">      64</span>                 :             : // at the execution boundary.</span>
 <span id="L65"><span class="lineNum">      65</span>                 :             : func (a rawSessionArgs) canonicalArgs() sessionArgs {</span>
-<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC tlaBgGNC">          17 :         out := sessionArgs{</span></span>
-<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">          17 :                 Action:             a.Action,</span></span>
-<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">          17 :                 Command:            a.Command,</span></span>
-<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">          17 :                 SessionID:          a.SessionID,</span></span>
-<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">          17 :                 Chars:              a.Chars,</span></span>
-<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">          17 :                 WorkingDir:         a.WorkingDir,</span></span>
-<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">          17 :                 Env:                a.Env,</span></span>
-<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">          17 :                 YieldTimeMs:        a.YieldTimeMs,</span></span>
-<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">          17 :                 SandboxPermissions: a.SandboxPermissions,</span></span>
-<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">          17 :                 NeedsGUIOpen:       a.NeedsGUIOpen,</span></span>
-<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">          17 :                 Justification:      a.Justification,</span></span>
-<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">          17 :         }</span></span>
-<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">          17 :         if a.MaxOutputTokens != nil {</span></span>
-<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">           2 :                 out.MaxOutputTokens = min(max(*a.MaxOutputTokens, 0), maxMaxOutputTokens)</span></span>
-<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">           2 :         }</span></span>
-<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">          17 :         return out</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC tlaBgGNC">          23 :         out := sessionArgs{</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">          23 :                 Action:             a.Action,</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">          23 :                 Command:            a.Command,</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">          23 :                 SessionID:          a.SessionID,</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">          23 :                 Chars:              a.Chars,</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">          23 :                 WorkingDir:         a.WorkingDir,</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">          23 :                 Env:                a.Env,</span></span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">          23 :                 YieldTimeMs:        a.YieldTimeMs,</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">          23 :                 SandboxPermissions: a.SandboxPermissions,</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">          23 :                 NeedsGUIOpen:       a.NeedsGUIOpen,</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">          23 :                 Justification:      a.Justification,</span></span>
+<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">          23 :         }</span></span>
+<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">          23 :         if a.MaxOutputTokens != nil {</span></span>
+<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">           5 :                 out.MaxOutputTokens = min(max(*a.MaxOutputTokens, 0), maxMaxOutputTokens)</span></span>
+<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">           5 :         }</span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">          23 :         return out</span></span>
 <span id="L82"><span class="lineNum">      82</span>                 :             : }</span>
 <span id="L83"><span class="lineNum">      83</span>                 :             : </span>
 <span id="L84"><span class="lineNum">      84</span>                 :             : // sessionArgs is the signed canonical shape: identical fields, with the</span>
@@ -172,16 +172,16 @@
 <span id="L101"><span class="lineNum">     101</span>                 :             : // commandSpec extracts the start-action command fields into the shared</span>
 <span id="L102"><span class="lineNum">     102</span>                 :             : // commandArgs shape validateCommandArgs understands.</span>
 <span id="L103"><span class="lineNum">     103</span>                 :             : func (a sessionArgs) commandSpec() commandArgs {</span>
-<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaGNC">          27 :         return commandArgs{</span></span>
-<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC">          27 :                 Command:            a.Command,</span></span>
-<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">          27 :                 WorkingDir:         a.WorkingDir,</span></span>
-<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">          27 :                 Env:                a.Env,</span></span>
-<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">          27 :                 YieldTimeMs:        a.YieldTimeMs,</span></span>
-<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">          27 :                 MaxOutputTokens:    a.MaxOutputTokens,</span></span>
-<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">          27 :                 SandboxPermissions: a.SandboxPermissions,</span></span>
-<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">          27 :                 NeedsGUIOpen:       a.NeedsGUIOpen,</span></span>
-<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">          27 :                 Justification:      a.Justification,</span></span>
-<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">          27 :         }</span></span>
+<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaGNC">          39 :         return commandArgs{</span></span>
+<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC">          39 :                 Command:            a.Command,</span></span>
+<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">          39 :                 WorkingDir:         a.WorkingDir,</span></span>
+<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">          39 :                 Env:                a.Env,</span></span>
+<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">          39 :                 YieldTimeMs:        a.YieldTimeMs,</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">          39 :                 MaxOutputTokens:    a.MaxOutputTokens,</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">          39 :                 SandboxPermissions: a.SandboxPermissions,</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">          39 :                 NeedsGUIOpen:       a.NeedsGUIOpen,</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">          39 :                 Justification:      a.Justification,</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">          39 :         }</span></span>
 <span id="L114"><span class="lineNum">     114</span>                 :             : }</span>
 <span id="L115"><span class="lineNum">     115</span>                 :             : </span>
 <span id="L116"><span class="lineNum">     116</span>                 :             : // ExecSessionTool manages long-running background sessions through one</span>
@@ -199,54 +199,54 @@
 <span id="L128"><span class="lineNum">     128</span>                 :             : // NewExecSessionTool creates the exec_session tool bound to the shared</span>
 <span id="L129"><span class="lineNum">     129</span>                 :             : // session manager.</span>
 <span id="L130"><span class="lineNum">     130</span>                 :             : func NewExecSessionTool(validator *workspacepkg.PathValidator, manager *Manager) (*ExecSessionTool, error) {</span>
-<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">          40 :         if validator == nil {</span></span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">          50 :         if validator == nil {</span></span>
 <span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, domain.NewError(domain.ErrInvalidInput, &quot;path validator is required&quot;)</span></span>
 <span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC tlaBgGNC">          40 :         if manager == nil {</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC tlaBgGNC">          50 :         if manager == nil {</span></span>
 <span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, domain.NewError(domain.ErrInvalidInput, &quot;session manager is required&quot;)</span></span>
 <span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC tlaBgGNC">          40 :         def := domain.ToolDefinition{</span></span>
-<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">          40 :                 Name: &quot;exec_session&quot;,</span></span>
-<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">          40 :                 // The sandbox policy itself is documented once on run_cmd; this</span></span>
-<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          40 :                 // description carries only what is session-specific.</span></span>
-<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">          40 :                 Description: &quot;Manage long-running background sessions inside the sandbox: dev servers, watch-mode test &quot; +</span></span>
-<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">          40 :                         &quot;runners, REPLs, database consoles; for one-shot commands that run to completion, prefer run_cmd. &quot; +</span></span>
-<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">          40 :                         &quot;Actions: 'start' launches a command via 'sh -c' like run_cmd (e.g. {\&quot;action\&quot;:\&quot;start\&quot;,\&quot;command\&quot;:\&quot;npm run dev\&quot;,\&quot;working_dir\&quot;:\&quot;web\&quot;}) &quot; +</span></span>
-<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">          40 :                         &quot;and returns a session_id early with status='running'; 'write' sends shell-style input to the session's stdin &quot; +</span></span>
-<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">          40 :                         &quot;(remember the trailing newline; control characters work too, e.g. '\\u0003' for Ctrl-C); 'poll' waits up to &quot; +</span></span>
-<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">          40 :                         &quot;yield_time_ms for new output (default 5000 when polling, 250 after a write); 'kill' terminates the session. &quot; +</span></span>
-<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">          40 :                         &quot;run_cmd's sandbox rules and scoped flags apply to start — needs_gui_open covers a session opening URLs/apps, &quot; +</span></span>
-<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">          40 :                         &quot;sandbox_permissions='require_escalated' with a justification runs the session OUTSIDE the sandbox. &quot; +</span></span>
-<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">          40 :                         &quot;Every call returns the merged stdout/stderr produced since the previous call, the status &quot; +</span></span>
-<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">          40 :                         &quot;('running', 'exited', or 'killed') and the exit code once finished. Keep polling a session you started &quot; +</span></span>
-<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">          40 :                         &quot;until it exits or kill it when no longer needed — sessions are killed automatically after 30 minutes &quot; +</span></span>
-<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">          40 :                         &quot;without interaction.&quot;,</span></span>
-<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">          40 :                 InputSchema: json.RawMessage(`{&quot;type&quot;:&quot;object&quot;,&quot;additionalProperties&quot;:false,&quot;properties&quot;:{&quot;action&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;enum&quot;:[&quot;start&quot;,&quot;write&quot;,&quot;poll&quot;,&quot;kill&quot;],&quot;description&quot;:&quot;The session operation (default: inferred — command present means start, session_id with chars means write, session_id alone means poll).&quot;},&quot;command&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:32768,&quot;description&quot;:&quot;The shell command to run as a session, via 'sh -c' (required for start).&quot;},&quot;session_id&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:64,&quot;description&quot;:&quot;The session to drive (required for write/poll/kill).&quot;},&quot;chars&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;maxLength&quot;:8192,&quot;description&quot;:&quot;Input to write to the session's stdin (write only).&quot;},&quot;working_dir&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:4096,&quot;default&quot;:&quot;.&quot;,&quot;description&quot;:&quot;Run directory, relative to the workspace root (start only).&quot;},&quot;env&quot;:{&quot;type&quot;:&quot;object&quot;,&quot;maxProperties&quot;:64,&quot;additionalProperties&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;maxLength&quot;:8192},&quot;description&quot;:&quot;Extra environment variables (sandbox-filtered allowlist; start only).&quot;},&quot;yield_time_ms&quot;:{&quot;type&quot;:&quot;integer&quot;,&quot;minimum&quot;:0,&quot;maximum&quot;:300000,&quot;description&quot;:&quot;Milliseconds to wait for output before returning (start default 1000, write 250, poll 5000).&quot;},&quot;max_output_tokens&quot;:{&quot;type&quot;:&quot;integer&quot;,&quot;minimum&quot;:0,&quot;maximum&quot;:16384,&quot;default&quot;:4096,&quot;description&quot;:&quot;Maximum tokens of merged output returned (1 token is roughly 4 bytes).&quot;},&quot;sandbox_permissions&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;enum&quot;:[&quot;use_default&quot;,&quot;require_escalated&quot;],&quot;default&quot;:&quot;use_default&quot;,&quot;description&quot;:&quot;'require_escalated' runs the session OUTSIDE the sandbox after explicit approval; requires justification (start only).&quot;},&quot;needs_gui_open&quot;:{&quot;type&quot;:&quot;boolean&quot;,&quot;description&quot;:&quot;Allow the session to open URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval (start only).&quot;},&quot;justification&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:240,&quot;description&quot;:&quot;Short note shown at approval time; required with require_escalated.&quot;}},&quot;required&quot;:[]}`),</span></span>
-<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">          40 :                 // Deliberately capability-free (static R0): risk is graded PER</span></span>
-<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">          40 :                 // ACTION in Prepare (start is R2, R3 when escalated; write/poll/kill</span></span>
-<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">          40 :                 // are R1) — and the loop's execution-time drift guard rejects a</span></span>
-<span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC">          40 :                 // prepared risk BELOW the definition's static tier. The per-action</span></span>
-<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">          40 :                 // elevation is covered by the prepared-call signature, the same</span></span>
-<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaGNC">          40 :                 // shape as the browser tool's riskForAction. Source=builtin is the</span></span>
-<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">          40 :                 // audit marker.</span></span>
-<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">          40 :                 Source: domain.ToolSourceBuiltin,</span></span>
-<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">          40 :         }</span></span>
-<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">          40 :         base, err := toolkit.NewBaseTool(def)</span></span>
-<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">          40 :         if err != nil {</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC tlaBgGNC">          50 :         def := domain.ToolDefinition{</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">          50 :                 Name: &quot;exec_session&quot;,</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">          50 :                 // The sandbox policy itself is documented once on run_cmd; this</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          50 :                 // description carries only what is session-specific.</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">          50 :                 Description: &quot;Manage long-running background sessions inside the sandbox: dev servers, watch-mode test &quot; +</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">          50 :                         &quot;runners, REPLs, database consoles; for one-shot commands that run to completion, prefer run_cmd. &quot; +</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">          50 :                         &quot;Actions: 'start' launches a command via 'sh -c' like run_cmd (e.g. {\&quot;action\&quot;:\&quot;start\&quot;,\&quot;command\&quot;:\&quot;npm run dev\&quot;,\&quot;working_dir\&quot;:\&quot;web\&quot;}) &quot; +</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">          50 :                         &quot;and returns a session_id early with status='running'; 'write' sends shell-style input to the session's stdin &quot; +</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">          50 :                         &quot;(remember the trailing newline; control characters work too, e.g. '\\u0003' for Ctrl-C); 'poll' waits up to &quot; +</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">          50 :                         &quot;yield_time_ms for new output (default 5000 when polling, 250 after a write); 'kill' terminates the session. &quot; +</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">          50 :                         &quot;run_cmd's sandbox rules and scoped flags apply to start — needs_gui_open covers a session opening URLs/apps, &quot; +</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">          50 :                         &quot;sandbox_permissions='require_escalated' with a justification runs the session OUTSIDE the sandbox. &quot; +</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">          50 :                         &quot;Every call returns the merged stdout/stderr produced since the previous call, the status &quot; +</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">          50 :                         &quot;('running', 'exited', or 'killed') and the exit code once finished. Keep polling a session you started &quot; +</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">          50 :                         &quot;until it exits or kill it when no longer needed — sessions are killed automatically after 30 minutes &quot; +</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">          50 :                         &quot;without interaction.&quot;,</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">          50 :                 InputSchema: json.RawMessage(`{&quot;type&quot;:&quot;object&quot;,&quot;additionalProperties&quot;:false,&quot;properties&quot;:{&quot;action&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;enum&quot;:[&quot;start&quot;,&quot;write&quot;,&quot;poll&quot;,&quot;kill&quot;],&quot;description&quot;:&quot;The session operation (default: inferred — command present means start, session_id with chars means write, session_id alone means poll).&quot;},&quot;command&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:32768,&quot;description&quot;:&quot;The shell command to run as a session, via 'sh -c' (required for start).&quot;},&quot;session_id&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:64,&quot;description&quot;:&quot;The session to drive (required for write/poll/kill).&quot;},&quot;chars&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;maxLength&quot;:8192,&quot;description&quot;:&quot;Input to write to the session's stdin (write only).&quot;},&quot;working_dir&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:4096,&quot;default&quot;:&quot;.&quot;,&quot;description&quot;:&quot;Run directory, relative to the workspace root (start only).&quot;},&quot;env&quot;:{&quot;type&quot;:&quot;object&quot;,&quot;maxProperties&quot;:64,&quot;additionalProperties&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;maxLength&quot;:8192},&quot;description&quot;:&quot;Extra environment variables (sandbox-filtered allowlist; start only).&quot;},&quot;yield_time_ms&quot;:{&quot;type&quot;:&quot;integer&quot;,&quot;minimum&quot;:0,&quot;maximum&quot;:300000,&quot;description&quot;:&quot;Milliseconds to wait for output before returning (start default 1000, write 250, poll 5000).&quot;},&quot;max_output_tokens&quot;:{&quot;type&quot;:&quot;integer&quot;,&quot;minimum&quot;:0,&quot;maximum&quot;:16384,&quot;default&quot;:4096,&quot;description&quot;:&quot;Maximum tokens of merged output returned (1 token is roughly 4 bytes).&quot;},&quot;sandbox_permissions&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;enum&quot;:[&quot;use_default&quot;,&quot;require_escalated&quot;],&quot;default&quot;:&quot;use_default&quot;,&quot;description&quot;:&quot;'require_escalated' runs the session OUTSIDE the sandbox after explicit approval; requires justification (start only).&quot;},&quot;needs_gui_open&quot;:{&quot;type&quot;:&quot;boolean&quot;,&quot;description&quot;:&quot;Allow the session to open URLs/apps (macOS 'open', Apple Events) inside the sandbox after a lightweight approval (start only).&quot;},&quot;justification&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:240,&quot;description&quot;:&quot;Short note shown at approval time; required with require_escalated.&quot;}},&quot;required&quot;:[]}`),</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">          50 :                 // Deliberately capability-free (static R0): risk is graded PER</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">          50 :                 // ACTION in Prepare (start is R2, R3 when escalated; write/poll/kill</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">          50 :                 // are R1) — and the loop's execution-time drift guard rejects a</span></span>
+<span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC">          50 :                 // prepared risk BELOW the definition's static tier. The per-action</span></span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">          50 :                 // elevation is covered by the prepared-call signature, the same</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaGNC">          50 :                 // shape as the browser tool's riskForAction. Source=builtin is the</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">          50 :                 // audit marker.</span></span>
+<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">          50 :                 Source: domain.ToolSourceBuiltin,</span></span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">          50 :         }</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">          50 :         base, err := toolkit.NewBaseTool(def)</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">          50 :         if err != nil {</span></span>
 <span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
 <span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC tlaBgGNC">          40 :         return &amp;ExecSessionTool{base: base, validator: validator, manager: manager}, nil</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC tlaBgGNC">          50 :         return &amp;ExecSessionTool{base: base, validator: validator, manager: manager}, nil</span></span>
 <span id="L168"><span class="lineNum">     168</span>                 :             : }</span>
 <span id="L169"><span class="lineNum">     169</span>                 :             : </span>
 <span id="L170"><span class="lineNum">     170</span>                 :             : func (t *ExecSessionTool) Definition() domain.ToolDefinition {</span>
-<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">          61 :         return t.base.Def</span></span>
-<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">          61 : }</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">          86 :         return t.base.Def</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">          86 : }</span></span>
 <span id="L173"><span class="lineNum">     173</span>                 :             : </span>
 <span id="L174"><span class="lineNum">     174</span>                 :             : // resolveAction fills in the action when the model omitted it: a command</span>
 <span id="L175"><span class="lineNum">     175</span>                 :             : // means start, a session_id with chars means write, a session_id alone</span>
 <span id="L176"><span class="lineNum">     176</span>                 :             : // means poll.</span>
 <span id="L177"><span class="lineNum">     177</span>                 :             : func resolveAction(args *sessionArgs) error {</span>
-<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">          38 :         if args.Action == &quot;&quot; {</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">          44 :         if args.Action == &quot;&quot; {</span></span>
 <span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">          16 :                 switch {</span></span>
 <span id="L180"><span class="lineNum">     180</span>                 :             :                 case args.Command != &quot;&quot;:</span>
 <span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">          11 :                         args.Action = actionStart</span></span>
@@ -258,9 +258,9 @@
 <span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">           1 :                         return domain.NewError(domain.ErrInvalidInput, &quot;action is required (start|write|poll|kill)&quot;)</span></span>
 <span id="L188"><span class="lineNum">     188</span>                 :             :                 }</span>
 <span id="L189"><span class="lineNum">     189</span>                 :             :         }</span>
-<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">          37 :         switch args.Action {</span></span>
+<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">          43 :         switch args.Action {</span></span>
 <span id="L191"><span class="lineNum">     191</span>                 :             :         case actionStart:</span>
-<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">          16 :                 if args.Command == &quot;&quot; {</span></span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">          22 :                 if args.Command == &quot;&quot; {</span></span>
 <span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">           1 :                         return domain.NewError(domain.ErrInvalidInput, &quot;command is required for action=start&quot;)</span></span>
 <span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
 <span id="L195"><span class="lineNum">     195</span>                 :             :         case actionWrite, actionPoll, actionKill:</span>
@@ -282,75 +282,75 @@
 <span id="L211"><span class="lineNum">     211</span>                 :             :         default:</span>
 <span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                 return domain.NewError(domain.ErrInvalidInput, fmt.Sprintf(&quot;unknown action %q (want start|write|poll|kill)&quot;, args.Action))</span></span>
 <span id="L213"><span class="lineNum">     213</span>                 :             :         }</span>
-<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">          30 :         return nil</span></span>
+<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">          36 :         return nil</span></span>
 <span id="L215"><span class="lineNum">     215</span>                 :             : }</span>
 <span id="L216"><span class="lineNum">     216</span>                 :             : </span>
 <span id="L217"><span class="lineNum">     217</span>                 :             : // riskForArgs grades the call's risk by action: only start spawns a new</span>
 <span id="L218"><span class="lineNum">     218</span>                 :             : // process (R2 inside the sandbox, R3 when escalated); write/poll/kill</span>
 <span id="L219"><span class="lineNum">     219</span>                 :             : // drive an already-approved session and stay at R1.</span>
 <span id="L220"><span class="lineNum">     220</span>                 :             : func riskForArgs(args sessionArgs) domain.RiskLevel {</span>
-<span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaGNC">          26 :         if args.Action == actionStart {</span></span>
-<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">          13 :                 return riskForCommand(args.commandSpec(), domain.R2)</span></span>
-<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC">          13 :         }</span></span>
+<span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaGNC">          32 :         if args.Action == actionStart {</span></span>
+<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">          19 :                 return riskForCommand(args.commandSpec(), domain.R2)</span></span>
+<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC">          19 :         }</span></span>
 <span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">          13 :         return domain.R1</span></span>
 <span id="L225"><span class="lineNum">     225</span>                 :             : }</span>
 <span id="L226"><span class="lineNum">     226</span>                 :             : </span>
 <span id="L227"><span class="lineNum">     227</span>                 :             : func (t *ExecSessionTool) Prepare(ctx context.Context, call domain.ToolCall) (domain.PreparedCall, error) {</span>
-<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">          17 :         raw, err := toolkit.DecodeLenient[rawSessionArgs](call.Arguments)</span></span>
-<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">          17 :         if err != nil {</span></span>
+<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">          23 :         raw, err := toolkit.DecodeLenient[rawSessionArgs](call.Arguments)</span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">          23 :         if err != nil {</span></span>
 <span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.PreparedCall{}, err</span></span>
 <span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaUNC">           0 :         }</span></span>
 <span id="L232"><span class="lineNum">     232</span>                 :             :         // The token budget crosses into the signed canonical arguments</span>
 <span id="L233"><span class="lineNum">     233</span>                 :             :         // verbatim; the byte budget derives at the drain boundary.</span>
-<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC tlaBgGNC">          17 :         args := raw.canonicalArgs()</span></span>
-<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC">          17 :         if err := resolveAction(&amp;args); err != nil {</span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC tlaBgGNC">          23 :         args := raw.canonicalArgs()</span></span>
+<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC">          23 :         if err := resolveAction(&amp;args); err != nil {</span></span>
 <span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.PreparedCall{}, err</span></span>
 <span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaUNC">           0 :         }</span></span>
 <span id="L238"><span class="lineNum">     238</span>                 :             : </span>
-<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC tlaBgGNC">          17 :         if args.Action == actionStart {</span></span>
-<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">          10 :                 cmd := args.commandSpec()</span></span>
-<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">          10 :                 if _, err = validateCommandArgs(t.validator, &amp;cmd); err != nil {</span></span>
+<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC tlaBgGNC">          23 :         if args.Action == actionStart {</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">          16 :                 cmd := args.commandSpec()</span></span>
+<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">          16 :                 if _, err = validateCommandArgs(t.validator, &amp;cmd); err != nil {</span></span>
 <span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">           1 :                         return domain.PreparedCall{}, err</span></span>
 <span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
 <span id="L244"><span class="lineNum">     244</span>                 :             :                 // Fold the normalized command fields back into the canonical args.</span>
-<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">           9 :                 args.Command, args.WorkingDir = cmd.Command, cmd.WorkingDir</span></span>
-<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">           9 :                 args.SandboxPermissions, args.Justification = cmd.SandboxPermissions, cmd.Justification</span></span>
+<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">          15 :                 args.Command, args.WorkingDir = cmd.Command, cmd.WorkingDir</span></span>
+<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">          15 :                 args.SandboxPermissions, args.Justification = cmd.SandboxPermissions, cmd.Justification</span></span>
 <span id="L247"><span class="lineNum">     247</span>                 :             :         }</span>
 <span id="L248"><span class="lineNum">     248</span>                 :             : </span>
-<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">          16 :         canonical, err := json.Marshal(args)</span></span>
-<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">          16 :         if err != nil {</span></span>
+<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">          22 :         canonical, err := json.Marshal(args)</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">          22 :         if err != nil {</span></span>
 <span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.PreparedCall{}, domain.NewError(domain.ErrInternal, &quot;failed to encode canonical arguments&quot;, domain.WithCause(err))</span></span>
 <span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaUNC">           0 :         }</span></span>
 <span id="L253"><span class="lineNum">     253</span>                 :             : </span>
-<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC tlaBgGNC">          16 :         risk := riskForArgs(args)</span></span>
-<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC">          16 :         opts := toolkit.PrepareOptions{Risk: &amp;risk}</span></span>
-<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">          16 :         if args.Action == actionStart {</span></span>
-<span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaGNC">           9 :                 opts.ReadPaths = []string{t.validator.Root()}</span></span>
-<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC">           9 :                 opts.WritePaths = []string{t.validator.Root()}</span></span>
-<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">           9 :                 // Same typed execution contract as run_cmd: argv rules, the</span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC tlaBgGNC">          22 :         risk := riskForArgs(args)</span></span>
+<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC">          22 :         opts := toolkit.PrepareOptions{Risk: &amp;risk}</span></span>
+<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">          22 :         if args.Action == actionStart {</span></span>
+<span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaGNC">          15 :                 opts.ReadPaths = []string{t.validator.Root()}</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC">          15 :                 opts.WritePaths = []string{t.validator.Root()}</span></span>
+<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">          15 :                 // Same typed execution contract as run_cmd: argv rules, the</span></span>
 <span id="L260"><span class="lineNum">     260</span>                 :             :                 // danger screen, and session memory apply to sessions too.</span>
-<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">           9 :                 opts.ExecRequest = &amp;domain.ExecRequest{</span></span>
-<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">           9 :                         Argv:         []string{&quot;sh&quot;, &quot;-c&quot;, args.Command},</span></span>
-<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC">           9 :                         Escalated:    args.SandboxPermissions == toolkit.SandboxRequireEscalated,</span></span>
-<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">           9 :                         NeedsGUIOpen: args.NeedsGUIOpen,</span></span>
-<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaGNC">           9 :                 }</span></span>
+<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">          15 :                 opts.ExecRequest = &amp;domain.ExecRequest{</span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">          15 :                         Argv:         []string{&quot;sh&quot;, &quot;-c&quot;, args.Command},</span></span>
+<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC">          15 :                         Escalated:    args.SandboxPermissions == toolkit.SandboxRequireEscalated,</span></span>
+<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">          15 :                         NeedsGUIOpen: args.NeedsGUIOpen,</span></span>
+<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaGNC">          15 :                 }</span></span>
 <span id="L266"><span class="lineNum">     266</span>                 :             :         }</span>
-<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">          16 :         prepared, err := t.base.PrepareCall(ctx, call, canonical, opts)</span></span>
-<span id="L268"><span class="lineNum">     268</span>                 :<span class="tlaGNC">          16 :         if err != nil {</span></span>
+<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">          22 :         prepared, err := t.base.PrepareCall(ctx, call, canonical, opts)</span></span>
+<span id="L268"><span class="lineNum">     268</span>                 :<span class="tlaGNC">          22 :         if err != nil {</span></span>
 <span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return domain.PreparedCall{}, err</span></span>
 <span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC tlaBgGNC">          16 :         prepared.ApprovalDesc = approvalDescFor(args)</span></span>
-<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">          16 :         return prepared, nil</span></span>
+<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC tlaBgGNC">          22 :         prepared.ApprovalDesc = approvalDescFor(args)</span></span>
+<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">          22 :         return prepared, nil</span></span>
 <span id="L273"><span class="lineNum">     273</span>                 :             : }</span>
 <span id="L274"><span class="lineNum">     274</span>                 :             : </span>
 <span id="L275"><span class="lineNum">     275</span>                 :             : func approvalDescFor(args sessionArgs) string {</span>
-<span id="L276"><span class="lineNum">     276</span>                 :<span class="tlaGNC">          16 :         switch args.Action {</span></span>
+<span id="L276"><span class="lineNum">     276</span>                 :<span class="tlaGNC">          22 :         switch args.Action {</span></span>
 <span id="L277"><span class="lineNum">     277</span>                 :             :         case actionStart:</span>
-<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaGNC">           9 :                 desc := fmt.Sprintf(&quot;Start session %s; cwd=%s&quot;, args.Command, args.WorkingDir)</span></span>
-<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">           9 :                 if args.SandboxPermissions == toolkit.SandboxRequireEscalated {</span></span>
+<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaGNC">          15 :                 desc := fmt.Sprintf(&quot;Start session %s; cwd=%s&quot;, args.Command, args.WorkingDir)</span></span>
+<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">          15 :                 if args.SandboxPermissions == toolkit.SandboxRequireEscalated {</span></span>
 <span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC">           1 :                         desc += &quot;; ESCALATED(no-sandbox)[&quot; + args.Justification + &quot;]&quot;</span></span>
 <span id="L281"><span class="lineNum">     281</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
-<span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaGNC">           9 :                 return desc</span></span>
+<span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaGNC">          15 :                 return desc</span></span>
 <span id="L283"><span class="lineNum">     283</span>                 :             :         case actionWrite:</span>
 <span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">           2 :                 return fmt.Sprintf(&quot;Write %d bytes to session %s&quot;, len(args.Chars), args.SessionID)</span></span>
 <span id="L285"><span class="lineNum">     285</span>                 :             :         case actionPoll:</span>

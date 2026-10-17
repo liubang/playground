@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -128,15 +128,15 @@
 <span id="L57"><span class="lineNum">      57</span>                 :             : //     as remembered;</span>
 <span id="L58"><span class="lineNum">      58</span>                 :             : //   - otherwise → exactly the effect's gap grant.</span>
 <span id="L59"><span class="lineNum">      59</span>                 :             : func MemoryPackages(d Derivation, trust string) ([]Package, bool) {</span>
-<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC tlaBgGNC">          46 :         e := d.Effect</span></span>
-<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">          46 :         if e.Unsandboxed &amp;&amp; trust != TrustUnsandboxed {</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC tlaBgGNC">          58 :         e := d.Effect</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">          58 :         if e.Unsandboxed &amp;&amp; trust != TrustUnsandboxed {</span></span>
 <span id="L62"><span class="lineNum">      62</span>                 :             :                 // A model-level invariant, not a UI convention: no code path may</span>
 <span id="L63"><span class="lineNum">      63</span>                 :             :                 // write a categorical standing approval for an escalated call</span>
 <span id="L64"><span class="lineNum">      64</span>                 :             :                 // short of explicit L2 full trust.</span>
 <span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">           1 :                 return nil, false</span></span>
 <span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">          45 :         grant := packageGrantFromEffect(e, trust)</span></span>
-<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">          45 :         switch {</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">          57 :         grant := packageGrantFromEffect(e, trust)</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">          57 :         switch {</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :             :         case len(d.Plan.Steps) &gt; 0:</span>
 <span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">          25 :                 return execMemoryPackages(d, grant)</span></span>
 <span id="L71"><span class="lineNum">      71</span>                 :             :         case d.Host != &quot;&quot;:</span>
@@ -174,15 +174,15 @@
 <span id="L103"><span class="lineNum">     103</span>                 :<span class="tlaGNC">           2 :                         MaxConsequence: e.Consequence,</span></span>
 <span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaGNC">           2 :                 }}, true</span></span>
 <span id="L105"><span class="lineNum">     105</span>                 :             :         default:</span>
-<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">          15 :                 canonical, eligible := ToolMemoryEligible(d.ToolName)</span></span>
-<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">          15 :                 if !eligible {</span></span>
-<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">          11 :                         return nil, false</span></span>
-<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">          11 :                 }</span></span>
-<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">           4 :                 return []Package{{</span></span>
-<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">           4 :                         Bind:           Binding{Kind: BindTool, Tool: canonical},</span></span>
-<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">           4 :                         Decision:       domain.DecisionAllow,</span></span>
-<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">           4 :                         MaxConsequence: e.Consequence,</span></span>
-<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">           4 :                 }}, true</span></span>
+<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">          27 :                 canonical, eligible := ToolMemoryEligible(d.ToolName)</span></span>
+<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">          27 :                 if !eligible {</span></span>
+<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">          17 :                         return nil, false</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">          17 :                 }</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">          10 :                 return []Package{{</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">          10 :                         Bind:           Binding{Kind: BindTool, Tool: canonical},</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">          10 :                         Decision:       domain.DecisionAllow,</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">          10 :                         MaxConsequence: e.Consequence,</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">          10 :                 }}, true</span></span>
 <span id="L115"><span class="lineNum">     115</span>                 :             :         }</span>
 <span id="L116"><span class="lineNum">     116</span>                 :             : }</span>
 <span id="L117"><span class="lineNum">     117</span>                 :             : </span>
@@ -229,39 +229,39 @@
 <span id="L158"><span class="lineNum">     158</span>                 :             : // carry for the given trust flavor: the L2 full-trust grant for an</span>
 <span id="L159"><span class="lineNum">     159</span>                 :             : // escalated call, otherwise exactly the effect's gap grant.</span>
 <span id="L160"><span class="lineNum">     160</span>                 :             : func packageGrantFromEffect(e Effect, trust string) PackageGrant {</span>
-<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">          45 :         if trust == TrustUnsandboxed &amp;&amp; e.Unsandboxed {</span></span>
+<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">          57 :         if trust == TrustUnsandboxed &amp;&amp; e.Unsandboxed {</span></span>
 <span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">           5 :                 return PackageGrant{Unsandboxed: true}</span></span>
 <span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">           5 :         }</span></span>
-<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">          40 :         return PackageGrant{</span></span>
-<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">          40 :                 NetworkFull:   !e.Network.IsZero(),</span></span>
-<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">          40 :                 NetworkHosts:  append([]string(nil), e.Network.Hosts...),</span></span>
-<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">          40 :                 WritablePaths: append([]string(nil), e.Writes.Paths...),</span></span>
-<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">          40 :                 GUIOpen:       e.GUIOpen,</span></span>
-<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">          40 :         }</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">          52 :         return PackageGrant{</span></span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">          52 :                 NetworkFull:   !e.Network.IsZero(),</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">          52 :                 NetworkHosts:  append([]string(nil), e.Network.Hosts...),</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">          52 :                 WritablePaths: append([]string(nil), e.Writes.Paths...),</span></span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">          52 :                 GUIOpen:       e.GUIOpen,</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">          52 :         }</span></span>
 <span id="L170"><span class="lineNum">     170</span>                 :             : }</span>
 <span id="L171"><span class="lineNum">     171</span>                 :             : </span>
 <span id="L172"><span class="lineNum">     172</span>                 :             : // MemoryPreviewLabel renders the display form of the memory for the</span>
 <span id="L173"><span class="lineNum">     173</span>                 :             : // approval overlay's &quot;allow always&quot; option. ok=false means the call</span>
 <span id="L174"><span class="lineNum">     174</span>                 :             : // cannot be remembered.</span>
 <span id="L175"><span class="lineNum">     175</span>                 :             : func MemoryPreviewLabel(d Derivation, trust string) (label string, pkgs []Package, ok bool) {</span>
-<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">          36 :         pkgs, ok = MemoryPackages(d, trust)</span></span>
-<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">          36 :         if !ok {</span></span>
-<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">          16 :                 return &quot;&quot;, nil, false</span></span>
-<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">          16 :         }</span></span>
-<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">          20 :         var parts []string</span></span>
-<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">          20 :         for _, p := range pkgs {</span></span>
-<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">          22 :                 parts = append(parts, bindingLabel(p.Bind))</span></span>
-<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">          22 :         }</span></span>
-<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">          20 :         label = strings.Join(parts, &quot; &amp;&amp; &quot;)</span></span>
-<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">          20 :         if grant := pkgs[0].Grant; !grant.IsZero() {</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">          48 :         pkgs, ok = MemoryPackages(d, trust)</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">          48 :         if !ok {</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">          22 :                 return &quot;&quot;, nil, false</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">          22 :         }</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">          26 :         var parts []string</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">          26 :         for _, p := range pkgs {</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">          28 :                 parts = append(parts, bindingLabel(p.Bind))</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">          28 :         }</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">          26 :         label = strings.Join(parts, &quot; &amp;&amp; &quot;)</span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">          26 :         if grant := pkgs[0].Grant; !grant.IsZero() {</span></span>
 <span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">           6 :                 label += &quot; (&quot; + grantLabel(grant) + &quot;)&quot;</span></span>
 <span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">           6 :         }</span></span>
-<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">          20 :         return label, pkgs, true</span></span>
+<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">          26 :         return label, pkgs, true</span></span>
 <span id="L189"><span class="lineNum">     189</span>                 :             : }</span>
 <span id="L190"><span class="lineNum">     190</span>                 :             : </span>
 <span id="L191"><span class="lineNum">     191</span>                 :             : // bindingLabel renders a binding for display.</span>
 <span id="L192"><span class="lineNum">     192</span>                 :             : func bindingLabel(b Binding) string {</span>
-<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">          22 :         switch b.Kind {</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">          28 :         switch b.Kind {</span></span>
 <span id="L194"><span class="lineNum">     194</span>                 :             :         case BindArgv:</span>
 <span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">          13 :                 return strings.Join(b.Argv, &quot; &quot;)</span></span>
 <span id="L196"><span class="lineNum">     196</span>                 :             :         case BindArgvExact:</span>
@@ -271,7 +271,7 @@
 <span id="L200"><span class="lineNum">     200</span>                 :             :         case BindPath:</span>
 <span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC">           2 :                 return b.Path</span></span>
 <span id="L202"><span class="lineNum">     202</span>                 :             :         case BindTool:</span>
-<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">           3 :                 return b.Tool</span></span>
+<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">           9 :                 return b.Tool</span></span>
 <span id="L204"><span class="lineNum">     204</span>                 :             :         }</span>
 <span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return &quot;&quot;</span></span>
 <span id="L206"><span class="lineNum">     206</span>                 :             : }</span>

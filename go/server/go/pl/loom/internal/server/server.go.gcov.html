@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -195,44 +195,44 @@
 <span id="L124"><span class="lineNum">     124</span>                 :             : </span>
 <span id="L125"><span class="lineNum">     125</span>                 :             : // New creates the server (no listening yet).</span>
 <span id="L126"><span class="lineNum">     126</span>                 :             : func New(cfg Config) (*Server, error) {</span>
-<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC tlaBgGNC">          79 :         if cfg.Service == nil {</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC tlaBgGNC">          80 :         if cfg.Service == nil {</span></span>
 <span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, errors.New(&quot;server: SessionService is required&quot;)</span></span>
 <span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC tlaBgGNC">          79 :         if cfg.Token == &quot;&quot; {</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC tlaBgGNC">          80 :         if cfg.Token == &quot;&quot; {</span></span>
 <span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, errors.New(&quot;server: token is required&quot;)</span></span>
 <span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC tlaBgGNC">          79 :         if cfg.Listen == &quot;&quot; {</span></span>
-<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">          73 :                 cfg.Listen = &quot;127.0.0.1:7680&quot;</span></span>
-<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">          73 :         }</span></span>
-<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">          79 :         logger := cfg.Logger</span></span>
-<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">          79 :         if logger == nil {</span></span>
-<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">          76 :                 logger = slog.Default()</span></span>
-<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">          76 :         }</span></span>
-<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          79 :         audit := cfg.AuditLogger</span></span>
-<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">          79 :         if audit == nil {</span></span>
-<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">          79 :                 audit = logger</span></span>
-<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">          79 :         }</span></span>
-<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">          79 :         var instanceBytes [4]byte</span></span>
-<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">          79 :         if _, err := rand.Read(instanceBytes[:]); err != nil {</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC tlaBgGNC">          80 :         if cfg.Listen == &quot;&quot; {</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">          74 :                 cfg.Listen = &quot;127.0.0.1:7680&quot;</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">          74 :         }</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">          80 :         logger := cfg.Logger</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">          80 :         if logger == nil {</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">          77 :                 logger = slog.Default()</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">          77 :         }</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          80 :         audit := cfg.AuditLogger</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">          80 :         if audit == nil {</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">          80 :                 audit = logger</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">          80 :         }</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">          80 :         var instanceBytes [4]byte</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">          80 :         if _, err := rand.Read(instanceBytes[:]); err != nil {</span></span>
 <span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, fmt.Errorf(&quot;generate instance id: %w&quot;, err)</span></span>
 <span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC tlaBgGNC">          79 :         s := &amp;Server{</span></span>
-<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">          79 :                 cfg:      cfg,</span></span>
-<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">          79 :                 svc:      cfg.Service,</span></span>
-<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">          79 :                 logger:   logger,</span></span>
-<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">          79 :                 audit:    audit,</span></span>
-<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">          79 :                 instance: hex.EncodeToString(instanceBytes[:]),</span></span>
-<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">          79 :                 done:     make(chan struct{}),</span></span>
-<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">          79 :                 sseConns: make(map[string]int),</span></span>
-<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">          79 :         }</span></span>
-<span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC">          79 :         mux := http.NewServeMux()</span></span>
-<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">          79 :         s.routes(mux)</span></span>
-<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaGNC">          79 :         s.http = &amp;http.Server{</span></span>
-<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">          79 :                 Handler:           s.withMiddleware(mux),</span></span>
-<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">          79 :                 ReadHeaderTimeout: 10 * time.Second,</span></span>
-<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">          79 :                 MaxHeaderBytes:    1 &lt;&lt; 20,</span></span>
-<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">          79 :         }</span></span>
-<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">          79 :         return s, nil</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC tlaBgGNC">          80 :         s := &amp;Server{</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">          80 :                 cfg:      cfg,</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">          80 :                 svc:      cfg.Service,</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">          80 :                 logger:   logger,</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">          80 :                 audit:    audit,</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">          80 :                 instance: hex.EncodeToString(instanceBytes[:]),</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">          80 :                 done:     make(chan struct{}),</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">          80 :                 sseConns: make(map[string]int),</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">          80 :         }</span></span>
+<span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC">          80 :         mux := http.NewServeMux()</span></span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">          80 :         s.routes(mux)</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaGNC">          80 :         s.http = &amp;http.Server{</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">          80 :                 Handler:           s.withMiddleware(mux),</span></span>
+<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">          80 :                 ReadHeaderTimeout: 10 * time.Second,</span></span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">          80 :                 MaxHeaderBytes:    1 &lt;&lt; 20,</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">          80 :         }</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">          80 :         return s, nil</span></span>
 <span id="L165"><span class="lineNum">     165</span>                 :             : }</span>
 <span id="L166"><span class="lineNum">     166</span>                 :             : </span>
 <span id="L167"><span class="lineNum">     167</span>                 :             : // Instance returns the server's instance ID: SSE clients resync whenever it</span>
@@ -304,16 +304,16 @@
 <span id="L233"><span class="lineNum">     233</span>                 :             : </span>
 <span id="L234"><span class="lineNum">     234</span>                 :             : // shuttingDown reports whether Shutdown has begun (SSE handlers select on</span>
 <span id="L235"><span class="lineNum">     235</span>                 :             : // the done channel it closes).</span>
-<span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaGNC">          55 : func (s *Server) shuttingDown() &lt;-chan struct{} { return s.done }</span></span>
+<span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaGNC">          43 : func (s *Server) shuttingDown() &lt;-chan struct{} { return s.done }</span></span>
 <span id="L237"><span class="lineNum">     237</span>                 :             : </span>
 <span id="L238"><span class="lineNum">     238</span>                 :             : func (s *Server) draining() bool {</span>
-<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">           7 :         s.drainingFlagMu.RLock()</span></span>
-<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">           7 :         defer s.drainingFlagMu.RUnlock()</span></span>
-<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">           7 :         return s.drainingFlag</span></span>
-<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">           7 : }</span></span>
+<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">           6 :         s.drainingFlagMu.RLock()</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">           6 :         defer s.drainingFlagMu.RUnlock()</span></span>
+<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">           6 :         return s.drainingFlag</span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">           6 : }</span></span>
 <span id="L243"><span class="lineNum">     243</span>                 :             : </span>
 <span id="L244"><span class="lineNum">     244</span>                 :             : func (s *Server) routes(mux *http.ServeMux) {</span>
-<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">          79 :         if s.cfg.ShareOnly {</span></span>
+<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">          80 :         if s.cfg.ShareOnly {</span></span>
 <span id="L246"><span class="lineNum">     246</span>                 :             :                 // The LAN share listener carries only the public read surface: the</span>
 <span id="L247"><span class="lineNum">     247</span>                 :             :                 // unguessable token in the URL is the capability, and no bearer</span>
 <span id="L248"><span class="lineNum">     248</span>                 :             :                 // route exists here at all.</span>
@@ -327,94 +327,94 @@
 <span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">           6 :                 mux.Handle(&quot;GET /&quot;, web.Handler())</span></span>
 <span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaGNC">           6 :                 return</span></span>
 <span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC">           6 :         }</span></span>
-<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /healthz&quot;, s.handleHealthz)</span></span>
-<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /readyz&quot;, s.handleReadyz)</span></span>
-<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/meta/version&quot;, s.handleMetaVersion)</span></span>
-<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/meta/models&quot;, s.handleMetaModels)</span></span>
-<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/meta/environment&quot;, s.handleMetaEnvironment)</span></span>
-<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/config&quot;, s.handleGetConfig)</span></span>
-<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;PUT /v1/config&quot;, s.handlePutConfig)</span></span>
-<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;POST /v1/config/reveal&quot;, s.handleRevealSecret)</span></span>
-<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/skills&quot;, s.handleListSkills)</span></span>
-<span id="L268"><span class="lineNum">     268</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;PUT /v1/skills/{name}/disabled&quot;, s.handleSetSkillDisabled)</span></span>
-<span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;DELETE /v1/skills&quot;, s.handleDeleteSkill)</span></span>
-<span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/mcp/servers&quot;, s.handleListMCPServers)</span></span>
-<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;POST /v1/mcp/servers/{name}/reconnect&quot;, s.handleReconnectMCPServer)</span></span>
-<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/rules/packs&quot;, s.handleListRulePacks)</span></span>
-<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;PUT /v1/rules/packs/{id}/install&quot;, s.handleInstallRulePack)</span></span>
-<span id="L274"><span class="lineNum">     274</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;DELETE /v1/rules/packs/{id}&quot;, s.handleUninstallRulePack)</span></span>
-<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/workspaces&quot;, s.handleListWorkspaces)</span></span>
-<span id="L276"><span class="lineNum">     276</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;POST /v1/workspaces&quot;, s.handleRegisterWorkspace)</span></span>
-<span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/workspaces/{id}&quot;, s.handleGetWorkspace)</span></span>
-<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;DELETE /v1/workspaces/{id}&quot;, s.handleDeleteWorkspace)</span></span>
-<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">          73 :         // Workspace explorer (WebUI right panel): workspace-confined file</span></span>
+<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /healthz&quot;, s.handleHealthz)</span></span>
+<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /readyz&quot;, s.handleReadyz)</span></span>
+<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/meta/version&quot;, s.handleMetaVersion)</span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/meta/models&quot;, s.handleMetaModels)</span></span>
+<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/meta/environment&quot;, s.handleMetaEnvironment)</span></span>
+<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/config&quot;, s.handleGetConfig)</span></span>
+<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;PUT /v1/config&quot;, s.handlePutConfig)</span></span>
+<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;POST /v1/config/reveal&quot;, s.handleRevealSecret)</span></span>
+<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/skills&quot;, s.handleListSkills)</span></span>
+<span id="L268"><span class="lineNum">     268</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;PUT /v1/skills/{name}/disabled&quot;, s.handleSetSkillDisabled)</span></span>
+<span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;DELETE /v1/skills&quot;, s.handleDeleteSkill)</span></span>
+<span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/mcp/servers&quot;, s.handleListMCPServers)</span></span>
+<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;POST /v1/mcp/servers/{name}/reconnect&quot;, s.handleReconnectMCPServer)</span></span>
+<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/rules/packs&quot;, s.handleListRulePacks)</span></span>
+<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;PUT /v1/rules/packs/{id}/install&quot;, s.handleInstallRulePack)</span></span>
+<span id="L274"><span class="lineNum">     274</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;DELETE /v1/rules/packs/{id}&quot;, s.handleUninstallRulePack)</span></span>
+<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/workspaces&quot;, s.handleListWorkspaces)</span></span>
+<span id="L276"><span class="lineNum">     276</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;POST /v1/workspaces&quot;, s.handleRegisterWorkspace)</span></span>
+<span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/workspaces/{id}&quot;, s.handleGetWorkspace)</span></span>
+<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;DELETE /v1/workspaces/{id}&quot;, s.handleDeleteWorkspace)</span></span>
+<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">          74 :         // Workspace explorer (WebUI right panel): workspace-confined file</span></span>
 <span id="L280"><span class="lineNum">     280</span>                 :             :         // tree/preview, git worktree status/diff, approval-mode quick switch.</span>
-<span id="L281"><span class="lineNum">     281</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/workspaces/{id}/files&quot;, s.handleListWorkspaceFiles)</span></span>
-<span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/workspaces/{id}/files/search&quot;, s.handleSearchWorkspaceFiles)</span></span>
-<span id="L283"><span class="lineNum">     283</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/workspaces/{id}/file&quot;, s.handleReadWorkspaceFile)</span></span>
-<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/workspaces/{id}/git/status&quot;, s.handleWorkspaceGitStatus)</span></span>
-<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/workspaces/{id}/git/diff&quot;, s.handleWorkspaceGitDiff)</span></span>
-<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/workspaces/{id}/approval-mode&quot;, s.handleGetWorkspaceApprovalMode)</span></span>
-<span id="L287"><span class="lineNum">     287</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;POST /v1/workspaces/{id}/approval-mode&quot;, s.handleSetWorkspaceApprovalMode)</span></span>
-<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/files/browse&quot;, s.handleBrowseDirectories)</span></span>
-<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/sessions&quot;, s.handleListSessions)</span></span>
-<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;POST /v1/sessions&quot;, s.handleCreateSession)</span></span>
-<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/sessions/{id}&quot;, s.handleInspectSession)</span></span>
-<span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/archive&quot;, s.handleArchiveSession)</span></span>
-<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;DELETE /v1/sessions/{id}&quot;, s.handleDeleteSession)</span></span>
-<span id="L294"><span class="lineNum">     294</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/sessions/{id}/transcript&quot;, s.handleTranscript)</span></span>
-<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/sessions/{id}/snapshot&quot;, s.handleSnapshot)</span></span>
-<span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/sessions/{id}/maze&quot;, s.handleSessionMaze)</span></span>
-<span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/sessions/{id}/export&quot;, s.handleExportSession)</span></span>
-<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/prompts&quot;, s.handleSubmitPrompt)</span></span>
-<span id="L299"><span class="lineNum">     299</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/cancel&quot;, s.handleCancelTurn)</span></span>
-<span id="L300"><span class="lineNum">     300</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/feedback&quot;, s.handleSubmitFeedback)</span></span>
-<span id="L301"><span class="lineNum">     301</span>                 :<span class="tlaGNC">          73 :         // Per-turn file revert (the turn-summary block's revert action): restores</span></span>
+<span id="L281"><span class="lineNum">     281</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/workspaces/{id}/files&quot;, s.handleListWorkspaceFiles)</span></span>
+<span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/workspaces/{id}/files/search&quot;, s.handleSearchWorkspaceFiles)</span></span>
+<span id="L283"><span class="lineNum">     283</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/workspaces/{id}/file&quot;, s.handleReadWorkspaceFile)</span></span>
+<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/workspaces/{id}/git/status&quot;, s.handleWorkspaceGitStatus)</span></span>
+<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/workspaces/{id}/git/diff&quot;, s.handleWorkspaceGitDiff)</span></span>
+<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/workspaces/{id}/approval-mode&quot;, s.handleGetWorkspaceApprovalMode)</span></span>
+<span id="L287"><span class="lineNum">     287</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;POST /v1/workspaces/{id}/approval-mode&quot;, s.handleSetWorkspaceApprovalMode)</span></span>
+<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/files/browse&quot;, s.handleBrowseDirectories)</span></span>
+<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/sessions&quot;, s.handleListSessions)</span></span>
+<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;POST /v1/sessions&quot;, s.handleCreateSession)</span></span>
+<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/sessions/{id}&quot;, s.handleInspectSession)</span></span>
+<span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/archive&quot;, s.handleArchiveSession)</span></span>
+<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;DELETE /v1/sessions/{id}&quot;, s.handleDeleteSession)</span></span>
+<span id="L294"><span class="lineNum">     294</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/sessions/{id}/transcript&quot;, s.handleTranscript)</span></span>
+<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/sessions/{id}/snapshot&quot;, s.handleSnapshot)</span></span>
+<span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/sessions/{id}/maze&quot;, s.handleSessionMaze)</span></span>
+<span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/sessions/{id}/export&quot;, s.handleExportSession)</span></span>
+<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/prompts&quot;, s.handleSubmitPrompt)</span></span>
+<span id="L299"><span class="lineNum">     299</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/cancel&quot;, s.handleCancelTurn)</span></span>
+<span id="L300"><span class="lineNum">     300</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/feedback&quot;, s.handleSubmitFeedback)</span></span>
+<span id="L301"><span class="lineNum">     301</span>                 :<span class="tlaGNC">          74 :         // Per-turn file revert (the turn-summary block's revert action): restores</span></span>
 <span id="L302"><span class="lineNum">     302</span>                 :             :         // the workspace files one run mutated, without truncating the session.</span>
-<span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/runs/{runID}/revert&quot;, s.handleRevertRunChanges)</span></span>
-<span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaGNC">          73 :         // Per-turn review projection: per-path sizes, +/− counts and inline</span></span>
+<span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/runs/{runID}/revert&quot;, s.handleRevertRunChanges)</span></span>
+<span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaGNC">          74 :         // Per-turn review projection: per-path sizes, +/− counts and inline</span></span>
 <span id="L305"><span class="lineNum">     305</span>                 :             :         // diffs of ledger-before vs CURRENT workspace content (git-free, so the</span>
 <span id="L306"><span class="lineNum">     306</span>                 :             :         // turn-summary card works in non-git workspaces).</span>
-<span id="L307"><span class="lineNum">     307</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/sessions/{id}/runs/{runID}/changes&quot;, s.handleRunChangeStats)</span></span>
-<span id="L308"><span class="lineNum">     308</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/approvals/{approvalID}&quot;, s.handleResolveApproval)</span></span>
-<span id="L309"><span class="lineNum">     309</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/questions/{questionID}&quot;, s.handleAnswerQuestion)</span></span>
-<span id="L310"><span class="lineNum">     310</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/model&quot;, s.handleSetModel)</span></span>
-<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/reasoning&quot;, s.handleSetReasoning)</span></span>
-<span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/compact&quot;, s.handleRequestCompaction)</span></span>
-<span id="L313"><span class="lineNum">     313</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/sessions/{id}/events&quot;, s.handleSessionEvents)</span></span>
-<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/artifacts/{id}&quot;, s.handleArtifact)</span></span>
-<span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaGNC">          73 :         // Share links: create/revoke are owner operations (bearer-gated);</span></span>
+<span id="L307"><span class="lineNum">     307</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/sessions/{id}/runs/{runID}/changes&quot;, s.handleRunChangeStats)</span></span>
+<span id="L308"><span class="lineNum">     308</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/approvals/{approvalID}&quot;, s.handleResolveApproval)</span></span>
+<span id="L309"><span class="lineNum">     309</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/questions/{questionID}&quot;, s.handleAnswerQuestion)</span></span>
+<span id="L310"><span class="lineNum">     310</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/model&quot;, s.handleSetModel)</span></span>
+<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/reasoning&quot;, s.handleSetReasoning)</span></span>
+<span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/compact&quot;, s.handleRequestCompaction)</span></span>
+<span id="L313"><span class="lineNum">     313</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/sessions/{id}/events&quot;, s.handleSessionEvents)</span></span>
+<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/artifacts/{id}&quot;, s.handleArtifact)</span></span>
+<span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaGNC">          74 :         // Share links: create/revoke are owner operations (bearer-gated);</span></span>
 <span id="L316"><span class="lineNum">     316</span>                 :             :         // the /v1/shared/* reads and the /share/{token} page are public —</span>
 <span id="L317"><span class="lineNum">     317</span>                 :             :         // the unguessable token in the URL is the capability.</span>
-<span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/share&quot;, s.handleShareSession)</span></span>
-<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;DELETE /v1/sessions/{id}/share&quot;, s.handleRevokeShare)</span></span>
-<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/shared/{token}&quot;, s.handleSharedView)</span></span>
-<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/shared/{token}/artifacts/{id}&quot;, s.handleSharedArtifact)</span></span>
-<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC">          73 :         mux.HandleFunc(&quot;GET /v1/shared/{token}/maze&quot;, s.handleSharedMaze)</span></span>
-<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">          73 :         if s.cfg.Share != nil {</span></span>
+<span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;POST /v1/sessions/{id}/share&quot;, s.handleShareSession)</span></span>
+<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;DELETE /v1/sessions/{id}/share&quot;, s.handleRevokeShare)</span></span>
+<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/shared/{token}&quot;, s.handleSharedView)</span></span>
+<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/shared/{token}/artifacts/{id}&quot;, s.handleSharedArtifact)</span></span>
+<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC">          74 :         mux.HandleFunc(&quot;GET /v1/shared/{token}/maze&quot;, s.handleSharedMaze)</span></span>
+<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">          74 :         if s.cfg.Share != nil {</span></span>
 <span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaGNC">           2 :                 mux.HandleFunc(&quot;GET /v1/share/endpoint&quot;, s.handleGetShareEndpoint)</span></span>
 <span id="L325"><span class="lineNum">     325</span>                 :<span class="tlaGNC">           2 :                 mux.HandleFunc(&quot;POST /v1/share/endpoint&quot;, s.handleSetShareEndpoint)</span></span>
 <span id="L326"><span class="lineNum">     326</span>                 :<span class="tlaGNC">           2 :         }</span></span>
-<span id="L327"><span class="lineNum">     327</span>                 :<span class="tlaGNC">          73 :         if !s.cfg.NoWeb {</span></span>
-<span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaGNC">          67 :                 mux.Handle(&quot;GET /share/{token}&quot;, web.SharePageHandler())</span></span>
-<span id="L329"><span class="lineNum">     329</span>                 :<span class="tlaGNC">          67 :         }</span></span>
-<span id="L330"><span class="lineNum">     330</span>                 :<span class="tlaGNC">          73 :         if !s.cfg.NoWeb {</span></span>
+<span id="L327"><span class="lineNum">     327</span>                 :<span class="tlaGNC">          74 :         if !s.cfg.NoWeb {</span></span>
+<span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaGNC">          68 :                 mux.Handle(&quot;GET /share/{token}&quot;, web.SharePageHandler())</span></span>
+<span id="L329"><span class="lineNum">     329</span>                 :<span class="tlaGNC">          68 :         }</span></span>
+<span id="L330"><span class="lineNum">     330</span>                 :<span class="tlaGNC">          74 :         if !s.cfg.NoWeb {</span></span>
 <span id="L331"><span class="lineNum">     331</span>                 :             :                 // Catch-all for the embedded SPA; ServeMux gives the /v1 patterns</span>
 <span id="L332"><span class="lineNum">     332</span>                 :             :                 // precedence (docs/WEB_DESIGN.md §7.1).</span>
-<span id="L333"><span class="lineNum">     333</span>                 :<span class="tlaGNC">          67 :                 mux.Handle(&quot;GET /&quot;, web.Handler())</span></span>
-<span id="L334"><span class="lineNum">     334</span>                 :<span class="tlaGNC">          67 :         }</span></span>
+<span id="L333"><span class="lineNum">     333</span>                 :<span class="tlaGNC">          68 :                 mux.Handle(&quot;GET /&quot;, web.Handler())</span></span>
+<span id="L334"><span class="lineNum">     334</span>                 :<span class="tlaGNC">          68 :         }</span></span>
 <span id="L335"><span class="lineNum">     335</span>                 :             : }</span>
 <span id="L336"><span class="lineNum">     336</span>                 :             : </span>
 <span id="L337"><span class="lineNum">     337</span>                 :             : // withMiddleware chains panic containment, security headers, CORS</span>
 <span id="L338"><span class="lineNum">     338</span>                 :             : // (deny-by-default, with optional single-origin whitelisting incl.</span>
 <span id="L339"><span class="lineNum">     339</span>                 :             : // preflight), bearer auth, and body limits around the router.</span>
 <span id="L340"><span class="lineNum">     340</span>                 :             : func (s *Server) withMiddleware(next http.Handler) http.Handler {</span>
-<span id="L341"><span class="lineNum">     341</span>                 :<span class="tlaGNC">          80 :         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {</span></span>
+<span id="L341"><span class="lineNum">     341</span>                 :<span class="tlaGNC">          81 :         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {</span></span>
 <span id="L342"><span class="lineNum">     342</span>                 :             :                 // Panic containment: a handler panic must not kill the connection</span>
 <span id="L343"><span class="lineNum">     343</span>                 :             :                 // (or crash in-flight SSE streams); log it and answer in the</span>
 <span id="L344"><span class="lineNum">     344</span>                 :             :                 // unified error model instead of dropping the request (REVIEW M24).</span>
-<span id="L345"><span class="lineNum">     345</span>                 :<span class="tlaGNC">         247 :                 defer func() {</span></span>
-<span id="L346"><span class="lineNum">     346</span>                 :<span class="tlaGNC">         247 :                         if rec := recover(); rec != nil {</span></span>
+<span id="L345"><span class="lineNum">     345</span>                 :<span class="tlaGNC">         255 :                 defer func() {</span></span>
+<span id="L346"><span class="lineNum">     346</span>                 :<span class="tlaGNC">         255 :                         if rec := recover(); rec != nil {</span></span>
 <span id="L347"><span class="lineNum">     347</span>                 :<span class="tlaGNC">           1 :                                 s.logger.Error(&quot;http handler panic&quot;,</span></span>
 <span id="L348"><span class="lineNum">     348</span>                 :<span class="tlaGNC">           1 :                                         &quot;panic&quot;, rec, &quot;method&quot;, r.Method, &quot;path&quot;, r.URL.Path)</span></span>
 <span id="L349"><span class="lineNum">     349</span>                 :<span class="tlaGNC">           1 :                                 writeError(w, &amp;statusError{</span></span>
@@ -427,22 +427,22 @@
 <span id="L356"><span class="lineNum">     356</span>                 :             :                 // Security headers on every response, static and API alike</span>
 <span id="L357"><span class="lineNum">     357</span>                 :             :                 // (docs/WEB_DESIGN.md §7.2): CSP is the second XSS line of defense</span>
 <span id="L358"><span class="lineNum">     358</span>                 :             :                 // behind DOMPurify; X-Frame-Options blocks clickjacking.</span>
-<span id="L359"><span class="lineNum">     359</span>                 :<span class="tlaGNC">         247 :                 header := w.Header()</span></span>
-<span id="L360"><span class="lineNum">     360</span>                 :<span class="tlaGNC">         247 :                 // img-src allows blob: because artifact images are fetched with the</span></span>
+<span id="L359"><span class="lineNum">     359</span>                 :<span class="tlaGNC">         255 :                 header := w.Header()</span></span>
+<span id="L360"><span class="lineNum">     360</span>                 :<span class="tlaGNC">         255 :                 // img-src allows blob: because artifact images are fetched with the</span></span>
 <span id="L361"><span class="lineNum">     361</span>                 :             :                 // bearer token and rendered through URL.createObjectURL — &lt;img&gt; cannot</span>
 <span id="L362"><span class="lineNum">     362</span>                 :             :                 // carry the Authorization header itself (see artifactBlock).</span>
 <span id="L363"><span class="lineNum">     363</span>                 :             :                 // connect-src allows loopback ws:// for the event stream's WebSocket</span>
 <span id="L364"><span class="lineNum">     364</span>                 :             :                 // transport (handlers_events.go): older WebKit does not extend 'self'</span>
 <span id="L365"><span class="lineNum">     365</span>                 :             :                 // to ws: URLs, and without an explicit entry the CSP blocks the</span>
 <span id="L366"><span class="lineNum">     366</span>                 :             :                 // upgrade in the desktop webview.</span>
-<span id="L367"><span class="lineNum">     367</span>                 :<span class="tlaGNC">         247 :                 header.Set(&quot;Content-Security-Policy&quot;, &quot;default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws://127.0.0.1:* ws://localhost:* ws://[::1]:*&quot;)</span></span>
-<span id="L368"><span class="lineNum">     368</span>                 :<span class="tlaGNC">         247 :                 header.Set(&quot;X-Content-Type-Options&quot;, &quot;nosniff&quot;)</span></span>
-<span id="L369"><span class="lineNum">     369</span>                 :<span class="tlaGNC">         247 :                 header.Set(&quot;Referrer-Policy&quot;, &quot;no-referrer&quot;)</span></span>
-<span id="L370"><span class="lineNum">     370</span>                 :<span class="tlaGNC">         247 :                 header.Set(&quot;X-Frame-Options&quot;, &quot;DENY&quot;)</span></span>
-<span id="L371"><span class="lineNum">     371</span>                 :<span class="tlaGNC">         247 :                 // CORS: deny cross-origin by default (no ACAO header at all);</span></span>
+<span id="L367"><span class="lineNum">     367</span>                 :<span class="tlaGNC">         255 :                 header.Set(&quot;Content-Security-Policy&quot;, &quot;default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws://127.0.0.1:* ws://localhost:* ws://[::1]:*&quot;)</span></span>
+<span id="L368"><span class="lineNum">     368</span>                 :<span class="tlaGNC">         255 :                 header.Set(&quot;X-Content-Type-Options&quot;, &quot;nosniff&quot;)</span></span>
+<span id="L369"><span class="lineNum">     369</span>                 :<span class="tlaGNC">         255 :                 header.Set(&quot;Referrer-Policy&quot;, &quot;no-referrer&quot;)</span></span>
+<span id="L370"><span class="lineNum">     370</span>                 :<span class="tlaGNC">         255 :                 header.Set(&quot;X-Frame-Options&quot;, &quot;DENY&quot;)</span></span>
+<span id="L371"><span class="lineNum">     371</span>                 :<span class="tlaGNC">         255 :                 // CORS: deny cross-origin by default (no ACAO header at all);</span></span>
 <span id="L372"><span class="lineNum">     372</span>                 :             :                 // --allow-origin whitelists one origin for remote-frontend</span>
 <span id="L373"><span class="lineNum">     373</span>                 :             :                 // development (docs/SERVE_DESIGN.md §5.2).</span>
-<span id="L374"><span class="lineNum">     374</span>                 :<span class="tlaGNC">         247 :                 if origin := r.Header.Get(&quot;Origin&quot;); origin != &quot;&quot; &amp;&amp; s.cfg.AllowOrigin != &quot;&quot; &amp;&amp; origin == s.cfg.AllowOrigin {</span></span>
+<span id="L374"><span class="lineNum">     374</span>                 :<span class="tlaGNC">         255 :                 if origin := r.Header.Get(&quot;Origin&quot;); origin != &quot;&quot; &amp;&amp; s.cfg.AllowOrigin != &quot;&quot; &amp;&amp; origin == s.cfg.AllowOrigin {</span></span>
 <span id="L375"><span class="lineNum">     375</span>                 :<span class="tlaGNC">           2 :                         w.Header().Set(&quot;Access-Control-Allow-Origin&quot;, origin)</span></span>
 <span id="L376"><span class="lineNum">     376</span>                 :<span class="tlaGNC">           2 :                         // CORS preflight: a browser sends a bare OPTIONS (no bearer</span></span>
 <span id="L377"><span class="lineNum">     377</span>                 :             :                         // token) before any credentialed cross-origin request, so it</span>
@@ -462,30 +462,30 @@
 <span id="L391"><span class="lineNum">     391</span>                 :             :                 // requires the bearer token (docs/WEB_DESIGN.md §7.1). ShareOnly</span>
 <span id="L392"><span class="lineNum">     392</span>                 :             :                 // listeners skip the gate entirely: they register public routes</span>
 <span id="L393"><span class="lineNum">     393</span>                 :             :                 // only, so anything unknown must 404, not 401.</span>
-<span id="L394"><span class="lineNum">     394</span>                 :<span class="tlaGNC">         246 :                 if !s.cfg.ShareOnly &amp;&amp; !isHealthRoute(r.URL.Path) &amp;&amp; !isStaticRoute(r.URL.Path) &amp;&amp; !isSharedRoute(r.URL.Path) &amp;&amp; !s.authorized(r) {</span></span>
+<span id="L394"><span class="lineNum">     394</span>                 :<span class="tlaGNC">         254 :                 if !s.cfg.ShareOnly &amp;&amp; !isHealthRoute(r.URL.Path) &amp;&amp; !isStaticRoute(r.URL.Path) &amp;&amp; !isSharedRoute(r.URL.Path) &amp;&amp; !s.authorized(r) {</span></span>
 <span id="L395"><span class="lineNum">     395</span>                 :<span class="tlaGNC">           7 :                         writeError(w, errUnauthorized)</span></span>
 <span id="L396"><span class="lineNum">     396</span>                 :<span class="tlaGNC">           7 :                         return</span></span>
 <span id="L397"><span class="lineNum">     397</span>                 :<span class="tlaGNC">           7 :                 }</span></span>
-<span id="L398"><span class="lineNum">     398</span>                 :<span class="tlaGNC">         239 :                 next.ServeHTTP(w, r)</span></span>
+<span id="L398"><span class="lineNum">     398</span>                 :<span class="tlaGNC">         247 :                 next.ServeHTTP(w, r)</span></span>
 <span id="L399"><span class="lineNum">     399</span>                 :             :         })</span>
 <span id="L400"><span class="lineNum">     400</span>                 :             : }</span>
 <span id="L401"><span class="lineNum">     401</span>                 :             : </span>
 <span id="L402"><span class="lineNum">     402</span>                 :             : func isHealthRoute(path string) bool {</span>
-<span id="L403"><span class="lineNum">     403</span>                 :<span class="tlaGNC">         244 :         return path == &quot;/healthz&quot; || path == &quot;/readyz&quot;</span></span>
-<span id="L404"><span class="lineNum">     404</span>                 :<span class="tlaGNC">         244 : }</span></span>
+<span id="L403"><span class="lineNum">     403</span>                 :<span class="tlaGNC">         252 :         return path == &quot;/healthz&quot; || path == &quot;/readyz&quot;</span></span>
+<span id="L404"><span class="lineNum">     404</span>                 :<span class="tlaGNC">         252 : }</span></span>
 <span id="L405"><span class="lineNum">     405</span>                 :             : </span>
 <span id="L406"><span class="lineNum">     406</span>                 :             : // isStaticRoute reports whether the path targets the embedded SPA rather</span>
 <span id="L407"><span class="lineNum">     407</span>                 :             : // than the API.</span>
 <span id="L408"><span class="lineNum">     408</span>                 :             : func isStaticRoute(path string) bool {</span>
-<span id="L409"><span class="lineNum">     409</span>                 :<span class="tlaGNC">         243 :         return !strings.HasPrefix(path, &quot;/v1/&quot;)</span></span>
-<span id="L410"><span class="lineNum">     410</span>                 :<span class="tlaGNC">         243 : }</span></span>
+<span id="L409"><span class="lineNum">     409</span>                 :<span class="tlaGNC">         251 :         return !strings.HasPrefix(path, &quot;/v1/&quot;)</span></span>
+<span id="L410"><span class="lineNum">     410</span>                 :<span class="tlaGNC">         251 : }</span></span>
 <span id="L411"><span class="lineNum">     411</span>                 :             : </span>
 <span id="L412"><span class="lineNum">     412</span>                 :             : // isSharedRoute reports whether the path is a public share-link read: the</span>
 <span id="L413"><span class="lineNum">     413</span>                 :             : // 128-bit token embedded in the URL is the credential, so these routes</span>
 <span id="L414"><span class="lineNum">     414</span>                 :             : // skip bearer auth (read-only by construction).</span>
 <span id="L415"><span class="lineNum">     415</span>                 :             : func isSharedRoute(path string) bool {</span>
-<span id="L416"><span class="lineNum">     416</span>                 :<span class="tlaGNC">         239 :         return strings.HasPrefix(path, &quot;/v1/shared/&quot;)</span></span>
-<span id="L417"><span class="lineNum">     417</span>                 :<span class="tlaGNC">         239 : }</span></span>
+<span id="L416"><span class="lineNum">     416</span>                 :<span class="tlaGNC">         247 :         return strings.HasPrefix(path, &quot;/v1/shared/&quot;)</span></span>
+<span id="L417"><span class="lineNum">     417</span>                 :<span class="tlaGNC">         247 : }</span></span>
 <span id="L418"><span class="lineNum">     418</span>                 :             : </span>
 <span id="L419"><span class="lineNum">     419</span>                 :             : // acquireSSE registers one SSE connection for the session; false when the</span>
 <span id="L420"><span class="lineNum">     420</span>                 :             : // per-session cap is reached.</span>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -234,16 +234,16 @@
 <span id="L163"><span class="lineNum">     163</span>                 :             : // session: agent name, agent version (stamped by the entry point at startup;</span>
 <span id="L164"><span class="lineNum">     164</span>                 :             : // omitted when empty), and the session ID (omitted when empty).</span>
 <span id="L165"><span class="lineNum">     165</span>                 :             : func LoomSessionEnv(version, sessionID string) map[string]string {</span>
-<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">         142 :         env := map[string]string{</span></span>
-<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">         142 :                 EnvAgentName: agentName,</span></span>
-<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">         142 :         }</span></span>
-<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">         142 :         if version = strings.TrimSpace(version); version != &quot;&quot; {</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">         145 :         env := map[string]string{</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">         145 :                 EnvAgentName: agentName,</span></span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">         145 :         }</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaGNC">         145 :         if version = strings.TrimSpace(version); version != &quot;&quot; {</span></span>
 <span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">           9 :                 env[EnvAgentVersion] = version</span></span>
 <span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">           9 :         }</span></span>
-<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">         142 :         if sessionID = strings.TrimSpace(sessionID); sessionID != &quot;&quot; {</span></span>
-<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">         141 :                 env[EnvSessionID] = sessionID</span></span>
-<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">         141 :         }</span></span>
-<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">         142 :         return env</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">         145 :         if sessionID = strings.TrimSpace(sessionID); sessionID != &quot;&quot; {</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">         144 :                 env[EnvSessionID] = sessionID</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">         144 :         }</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">         145 :         return env</span></span>
 <span id="L176"><span class="lineNum">     176</span>                 :             : }</span>
 <span id="L177"><span class="lineNum">     177</span>                 :             : </span>
 <span id="L178"><span class="lineNum">     178</span>                 :             : // sessionEnvContextKey carries per-turn loom attribution variables through</span>
@@ -256,14 +256,14 @@
 <span id="L185"><span class="lineNum">     185</span>                 :             : // session without touching any process-level shared value. The map is</span>
 <span id="L186"><span class="lineNum">     186</span>                 :             : // cloned; an empty map returns ctx unchanged.</span>
 <span id="L187"><span class="lineNum">     187</span>                 :             : func ContextWithSessionEnv(ctx context.Context, env map[string]string) context.Context {</span>
-<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">         139 :         if len(env) == 0 {</span></span>
+<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">         142 :         if len(env) == 0 {</span></span>
 <span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return ctx</span></span>
 <span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC tlaBgGNC">         139 :         cloned := make(map[string]string, len(env))</span></span>
-<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">         139 :         for key, value := range env {</span></span>
-<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">         285 :                 cloned[key] = value</span></span>
-<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">         285 :         }</span></span>
-<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">         139 :         return context.WithValue(ctx, sessionEnvContextKey{}, cloned)</span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC tlaBgGNC">         142 :         cloned := make(map[string]string, len(env))</span></span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">         142 :         for key, value := range env {</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">         291 :                 cloned[key] = value</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">         291 :         }</span></span>
+<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">         142 :         return context.WithValue(ctx, sessionEnvContextKey{}, cloned)</span></span>
 <span id="L196"><span class="lineNum">     196</span>                 :             : }</span>
 <span id="L197"><span class="lineNum">     197</span>                 :             : </span>
 <span id="L198"><span class="lineNum">     198</span>                 :             : // SessionEnvFromContext returns the attribution environment attached via</span>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -217,12 +217,12 @@
 <span id="L146"><span class="lineNum">     146</span>                 :             : </span>
 <span id="L147"><span class="lineNum">     147</span>                 :             : // SupportsImages reports whether the model declares image input.</span>
 <span id="L148"><span class="lineNum">     148</span>                 :             : func (m Model) SupportsImages() bool {</span>
-<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC tlaBgGNC">          76 :         for _, modality := range m.Modalities {</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC tlaBgGNC">          83 :         for _, modality := range m.Modalities {</span></span>
 <span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">           6 :                 if modality == &quot;image&quot; {</span></span>
 <span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">           3 :                         return true</span></span>
 <span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">           3 :                 }</span></span>
 <span id="L153"><span class="lineNum">     153</span>                 :             :         }</span>
-<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">          73 :         return false</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">          80 :         return false</span></span>
 <span id="L155"><span class="lineNum">     155</span>                 :             : }</span>
 <span id="L156"><span class="lineNum">     156</span>                 :             : </span>
 <span id="L157"><span class="lineNum">     157</span>                 :             : // Reasoning configures the model's reasoning (thinking) intent in</span>
@@ -242,10 +242,10 @@
 <span id="L171"><span class="lineNum">     171</span>                 :             : </span>
 <span id="L172"><span class="lineNum">     172</span>                 :             : // DomainSpec converts the configuration into the vendor-neutral domain spec.</span>
 <span id="L173"><span class="lineNum">     173</span>                 :             : func (r Reasoning) DomainSpec() domain.ReasoningSpec {</span>
-<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">         222 :         return domain.ReasoningSpec{</span></span>
-<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">         222 :                 Effort:       domain.ReasoningEffort(strings.TrimSpace(r.Effort)),</span></span>
-<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">         222 :                 BudgetTokens: r.BudgetTokens,</span></span>
-<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">         222 :         }</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">         231 :         return domain.ReasoningSpec{</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">         231 :                 Effort:       domain.ReasoningEffort(strings.TrimSpace(r.Effort)),</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC">         231 :                 BudgetTokens: r.BudgetTokens,</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">         231 :         }</span></span>
 <span id="L178"><span class="lineNum">     178</span>                 :             : }</span>
 <span id="L179"><span class="lineNum">     179</span>                 :             : </span>
 <span id="L180"><span class="lineNum">     180</span>                 :             : // Limits mirrors domain.Limits; nil fields keep the built-in default.</span>
@@ -364,212 +364,224 @@
 <span id="L293"><span class="lineNum">     293</span>                 :             : // to a destination no host rule covers: &quot;allow&quot; (default: ambient</span>
 <span id="L294"><span class="lineNum">     294</span>                 :             : // network with the deny list enforced at connection time, everything</span>
 <span id="L295"><span class="lineNum">     295</span>                 :             : // logged) or &quot;deny&quot; (allowlist posture for sensitive workspaces).</span>
-<span id="L296"><span class="lineNum">     296</span>                 :             : type SandboxProxy struct {</span>
-<span id="L297"><span class="lineNum">     297</span>                 :             :         Unmatched string `yaml:&quot;unmatched,omitempty&quot;`</span>
-<span id="L298"><span class="lineNum">     298</span>                 :             : }</span>
-<span id="L299"><span class="lineNum">     299</span>                 :             : </span>
-<span id="L300"><span class="lineNum">     300</span>                 :             : // Tracing configures Langfuse observability. Keys follow the same</span>
-<span id="L301"><span class="lineNum">     301</span>                 :             : // inline-or-env-reference rule as provider API keys.</span>
-<span id="L302"><span class="lineNum">     302</span>                 :             : type Tracing struct {</span>
-<span id="L303"><span class="lineNum">     303</span>                 :             :         Host           string `yaml:&quot;host,omitempty&quot;`</span>
-<span id="L304"><span class="lineNum">     304</span>                 :             :         PublicKey      string `yaml:&quot;public_key,omitempty&quot;`</span>
-<span id="L305"><span class="lineNum">     305</span>                 :             :         PublicKeyEnv   string `yaml:&quot;public_key_env,omitempty&quot;`</span>
-<span id="L306"><span class="lineNum">     306</span>                 :             :         SecretKey      string `yaml:&quot;secret_key,omitempty&quot;`</span>
-<span id="L307"><span class="lineNum">     307</span>                 :             :         SecretKeyEnv   string `yaml:&quot;secret_key_env,omitempty&quot;`</span>
-<span id="L308"><span class="lineNum">     308</span>                 :             :         Environment    string `yaml:&quot;environment,omitempty&quot;`</span>
-<span id="L309"><span class="lineNum">     309</span>                 :             :         IncludeContent *bool  `yaml:&quot;include_content,omitempty&quot;`</span>
-<span id="L310"><span class="lineNum">     310</span>                 :             :         User           string `yaml:&quot;user,omitempty&quot;`</span>
-<span id="L311"><span class="lineNum">     311</span>                 :             :         // Cost rates are USD per million tokens; non-positive disables cost</span>
-<span id="L312"><span class="lineNum">     312</span>                 :             :         // attribution. The cache rates price the prompt-cache split; zero</span>
-<span id="L313"><span class="lineNum">     313</span>                 :             :         // derives the provider-family default (domain.CallCostUSD).</span>
-<span id="L314"><span class="lineNum">     314</span>                 :             :         CostInputPerMTok      float64 `yaml:&quot;cost_input_usd_per_mtok,omitempty&quot;`</span>
-<span id="L315"><span class="lineNum">     315</span>                 :             :         CostOutputPerMTok     float64 `yaml:&quot;cost_output_usd_per_mtok,omitempty&quot;`</span>
-<span id="L316"><span class="lineNum">     316</span>                 :             :         CostCacheReadPerMTok  float64 `yaml:&quot;cost_cache_read_usd_per_mtok,omitempty&quot;`</span>
-<span id="L317"><span class="lineNum">     317</span>                 :             :         CostCacheWritePerMTok float64 `yaml:&quot;cost_cache_write_usd_per_mtok,omitempty&quot;`</span>
-<span id="L318"><span class="lineNum">     318</span>                 :             : }</span>
-<span id="L319"><span class="lineNum">     319</span>                 :             : </span>
-<span id="L320"><span class="lineNum">     320</span>                 :             : // Share is the persistent preference for the optional LAN share</span>
-<span id="L321"><span class="lineNum">     321</span>                 :             : // listener (loom-desktop, docs/DESKTOP_DESIGN.md §5): whether it starts</span>
-<span id="L322"><span class="lineNum">     322</span>                 :             : // at launch, and its fixed bind address. A stable port is what lets</span>
-<span id="L323"><span class="lineNum">     323</span>                 :             : // share links survive restarts — share tokens are persisted in the</span>
-<span id="L324"><span class="lineNum">     324</span>                 :             : // session store. Toggling at runtime (POST /v1/share/endpoint) writes</span>
-<span id="L325"><span class="lineNum">     325</span>                 :             : // through to enabled and hot-applies, so the on/off state never</span>
-<span id="L326"><span class="lineNum">     326</span>                 :             : // diverges from this file.</span>
-<span id="L327"><span class="lineNum">     327</span>                 :             : type Share struct {</span>
-<span id="L328"><span class="lineNum">     328</span>                 :             :         Enabled *bool  `yaml:&quot;enabled,omitempty&quot;`</span>
-<span id="L329"><span class="lineNum">     329</span>                 :             :         Listen  string `yaml:&quot;listen,omitempty&quot;`</span>
-<span id="L330"><span class="lineNum">     330</span>                 :             : }</span>
-<span id="L331"><span class="lineNum">     331</span>                 :             : </span>
-<span id="L332"><span class="lineNum">     332</span>                 :             : // Logging configures file logging quotas (glog-style daily files under</span>
-<span id="L333"><span class="lineNum">     333</span>                 :             : // &lt;loom home&gt;/logs). Zero values keep the built-in defaults; negative</span>
-<span id="L334"><span class="lineNum">     334</span>                 :             : // values disable the corresponding limit.</span>
-<span id="L335"><span class="lineNum">     335</span>                 :             : type Logging struct {</span>
-<span id="L336"><span class="lineNum">     336</span>                 :             :         // MaxFileMB caps one log file in MiB; past the cap the writer rolls to</span>
-<span id="L337"><span class="lineNum">     337</span>                 :             :         // a same-day sequence file. 0 = default (2048).</span>
-<span id="L338"><span class="lineNum">     338</span>                 :             :         MaxFileMB int `yaml:&quot;max_file_mb,omitempty&quot;`</span>
-<span id="L339"><span class="lineNum">     339</span>                 :             :         // MaxTotalMB caps the logs directory total in MiB; the oldest files are</span>
-<span id="L340"><span class="lineNum">     340</span>                 :             :         // garbage-collected past the cap. 0 = default (10240).</span>
-<span id="L341"><span class="lineNum">     341</span>                 :             :         MaxTotalMB int `yaml:&quot;max_total_mb,omitempty&quot;`</span>
-<span id="L342"><span class="lineNum">     342</span>                 :             : }</span>
-<span id="L343"><span class="lineNum">     343</span>                 :             : </span>
-<span id="L344"><span class="lineNum">     344</span>                 :             : // UI configures the terminal frontend.</span>
-<span id="L345"><span class="lineNum">     345</span>                 :             : type UI struct {</span>
-<span id="L346"><span class="lineNum">     346</span>                 :             :         Icons     string `yaml:&quot;icons,omitempty&quot;`</span>
-<span id="L347"><span class="lineNum">     347</span>                 :             :         AltScreen bool   `yaml:&quot;alt_screen,omitempty&quot;`</span>
-<span id="L348"><span class="lineNum">     348</span>                 :             :         // Keymap overrides default key bindings (docs/VIM_UI_DESIGN.md §5.2):</span>
-<span id="L349"><span class="lineNum">     349</span>                 :             :         // context → action → replacement key, e.g.</span>
-<span id="L350"><span class="lineNum">     350</span>                 :             :         // {chat: {search_transcript: &quot;ctrl+s&quot;}}. Unknown contexts/actions</span>
-<span id="L351"><span class="lineNum">     351</span>                 :             :         // and conflicting keys are ignored with a status-bar warning.</span>
-<span id="L352"><span class="lineNum">     352</span>                 :             :         Keymap map[string]map[string]string `yaml:&quot;keymap,omitempty&quot;`</span>
-<span id="L353"><span class="lineNum">     353</span>                 :             : }</span>
-<span id="L354"><span class="lineNum">     354</span>                 :             : </span>
-<span id="L355"><span class="lineNum">     355</span>                 :             : // Subagent configures the delegate_task sub-agent</span>
-<span id="L356"><span class="lineNum">     356</span>                 :             : // (docs/SUBAGENT_DESIGN.md §7). Enabled is nil-typed so &quot;absent&quot;</span>
-<span id="L357"><span class="lineNum">     357</span>                 :             : // defaults to true while an explicit false removes the tool from the</span>
-<span id="L358"><span class="lineNum">     358</span>                 :             : // registry entirely.</span>
-<span id="L359"><span class="lineNum">     359</span>                 :             : type Subagent struct {</span>
-<span id="L360"><span class="lineNum">     360</span>                 :             :         Enabled *bool `yaml:&quot;enabled,omitempty&quot;`</span>
-<span id="L361"><span class="lineNum">     361</span>                 :             :         // MaxTokens caps the child run's session-cumulative metered tokens;</span>
-<span id="L362"><span class="lineNum">     362</span>                 :             :         // nil/0 inherits limits.max_tokens. The child's consumption is also</span>
-<span id="L363"><span class="lineNum">     363</span>                 :             :         // folded back into the parent run's budget, so delegation is never a</span>
-<span id="L364"><span class="lineNum">     364</span>                 :             :         // budget loophole.</span>
-<span id="L365"><span class="lineNum">     365</span>                 :             :         MaxTokens *int64 `yaml:&quot;max_tokens,omitempty&quot;`</span>
-<span id="L366"><span class="lineNum">     366</span>                 :             :         // MaxOutputTokens caps each child model RESPONSE. Sub-agent answers</span>
-<span id="L367"><span class="lineNum">     367</span>                 :             :         // should be concise; the per-request cap is also a latency knob — a</span>
-<span id="L368"><span class="lineNum">     368</span>                 :             :         // truncation is only discovered after the whole output budget has</span>
-<span id="L369"><span class="lineNum">     369</span>                 :             :         // streamed. nil = 8192 (reasoning headroom included); explicit 0</span>
-<span id="L370"><span class="lineNum">     370</span>                 :             :         // inherits limits.max_output_tokens.</span>
-<span id="L371"><span class="lineNum">     371</span>                 :             :         MaxOutputTokens *int64 `yaml:&quot;max_output_tokens,omitempty&quot;`</span>
-<span id="L372"><span class="lineNum">     372</span>                 :             :         // Model pins the sub-agent to a specific &quot;provider/model&quot; (or a bare</span>
-<span id="L373"><span class="lineNum">     373</span>                 :             :         // model/provider name); empty follows the current turn's model.</span>
-<span id="L374"><span class="lineNum">     374</span>                 :             :         Model string `yaml:&quot;model,omitempty&quot;`</span>
-<span id="L375"><span class="lineNum">     375</span>                 :             : }</span>
-<span id="L376"><span class="lineNum">     376</span>                 :             : </span>
-<span id="L377"><span class="lineNum">     377</span>                 :             : // Image configures text-to-image generation (the generate_image tool).</span>
-<span id="L378"><span class="lineNum">     378</span>                 :             : // Generation reuses the named provider's base_url/api_key, so only</span>
-<span id="L379"><span class="lineNum">     379</span>                 :             : // openai-type providers qualify; the tool is registered only when the</span>
-<span id="L380"><span class="lineNum">     380</span>                 :             : // section is enabled. Enabled is nil-typed: absent means &quot;enabled when</span>
-<span id="L381"><span class="lineNum">     381</span>                 :             : // provider and model are both set&quot;, an explicit false always disables.</span>
-<span id="L382"><span class="lineNum">     382</span>                 :             : type Image struct {</span>
-<span id="L383"><span class="lineNum">     383</span>                 :             :         Enabled  *bool  `yaml:&quot;enabled,omitempty&quot;`</span>
-<span id="L384"><span class="lineNum">     384</span>                 :             :         Provider string `yaml:&quot;provider,omitempty&quot;`</span>
-<span id="L385"><span class="lineNum">     385</span>                 :             :         Model    string `yaml:&quot;model,omitempty&quot;`</span>
-<span id="L386"><span class="lineNum">     386</span>                 :             :         // Size/Quality are the generation defaults (OpenAI Images API</span>
-<span id="L387"><span class="lineNum">     387</span>                 :             :         // vocabulary: &quot;auto&quot;, &quot;1024x1024&quot;, ... / &quot;low&quot;, &quot;medium&quot;, &quot;high&quot;);</span>
-<span id="L388"><span class="lineNum">     388</span>                 :             :         // empty means &quot;auto&quot;.</span>
-<span id="L389"><span class="lineNum">     389</span>                 :             :         Size    string `yaml:&quot;size,omitempty&quot;`</span>
-<span id="L390"><span class="lineNum">     390</span>                 :             :         Quality string `yaml:&quot;quality,omitempty&quot;`</span>
-<span id="L391"><span class="lineNum">     391</span>                 :             : }</span>
-<span id="L392"><span class="lineNum">     392</span>                 :             : </span>
-<span id="L393"><span class="lineNum">     393</span>                 :             : // Memory configures the long-term memory system (docs/MEMORY_DESIGN.md).</span>
-<span id="L394"><span class="lineNum">     394</span>                 :             : // Enabled is nil-typed so &quot;absent&quot; defaults to true while an explicit</span>
-<span id="L395"><span class="lineNum">     395</span>                 :             : // false disables extraction, consolidation, and tool registration.</span>
-<span id="L396"><span class="lineNum">     396</span>                 :             : //</span>
-<span id="L397"><span class="lineNum">     397</span>                 :             : // The extraction/consolidation pipeline runs in the background at process</span>
-<span id="L398"><span class="lineNum">     398</span>                 :             : // startup (and every run_interval afterwards), draining a persistent job</span>
-<span id="L399"><span class="lineNum">     399</span>                 :             : // queue — never on the shutdown path.</span>
-<span id="L400"><span class="lineNum">     400</span>                 :             : type Memory struct {</span>
-<span id="L401"><span class="lineNum">     401</span>                 :             :         Enabled *bool `yaml:&quot;enabled,omitempty&quot;`</span>
-<span id="L402"><span class="lineNum">     402</span>                 :             :         // ExtractModel pins the Phase 1 extraction model (&quot;provider/model&quot; or</span>
-<span id="L403"><span class="lineNum">     403</span>                 :             :         // a bare model/provider name); empty follows the default model. A</span>
-<span id="L404"><span class="lineNum">     404</span>                 :             :         // cheap/fast model is recommended.</span>
-<span id="L405"><span class="lineNum">     405</span>                 :             :         ExtractModel string `yaml:&quot;extract_model,omitempty&quot;`</span>
-<span id="L406"><span class="lineNum">     406</span>                 :             :         // ConsolidationModel pins the Phase 2 consolidation model; empty</span>
-<span id="L407"><span class="lineNum">     407</span>                 :             :         // follows the default model.</span>
-<span id="L408"><span class="lineNum">     408</span>                 :             :         ConsolidationModel string `yaml:&quot;consolidation_model,omitempty&quot;`</span>
-<span id="L409"><span class="lineNum">     409</span>                 :             :         // MaxJobsPerRun bounds extraction jobs claimed per pipeline pass;</span>
-<span id="L410"><span class="lineNum">     410</span>                 :             :         // nil keeps the default (8).</span>
-<span id="L411"><span class="lineNum">     411</span>                 :             :         MaxJobsPerRun *int `yaml:&quot;max_jobs_per_run,omitempty&quot;`</span>
-<span id="L412"><span class="lineNum">     412</span>                 :             :         // RunInterval re-runs the pipeline periodically (Go duration syntax,</span>
-<span id="L413"><span class="lineNum">     413</span>                 :             :         // e.g. &quot;30m&quot;); empty keeps the default (&quot;30m&quot;), &quot;0&quot; runs the pipeline</span>
-<span id="L414"><span class="lineNum">     414</span>                 :             :         // once at startup only.</span>
-<span id="L415"><span class="lineNum">     415</span>                 :             :         RunInterval string `yaml:&quot;run_interval,omitempty&quot;`</span>
-<span id="L416"><span class="lineNum">     416</span>                 :             :         // MinSessionIdle skips sessions touched more recently than this (Go</span>
-<span id="L417"><span class="lineNum">     417</span>                 :             :         // duration); empty keeps the default (&quot;1h&quot;). Prevents extracting</span>
-<span id="L418"><span class="lineNum">     418</span>                 :             :         // sessions that may still be active.</span>
-<span id="L419"><span class="lineNum">     419</span>                 :             :         MinSessionIdle string `yaml:&quot;min_session_idle,omitempty&quot;`</span>
-<span id="L420"><span class="lineNum">     420</span>                 :             :         // MaxSessionAge skips sessions last touched longer ago than this (Go</span>
-<span id="L421"><span class="lineNum">     421</span>                 :             :         // duration); empty keeps the default (&quot;720h&quot;, 30 days).</span>
-<span id="L422"><span class="lineNum">     422</span>                 :             :         MaxSessionAge string `yaml:&quot;max_session_age,omitempty&quot;`</span>
-<span id="L423"><span class="lineNum">     423</span>                 :             : }</span>
-<span id="L424"><span class="lineNum">     424</span>                 :             : </span>
-<span id="L425"><span class="lineNum">     425</span>                 :             : // Sessions configures session lifecycle maintenance.</span>
-<span id="L426"><span class="lineNum">     426</span>                 :             : type Sessions struct {</span>
-<span id="L427"><span class="lineNum">     427</span>                 :             :         // AutoArchiveAfter (Go duration, e.g. &quot;720h&quot;) enables the background</span>
-<span id="L428"><span class="lineNum">     428</span>                 :             :         // session archiver: sessions whose last activity is older than this</span>
-<span id="L429"><span class="lineNum">     429</span>                 :             :         // are marked archived — hidden from default listings and read-only</span>
-<span id="L430"><span class="lineNum">     430</span>                 :             :         // until explicitly unarchived. Empty or &quot;0&quot; disables the archiver</span>
-<span id="L431"><span class="lineNum">     431</span>                 :             :         // (the default).</span>
-<span id="L432"><span class="lineNum">     432</span>                 :             :         AutoArchiveAfter string `yaml:&quot;auto_archive_after,omitempty&quot;`</span>
-<span id="L433"><span class="lineNum">     433</span>                 :             :         // GCArchivedAfter (Go duration, e.g. &quot;720h&quot;) permanently deletes</span>
-<span id="L434"><span class="lineNum">     434</span>                 :             :         // sessions that have been archived for longer than this, together with</span>
-<span id="L435"><span class="lineNum">     435</span>                 :             :         // their events, checkpoints and file-change history; artifacts no</span>
-<span id="L436"><span class="lineNum">     436</span>                 :             :         // remaining session references are collected by the same sweep. Empty</span>
-<span id="L437"><span class="lineNum">     437</span>                 :             :         // or &quot;0&quot; disables purging (the default): archived sessions are kept</span>
-<span id="L438"><span class="lineNum">     438</span>                 :             :         // forever.</span>
-<span id="L439"><span class="lineNum">     439</span>                 :             :         GCArchivedAfter string `yaml:&quot;gc_archived_after,omitempty&quot;`</span>
-<span id="L440"><span class="lineNum">     440</span>                 :             : }</span>
-<span id="L441"><span class="lineNum">     441</span>                 :             : </span>
-<span id="L442"><span class="lineNum">     442</span>                 :             : // Browser configures the headless Chrome browser tool. Enabled is</span>
-<span id="L443"><span class="lineNum">     443</span>                 :             : // nil-typed: absent means &quot;enabled&quot; (the tool registers with defaults),</span>
-<span id="L444"><span class="lineNum">     444</span>                 :             : // an explicit false removes the browser tool from the registry.</span>
-<span id="L445"><span class="lineNum">     445</span>                 :             : type Browser struct {</span>
-<span id="L446"><span class="lineNum">     446</span>                 :             :         Enabled    *bool  `yaml:&quot;enabled,omitempty&quot;`</span>
-<span id="L447"><span class="lineNum">     447</span>                 :             :         ChromePath string `yaml:&quot;chrome_path,omitempty&quot;`</span>
-<span id="L448"><span class="lineNum">     448</span>                 :             :         // CdpURL is a remote Chrome DevTools Protocol endpoint (ws:// or</span>
-<span id="L449"><span class="lineNum">     449</span>                 :             :         // http://). When set, the browser Manager connects to this remote</span>
-<span id="L450"><span class="lineNum">     450</span>                 :             :         // Chrome instead of launching a local process — letting users point</span>
-<span id="L451"><span class="lineNum">     451</span>                 :             :         // loom at an externally managed Chrome (e.g. one with a real profile</span>
-<span id="L452"><span class="lineNum">     452</span>                 :             :         // or anti-detection extensions). Empty means &quot;launch locally&quot;.</span>
-<span id="L453"><span class="lineNum">     453</span>                 :             :         CdpURL         string `yaml:&quot;cdp_url,omitempty&quot;`</span>
-<span id="L454"><span class="lineNum">     454</span>                 :             :         IdleTTL        string `yaml:&quot;idle_ttl,omitempty&quot;`</span>
-<span id="L455"><span class="lineNum">     455</span>                 :             :         NavTimeoutMs   int    `yaml:&quot;nav_timeout_ms,omitempty&quot;`</span>
-<span id="L456"><span class="lineNum">     456</span>                 :             :         ScreenshotQ    int    `yaml:&quot;screenshot_quality,omitempty&quot;`</span>
-<span id="L457"><span class="lineNum">     457</span>                 :             :         ViewportWidth  int    `yaml:&quot;viewport_width,omitempty&quot;`</span>
-<span id="L458"><span class="lineNum">     458</span>                 :             :         ViewportHeight int    `yaml:&quot;viewport_height,omitempty&quot;`</span>
-<span id="L459"><span class="lineNum">     459</span>                 :             : }</span>
-<span id="L460"><span class="lineNum">     460</span>                 :             : </span>
-<span id="L461"><span class="lineNum">     461</span>                 :             : // KnowledgeBase configures the minisearch-backed knowledge base tools</span>
-<span id="L462"><span class="lineNum">     462</span>                 :             : // (kb_search/kb_read). Enabled is nil-typed: absent means &quot;enabled when</span>
-<span id="L463"><span class="lineNum">     463</span>                 :             : // base_url is set&quot; (like image), an explicit false always disables.</span>
-<span id="L464"><span class="lineNum">     464</span>                 :             : // The credential lives inline: a reader-role key is sufficient for the</span>
-<span id="L465"><span class="lineNum">     465</span>                 :             : // read-only tools, and env indirection is intentionally not offered (see</span>
-<span id="L466"><span class="lineNum">     466</span>                 :             : // Provider.APIKey for the inline convention).</span>
-<span id="L467"><span class="lineNum">     467</span>                 :             : type KnowledgeBase struct {</span>
-<span id="L468"><span class="lineNum">     468</span>                 :             :         Enabled *bool  `yaml:&quot;enabled,omitempty&quot;`</span>
-<span id="L469"><span class="lineNum">     469</span>                 :             :         BaseURL string `yaml:&quot;base_url,omitempty&quot;`</span>
-<span id="L470"><span class="lineNum">     470</span>                 :             :         // APIKey is the minisearch bearer token (msk_…). Optional: a</span>
-<span id="L471"><span class="lineNum">     471</span>                 :             :         // minisearch deployment running with --auth=off needs none.</span>
-<span id="L472"><span class="lineNum">     472</span>                 :             :         APIKey string `yaml:&quot;api_key,omitempty&quot;`</span>
-<span id="L473"><span class="lineNum">     473</span>                 :             :         // TimeoutMs bounds each request; 0 keeps the default (10000).</span>
-<span id="L474"><span class="lineNum">     474</span>                 :             :         TimeoutMs int `yaml:&quot;timeout_ms,omitempty&quot;`</span>
-<span id="L475"><span class="lineNum">     475</span>                 :             :         // DefaultTopK is the default result count; 0 keeps the default (5).</span>
-<span id="L476"><span class="lineNum">     476</span>                 :             :         DefaultTopK int `yaml:&quot;default_top_k,omitempty&quot;`</span>
-<span id="L477"><span class="lineNum">     477</span>                 :             :         // Collections lists the searchable collections. At least one is</span>
-<span id="L478"><span class="lineNum">     478</span>                 :             :         // required when enabled; each carries a description surfaced to the</span>
-<span id="L479"><span class="lineNum">     479</span>                 :             :         // model so it can route by topic without a discovery round-trip.</span>
-<span id="L480"><span class="lineNum">     480</span>                 :             :         Collections []KBCollection `yaml:&quot;collections,omitempty&quot;`</span>
-<span id="L481"><span class="lineNum">     481</span>                 :             :         // DefaultCollection selects the default; empty means the first entry.</span>
-<span id="L482"><span class="lineNum">     482</span>                 :             :         DefaultCollection string `yaml:&quot;default_collection,omitempty&quot;`</span>
-<span id="L483"><span class="lineNum">     483</span>                 :             : }</span>
-<span id="L484"><span class="lineNum">     484</span>                 :             : </span>
-<span id="L485"><span class="lineNum">     485</span>                 :             : // KBCollection names one searchable minisearch collection.</span>
-<span id="L486"><span class="lineNum">     486</span>                 :             : type KBCollection struct {</span>
-<span id="L487"><span class="lineNum">     487</span>                 :             :         Name        string `yaml:&quot;name&quot;`</span>
-<span id="L488"><span class="lineNum">     488</span>                 :             :         Description string `yaml:&quot;description,omitempty&quot;`</span>
-<span id="L489"><span class="lineNum">     489</span>                 :             : }</span>
-<span id="L490"><span class="lineNum">     490</span>                 :             : </span>
-<span id="L491"><span class="lineNum">     491</span>                 :             : // MCPServer configures one MCP server connection. The key in MCPServers</span>
-<span id="L492"><span class="lineNum">     492</span>                 :             : // is the server name used for log attribution and tool name</span>
-<span id="L493"><span class="lineNum">     493</span>                 :             : // qualification (mcp__{server}__{tool}). Two transports are supported,</span>
-<span id="L494"><span class="lineNum">     494</span>                 :             : // selected by exactly one of Command or URL:</span>
-<span id="L495"><span class="lineNum">     495</span>                 :             : //   - command: spawn a subprocess and speak MCP over its stdio pipes;</span>
-<span id="L496"><span class="lineNum">     496</span>                 :             : //   - url:     POST JSON-RPC to a remote streamable HTTP endpoint.</span>
-<span id="L497"><span class="lineNum">     497</span>                 :             : //</span>
-<span id="L498"><span class="lineNum">     498</span>                 :             : // It aliases mcp.ServerConfig so the resolved configuration flows into</span>
-<span id="L499"><span class="lineNum">     499</span>                 :             : // the MCP manager without a field-by-field copy (REVIEW R12); the ${VAR}</span>
-<span id="L500"><span class="lineNum">     500</span>                 :             : // header reference resolution documented there happens at load time here.</span>
-<span id="L501"><span class="lineNum">     501</span>                 :             : type MCPServer = mcp.ServerConfig</span>
+<span id="L296"><span class="lineNum">     296</span>                 :             : // DenyPrivate additionally bars the proxy from dialing private ranges</span>
+<span id="L297"><span class="lineNum">     297</span>                 :             : // (RFC1918/CGNAT/ULA); default off keeps internal allowlisting</span>
+<span id="L298"><span class="lineNum">     298</span>                 :             : // possible. Non-Go clients (curl) do not honour the CIDR entries in</span>
+<span id="L299"><span class="lineNum">     299</span>                 :             : // NO_PROXY, so without this knob they can ride the proxy to private</span>
+<span id="L300"><span class="lineNum">     300</span>                 :             : // space under the unmatched-allow posture. Explicitly allow-listed IP</span>
+<span id="L301"><span class="lineNum">     301</span>                 :             : // literals stay exempt either way.</span>
+<span id="L302"><span class="lineNum">     302</span>                 :             : type SandboxProxy struct {</span>
+<span id="L303"><span class="lineNum">     303</span>                 :             :         Unmatched   string `yaml:&quot;unmatched,omitempty&quot;`</span>
+<span id="L304"><span class="lineNum">     304</span>                 :             :         DenyPrivate bool   `yaml:&quot;deny_private,omitempty&quot;`</span>
+<span id="L305"><span class="lineNum">     305</span>                 :             : }</span>
+<span id="L306"><span class="lineNum">     306</span>                 :             : </span>
+<span id="L307"><span class="lineNum">     307</span>                 :             : // Tracing configures Langfuse observability. Keys follow the same</span>
+<span id="L308"><span class="lineNum">     308</span>                 :             : // inline-or-env-reference rule as provider API keys.</span>
+<span id="L309"><span class="lineNum">     309</span>                 :             : type Tracing struct {</span>
+<span id="L310"><span class="lineNum">     310</span>                 :             :         Host           string `yaml:&quot;host,omitempty&quot;`</span>
+<span id="L311"><span class="lineNum">     311</span>                 :             :         PublicKey      string `yaml:&quot;public_key,omitempty&quot;`</span>
+<span id="L312"><span class="lineNum">     312</span>                 :             :         PublicKeyEnv   string `yaml:&quot;public_key_env,omitempty&quot;`</span>
+<span id="L313"><span class="lineNum">     313</span>                 :             :         SecretKey      string `yaml:&quot;secret_key,omitempty&quot;`</span>
+<span id="L314"><span class="lineNum">     314</span>                 :             :         SecretKeyEnv   string `yaml:&quot;secret_key_env,omitempty&quot;`</span>
+<span id="L315"><span class="lineNum">     315</span>                 :             :         Environment    string `yaml:&quot;environment,omitempty&quot;`</span>
+<span id="L316"><span class="lineNum">     316</span>                 :             :         IncludeContent *bool  `yaml:&quot;include_content,omitempty&quot;`</span>
+<span id="L317"><span class="lineNum">     317</span>                 :             :         User           string `yaml:&quot;user,omitempty&quot;`</span>
+<span id="L318"><span class="lineNum">     318</span>                 :             :         // Cost rates are USD per million tokens; non-positive disables cost</span>
+<span id="L319"><span class="lineNum">     319</span>                 :             :         // attribution. The cache rates price the prompt-cache split; zero</span>
+<span id="L320"><span class="lineNum">     320</span>                 :             :         // derives the provider-family default (domain.CallCostUSD).</span>
+<span id="L321"><span class="lineNum">     321</span>                 :             :         CostInputPerMTok      float64 `yaml:&quot;cost_input_usd_per_mtok,omitempty&quot;`</span>
+<span id="L322"><span class="lineNum">     322</span>                 :             :         CostOutputPerMTok     float64 `yaml:&quot;cost_output_usd_per_mtok,omitempty&quot;`</span>
+<span id="L323"><span class="lineNum">     323</span>                 :             :         CostCacheReadPerMTok  float64 `yaml:&quot;cost_cache_read_usd_per_mtok,omitempty&quot;`</span>
+<span id="L324"><span class="lineNum">     324</span>                 :             :         CostCacheWritePerMTok float64 `yaml:&quot;cost_cache_write_usd_per_mtok,omitempty&quot;`</span>
+<span id="L325"><span class="lineNum">     325</span>                 :             : }</span>
+<span id="L326"><span class="lineNum">     326</span>                 :             : </span>
+<span id="L327"><span class="lineNum">     327</span>                 :             : // Share is the persistent preference for the optional LAN share</span>
+<span id="L328"><span class="lineNum">     328</span>                 :             : // listener (loom-desktop, docs/DESKTOP_DESIGN.md §5): whether it starts</span>
+<span id="L329"><span class="lineNum">     329</span>                 :             : // at launch, and its fixed bind address. A stable port is what lets</span>
+<span id="L330"><span class="lineNum">     330</span>                 :             : // share links survive restarts — share tokens are persisted in the</span>
+<span id="L331"><span class="lineNum">     331</span>                 :             : // session store. Toggling at runtime (POST /v1/share/endpoint) writes</span>
+<span id="L332"><span class="lineNum">     332</span>                 :             : // through to enabled and hot-applies, so the on/off state never</span>
+<span id="L333"><span class="lineNum">     333</span>                 :             : // diverges from this file.</span>
+<span id="L334"><span class="lineNum">     334</span>                 :             : type Share struct {</span>
+<span id="L335"><span class="lineNum">     335</span>                 :             :         Enabled *bool  `yaml:&quot;enabled,omitempty&quot;`</span>
+<span id="L336"><span class="lineNum">     336</span>                 :             :         Listen  string `yaml:&quot;listen,omitempty&quot;`</span>
+<span id="L337"><span class="lineNum">     337</span>                 :             : }</span>
+<span id="L338"><span class="lineNum">     338</span>                 :             : </span>
+<span id="L339"><span class="lineNum">     339</span>                 :             : // Logging configures file logging quotas (glog-style daily files under</span>
+<span id="L340"><span class="lineNum">     340</span>                 :             : // &lt;loom home&gt;/logs). Zero values keep the built-in defaults; negative</span>
+<span id="L341"><span class="lineNum">     341</span>                 :             : // values disable the corresponding limit.</span>
+<span id="L342"><span class="lineNum">     342</span>                 :             : type Logging struct {</span>
+<span id="L343"><span class="lineNum">     343</span>                 :             :         // MaxFileMB caps one log file in MiB; past the cap the writer rolls to</span>
+<span id="L344"><span class="lineNum">     344</span>                 :             :         // a same-day sequence file. 0 = default (2048).</span>
+<span id="L345"><span class="lineNum">     345</span>                 :             :         MaxFileMB int `yaml:&quot;max_file_mb,omitempty&quot;`</span>
+<span id="L346"><span class="lineNum">     346</span>                 :             :         // MaxTotalMB caps the logs directory total in MiB; the oldest files are</span>
+<span id="L347"><span class="lineNum">     347</span>                 :             :         // garbage-collected past the cap. 0 = default (10240).</span>
+<span id="L348"><span class="lineNum">     348</span>                 :             :         MaxTotalMB int `yaml:&quot;max_total_mb,omitempty&quot;`</span>
+<span id="L349"><span class="lineNum">     349</span>                 :             : }</span>
+<span id="L350"><span class="lineNum">     350</span>                 :             : </span>
+<span id="L351"><span class="lineNum">     351</span>                 :             : // UI configures the terminal frontend.</span>
+<span id="L352"><span class="lineNum">     352</span>                 :             : type UI struct {</span>
+<span id="L353"><span class="lineNum">     353</span>                 :             :         Icons     string `yaml:&quot;icons,omitempty&quot;`</span>
+<span id="L354"><span class="lineNum">     354</span>                 :             :         AltScreen bool   `yaml:&quot;alt_screen,omitempty&quot;`</span>
+<span id="L355"><span class="lineNum">     355</span>                 :             :         // Keymap overrides default key bindings (docs/VIM_UI_DESIGN.md §5.2):</span>
+<span id="L356"><span class="lineNum">     356</span>                 :             :         // context → action → replacement key, e.g.</span>
+<span id="L357"><span class="lineNum">     357</span>                 :             :         // {chat: {search_transcript: &quot;ctrl+s&quot;}}. Unknown contexts/actions</span>
+<span id="L358"><span class="lineNum">     358</span>                 :             :         // and conflicting keys are ignored with a status-bar warning.</span>
+<span id="L359"><span class="lineNum">     359</span>                 :             :         Keymap map[string]map[string]string `yaml:&quot;keymap,omitempty&quot;`</span>
+<span id="L360"><span class="lineNum">     360</span>                 :             : }</span>
+<span id="L361"><span class="lineNum">     361</span>                 :             : </span>
+<span id="L362"><span class="lineNum">     362</span>                 :             : // Subagent configures the delegate_task sub-agent</span>
+<span id="L363"><span class="lineNum">     363</span>                 :             : // (docs/SUBAGENT_DESIGN.md §7). Enabled is nil-typed so &quot;absent&quot;</span>
+<span id="L364"><span class="lineNum">     364</span>                 :             : // defaults to true while an explicit false removes the tool from the</span>
+<span id="L365"><span class="lineNum">     365</span>                 :             : // registry entirely.</span>
+<span id="L366"><span class="lineNum">     366</span>                 :             : type Subagent struct {</span>
+<span id="L367"><span class="lineNum">     367</span>                 :             :         Enabled *bool `yaml:&quot;enabled,omitempty&quot;`</span>
+<span id="L368"><span class="lineNum">     368</span>                 :             :         // MaxTokens caps the child run's session-cumulative metered tokens;</span>
+<span id="L369"><span class="lineNum">     369</span>                 :             :         // nil/0 inherits limits.max_tokens. The child's consumption is also</span>
+<span id="L370"><span class="lineNum">     370</span>                 :             :         // folded back into the parent run's budget, so delegation is never a</span>
+<span id="L371"><span class="lineNum">     371</span>                 :             :         // budget loophole.</span>
+<span id="L372"><span class="lineNum">     372</span>                 :             :         MaxTokens *int64 `yaml:&quot;max_tokens,omitempty&quot;`</span>
+<span id="L373"><span class="lineNum">     373</span>                 :             :         // MaxOutputTokens caps each child model RESPONSE. Sub-agent answers</span>
+<span id="L374"><span class="lineNum">     374</span>                 :             :         // should be concise; the per-request cap is also a latency knob — a</span>
+<span id="L375"><span class="lineNum">     375</span>                 :             :         // truncation is only discovered after the whole output budget has</span>
+<span id="L376"><span class="lineNum">     376</span>                 :             :         // streamed. nil = 8192 (reasoning headroom included); explicit 0</span>
+<span id="L377"><span class="lineNum">     377</span>                 :             :         // inherits limits.max_output_tokens.</span>
+<span id="L378"><span class="lineNum">     378</span>                 :             :         MaxOutputTokens *int64 `yaml:&quot;max_output_tokens,omitempty&quot;`</span>
+<span id="L379"><span class="lineNum">     379</span>                 :             :         // Model pins the sub-agent to a specific &quot;provider/model&quot; (or a bare</span>
+<span id="L380"><span class="lineNum">     380</span>                 :             :         // model/provider name); empty follows the current turn's model.</span>
+<span id="L381"><span class="lineNum">     381</span>                 :             :         Model string `yaml:&quot;model,omitempty&quot;`</span>
+<span id="L382"><span class="lineNum">     382</span>                 :             : }</span>
+<span id="L383"><span class="lineNum">     383</span>                 :             : </span>
+<span id="L384"><span class="lineNum">     384</span>                 :             : // Image configures text-to-image generation (the generate_image tool).</span>
+<span id="L385"><span class="lineNum">     385</span>                 :             : // Generation reuses the named provider's base_url/api_key, so only</span>
+<span id="L386"><span class="lineNum">     386</span>                 :             : // openai-type providers qualify; the tool is registered only when the</span>
+<span id="L387"><span class="lineNum">     387</span>                 :             : // section is enabled. Enabled is nil-typed: absent means &quot;enabled when</span>
+<span id="L388"><span class="lineNum">     388</span>                 :             : // provider and model are both set&quot;, an explicit false always disables.</span>
+<span id="L389"><span class="lineNum">     389</span>                 :             : type Image struct {</span>
+<span id="L390"><span class="lineNum">     390</span>                 :             :         Enabled  *bool  `yaml:&quot;enabled,omitempty&quot;`</span>
+<span id="L391"><span class="lineNum">     391</span>                 :             :         Provider string `yaml:&quot;provider,omitempty&quot;`</span>
+<span id="L392"><span class="lineNum">     392</span>                 :             :         Model    string `yaml:&quot;model,omitempty&quot;`</span>
+<span id="L393"><span class="lineNum">     393</span>                 :             :         // Size/Quality are the generation defaults (OpenAI Images API</span>
+<span id="L394"><span class="lineNum">     394</span>                 :             :         // vocabulary: &quot;auto&quot;, &quot;1024x1024&quot;, ... / &quot;low&quot;, &quot;medium&quot;, &quot;high&quot;);</span>
+<span id="L395"><span class="lineNum">     395</span>                 :             :         // empty means &quot;auto&quot;.</span>
+<span id="L396"><span class="lineNum">     396</span>                 :             :         Size    string `yaml:&quot;size,omitempty&quot;`</span>
+<span id="L397"><span class="lineNum">     397</span>                 :             :         Quality string `yaml:&quot;quality,omitempty&quot;`</span>
+<span id="L398"><span class="lineNum">     398</span>                 :             : }</span>
+<span id="L399"><span class="lineNum">     399</span>                 :             : </span>
+<span id="L400"><span class="lineNum">     400</span>                 :             : // Memory configures the long-term memory system (docs/MEMORY_DESIGN.md).</span>
+<span id="L401"><span class="lineNum">     401</span>                 :             : // Enabled is nil-typed so &quot;absent&quot; defaults to true while an explicit</span>
+<span id="L402"><span class="lineNum">     402</span>                 :             : // false disables extraction, consolidation, and tool registration.</span>
+<span id="L403"><span class="lineNum">     403</span>                 :             : //</span>
+<span id="L404"><span class="lineNum">     404</span>                 :             : // The extraction/consolidation pipeline runs in the background at process</span>
+<span id="L405"><span class="lineNum">     405</span>                 :             : // startup (and every run_interval afterwards), draining a persistent job</span>
+<span id="L406"><span class="lineNum">     406</span>                 :             : // queue — never on the shutdown path.</span>
+<span id="L407"><span class="lineNum">     407</span>                 :             : type Memory struct {</span>
+<span id="L408"><span class="lineNum">     408</span>                 :             :         Enabled *bool `yaml:&quot;enabled,omitempty&quot;`</span>
+<span id="L409"><span class="lineNum">     409</span>                 :             :         // ExtractModel pins the Phase 1 extraction model (&quot;provider/model&quot; or</span>
+<span id="L410"><span class="lineNum">     410</span>                 :             :         // a bare model/provider name); empty follows the default model. A</span>
+<span id="L411"><span class="lineNum">     411</span>                 :             :         // cheap/fast model is recommended.</span>
+<span id="L412"><span class="lineNum">     412</span>                 :             :         ExtractModel string `yaml:&quot;extract_model,omitempty&quot;`</span>
+<span id="L413"><span class="lineNum">     413</span>                 :             :         // ConsolidationModel pins the Phase 2 consolidation model; empty</span>
+<span id="L414"><span class="lineNum">     414</span>                 :             :         // follows the default model.</span>
+<span id="L415"><span class="lineNum">     415</span>                 :             :         ConsolidationModel string `yaml:&quot;consolidation_model,omitempty&quot;`</span>
+<span id="L416"><span class="lineNum">     416</span>                 :             :         // MaxJobsPerRun bounds extraction jobs claimed per pipeline pass;</span>
+<span id="L417"><span class="lineNum">     417</span>                 :             :         // nil keeps the default (8).</span>
+<span id="L418"><span class="lineNum">     418</span>                 :             :         MaxJobsPerRun *int `yaml:&quot;max_jobs_per_run,omitempty&quot;`</span>
+<span id="L419"><span class="lineNum">     419</span>                 :             :         // RunInterval re-runs the pipeline periodically (Go duration syntax,</span>
+<span id="L420"><span class="lineNum">     420</span>                 :             :         // e.g. &quot;30m&quot;); empty keeps the default (&quot;30m&quot;), &quot;0&quot; runs the pipeline</span>
+<span id="L421"><span class="lineNum">     421</span>                 :             :         // once at startup only.</span>
+<span id="L422"><span class="lineNum">     422</span>                 :             :         RunInterval string `yaml:&quot;run_interval,omitempty&quot;`</span>
+<span id="L423"><span class="lineNum">     423</span>                 :             :         // MinSessionIdle skips sessions touched more recently than this (Go</span>
+<span id="L424"><span class="lineNum">     424</span>                 :             :         // duration); empty keeps the default (&quot;1h&quot;). Prevents extracting</span>
+<span id="L425"><span class="lineNum">     425</span>                 :             :         // sessions that may still be active.</span>
+<span id="L426"><span class="lineNum">     426</span>                 :             :         MinSessionIdle string `yaml:&quot;min_session_idle,omitempty&quot;`</span>
+<span id="L427"><span class="lineNum">     427</span>                 :             :         // MaxSessionAge skips sessions last touched longer ago than this (Go</span>
+<span id="L428"><span class="lineNum">     428</span>                 :             :         // duration); empty keeps the default (&quot;720h&quot;, 30 days).</span>
+<span id="L429"><span class="lineNum">     429</span>                 :             :         MaxSessionAge string `yaml:&quot;max_session_age,omitempty&quot;`</span>
+<span id="L430"><span class="lineNum">     430</span>                 :             : }</span>
+<span id="L431"><span class="lineNum">     431</span>                 :             : </span>
+<span id="L432"><span class="lineNum">     432</span>                 :             : // Sessions configures session lifecycle maintenance.</span>
+<span id="L433"><span class="lineNum">     433</span>                 :             : type Sessions struct {</span>
+<span id="L434"><span class="lineNum">     434</span>                 :             :         // AutoArchiveAfter (Go duration, e.g. &quot;720h&quot;) enables the background</span>
+<span id="L435"><span class="lineNum">     435</span>                 :             :         // session archiver: sessions whose last activity is older than this</span>
+<span id="L436"><span class="lineNum">     436</span>                 :             :         // are marked archived — hidden from default listings and read-only</span>
+<span id="L437"><span class="lineNum">     437</span>                 :             :         // until explicitly unarchived. Empty or &quot;0&quot; disables the archiver</span>
+<span id="L438"><span class="lineNum">     438</span>                 :             :         // (the default).</span>
+<span id="L439"><span class="lineNum">     439</span>                 :             :         AutoArchiveAfter string `yaml:&quot;auto_archive_after,omitempty&quot;`</span>
+<span id="L440"><span class="lineNum">     440</span>                 :             :         // GCArchivedAfter (Go duration, e.g. &quot;720h&quot;) permanently deletes</span>
+<span id="L441"><span class="lineNum">     441</span>                 :             :         // sessions that have been archived for longer than this, together with</span>
+<span id="L442"><span class="lineNum">     442</span>                 :             :         // their events, checkpoints and file-change history; artifacts no</span>
+<span id="L443"><span class="lineNum">     443</span>                 :             :         // remaining session references are collected by the same sweep. Empty</span>
+<span id="L444"><span class="lineNum">     444</span>                 :             :         // or &quot;0&quot; disables purging (the default): archived sessions are kept</span>
+<span id="L445"><span class="lineNum">     445</span>                 :             :         // forever.</span>
+<span id="L446"><span class="lineNum">     446</span>                 :             :         GCArchivedAfter string `yaml:&quot;gc_archived_after,omitempty&quot;`</span>
+<span id="L447"><span class="lineNum">     447</span>                 :             :         // TitleModel pins the session-title sidecar model (&quot;provider/model&quot; or</span>
+<span id="L448"><span class="lineNum">     448</span>                 :             :         // a bare model/provider name); empty follows the session's own model.</span>
+<span id="L449"><span class="lineNum">     449</span>                 :             :         // A cheap/fast model is recommended — the sidecar runs once per</span>
+<span id="L450"><span class="lineNum">     450</span>                 :             :         // session, after the first turn.</span>
+<span id="L451"><span class="lineNum">     451</span>                 :             :         TitleModel string `yaml:&quot;title_model,omitempty&quot;`</span>
+<span id="L452"><span class="lineNum">     452</span>                 :             : }</span>
+<span id="L453"><span class="lineNum">     453</span>                 :             : </span>
+<span id="L454"><span class="lineNum">     454</span>                 :             : // Browser configures the headless Chrome browser tool. Enabled is</span>
+<span id="L455"><span class="lineNum">     455</span>                 :             : // nil-typed: absent means &quot;enabled&quot; (the tool registers with defaults),</span>
+<span id="L456"><span class="lineNum">     456</span>                 :             : // an explicit false removes the browser tool from the registry.</span>
+<span id="L457"><span class="lineNum">     457</span>                 :             : type Browser struct {</span>
+<span id="L458"><span class="lineNum">     458</span>                 :             :         Enabled    *bool  `yaml:&quot;enabled,omitempty&quot;`</span>
+<span id="L459"><span class="lineNum">     459</span>                 :             :         ChromePath string `yaml:&quot;chrome_path,omitempty&quot;`</span>
+<span id="L460"><span class="lineNum">     460</span>                 :             :         // CdpURL is a remote Chrome DevTools Protocol endpoint (ws:// or</span>
+<span id="L461"><span class="lineNum">     461</span>                 :             :         // http://). When set, the browser Manager connects to this remote</span>
+<span id="L462"><span class="lineNum">     462</span>                 :             :         // Chrome instead of launching a local process — letting users point</span>
+<span id="L463"><span class="lineNum">     463</span>                 :             :         // loom at an externally managed Chrome (e.g. one with a real profile</span>
+<span id="L464"><span class="lineNum">     464</span>                 :             :         // or anti-detection extensions). Empty means &quot;launch locally&quot;.</span>
+<span id="L465"><span class="lineNum">     465</span>                 :             :         CdpURL         string `yaml:&quot;cdp_url,omitempty&quot;`</span>
+<span id="L466"><span class="lineNum">     466</span>                 :             :         IdleTTL        string `yaml:&quot;idle_ttl,omitempty&quot;`</span>
+<span id="L467"><span class="lineNum">     467</span>                 :             :         NavTimeoutMs   int    `yaml:&quot;nav_timeout_ms,omitempty&quot;`</span>
+<span id="L468"><span class="lineNum">     468</span>                 :             :         ScreenshotQ    int    `yaml:&quot;screenshot_quality,omitempty&quot;`</span>
+<span id="L469"><span class="lineNum">     469</span>                 :             :         ViewportWidth  int    `yaml:&quot;viewport_width,omitempty&quot;`</span>
+<span id="L470"><span class="lineNum">     470</span>                 :             :         ViewportHeight int    `yaml:&quot;viewport_height,omitempty&quot;`</span>
+<span id="L471"><span class="lineNum">     471</span>                 :             : }</span>
+<span id="L472"><span class="lineNum">     472</span>                 :             : </span>
+<span id="L473"><span class="lineNum">     473</span>                 :             : // KnowledgeBase configures the minisearch-backed knowledge base tools</span>
+<span id="L474"><span class="lineNum">     474</span>                 :             : // (kb_search/kb_read). Enabled is nil-typed: absent means &quot;enabled when</span>
+<span id="L475"><span class="lineNum">     475</span>                 :             : // base_url is set&quot; (like image), an explicit false always disables.</span>
+<span id="L476"><span class="lineNum">     476</span>                 :             : // The credential lives inline: a reader-role key is sufficient for the</span>
+<span id="L477"><span class="lineNum">     477</span>                 :             : // read-only tools, and env indirection is intentionally not offered (see</span>
+<span id="L478"><span class="lineNum">     478</span>                 :             : // Provider.APIKey for the inline convention).</span>
+<span id="L479"><span class="lineNum">     479</span>                 :             : type KnowledgeBase struct {</span>
+<span id="L480"><span class="lineNum">     480</span>                 :             :         Enabled *bool  `yaml:&quot;enabled,omitempty&quot;`</span>
+<span id="L481"><span class="lineNum">     481</span>                 :             :         BaseURL string `yaml:&quot;base_url,omitempty&quot;`</span>
+<span id="L482"><span class="lineNum">     482</span>                 :             :         // APIKey is the minisearch bearer token (msk_…). Optional: a</span>
+<span id="L483"><span class="lineNum">     483</span>                 :             :         // minisearch deployment running with --auth=off needs none.</span>
+<span id="L484"><span class="lineNum">     484</span>                 :             :         APIKey string `yaml:&quot;api_key,omitempty&quot;`</span>
+<span id="L485"><span class="lineNum">     485</span>                 :             :         // TimeoutMs bounds each request; 0 keeps the default (10000).</span>
+<span id="L486"><span class="lineNum">     486</span>                 :             :         TimeoutMs int `yaml:&quot;timeout_ms,omitempty&quot;`</span>
+<span id="L487"><span class="lineNum">     487</span>                 :             :         // DefaultTopK is the default result count; 0 keeps the default (5).</span>
+<span id="L488"><span class="lineNum">     488</span>                 :             :         DefaultTopK int `yaml:&quot;default_top_k,omitempty&quot;`</span>
+<span id="L489"><span class="lineNum">     489</span>                 :             :         // Collections lists the searchable collections. At least one is</span>
+<span id="L490"><span class="lineNum">     490</span>                 :             :         // required when enabled; each carries a description surfaced to the</span>
+<span id="L491"><span class="lineNum">     491</span>                 :             :         // model so it can route by topic without a discovery round-trip.</span>
+<span id="L492"><span class="lineNum">     492</span>                 :             :         Collections []KBCollection `yaml:&quot;collections,omitempty&quot;`</span>
+<span id="L493"><span class="lineNum">     493</span>                 :             :         // DefaultCollection selects the default; empty means the first entry.</span>
+<span id="L494"><span class="lineNum">     494</span>                 :             :         DefaultCollection string `yaml:&quot;default_collection,omitempty&quot;`</span>
+<span id="L495"><span class="lineNum">     495</span>                 :             : }</span>
+<span id="L496"><span class="lineNum">     496</span>                 :             : </span>
+<span id="L497"><span class="lineNum">     497</span>                 :             : // KBCollection names one searchable minisearch collection.</span>
+<span id="L498"><span class="lineNum">     498</span>                 :             : type KBCollection struct {</span>
+<span id="L499"><span class="lineNum">     499</span>                 :             :         Name        string `yaml:&quot;name&quot;`</span>
+<span id="L500"><span class="lineNum">     500</span>                 :             :         Description string `yaml:&quot;description,omitempty&quot;`</span>
+<span id="L501"><span class="lineNum">     501</span>                 :             : }</span>
+<span id="L502"><span class="lineNum">     502</span>                 :             : </span>
+<span id="L503"><span class="lineNum">     503</span>                 :             : // MCPServer configures one MCP server connection. The key in MCPServers</span>
+<span id="L504"><span class="lineNum">     504</span>                 :             : // is the server name used for log attribution and tool name</span>
+<span id="L505"><span class="lineNum">     505</span>                 :             : // qualification (mcp__{server}__{tool}). Two transports are supported,</span>
+<span id="L506"><span class="lineNum">     506</span>                 :             : // selected by exactly one of Command or URL:</span>
+<span id="L507"><span class="lineNum">     507</span>                 :             : //   - command: spawn a subprocess and speak MCP over its stdio pipes;</span>
+<span id="L508"><span class="lineNum">     508</span>                 :             : //   - url:     POST JSON-RPC to a remote streamable HTTP endpoint.</span>
+<span id="L509"><span class="lineNum">     509</span>                 :             : //</span>
+<span id="L510"><span class="lineNum">     510</span>                 :             : // It aliases mcp.ServerConfig so the resolved configuration flows into</span>
+<span id="L511"><span class="lineNum">     511</span>                 :             : // the MCP manager without a field-by-field copy (REVIEW R12); the ${VAR}</span>
+<span id="L512"><span class="lineNum">     512</span>                 :             : // header reference resolution documented there happens at load time here.</span>
+<span id="L513"><span class="lineNum">     513</span>                 :             : type MCPServer = mcp.ServerConfig</span>
         </pre>
               </td>
             </tr>

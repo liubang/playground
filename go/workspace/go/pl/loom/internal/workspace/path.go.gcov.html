@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -149,30 +149,30 @@
 <span id="L78"><span class="lineNum">      78</span>                 :             : // extraRoots are additional writable roots (the system scratch dirs —</span>
 <span id="L79"><span class="lineNum">      79</span>                 :             : // ScratchDirs). Every root is resolved to an absolute, symlink-free path.</span>
 <span id="L80"><span class="lineNum">      80</span>                 :             : func NewPathValidator(root string, extraRoots ...string) (*PathValidator, error) {</span>
-<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC tlaBgGNC">         254 :         abs, err := filepath.Abs(root)</span></span>
-<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">         254 :         if err != nil {</span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC tlaBgGNC">         270 :         abs, err := filepath.Abs(root)</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">         270 :         if err != nil {</span></span>
 <span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, fmt.Errorf(&quot;abs path: %w&quot;, err)</span></span>
 <span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC tlaBgGNC">         254 :         resolved, err := filepath.EvalSymlinks(abs)</span></span>
-<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">         254 :         if err != nil {</span></span>
+<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC tlaBgGNC">         270 :         resolved, err := filepath.EvalSymlinks(abs)</span></span>
+<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">         270 :         if err != nil {</span></span>
 <span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, fmt.Errorf(&quot;eval symlinks: %w&quot;, err)</span></span>
 <span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC tlaBgGNC">         254 :         seen := map[string]bool{resolved: true}</span></span>
-<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">         254 :         extra := make([]string, 0, len(extraRoots))</span></span>
-<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">         254 :         for _, r := range extraRoots {</span></span>
-<span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaGNC">          31 :                 if c := Canonicalize(r); c != &quot;&quot; &amp;&amp; !seen[c] {</span></span>
-<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">          31 :                         seen[c] = true</span></span>
-<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">          31 :                         extra = append(extra, c)</span></span>
-<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">          31 :                 }</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC tlaBgGNC">         270 :         seen := map[string]bool{resolved: true}</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">         270 :         extra := make([]string, 0, len(extraRoots))</span></span>
+<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">         270 :         for _, r := range extraRoots {</span></span>
+<span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaGNC">          40 :                 if c := Canonicalize(r); c != &quot;&quot; &amp;&amp; !seen[c] {</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">          40 :                         seen[c] = true</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">          40 :                         extra = append(extra, c)</span></span>
+<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">          40 :                 }</span></span>
 <span id="L96"><span class="lineNum">      96</span>                 :             :         }</span>
-<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">         254 :         return &amp;PathValidator{root: resolved, extraRoots: extra}, nil</span></span>
+<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">         270 :         return &amp;PathValidator{root: resolved, extraRoots: extra}, nil</span></span>
 <span id="L98"><span class="lineNum">      98</span>                 :             : }</span>
 <span id="L99"><span class="lineNum">      99</span>                 :             : </span>
 <span id="L100"><span class="lineNum">     100</span>                 :             : // matchRoot returns the root (workspace or extra) containing path.</span>
 <span id="L101"><span class="lineNum">     101</span>                 :             : func (v *PathValidator) matchRoot(path string) (string, bool) {</span>
-<span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaGNC">         210 :         if isUnderRoot(path, v.root) {</span></span>
-<span id="L103"><span class="lineNum">     103</span>                 :<span class="tlaGNC">         176 :                 return v.root, true</span></span>
-<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaGNC">         176 :         }</span></span>
+<span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaGNC">         241 :         if isUnderRoot(path, v.root) {</span></span>
+<span id="L103"><span class="lineNum">     103</span>                 :<span class="tlaGNC">         207 :                 return v.root, true</span></span>
+<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaGNC">         207 :         }</span></span>
 <span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC">          34 :         for _, r := range v.extraRoots {</span></span>
 <span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">           6 :                 if isUnderRoot(path, r) {</span></span>
 <span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">           4 :                         return r, true</span></span>
@@ -187,10 +187,10 @@
 <span id="L116"><span class="lineNum">     116</span>                 :             : // resolve through their nearest existing ancestor. Callers pass absolute</span>
 <span id="L117"><span class="lineNum">     117</span>                 :             : // paths (relative input is cleaned but not made absolute).</span>
 <span id="L118"><span class="lineNum">     118</span>                 :             : func Canonicalize(path string) string {</span>
-<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">         528 :         clean := filepath.Clean(path)</span></span>
-<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">         528 :         if resolved, err := filepath.EvalSymlinks(clean); err == nil {</span></span>
-<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">         268 :                 return resolved</span></span>
-<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">         268 :         }</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">         627 :         clean := filepath.Clean(path)</span></span>
+<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">         627 :         if resolved, err := filepath.EvalSymlinks(clean); err == nil {</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">         367 :                 return resolved</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">         367 :         }</span></span>
 <span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">         260 :         dir := clean</span></span>
 <span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">         260 :         var tail []string</span></span>
 <span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">         260 :         for {</span></span>
@@ -215,39 +215,39 @@
 <span id="L144"><span class="lineNum">     144</span>                 :             : // profile and this validator — derive their temp-dir allowance from</span>
 <span id="L145"><span class="lineNum">     145</span>                 :             : // this list, so they can never disagree.</span>
 <span id="L146"><span class="lineNum">     146</span>                 :             : func ScratchDirs() []string {</span>
-<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">          64 :         dirs := []string{Canonicalize(os.TempDir())}</span></span>
-<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">          64 :         if tmp := Canonicalize(string(filepath.Separator) + &quot;tmp&quot;); tmp != dirs[0] {</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">          82 :         dirs := []string{Canonicalize(os.TempDir())}</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">          82 :         if tmp := Canonicalize(string(filepath.Separator) + &quot;tmp&quot;); tmp != dirs[0] {</span></span>
 <span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 dirs = append(dirs, tmp)</span></span>
 <span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC tlaBgGNC">          64 :         return dirs</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC tlaBgGNC">          82 :         return dirs</span></span>
 <span id="L152"><span class="lineNum">     152</span>                 :             : }</span>
 <span id="L153"><span class="lineNum">     153</span>                 :             : </span>
 <span id="L154"><span class="lineNum">     154</span>                 :             : // Root returns the workspace root.</span>
-<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">         636 : func (v *PathValidator) Root() string { return v.root }</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">         693 : func (v *PathValidator) Root() string { return v.root }</span></span>
 <span id="L156"><span class="lineNum">     156</span>                 :             : </span>
 <span id="L157"><span class="lineNum">     157</span>                 :             : // resolve cleans path, joins it with the workspace root when relative,</span>
 <span id="L158"><span class="lineNum">     158</span>                 :             : // and resolves it to a canonical symlink-free absolute path (non-existent</span>
 <span id="L159"><span class="lineNum">     159</span>                 :             : // tails resolve through their nearest existing ancestor).</span>
 <span id="L160"><span class="lineNum">     160</span>                 :             : func (v *PathValidator) resolve(path string) (string, error) {</span>
 <span id="L161"><span class="lineNum">     161</span>                 :             :         // Reject null bytes</span>
-<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">         506 :         if strings.ContainsRune(path, 0) {</span></span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">         542 :         if strings.ContainsRune(path, 0) {</span></span>
 <span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">           1 :                 return &quot;&quot;, fmt.Errorf(&quot;null byte in path&quot;)</span></span>
 <span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">           1 :         }</span></span>
 <span id="L165"><span class="lineNum">     165</span>                 :             : </span>
 <span id="L166"><span class="lineNum">     166</span>                 :             :         // Clean the path</span>
-<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">         505 :         cleaned := filepath.Clean(path)</span></span>
-<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">         505 : </span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">         541 :         cleaned := filepath.Clean(path)</span></span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">         541 : </span></span>
 <span id="L169"><span class="lineNum">     169</span>                 :             :         // Join with root if not absolute</span>
-<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">         505 :         var full string</span></span>
-<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">         505 :         if filepath.IsAbs(cleaned) {</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">         541 :         var full string</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">         541 :         if filepath.IsAbs(cleaned) {</span></span>
 <span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC">         243 :                 full = cleaned</span></span>
 <span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">         243 :         } else {</span></span>
-<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">         262 :                 full = filepath.Join(v.root, cleaned)</span></span>
-<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">         262 :         }</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">         298 :                 full = filepath.Join(v.root, cleaned)</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">         298 :         }</span></span>
 <span id="L176"><span class="lineNum">     176</span>                 :             : </span>
 <span id="L177"><span class="lineNum">     177</span>                 :             :         // Resolve symlinks (if the file exists)</span>
-<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">         505 :         resolved, err := filepath.EvalSymlinks(full)</span></span>
-<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">         505 :         if err != nil {</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">         541 :         resolved, err := filepath.EvalSymlinks(full)</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">         541 :         if err != nil {</span></span>
 <span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">          23 :                 if !os.IsNotExist(err) {</span></span>
 <span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return &quot;&quot;, fmt.Errorf(&quot;eval symlinks: %w&quot;, err)</span></span>
 <span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
@@ -257,23 +257,23 @@
 <span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return &quot;&quot;, fmt.Errorf(&quot;resolve non-existent path: %w&quot;, err)</span></span>
 <span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
 <span id="L188"><span class="lineNum">     188</span>                 :             :         }</span>
-<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC tlaBgGNC">         505 :         return resolved, nil</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC tlaBgGNC">         541 :         return resolved, nil</span></span>
 <span id="L190"><span class="lineNum">     190</span>                 :             : }</span>
 <span id="L191"><span class="lineNum">     191</span>                 :             : </span>
 <span id="L192"><span class="lineNum">     192</span>                 :             : // Validate checks that the given path is within the workspace root.</span>
 <span id="L193"><span class="lineNum">     193</span>                 :             : // It cleans the path, resolves symlinks, and ensures the result is under root.</span>
 <span id="L194"><span class="lineNum">     194</span>                 :             : func (v *PathValidator) Validate(path string) (string, error) {</span>
-<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">         119 :         resolved, err := v.resolve(path)</span></span>
-<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">         119 :         if err != nil {</span></span>
+<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">         137 :         resolved, err := v.resolve(path)</span></span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">         137 :         if err != nil {</span></span>
 <span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">           1 :                 return &quot;&quot;, err</span></span>
 <span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC">           1 :         }</span></span>
 <span id="L199"><span class="lineNum">     199</span>                 :             : </span>
 <span id="L200"><span class="lineNum">     200</span>                 :             :         // Ensure resolved path is under an allowed root</span>
-<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC">         118 :         if _, ok := v.matchRoot(resolved); !ok {</span></span>
+<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC">         136 :         if _, ok := v.matchRoot(resolved); !ok {</span></span>
 <span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">           8 :                 return &quot;&quot;, fmt.Errorf(&quot;path %q escapes workspace root %q&quot;, path, v.root)</span></span>
 <span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">           8 :         }</span></span>
 <span id="L204"><span class="lineNum">     204</span>                 :             : </span>
-<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">         110 :         return resolved, nil</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">         128 :         return resolved, nil</span></span>
 <span id="L206"><span class="lineNum">     206</span>                 :             : }</span>
 <span id="L207"><span class="lineNum">     207</span>                 :             : </span>
 <span id="L208"><span class="lineNum">     208</span>                 :             : // ValidateRead resolves path for READ-ONLY access. Unlike Validate it</span>
@@ -284,36 +284,36 @@
 <span id="L213"><span class="lineNum">     213</span>                 :             : // Writes must keep using Validate/ResolveLexical: read alignment never</span>
 <span id="L214"><span class="lineNum">     214</span>                 :             : // widens the write boundary.</span>
 <span id="L215"><span class="lineNum">     215</span>                 :             : func (v *PathValidator) ValidateRead(path string) (string, error) {</span>
-<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">         387 :         resolved, err := v.resolve(path)</span></span>
-<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">         387 :         if err != nil {</span></span>
+<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">         405 :         resolved, err := v.resolve(path)</span></span>
+<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">         405 :         if err != nil {</span></span>
 <span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;&quot;, err</span></span>
 <span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC tlaBgGNC">         387 :         if IsSensitiveAbsolute(resolved) {</span></span>
+<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaGNC tlaBgGNC">         405 :         if IsSensitiveAbsolute(resolved) {</span></span>
 <span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaGNC">          14 :                 return &quot;&quot;, fmt.Errorf(&quot;path %q is in a sensitive location&quot;, path)</span></span>
 <span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">          14 :         }</span></span>
-<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC">         373 :         return resolved, nil</span></span>
+<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC">         391 :         return resolved, nil</span></span>
 <span id="L224"><span class="lineNum">     224</span>                 :             : }</span>
 <span id="L225"><span class="lineNum">     225</span>                 :             : </span>
 <span id="L226"><span class="lineNum">     226</span>                 :             : // ResolveLexical normalizes a path under the workspace without following symlinks.</span>
 <span id="L227"><span class="lineNum">     227</span>                 :             : func (v *PathValidator) ResolveLexical(path string) (ResolvedPath, error) {</span>
-<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">          81 :         if strings.TrimSpace(path) == &quot;&quot; {</span></span>
+<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">          94 :         if strings.TrimSpace(path) == &quot;&quot; {</span></span>
 <span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return ResolvedPath{}, fmt.Errorf(&quot;path is required&quot;)</span></span>
 <span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC tlaBgGNC">          81 :         if strings.ContainsRune(path, 0) {</span></span>
+<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC tlaBgGNC">          94 :         if strings.ContainsRune(path, 0) {</span></span>
 <span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return ResolvedPath{}, fmt.Errorf(&quot;null byte in path&quot;)</span></span>
 <span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaUNC">           0 :         }</span></span>
 <span id="L234"><span class="lineNum">     234</span>                 :             : </span>
-<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC tlaBgGNC">          81 :         cleaned := filepath.Clean(path)</span></span>
-<span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaGNC">          81 :         var full string</span></span>
-<span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaGNC">          81 :         if filepath.IsAbs(cleaned) {</span></span>
-<span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">          41 :                 full = cleaned</span></span>
-<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">          41 :         } else {</span></span>
-<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">          40 :                 full = filepath.Join(v.root, cleaned)</span></span>
-<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">          40 :         }</span></span>
-<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">          81 :         full = filepath.Clean(full)</span></span>
-<span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaGNC">          81 :         root, ok := v.matchRoot(full)</span></span>
-<span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaGNC">          81 :         abs := full</span></span>
-<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">          81 :         if !ok {</span></span>
+<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC tlaBgGNC">          94 :         cleaned := filepath.Clean(path)</span></span>
+<span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaGNC">          94 :         var full string</span></span>
+<span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaGNC">          94 :         if filepath.IsAbs(cleaned) {</span></span>
+<span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">          42 :                 full = cleaned</span></span>
+<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">          42 :         } else {</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">          52 :                 full = filepath.Join(v.root, cleaned)</span></span>
+<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">          52 :         }</span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">          94 :         full = filepath.Clean(full)</span></span>
+<span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaGNC">          94 :         root, ok := v.matchRoot(full)</span></span>
+<span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaGNC">          94 :         abs := full</span></span>
+<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">          94 :         if !ok {</span></span>
 <span id="L246"><span class="lineNum">     246</span>                 :             :                 // External absolute paths may reach an allowed scratch root</span>
 <span id="L247"><span class="lineNum">     247</span>                 :             :                 // through a symlinked prefix (macOS /tmp → /private/tmp): decide</span>
 <span id="L248"><span class="lineNum">     248</span>                 :             :                 // and resolve against the canonical form. Workspace-internal</span>
@@ -326,24 +326,24 @@
 <span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC">          11 :                 }</span></span>
 <span id="L256"><span class="lineNum">     256</span>                 :             :         }</span>
 <span id="L257"><span class="lineNum">     257</span>                 :             : </span>
-<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC">          70 :         rel, err := filepath.Rel(root, abs)</span></span>
-<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">          70 :         if err != nil {</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC">          83 :         rel, err := filepath.Rel(root, abs)</span></span>
+<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">          83 :         if err != nil {</span></span>
 <span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return ResolvedPath{}, fmt.Errorf(&quot;rel path: %w&quot;, err)</span></span>
 <span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC tlaBgGNC">          70 :         if ContainsSensitiveComponent(rel) {</span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC tlaBgGNC">          83 :         if ContainsSensitiveComponent(rel) {</span></span>
 <span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC">           7 :                 return ResolvedPath{}, fmt.Errorf(&quot;path %q contains a sensitive component&quot;, path)</span></span>
 <span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">           7 :         }</span></span>
 <span id="L265"><span class="lineNum">     265</span>                 :             : </span>
-<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaGNC">          63 :         if root != v.root {</span></span>
+<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaGNC">          76 :         if root != v.root {</span></span>
 <span id="L267"><span class="lineNum">     267</span>                 :             :                 // Extra root (system scratch): no workspace-relative form — the</span>
 <span id="L268"><span class="lineNum">     268</span>                 :             :                 // display path is the absolute path itself.</span>
 <span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaGNC">           2 :                 return ResolvedPath{Absolute: abs, Display: abs}, nil</span></span>
 <span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaGNC">           2 :         }</span></span>
-<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">          61 :         return ResolvedPath{</span></span>
-<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">          61 :                 Absolute: abs,</span></span>
-<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">          61 :                 Relative: rel,</span></span>
-<span id="L274"><span class="lineNum">     274</span>                 :<span class="tlaGNC">          61 :                 Display:  DisplayPath(rel),</span></span>
-<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaGNC">          61 :         }, nil</span></span>
+<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">          74 :         return ResolvedPath{</span></span>
+<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">          74 :                 Absolute: abs,</span></span>
+<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">          74 :                 Relative: rel,</span></span>
+<span id="L274"><span class="lineNum">     274</span>                 :<span class="tlaGNC">          74 :                 Display:  DisplayPath(rel),</span></span>
+<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaGNC">          74 :         }, nil</span></span>
 <span id="L276"><span class="lineNum">     276</span>                 :             : }</span>
 <span id="L277"><span class="lineNum">     277</span>                 :             : </span>
 <span id="L278"><span class="lineNum">     278</span>                 :             : // ResolveWrite resolves a WRITE target. Paths under the workspace or</span>
@@ -356,10 +356,10 @@
 <span id="L285"><span class="lineNum">     285</span>                 :             : // boundary. Callers MUST route external writes through the policy layer</span>
 <span id="L286"><span class="lineNum">     286</span>                 :             : // (approval, writable-path rules); resolution alone is not an approval.</span>
 <span id="L287"><span class="lineNum">     287</span>                 :             : func (v *PathValidator) ResolveWrite(path string) (resolved ResolvedPath, external bool, err error) {</span>
-<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC">          50 :         resolved, err = v.ResolveLexical(path)</span></span>
-<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">          50 :         if err == nil {</span></span>
-<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC">          38 :                 return resolved, false, nil</span></span>
-<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaGNC">          38 :         }</span></span>
+<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC">          62 :         resolved, err = v.ResolveLexical(path)</span></span>
+<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">          62 :         if err == nil {</span></span>
+<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC">          50 :                 return resolved, false, nil</span></span>
+<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaGNC">          50 :         }</span></span>
 <span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaGNC">          12 :         canonical, readErr := v.ValidateRead(path)</span></span>
 <span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC">          12 :         if readErr != nil {</span></span>
 <span id="L294"><span class="lineNum">     294</span>                 :             :                 // The ValidateRead error is the operative one: &quot;escapes the</span>
@@ -372,11 +372,11 @@
 <span id="L301"><span class="lineNum">     301</span>                 :             : </span>
 <span id="L302"><span class="lineNum">     302</span>                 :             : // Snapshot returns a secure regular-file snapshot for a workspace path.</span>
 <span id="L303"><span class="lineNum">     303</span>                 :             : func (v *PathValidator) Snapshot(path string) (Snapshot, error) {</span>
-<span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaGNC">           9 :         resolved, err := v.ResolveLexical(path)</span></span>
-<span id="L305"><span class="lineNum">     305</span>                 :<span class="tlaGNC">           9 :         if err != nil {</span></span>
+<span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaGNC">          10 :         resolved, err := v.ResolveLexical(path)</span></span>
+<span id="L305"><span class="lineNum">     305</span>                 :<span class="tlaGNC">          10 :         if err != nil {</span></span>
 <span id="L306"><span class="lineNum">     306</span>                 :<span class="tlaGNC">           1 :                 return Snapshot{}, err</span></span>
 <span id="L307"><span class="lineNum">     307</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L308"><span class="lineNum">     308</span>                 :<span class="tlaGNC">           8 :         return v.SnapshotResolved(resolved)</span></span>
+<span id="L308"><span class="lineNum">     308</span>                 :<span class="tlaGNC">           9 :         return v.SnapshotResolved(resolved)</span></span>
 <span id="L309"><span class="lineNum">     309</span>                 :             : }</span>
 <span id="L310"><span class="lineNum">     310</span>                 :             : </span>
 <span id="L311"><span class="lineNum">     311</span>                 :             : // SnapshotResolved snapshots an already-resolved path. It is the shared</span>
@@ -384,14 +384,14 @@
 <span id="L313"><span class="lineNum">     313</span>                 :             : // approved external writes via ResolveWrite) skip re-resolution — the</span>
 <span id="L314"><span class="lineNum">     314</span>                 :             : // signature-bound ResolvedPath IS the vetted input.</span>
 <span id="L315"><span class="lineNum">     315</span>                 :             : func (v *PathValidator) SnapshotResolved(resolved ResolvedPath) (Snapshot, error) {</span>
-<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaGNC">          59 :         info, err := ensurePathChain(resolved.Absolute, true)</span></span>
-<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaGNC">          59 :         if err != nil {</span></span>
-<span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaGNC">          11 :                 return Snapshot{}, err</span></span>
-<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">          11 :         }</span></span>
-<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC">          48 :         if !info.Mode().IsRegular() {</span></span>
+<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaGNC">          72 :         info, err := ensurePathChain(resolved.Absolute, true)</span></span>
+<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaGNC">          72 :         if err != nil {</span></span>
+<span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaGNC">          14 :                 return Snapshot{}, err</span></span>
+<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">          14 :         }</span></span>
+<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC">          58 :         if !info.Mode().IsRegular() {</span></span>
 <span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return Snapshot{}, fmt.Errorf(&quot;path %q is not a regular file&quot;, resolved.Display)</span></span>
 <span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC tlaBgGNC">          48 :         return snapshotByOpen(resolved)</span></span>
+<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC tlaBgGNC">          58 :         return snapshotByOpen(resolved)</span></span>
 <span id="L324"><span class="lineNum">     324</span>                 :             : }</span>
 <span id="L325"><span class="lineNum">     325</span>                 :             : </span>
 <span id="L326"><span class="lineNum">     326</span>                 :             : // SHA256 returns the current hash of a secure regular workspace file.</span>
@@ -513,14 +513,14 @@
 <span id="L442"><span class="lineNum">     442</span>                 :             : // isUnderRoot checks that path is under root, handling trailing separators.</span>
 <span id="L443"><span class="lineNum">     443</span>                 :             : func isUnderRoot(path, root string) bool {</span>
 <span id="L444"><span class="lineNum">     444</span>                 :             :         // Ensure both have trailing separator for prefix comparison</span>
-<span id="L445"><span class="lineNum">     445</span>                 :<span class="tlaGNC">        3175 :         normalized := filepath.Clean(path)</span></span>
-<span id="L446"><span class="lineNum">     446</span>                 :<span class="tlaGNC">        3175 :         rootNorm := filepath.Clean(root)</span></span>
-<span id="L447"><span class="lineNum">     447</span>                 :<span class="tlaGNC">        3175 : </span></span>
-<span id="L448"><span class="lineNum">     448</span>                 :<span class="tlaGNC">        3175 :         if normalized == rootNorm {</span></span>
-<span id="L449"><span class="lineNum">     449</span>                 :<span class="tlaGNC">          79 :                 return true</span></span>
-<span id="L450"><span class="lineNum">     450</span>                 :<span class="tlaGNC">          79 :         }</span></span>
+<span id="L445"><span class="lineNum">     445</span>                 :<span class="tlaGNC">        3206 :         normalized := filepath.Clean(path)</span></span>
+<span id="L446"><span class="lineNum">     446</span>                 :<span class="tlaGNC">        3206 :         rootNorm := filepath.Clean(root)</span></span>
+<span id="L447"><span class="lineNum">     447</span>                 :<span class="tlaGNC">        3206 : </span></span>
+<span id="L448"><span class="lineNum">     448</span>                 :<span class="tlaGNC">        3206 :         if normalized == rootNorm {</span></span>
+<span id="L449"><span class="lineNum">     449</span>                 :<span class="tlaGNC">          91 :                 return true</span></span>
+<span id="L450"><span class="lineNum">     450</span>                 :<span class="tlaGNC">          91 :         }</span></span>
 <span id="L451"><span class="lineNum">     451</span>                 :             : </span>
-<span id="L452"><span class="lineNum">     452</span>                 :<span class="tlaGNC">        3096 :         return strings.HasPrefix(normalized, rootNorm+string(filepath.Separator))</span></span>
+<span id="L452"><span class="lineNum">     452</span>                 :<span class="tlaGNC">        3115 :         return strings.HasPrefix(normalized, rootNorm+string(filepath.Separator))</span></span>
 <span id="L453"><span class="lineNum">     453</span>                 :             : }</span>
 <span id="L454"><span class="lineNum">     454</span>                 :             : </span>
 <span id="L455"><span class="lineNum">     455</span>                 :             : // resolveNonExistent resolves symlinks for a non-existent path by walking</span>
@@ -554,16 +554,16 @@
 <span id="L483"><span class="lineNum">     483</span>                 :             : // DisplayPath renders a workspace-relative path for display: cleaned and</span>
 <span id="L484"><span class="lineNum">     484</span>                 :             : // slash-normalized, with the workspace root itself shown as &quot;.&quot;.</span>
 <span id="L485"><span class="lineNum">     485</span>                 :             : func DisplayPath(rel string) string {</span>
-<span id="L486"><span class="lineNum">     486</span>                 :<span class="tlaGNC">         442 :         clean := filepath.Clean(rel)</span></span>
-<span id="L487"><span class="lineNum">     487</span>                 :<span class="tlaGNC">         442 :         if clean == &quot;.&quot; || clean == string(filepath.Separator) {</span></span>
-<span id="L488"><span class="lineNum">     488</span>                 :<span class="tlaGNC">         107 :                 return &quot;.&quot;</span></span>
-<span id="L489"><span class="lineNum">     489</span>                 :<span class="tlaGNC">         107 :         }</span></span>
-<span id="L490"><span class="lineNum">     490</span>                 :<span class="tlaGNC">         335 :         return filepath.ToSlash(clean)</span></span>
+<span id="L486"><span class="lineNum">     486</span>                 :<span class="tlaGNC">         485 :         clean := filepath.Clean(rel)</span></span>
+<span id="L487"><span class="lineNum">     487</span>                 :<span class="tlaGNC">         485 :         if clean == &quot;.&quot; || clean == string(filepath.Separator) {</span></span>
+<span id="L488"><span class="lineNum">     488</span>                 :<span class="tlaGNC">         131 :                 return &quot;.&quot;</span></span>
+<span id="L489"><span class="lineNum">     489</span>                 :<span class="tlaGNC">         131 :         }</span></span>
+<span id="L490"><span class="lineNum">     490</span>                 :<span class="tlaGNC">         354 :         return filepath.ToSlash(clean)</span></span>
 <span id="L491"><span class="lineNum">     491</span>                 :             : }</span>
 <span id="L492"><span class="lineNum">     492</span>                 :             : </span>
 <span id="L493"><span class="lineNum">     493</span>                 :             : func ensurePathChain(path string, requireLeaf bool) (fs.FileInfo, error) {</span>
-<span id="L494"><span class="lineNum">     494</span>                 :<span class="tlaGNC">         156 :         clean := filepath.Clean(path)</span></span>
-<span id="L495"><span class="lineNum">     495</span>                 :<span class="tlaGNC">         156 :         if !filepath.IsAbs(clean) {</span></span>
+<span id="L494"><span class="lineNum">     494</span>                 :<span class="tlaGNC">         169 :         clean := filepath.Clean(path)</span></span>
+<span id="L495"><span class="lineNum">     495</span>                 :<span class="tlaGNC">         169 :         if !filepath.IsAbs(clean) {</span></span>
 <span id="L496"><span class="lineNum">     496</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 abs, err := filepath.Abs(clean)</span></span>
 <span id="L497"><span class="lineNum">     497</span>                 :<span class="tlaUNC">           0 :                 if err != nil {</span></span>
 <span id="L498"><span class="lineNum">     498</span>                 :<span class="tlaUNC">           0 :                         return nil, fmt.Errorf(&quot;abs path: %w&quot;, err)</span></span>
@@ -571,77 +571,77 @@
 <span id="L500"><span class="lineNum">     500</span>                 :<span class="tlaUNC">           0 :                 clean = abs</span></span>
 <span id="L501"><span class="lineNum">     501</span>                 :             :         }</span>
 <span id="L502"><span class="lineNum">     502</span>                 :             : </span>
-<span id="L503"><span class="lineNum">     503</span>                 :<span class="tlaGNC tlaBgGNC">         156 :         parts := make([]string, 0, 8)</span></span>
-<span id="L504"><span class="lineNum">     504</span>                 :<span class="tlaGNC">         156 :         for current := clean; ; current = filepath.Dir(current) {</span></span>
-<span id="L505"><span class="lineNum">     505</span>                 :<span class="tlaGNC">         887 :                 parts = append(parts, current)</span></span>
-<span id="L506"><span class="lineNum">     506</span>                 :<span class="tlaGNC">         887 :                 parent := filepath.Dir(current)</span></span>
-<span id="L507"><span class="lineNum">     507</span>                 :<span class="tlaGNC">         887 :                 if parent == current {</span></span>
-<span id="L508"><span class="lineNum">     508</span>                 :<span class="tlaGNC">         156 :                         break</span></span>
+<span id="L503"><span class="lineNum">     503</span>                 :<span class="tlaGNC tlaBgGNC">         169 :         parts := make([]string, 0, 8)</span></span>
+<span id="L504"><span class="lineNum">     504</span>                 :<span class="tlaGNC">         169 :         for current := clean; ; current = filepath.Dir(current) {</span></span>
+<span id="L505"><span class="lineNum">     505</span>                 :<span class="tlaGNC">         952 :                 parts = append(parts, current)</span></span>
+<span id="L506"><span class="lineNum">     506</span>                 :<span class="tlaGNC">         952 :                 parent := filepath.Dir(current)</span></span>
+<span id="L507"><span class="lineNum">     507</span>                 :<span class="tlaGNC">         952 :                 if parent == current {</span></span>
+<span id="L508"><span class="lineNum">     508</span>                 :<span class="tlaGNC">         169 :                         break</span></span>
 <span id="L509"><span class="lineNum">     509</span>                 :             :                 }</span>
 <span id="L510"><span class="lineNum">     510</span>                 :             :         }</span>
-<span id="L511"><span class="lineNum">     511</span>                 :<span class="tlaGNC">         156 :         for i, j := 0, len(parts)-1; i &lt; j; i, j = i+1, j-1 {</span></span>
-<span id="L512"><span class="lineNum">     512</span>                 :<span class="tlaGNC">         417 :                 parts[i], parts[j] = parts[j], parts[i]</span></span>
-<span id="L513"><span class="lineNum">     513</span>                 :<span class="tlaGNC">         417 :         }</span></span>
+<span id="L511"><span class="lineNum">     511</span>                 :<span class="tlaGNC">         169 :         for i, j := 0, len(parts)-1; i &lt; j; i, j = i+1, j-1 {</span></span>
+<span id="L512"><span class="lineNum">     512</span>                 :<span class="tlaGNC">         443 :                 parts[i], parts[j] = parts[j], parts[i]</span></span>
+<span id="L513"><span class="lineNum">     513</span>                 :<span class="tlaGNC">         443 :         }</span></span>
 <span id="L514"><span class="lineNum">     514</span>                 :             : </span>
-<span id="L515"><span class="lineNum">     515</span>                 :<span class="tlaGNC">         156 :         for idx, current := range parts {</span></span>
-<span id="L516"><span class="lineNum">     516</span>                 :<span class="tlaGNC">         879 :                 info, err := os.Lstat(current)</span></span>
-<span id="L517"><span class="lineNum">     517</span>                 :<span class="tlaGNC">         879 :                 if err != nil {</span></span>
-<span id="L518"><span class="lineNum">     518</span>                 :<span class="tlaGNC">          28 :                         if os.IsNotExist(err) &amp;&amp; idx == len(parts)-1 &amp;&amp; !requireLeaf {</span></span>
+<span id="L515"><span class="lineNum">     515</span>                 :<span class="tlaGNC">         169 :         for idx, current := range parts {</span></span>
+<span id="L516"><span class="lineNum">     516</span>                 :<span class="tlaGNC">         944 :                 info, err := os.Lstat(current)</span></span>
+<span id="L517"><span class="lineNum">     517</span>                 :<span class="tlaGNC">         944 :                 if err != nil {</span></span>
+<span id="L518"><span class="lineNum">     518</span>                 :<span class="tlaGNC">          31 :                         if os.IsNotExist(err) &amp;&amp; idx == len(parts)-1 &amp;&amp; !requireLeaf {</span></span>
 <span id="L519"><span class="lineNum">     519</span>                 :<span class="tlaGNC">          19 :                                 return nil, nil</span></span>
 <span id="L520"><span class="lineNum">     520</span>                 :<span class="tlaGNC">          19 :                         }</span></span>
-<span id="L521"><span class="lineNum">     521</span>                 :<span class="tlaGNC">           9 :                         return nil, fmt.Errorf(&quot;lstat %q: %w&quot;, current, err)</span></span>
+<span id="L521"><span class="lineNum">     521</span>                 :<span class="tlaGNC">          12 :                         return nil, fmt.Errorf(&quot;lstat %q: %w&quot;, current, err)</span></span>
 <span id="L522"><span class="lineNum">     522</span>                 :             :                 }</span>
-<span id="L523"><span class="lineNum">     523</span>                 :<span class="tlaGNC">         851 :                 if info.Mode()&amp;os.ModeSymlink != 0 {</span></span>
+<span id="L523"><span class="lineNum">     523</span>                 :<span class="tlaGNC">         913 :                 if info.Mode()&amp;os.ModeSymlink != 0 {</span></span>
 <span id="L524"><span class="lineNum">     524</span>                 :<span class="tlaGNC">           3 :                         return nil, fmt.Errorf(&quot;path %q contains a symlink&quot;, current)</span></span>
 <span id="L525"><span class="lineNum">     525</span>                 :<span class="tlaGNC">           3 :                 }</span></span>
-<span id="L526"><span class="lineNum">     526</span>                 :<span class="tlaGNC">         848 :                 if idx &lt; len(parts)-1 &amp;&amp; !info.IsDir() {</span></span>
+<span id="L526"><span class="lineNum">     526</span>                 :<span class="tlaGNC">         910 :                 if idx &lt; len(parts)-1 &amp;&amp; !info.IsDir() {</span></span>
 <span id="L527"><span class="lineNum">     527</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return nil, fmt.Errorf(&quot;path component %q is not a directory&quot;, current)</span></span>
 <span id="L528"><span class="lineNum">     528</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
-<span id="L529"><span class="lineNum">     529</span>                 :<span class="tlaGNC tlaBgGNC">         848 :                 if idx == len(parts)-1 {</span></span>
-<span id="L530"><span class="lineNum">     530</span>                 :<span class="tlaGNC">         125 :                         return info, nil</span></span>
-<span id="L531"><span class="lineNum">     531</span>                 :<span class="tlaGNC">         125 :                 }</span></span>
+<span id="L529"><span class="lineNum">     529</span>                 :<span class="tlaGNC tlaBgGNC">         910 :                 if idx == len(parts)-1 {</span></span>
+<span id="L530"><span class="lineNum">     530</span>                 :<span class="tlaGNC">         135 :                         return info, nil</span></span>
+<span id="L531"><span class="lineNum">     531</span>                 :<span class="tlaGNC">         135 :                 }</span></span>
 <span id="L532"><span class="lineNum">     532</span>                 :             :         }</span>
 <span id="L533"><span class="lineNum">     533</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return nil, fmt.Errorf(&quot;path %q could not be validated&quot;, clean)</span></span>
 <span id="L534"><span class="lineNum">     534</span>                 :             : }</span>
 <span id="L535"><span class="lineNum">     535</span>                 :             : </span>
 <span id="L536"><span class="lineNum">     536</span>                 :             : func snapshotByOpen(path ResolvedPath) (Snapshot, error) {</span>
-<span id="L537"><span class="lineNum">     537</span>                 :<span class="tlaGNC tlaBgGNC">          89 :         lstatInfo, err := os.Lstat(path.Absolute)</span></span>
-<span id="L538"><span class="lineNum">     538</span>                 :<span class="tlaGNC">          89 :         if err != nil {</span></span>
+<span id="L537"><span class="lineNum">     537</span>                 :<span class="tlaGNC tlaBgGNC">          99 :         lstatInfo, err := os.Lstat(path.Absolute)</span></span>
+<span id="L538"><span class="lineNum">     538</span>                 :<span class="tlaGNC">          99 :         if err != nil {</span></span>
 <span id="L539"><span class="lineNum">     539</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return Snapshot{}, fmt.Errorf(&quot;lstat file: %w&quot;, err)</span></span>
 <span id="L540"><span class="lineNum">     540</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L541"><span class="lineNum">     541</span>                 :<span class="tlaGNC tlaBgGNC">          89 :         if lstatInfo.Mode()&amp;os.ModeSymlink != 0 {</span></span>
+<span id="L541"><span class="lineNum">     541</span>                 :<span class="tlaGNC tlaBgGNC">          99 :         if lstatInfo.Mode()&amp;os.ModeSymlink != 0 {</span></span>
 <span id="L542"><span class="lineNum">     542</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return Snapshot{}, fmt.Errorf(&quot;path %q is a symlink&quot;, path.Display)</span></span>
 <span id="L543"><span class="lineNum">     543</span>                 :<span class="tlaUNC">           0 :         }</span></span>
 <span id="L544"><span class="lineNum">     544</span>                 :             : </span>
-<span id="L545"><span class="lineNum">     545</span>                 :<span class="tlaGNC tlaBgGNC">          89 :         file, err := os.Open(path.Absolute)</span></span>
-<span id="L546"><span class="lineNum">     546</span>                 :<span class="tlaGNC">          89 :         if err != nil {</span></span>
+<span id="L545"><span class="lineNum">     545</span>                 :<span class="tlaGNC tlaBgGNC">          99 :         file, err := os.Open(path.Absolute)</span></span>
+<span id="L546"><span class="lineNum">     546</span>                 :<span class="tlaGNC">          99 :         if err != nil {</span></span>
 <span id="L547"><span class="lineNum">     547</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return Snapshot{}, fmt.Errorf(&quot;open file: %w&quot;, err)</span></span>
 <span id="L548"><span class="lineNum">     548</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L549"><span class="lineNum">     549</span>                 :<span class="tlaGNC tlaBgGNC">          89 :         defer file.Close()</span></span>
-<span id="L550"><span class="lineNum">     550</span>                 :<span class="tlaGNC">          89 : </span></span>
-<span id="L551"><span class="lineNum">     551</span>                 :<span class="tlaGNC">          89 :         info, err := file.Stat()</span></span>
-<span id="L552"><span class="lineNum">     552</span>                 :<span class="tlaGNC">          89 :         if err != nil {</span></span>
+<span id="L549"><span class="lineNum">     549</span>                 :<span class="tlaGNC tlaBgGNC">          99 :         defer file.Close()</span></span>
+<span id="L550"><span class="lineNum">     550</span>                 :<span class="tlaGNC">          99 : </span></span>
+<span id="L551"><span class="lineNum">     551</span>                 :<span class="tlaGNC">          99 :         info, err := file.Stat()</span></span>
+<span id="L552"><span class="lineNum">     552</span>                 :<span class="tlaGNC">          99 :         if err != nil {</span></span>
 <span id="L553"><span class="lineNum">     553</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return Snapshot{}, fmt.Errorf(&quot;stat file: %w&quot;, err)</span></span>
 <span id="L554"><span class="lineNum">     554</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L555"><span class="lineNum">     555</span>                 :<span class="tlaGNC tlaBgGNC">          89 :         if !info.Mode().IsRegular() {</span></span>
+<span id="L555"><span class="lineNum">     555</span>                 :<span class="tlaGNC tlaBgGNC">          99 :         if !info.Mode().IsRegular() {</span></span>
 <span id="L556"><span class="lineNum">     556</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return Snapshot{}, fmt.Errorf(&quot;path %q is not a regular file&quot;, path.Display)</span></span>
 <span id="L557"><span class="lineNum">     557</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L558"><span class="lineNum">     558</span>                 :<span class="tlaGNC tlaBgGNC">          89 :         if !os.SameFile(lstatInfo, info) {</span></span>
+<span id="L558"><span class="lineNum">     558</span>                 :<span class="tlaGNC tlaBgGNC">          99 :         if !os.SameFile(lstatInfo, info) {</span></span>
 <span id="L559"><span class="lineNum">     559</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return Snapshot{}, fmt.Errorf(&quot;path %q changed during snapshot&quot;, path.Display)</span></span>
 <span id="L560"><span class="lineNum">     560</span>                 :<span class="tlaUNC">           0 :         }</span></span>
 <span id="L561"><span class="lineNum">     561</span>                 :             : </span>
-<span id="L562"><span class="lineNum">     562</span>                 :<span class="tlaGNC tlaBgGNC">          89 :         hasher := sha256.New()</span></span>
-<span id="L563"><span class="lineNum">     563</span>                 :<span class="tlaGNC">          89 :         size, err := io.Copy(hasher, file)</span></span>
-<span id="L564"><span class="lineNum">     564</span>                 :<span class="tlaGNC">          89 :         if err != nil {</span></span>
+<span id="L562"><span class="lineNum">     562</span>                 :<span class="tlaGNC tlaBgGNC">          99 :         hasher := sha256.New()</span></span>
+<span id="L563"><span class="lineNum">     563</span>                 :<span class="tlaGNC">          99 :         size, err := io.Copy(hasher, file)</span></span>
+<span id="L564"><span class="lineNum">     564</span>                 :<span class="tlaGNC">          99 :         if err != nil {</span></span>
 <span id="L565"><span class="lineNum">     565</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return Snapshot{}, fmt.Errorf(&quot;read file: %w&quot;, err)</span></span>
 <span id="L566"><span class="lineNum">     566</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L567"><span class="lineNum">     567</span>                 :<span class="tlaGNC tlaBgGNC">          89 :         return Snapshot{</span></span>
-<span id="L568"><span class="lineNum">     568</span>                 :<span class="tlaGNC">          89 :                 Path:   path.Display,</span></span>
-<span id="L569"><span class="lineNum">     569</span>                 :<span class="tlaGNC">          89 :                 SHA256: hex.EncodeToString(hasher.Sum(nil)),</span></span>
-<span id="L570"><span class="lineNum">     570</span>                 :<span class="tlaGNC">          89 :                 Size:   size,</span></span>
-<span id="L571"><span class="lineNum">     571</span>                 :<span class="tlaGNC">          89 :                 Mode:   info.Mode(),</span></span>
-<span id="L572"><span class="lineNum">     572</span>                 :<span class="tlaGNC">          89 :                 MTime:  info.ModTime(),</span></span>
-<span id="L573"><span class="lineNum">     573</span>                 :<span class="tlaGNC">          89 :         }, nil</span></span>
+<span id="L567"><span class="lineNum">     567</span>                 :<span class="tlaGNC tlaBgGNC">          99 :         return Snapshot{</span></span>
+<span id="L568"><span class="lineNum">     568</span>                 :<span class="tlaGNC">          99 :                 Path:   path.Display,</span></span>
+<span id="L569"><span class="lineNum">     569</span>                 :<span class="tlaGNC">          99 :                 SHA256: hex.EncodeToString(hasher.Sum(nil)),</span></span>
+<span id="L570"><span class="lineNum">     570</span>                 :<span class="tlaGNC">          99 :                 Size:   size,</span></span>
+<span id="L571"><span class="lineNum">     571</span>                 :<span class="tlaGNC">          99 :                 Mode:   info.Mode(),</span></span>
+<span id="L572"><span class="lineNum">     572</span>                 :<span class="tlaGNC">          99 :                 MTime:  info.ModTime(),</span></span>
+<span id="L573"><span class="lineNum">     573</span>                 :<span class="tlaGNC">          99 :         }, nil</span></span>
 <span id="L574"><span class="lineNum">     574</span>                 :             : }</span>
 <span id="L575"><span class="lineNum">     575</span>                 :             : </span>
 <span id="L576"><span class="lineNum">     576</span>                 :             : func currentModeForWrite(path ResolvedPath, opts AtomicWriteOptions) (fs.FileMode, error) {</span>

@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryLo">22.4&nbsp;%</td>
-            <td class="headerCovTableEntry">174</td>
+            <td class="headerCovTableEntryLo">22.0&nbsp;%</td>
+            <td class="headerCovTableEntry">177</td>
             <td class="headerCovTableEntry">39</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -269,118 +269,123 @@
 <span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaUNC">           0 :         c.mu.Lock()</span></span>
 <span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaUNC">           0 :         c.runID = domain.RunID{}</span></span>
 <span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaUNC">           0 :         c.turnCounter = 0</span></span>
-<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaUNC">           0 :         c.messages = append([]domain.Message(nil), inspection.Transcript.Messages...)</span></span>
-<span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaUNC">           0 :         // The rewind truncated the timeline: drop the stale turn projections</span></span>
-<span id="L203"><span class="lineNum">     203</span>                 :             :         // and rebuild from the surviving events (derived state — TurnSummary).</span>
-<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaUNC">           0 :         c.turnChanges = nil</span></span>
-<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaUNC">           0 :         c.turnSummaries = turnSummariesFromEvents(inspection.Events)</span></span>
-<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaUNC">           0 :         c.lastUsage = run.Usage</span></span>
-<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaUNC">           0 :         c.resumedRun = run</span></span>
-<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaUNC">           0 :         c.resumed = true</span></span>
-<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaUNC">           0 :         // A pending compaction belongs to the truncated-away transcript.</span></span>
-<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaUNC">           0 :         c.forceCompact = false</span></span>
-<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaUNC">           0 :         c.state = ControllerStateIdle</span></span>
-<span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaUNC">           0 :         c.mu.Unlock()</span></span>
-<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaUNC">           0 : </span></span>
-<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaUNC">           0 :         c.logger.Info(&quot;session rewound&quot;,</span></span>
-<span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaUNC">           0 :                 &quot;session_id&quot;, sessionID,</span></span>
-<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaUNC">           0 :                 &quot;checkpoint_sequence&quot;, cmd.CheckpointSequence,</span></span>
-<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaUNC">           0 :                 &quot;restored&quot;, len(outcome.Restored),</span></span>
-<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaUNC">           0 :                 &quot;deleted&quot;, len(outcome.Deleted),</span></span>
-<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaUNC">           0 :                 &quot;conflicts&quot;, len(outcome.Conflicts),</span></span>
-<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaUNC">           0 :                 &quot;skipped&quot;, len(outcome.Skipped))</span></span>
-<span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaUNC">           0 :         cmd.ResultCh &lt;- controllerResult{Value: outcome}</span></span>
-<span id="L222"><span class="lineNum">     222</span>                 :             : }</span>
-<span id="L223"><span class="lineNum">     223</span>                 :             : </span>
-<span id="L224"><span class="lineNum">     224</span>                 :             : // restoreRewindChanges applies one deduplicated rewind change set to the</span>
-<span id="L225"><span class="lineNum">     225</span>                 :             : // workspace: files that existed at the checkpoint get their captured</span>
-<span id="L226"><span class="lineNum">     226</span>                 :             : // pre-mutation content written back; files created after the checkpoint</span>
-<span id="L227"><span class="lineNum">     227</span>                 :             : // are removed. Every path is re-validated against the workspace root and</span>
-<span id="L228"><span class="lineNum">     228</span>                 :             : // every write goes through the same atomic-write discipline as the edit</span>
-<span id="L229"><span class="lineNum">     229</span>                 :             : // tool. A path whose current content does not match the recorded latest</span>
-<span id="L230"><span class="lineNum">     230</span>                 :             : // post-checkpoint hash was modified outside the recorded history; it is</span>
-<span id="L231"><span class="lineNum">     231</span>                 :             : // still rewound (the user asked for it) but reported as a conflict. The</span>
-<span id="L232"><span class="lineNum">     232</span>                 :             : // file-state book is updated so a subsequent edit sees the restored</span>
-<span id="L233"><span class="lineNum">     233</span>                 :             : // content as the drift baseline.</span>
-<span id="L234"><span class="lineNum">     234</span>                 :             : func restoreRewindChanges(validator *workspace.PathValidator, book *workspace.FileStateBook, changes []session.FileChange) RewindOutcome {</span>
-<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC tlaBgGNC">           5 :         var out RewindOutcome</span></span>
-<span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaGNC">           5 :         for _, change := range changes {</span></span>
-<span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaGNC">           5 :                 if !change.Restorable {</span></span>
-<span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">           1 :                         out.Skipped = append(out.Skipped, change.Path)</span></span>
-<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC">           1 :                         continue</span></span>
-<span id="L240"><span class="lineNum">     240</span>                 :             :                 }</span>
-<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">           4 :                 resolved, err := validator.ResolveLexical(change.Path)</span></span>
-<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">           4 :                 if err != nil {</span></span>
-<span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         out.Conflicts = append(out.Conflicts, fmt.Sprintf(&quot;%s (path no longer resolvable: %v)&quot;, change.Path, err))</span></span>
-<span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaUNC">           0 :                         continue</span></span>
+<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaUNC">           0 :         // A rewind past the first turn re-opens the title question for this</span></span>
+<span id="L202"><span class="lineNum">     202</span>                 :             :         // session: re-arm the one-shot (the transcript gate still applies when</span>
+<span id="L203"><span class="lineNum">     203</span>                 :             :         // messages survive).</span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaUNC">           0 :         c.titleTriggered = false</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaUNC">           0 :         c.titlePending = false</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaUNC">           0 :         c.messages = append([]domain.Message(nil), inspection.Transcript.Messages...)</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaUNC">           0 :         // The rewind truncated the timeline: drop the stale turn projections</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :             :         // and rebuild from the surviving events (derived state — TurnSummary).</span>
+<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaUNC">           0 :         c.turnChanges = nil</span></span>
+<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaUNC">           0 :         c.turnSummaries = turnSummariesFromEvents(inspection.Events)</span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaUNC">           0 :         c.lastUsage = run.Usage</span></span>
+<span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaUNC">           0 :         c.resumedRun = run</span></span>
+<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaUNC">           0 :         c.resumed = true</span></span>
+<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaUNC">           0 :         // A pending compaction belongs to the truncated-away transcript.</span></span>
+<span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaUNC">           0 :         c.forceCompact = false</span></span>
+<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaUNC">           0 :         c.state = ControllerStateIdle</span></span>
+<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaUNC">           0 :         c.mu.Unlock()</span></span>
+<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaUNC">           0 : </span></span>
+<span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaUNC">           0 :         c.logger.Info(&quot;session rewound&quot;,</span></span>
+<span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaUNC">           0 :                 &quot;session_id&quot;, sessionID,</span></span>
+<span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaUNC">           0 :                 &quot;checkpoint_sequence&quot;, cmd.CheckpointSequence,</span></span>
+<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaUNC">           0 :                 &quot;restored&quot;, len(outcome.Restored),</span></span>
+<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaUNC">           0 :                 &quot;deleted&quot;, len(outcome.Deleted),</span></span>
+<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaUNC">           0 :                 &quot;conflicts&quot;, len(outcome.Conflicts),</span></span>
+<span id="L225"><span class="lineNum">     225</span>                 :<span class="tlaUNC">           0 :                 &quot;skipped&quot;, len(outcome.Skipped))</span></span>
+<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaUNC">           0 :         cmd.ResultCh &lt;- controllerResult{Value: outcome}</span></span>
+<span id="L227"><span class="lineNum">     227</span>                 :             : }</span>
+<span id="L228"><span class="lineNum">     228</span>                 :             : </span>
+<span id="L229"><span class="lineNum">     229</span>                 :             : // restoreRewindChanges applies one deduplicated rewind change set to the</span>
+<span id="L230"><span class="lineNum">     230</span>                 :             : // workspace: files that existed at the checkpoint get their captured</span>
+<span id="L231"><span class="lineNum">     231</span>                 :             : // pre-mutation content written back; files created after the checkpoint</span>
+<span id="L232"><span class="lineNum">     232</span>                 :             : // are removed. Every path is re-validated against the workspace root and</span>
+<span id="L233"><span class="lineNum">     233</span>                 :             : // every write goes through the same atomic-write discipline as the edit</span>
+<span id="L234"><span class="lineNum">     234</span>                 :             : // tool. A path whose current content does not match the recorded latest</span>
+<span id="L235"><span class="lineNum">     235</span>                 :             : // post-checkpoint hash was modified outside the recorded history; it is</span>
+<span id="L236"><span class="lineNum">     236</span>                 :             : // still rewound (the user asked for it) but reported as a conflict. The</span>
+<span id="L237"><span class="lineNum">     237</span>                 :             : // file-state book is updated so a subsequent edit sees the restored</span>
+<span id="L238"><span class="lineNum">     238</span>                 :             : // content as the drift baseline.</span>
+<span id="L239"><span class="lineNum">     239</span>                 :             : func restoreRewindChanges(validator *workspace.PathValidator, book *workspace.FileStateBook, changes []session.FileChange) RewindOutcome {</span>
+<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC tlaBgGNC">           5 :         var out RewindOutcome</span></span>
+<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">           5 :         for _, change := range changes {</span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">           5 :                 if !change.Restorable {</span></span>
+<span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaGNC">           1 :                         out.Skipped = append(out.Skipped, change.Path)</span></span>
+<span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaGNC">           1 :                         continue</span></span>
 <span id="L245"><span class="lineNum">     245</span>                 :             :                 }</span>
-<span id="L246"><span class="lineNum">     246</span>                 :             : </span>
-<span id="L247"><span class="lineNum">     247</span>                 :             :                 // Conflict detection: compare the on-disk state with the LATEST</span>
-<span id="L248"><span class="lineNum">     248</span>                 :             :                 // recorded post-checkpoint state. A mismatch means the file was</span>
-<span id="L249"><span class="lineNum">     249</span>                 :             :                 // modified outside the recorded history.</span>
-<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC tlaBgGNC">           4 :                 conflict := &quot;&quot;</span></span>
-<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">           4 :                 snapshot, statErr := validator.Snapshot(resolved.Absolute)</span></span>
-<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">           4 :                 switch {</span></span>
-<span id="L253"><span class="lineNum">     253</span>                 :             :                 case statErr == nil:</span>
-<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">           4 :                         if change.LatestAfterHash != &quot;&quot; &amp;&amp; snapshot.SHA256 != change.LatestAfterHash {</span></span>
-<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC">           1 :                                 conflict = &quot;external modification overwritten&quot;</span></span>
-<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">           1 :                         }</span></span>
-<span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 case errors.Is(statErr, os.ErrNotExist):</span></span>
-<span id="L258"><span class="lineNum">     258</span>                 :             :                         // Currently absent: restoring recreates the file; deleting is a no-op.</span>
-<span id="L259"><span class="lineNum">     259</span>                 :             :                 default:</span>
-<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaUNC">           0 :                         out.Conflicts = append(out.Conflicts, fmt.Sprintf(&quot;%s (stat failed: %v)&quot;, change.Path, statErr))</span></span>
-<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaUNC">           0 :                         continue</span></span>
-<span id="L262"><span class="lineNum">     262</span>                 :             :                 }</span>
-<span id="L263"><span class="lineNum">     263</span>                 :             : </span>
-<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC tlaBgGNC">           4 :                 if change.BeforeExisted {</span></span>
-<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaGNC">           3 :                         content := change.BeforeContent</span></span>
-<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaGNC">           3 :                         if content == nil {</span></span>
-<span id="L267"><span class="lineNum">     267</span>                 :             :                                 // Restorable with nil content is the empty-file sentinel</span>
-<span id="L268"><span class="lineNum">     268</span>                 :             :                                 // (session.RecordFileChange normalizes it to an empty</span>
-<span id="L269"><span class="lineNum">     269</span>                 :             :                                 // blob, but a driver may still read an empty blob back</span>
-<span id="L270"><span class="lineNum">     270</span>                 :             :                                 // as nil).</span>
-<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">           1 :                                 content = []byte{}</span></span>
-<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">           1 :                         }</span></span>
-<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">           3 :                         expected := workspace.EmptyFileSHA256</span></span>
-<span id="L274"><span class="lineNum">     274</span>                 :<span class="tlaGNC">           3 :                         if statErr == nil {</span></span>
-<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaGNC">           3 :                                 expected = snapshot.SHA256</span></span>
-<span id="L276"><span class="lineNum">     276</span>                 :<span class="tlaGNC">           3 :                         } else if err := os.MkdirAll(filepath.Dir(resolved.Absolute), 0o755); err != nil {</span></span>
-<span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 out.Conflicts = append(out.Conflicts, fmt.Sprintf(&quot;%s (recreate parent: %v)&quot;, change.Path, err))</span></span>
-<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaUNC">           0 :                                 continue</span></span>
-<span id="L279"><span class="lineNum">     279</span>                 :             :                         }</span>
-<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC tlaBgGNC">           3 :                         written, err := validator.AtomicWrite(resolved.Absolute, content, workspace.AtomicWriteOptions{</span></span>
-<span id="L281"><span class="lineNum">     281</span>                 :<span class="tlaGNC">           3 :                                 ExpectedHash: expected,</span></span>
-<span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaGNC">           3 :                                 SyncParent:   true,</span></span>
-<span id="L283"><span class="lineNum">     283</span>                 :<span class="tlaGNC">           3 :                         })</span></span>
-<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">           3 :                         if err != nil {</span></span>
-<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 out.Conflicts = append(out.Conflicts, fmt.Sprintf(&quot;%s (restore failed: %v)&quot;, change.Path, err))</span></span>
-<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaUNC">           0 :                                 continue</span></span>
-<span id="L287"><span class="lineNum">     287</span>                 :             :                         }</span>
-<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC tlaBgGNC">           3 :                         book.Record(resolved.Absolute, written.SHA256)</span></span>
-<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">           3 :                         if conflict != &quot;&quot; {</span></span>
-<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC">           1 :                                 out.Conflicts = append(out.Conflicts, fmt.Sprintf(&quot;%s (%s)&quot;, change.Path, conflict))</span></span>
-<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaGNC">           1 :                         }</span></span>
-<span id="L292"><span class="lineNum">     292</span>                 :<span class="tlaGNC">           3 :                         out.Restored = append(out.Restored, change.Path)</span></span>
-<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC">           3 :                         continue</span></span>
-<span id="L294"><span class="lineNum">     294</span>                 :             :                 }</span>
-<span id="L295"><span class="lineNum">     295</span>                 :             : </span>
-<span id="L296"><span class="lineNum">     296</span>                 :             :                 // The file was created after the checkpoint: rewind removes it.</span>
-<span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaGNC">           1 :                 if statErr != nil {</span></span>
-<span id="L298"><span class="lineNum">     298</span>                 :             :                         // Already absent — nothing to do.</span>
-<span id="L299"><span class="lineNum">     299</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         continue</span></span>
-<span id="L300"><span class="lineNum">     300</span>                 :             :                 }</span>
-<span id="L301"><span class="lineNum">     301</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                 if err := os.Remove(resolved.Absolute); err != nil {</span></span>
-<span id="L302"><span class="lineNum">     302</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         out.Conflicts = append(out.Conflicts, fmt.Sprintf(&quot;%s (delete failed: %v)&quot;, change.Path, err))</span></span>
-<span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaUNC">           0 :                         continue</span></span>
-<span id="L304"><span class="lineNum">     304</span>                 :             :                 }</span>
-<span id="L305"><span class="lineNum">     305</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                 book.Forget(resolved.Absolute)</span></span>
-<span id="L306"><span class="lineNum">     306</span>                 :<span class="tlaGNC">           1 :                 if conflict != &quot;&quot; {</span></span>
-<span id="L307"><span class="lineNum">     307</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         out.Conflicts = append(out.Conflicts, fmt.Sprintf(&quot;%s (%s)&quot;, change.Path, conflict))</span></span>
-<span id="L308"><span class="lineNum">     308</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
-<span id="L309"><span class="lineNum">     309</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                 out.Deleted = append(out.Deleted, change.Path)</span></span>
-<span id="L310"><span class="lineNum">     310</span>                 :             :         }</span>
-<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC">           5 :         return out</span></span>
-<span id="L312"><span class="lineNum">     312</span>                 :             : }</span>
+<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">           4 :                 resolved, err := validator.ResolveLexical(change.Path)</span></span>
+<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC">           4 :                 if err != nil {</span></span>
+<span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         out.Conflicts = append(out.Conflicts, fmt.Sprintf(&quot;%s (path no longer resolvable: %v)&quot;, change.Path, err))</span></span>
+<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaUNC">           0 :                         continue</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :             :                 }</span>
+<span id="L251"><span class="lineNum">     251</span>                 :             : </span>
+<span id="L252"><span class="lineNum">     252</span>                 :             :                 // Conflict detection: compare the on-disk state with the LATEST</span>
+<span id="L253"><span class="lineNum">     253</span>                 :             :                 // recorded post-checkpoint state. A mismatch means the file was</span>
+<span id="L254"><span class="lineNum">     254</span>                 :             :                 // modified outside the recorded history.</span>
+<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC tlaBgGNC">           4 :                 conflict := &quot;&quot;</span></span>
+<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">           4 :                 snapshot, statErr := validator.Snapshot(resolved.Absolute)</span></span>
+<span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaGNC">           4 :                 switch {</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :             :                 case statErr == nil:</span>
+<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">           4 :                         if change.LatestAfterHash != &quot;&quot; &amp;&amp; snapshot.SHA256 != change.LatestAfterHash {</span></span>
+<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaGNC">           1 :                                 conflict = &quot;external modification overwritten&quot;</span></span>
+<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">           1 :                         }</span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 case errors.Is(statErr, os.ErrNotExist):</span></span>
+<span id="L263"><span class="lineNum">     263</span>                 :             :                         // Currently absent: restoring recreates the file; deleting is a no-op.</span>
+<span id="L264"><span class="lineNum">     264</span>                 :             :                 default:</span>
+<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaUNC">           0 :                         out.Conflicts = append(out.Conflicts, fmt.Sprintf(&quot;%s (stat failed: %v)&quot;, change.Path, statErr))</span></span>
+<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaUNC">           0 :                         continue</span></span>
+<span id="L267"><span class="lineNum">     267</span>                 :             :                 }</span>
+<span id="L268"><span class="lineNum">     268</span>                 :             : </span>
+<span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaGNC tlaBgGNC">           4 :                 if change.BeforeExisted {</span></span>
+<span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaGNC">           3 :                         content := change.BeforeContent</span></span>
+<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">           3 :                         if content == nil {</span></span>
+<span id="L272"><span class="lineNum">     272</span>                 :             :                                 // Restorable with nil content is the empty-file sentinel</span>
+<span id="L273"><span class="lineNum">     273</span>                 :             :                                 // (session.RecordFileChange normalizes it to an empty</span>
+<span id="L274"><span class="lineNum">     274</span>                 :             :                                 // blob, but a driver may still read an empty blob back</span>
+<span id="L275"><span class="lineNum">     275</span>                 :             :                                 // as nil).</span>
+<span id="L276"><span class="lineNum">     276</span>                 :<span class="tlaGNC">           1 :                                 content = []byte{}</span></span>
+<span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaGNC">           1 :                         }</span></span>
+<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaGNC">           3 :                         expected := workspace.EmptyFileSHA256</span></span>
+<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">           3 :                         if statErr == nil {</span></span>
+<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC">           3 :                                 expected = snapshot.SHA256</span></span>
+<span id="L281"><span class="lineNum">     281</span>                 :<span class="tlaGNC">           3 :                         } else if err := os.MkdirAll(filepath.Dir(resolved.Absolute), 0o755); err != nil {</span></span>
+<span id="L282"><span class="lineNum">     282</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 out.Conflicts = append(out.Conflicts, fmt.Sprintf(&quot;%s (recreate parent: %v)&quot;, change.Path, err))</span></span>
+<span id="L283"><span class="lineNum">     283</span>                 :<span class="tlaUNC">           0 :                                 continue</span></span>
+<span id="L284"><span class="lineNum">     284</span>                 :             :                         }</span>
+<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaGNC tlaBgGNC">           3 :                         written, err := validator.AtomicWrite(resolved.Absolute, content, workspace.AtomicWriteOptions{</span></span>
+<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaGNC">           3 :                                 ExpectedHash: expected,</span></span>
+<span id="L287"><span class="lineNum">     287</span>                 :<span class="tlaGNC">           3 :                                 SyncParent:   true,</span></span>
+<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC">           3 :                         })</span></span>
+<span id="L289"><span class="lineNum">     289</span>                 :<span class="tlaGNC">           3 :                         if err != nil {</span></span>
+<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 out.Conflicts = append(out.Conflicts, fmt.Sprintf(&quot;%s (restore failed: %v)&quot;, change.Path, err))</span></span>
+<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaUNC">           0 :                                 continue</span></span>
+<span id="L292"><span class="lineNum">     292</span>                 :             :                         }</span>
+<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC tlaBgGNC">           3 :                         book.Record(resolved.Absolute, written.SHA256)</span></span>
+<span id="L294"><span class="lineNum">     294</span>                 :<span class="tlaGNC">           3 :                         if conflict != &quot;&quot; {</span></span>
+<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">           1 :                                 out.Conflicts = append(out.Conflicts, fmt.Sprintf(&quot;%s (%s)&quot;, change.Path, conflict))</span></span>
+<span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaGNC">           1 :                         }</span></span>
+<span id="L297"><span class="lineNum">     297</span>                 :<span class="tlaGNC">           3 :                         out.Restored = append(out.Restored, change.Path)</span></span>
+<span id="L298"><span class="lineNum">     298</span>                 :<span class="tlaGNC">           3 :                         continue</span></span>
+<span id="L299"><span class="lineNum">     299</span>                 :             :                 }</span>
+<span id="L300"><span class="lineNum">     300</span>                 :             : </span>
+<span id="L301"><span class="lineNum">     301</span>                 :             :                 // The file was created after the checkpoint: rewind removes it.</span>
+<span id="L302"><span class="lineNum">     302</span>                 :<span class="tlaGNC">           1 :                 if statErr != nil {</span></span>
+<span id="L303"><span class="lineNum">     303</span>                 :             :                         // Already absent — nothing to do.</span>
+<span id="L304"><span class="lineNum">     304</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         continue</span></span>
+<span id="L305"><span class="lineNum">     305</span>                 :             :                 }</span>
+<span id="L306"><span class="lineNum">     306</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                 if err := os.Remove(resolved.Absolute); err != nil {</span></span>
+<span id="L307"><span class="lineNum">     307</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         out.Conflicts = append(out.Conflicts, fmt.Sprintf(&quot;%s (delete failed: %v)&quot;, change.Path, err))</span></span>
+<span id="L308"><span class="lineNum">     308</span>                 :<span class="tlaUNC">           0 :                         continue</span></span>
+<span id="L309"><span class="lineNum">     309</span>                 :             :                 }</span>
+<span id="L310"><span class="lineNum">     310</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                 book.Forget(resolved.Absolute)</span></span>
+<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC">           1 :                 if conflict != &quot;&quot; {</span></span>
+<span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         out.Conflicts = append(out.Conflicts, fmt.Sprintf(&quot;%s (%s)&quot;, change.Path, conflict))</span></span>
+<span id="L313"><span class="lineNum">     313</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
+<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                 out.Deleted = append(out.Deleted, change.Path)</span></span>
+<span id="L315"><span class="lineNum">     315</span>                 :             :         }</span>
+<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaGNC">           5 :         return out</span></span>
+<span id="L317"><span class="lineNum">     317</span>                 :             : }</span>
         </pre>
               </td>
             </tr>

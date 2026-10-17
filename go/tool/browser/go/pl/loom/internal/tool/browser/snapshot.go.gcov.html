@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryMed">84.6&nbsp;%</td>
+            <td class="headerCovTableEntryMed">83.1&nbsp;%</td>
             <td class="headerCovTableEntry">267</td>
-            <td class="headerCovTableEntry">226</td>
+            <td class="headerCovTableEntry">222</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -182,9 +182,9 @@
 <span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">          16 :         }</span></span>
 <span id="L112"><span class="lineNum">     112</span>                 :             :         // Sort by the numeric part, not lexically: &quot;[9]&quot; &lt; &quot;[10]&quot;.</span>
 <span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">           3 :         sort.Slice(keys, func(i, j int) bool {</span></span>
-<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">          26 :                 if oi, oj := refOrdinal(keys[i]), refOrdinal(keys[j]); oi != oj {</span></span>
-<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">          26 :                         return oi &lt; oj</span></span>
-<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">          26 :                 }</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">          48 :                 if oi, oj := refOrdinal(keys[i]), refOrdinal(keys[j]); oi != oj {</span></span>
+<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">          48 :                         return oi &lt; oj</span></span>
+<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">          48 :                 }</span></span>
 <span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return keys[i] &lt; keys[j]</span></span>
 <span id="L118"><span class="lineNum">     118</span>                 :             :         })</span>
 <span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         const maxListed = 8</span></span>
@@ -224,46 +224,46 @@
 <span id="L153"><span class="lineNum">     153</span>                 :             : // refOrdinal extracts the numeric part of a ref key (&quot;[9]&quot; → 9) for</span>
 <span id="L154"><span class="lineNum">     154</span>                 :             : // sorting; malformed keys sort last.</span>
 <span id="L155"><span class="lineNum">     155</span>                 :             : func refOrdinal(ref string) int {</span>
-<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">          52 :         n, err := strconv.Atoi(strings.Trim(ref, &quot;[]&quot;))</span></span>
-<span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC">          52 :         if err != nil {</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">          96 :         n, err := strconv.Atoi(strings.Trim(ref, &quot;[]&quot;))</span></span>
+<span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC">          96 :         if err != nil {</span></span>
 <span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return math.MaxInt</span></span>
 <span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC tlaBgGNC">          52 :         return n</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC tlaBgGNC">          96 :         return n</span></span>
 <span id="L161"><span class="lineNum">     161</span>                 :             : }</span>
 <span id="L162"><span class="lineNum">     162</span>                 :             : </span>
 <span id="L163"><span class="lineNum">     163</span>                 :             : // replace atomically swaps the registry contents with a fresh snapshot.</span>
 <span id="L164"><span class="lineNum">     164</span>                 :             : func (r *refRegistry) replace(refs map[string]*axNode) {</span>
-<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">          18 :         r.mu.Lock()</span></span>
-<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">          18 :         defer r.mu.Unlock()</span></span>
-<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">          18 :         r.refs = refs</span></span>
-<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">          18 : }</span></span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">          17 :         r.mu.Lock()</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">          17 :         defer r.mu.Unlock()</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">          17 :         r.refs = refs</span></span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">          17 : }</span></span>
 <span id="L169"><span class="lineNum">     169</span>                 :             : </span>
 <span id="L170"><span class="lineNum">     170</span>                 :             : // --- snapshot action ---</span>
 <span id="L171"><span class="lineNum">     171</span>                 :             : </span>
 <span id="L172"><span class="lineNum">     172</span>                 :             : func (t *BrowserTool) doSnapshot(ctx context.Context, callID domain.ToolCallID, timeout time.Duration, startedAt time.Time) domain.ToolResult {</span>
-<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">           8 :         op, release, err := t.pageFor(ctx, timeout)</span></span>
-<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">           8 :         if err != nil {</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">           7 :         op, release, err := t.pageFor(ctx, timeout)</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaGNC">           7 :         if err != nil {</span></span>
 <span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return toolkit.ErrorResult(callID, startedAt, err)</span></span>
 <span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC tlaBgGNC">           8 :         defer release()</span></span>
-<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">           8 : </span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC tlaBgGNC">           7 :         defer release()</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">           7 : </span></span>
 <span id="L179"><span class="lineNum">     179</span>                 :             :         // Enable the accessibility domain so AXNodeIds are stable.</span>
-<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">           8 :         if err := (proto.AccessibilityEnable{}).Call(op); err != nil {</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">           7 :         if err := (proto.AccessibilityEnable{}).Call(op); err != nil {</span></span>
 <span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))</span></span>
 <span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC tlaBgGNC">           8 :         tree, err := (proto.AccessibilityGetFullAXTree{}).Call(op)</span></span>
-<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">           8 :         if err != nil {</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC tlaBgGNC">           7 :         tree, err := (proto.AccessibilityGetFullAXTree{}).Call(op)</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">           7 :         if err != nil {</span></span>
 <span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return toolkit.ErrorResult(callID, startedAt, mapBrowserError(err))</span></span>
 <span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaUNC">           0 :         }</span></span>
 <span id="L187"><span class="lineNum">     187</span>                 :             : </span>
 <span id="L188"><span class="lineNum">     188</span>                 :             :         // Build the serialized tree and populate the ref registry.</span>
-<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC tlaBgGNC">           8 :         serialized := t.serializeAXTree(tree.Nodes)</span></span>
-<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">           8 : </span></span>
-<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">           8 :         return toolkit.SuccessResult(callID, startedAt, browserOutput{</span></span>
-<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">           8 :                 Action: &quot;snapshot&quot;,</span></span>
-<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">           8 :                 Status: &quot;ok&quot;,</span></span>
-<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">           8 :                 Output: serialized,</span></span>
-<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">           8 :         })</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :<span class="tlaGNC tlaBgGNC">           7 :         serialized := t.serializeAXTree(tree.Nodes)</span></span>
+<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">           7 : </span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">           7 :         return toolkit.SuccessResult(callID, startedAt, browserOutput{</span></span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">           7 :                 Action: &quot;snapshot&quot;,</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">           7 :                 Status: &quot;ok&quot;,</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaGNC">           7 :                 Output: serialized,</span></span>
+<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">           7 :         })</span></span>
 <span id="L196"><span class="lineNum">     196</span>                 :             : }</span>
 <span id="L197"><span class="lineNum">     197</span>                 :             : </span>
 <span id="L198"><span class="lineNum">     198</span>                 :             : // serializeAXTree converts the flat AX node list from CDP into a</span>
@@ -271,38 +271,38 @@
 <span id="L200"><span class="lineNum">     200</span>                 :             : // elements. It also replaces the tool's refRegistry.</span>
 <span id="L201"><span class="lineNum">     201</span>                 :             : func (t *BrowserTool) serializeAXTree(nodes []*proto.AccessibilityAXNode) string {</span>
 <span id="L202"><span class="lineNum">     202</span>                 :             :         // Build a lookup from AX NodeID → Node for tree reconstruction.</span>
-<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">           9 :         byID := make(map[proto.AccessibilityAXNodeID]*proto.AccessibilityAXNode, len(nodes))</span></span>
-<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">           9 :         var root *proto.AccessibilityAXNode</span></span>
-<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">           9 :         for _, n := range nodes {</span></span>
-<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">         158 :                 byID[n.NodeID] = n</span></span>
-<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">         158 :                 if n.ParentID == &quot;&quot; {</span></span>
-<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">           8 :                         if root == nil || axValue(n.Role) == &quot;RootWebArea&quot; {</span></span>
-<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC">           8 :                                 root = n</span></span>
-<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaGNC">           8 :                         }</span></span>
+<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">           8 :         byID := make(map[proto.AccessibilityAXNodeID]*proto.AccessibilityAXNode, len(nodes))</span></span>
+<span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">           8 :         var root *proto.AccessibilityAXNode</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">           8 :         for _, n := range nodes {</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">         132 :                 byID[n.NodeID] = n</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">         132 :                 if n.ParentID == &quot;&quot; {</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">           7 :                         if root == nil || axValue(n.Role) == &quot;RootWebArea&quot; {</span></span>
+<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC">           7 :                                 root = n</span></span>
+<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaGNC">           7 :                         }</span></span>
 <span id="L211"><span class="lineNum">     211</span>                 :             :                 }</span>
 <span id="L212"><span class="lineNum">     212</span>                 :             :         }</span>
-<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaGNC">           9 :         if root == nil &amp;&amp; len(nodes) &gt; 0 {</span></span>
+<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaGNC">           8 :         if root == nil &amp;&amp; len(nodes) &gt; 0 {</span></span>
 <span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 root = nodes[0]</span></span>
 <span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC tlaBgGNC">           9 :         if root == nil {</span></span>
+<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC tlaBgGNC">           8 :         if root == nil {</span></span>
 <span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">           1 :                 t.registry.replace(nil)</span></span>
 <span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaGNC">           1 :                 return &quot;(empty accessibility tree)&quot;</span></span>
 <span id="L219"><span class="lineNum">     219</span>                 :<span class="tlaGNC">           1 :         }</span></span>
 <span id="L220"><span class="lineNum">     220</span>                 :             : </span>
-<span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaGNC">           8 :         refs := make(map[string]*axNode)</span></span>
-<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">           8 :         refCounter := 0</span></span>
-<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC">           8 :         var b strings.Builder</span></span>
-<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">           8 :         b.WriteString(&quot;=== Accessibility Tree Snapshot ===\n\n&quot;)</span></span>
-<span id="L225"><span class="lineNum">     225</span>                 :<span class="tlaGNC">           8 : </span></span>
-<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC">           8 :         t.buildAXSerial(&amp;b, root, byID, 0, &amp;refCounter, refs)</span></span>
-<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">           8 :         t.registry.replace(refs)</span></span>
-<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">           8 : </span></span>
-<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">           8 :         output := b.String()</span></span>
-<span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">           8 :         if runeCount(output) &gt; maxSnapshotRunes {</span></span>
+<span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaGNC">           7 :         refs := make(map[string]*axNode)</span></span>
+<span id="L222"><span class="lineNum">     222</span>                 :<span class="tlaGNC">           7 :         refCounter := 0</span></span>
+<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC">           7 :         var b strings.Builder</span></span>
+<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">           7 :         b.WriteString(&quot;=== Accessibility Tree Snapshot ===\n\n&quot;)</span></span>
+<span id="L225"><span class="lineNum">     225</span>                 :<span class="tlaGNC">           7 : </span></span>
+<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC">           7 :         t.buildAXSerial(&amp;b, root, byID, 0, &amp;refCounter, refs)</span></span>
+<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">           7 :         t.registry.replace(refs)</span></span>
+<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">           7 : </span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">           7 :         output := b.String()</span></span>
+<span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">           7 :         if runeCount(output) &gt; maxSnapshotRunes {</span></span>
 <span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 output = truncateRunes(output, maxSnapshotRunes) +</span></span>
 <span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaUNC">           0 :                         &quot;\n\n... (truncated: use scroll or narrower scope to see more)&quot;</span></span>
 <span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC tlaBgGNC">           8 :         return output</span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC tlaBgGNC">           7 :         return output</span></span>
 <span id="L235"><span class="lineNum">     235</span>                 :             : }</span>
 <span id="L236"><span class="lineNum">     236</span>                 :             : </span>
 <span id="L237"><span class="lineNum">     237</span>                 :             : // buildAXSerial recursively serializes the AX tree depth-first.</span>
@@ -316,55 +316,55 @@
 <span id="L245"><span class="lineNum">     245</span>                 :             : ) {</span>
 <span id="L246"><span class="lineNum">     246</span>                 :             :         // Ignored and purely structural nodes contribute no line of their own;</span>
 <span id="L247"><span class="lineNum">     247</span>                 :             :         // their children are hoisted to the same depth to save tokens.</span>
-<span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaGNC">         158 :         if node.Ignored || isSkippable(roleOf(node), nameOf(node)) {</span></span>
-<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">          28 :                 for _, childID := range node.ChildIDs {</span></span>
-<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">          47 :                         if child, ok := byID[childID]; ok {</span></span>
-<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">          47 :                                 t.buildAXSerial(b, child, byID, depth, refCounter, refs)</span></span>
-<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">          47 :                         }</span></span>
+<span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaGNC">         132 :         if node.Ignored || isSkippable(roleOf(node), nameOf(node)) {</span></span>
+<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">          24 :                 for _, childID := range node.ChildIDs {</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">          39 :                         if child, ok := byID[childID]; ok {</span></span>
+<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">          39 :                                 t.buildAXSerial(b, child, byID, depth, refCounter, refs)</span></span>
+<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">          39 :                         }</span></span>
 <span id="L253"><span class="lineNum">     253</span>                 :             :                 }</span>
-<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">          28 :                 return</span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">          24 :                 return</span></span>
 <span id="L255"><span class="lineNum">     255</span>                 :             :         }</span>
 <span id="L256"><span class="lineNum">     256</span>                 :             : </span>
-<span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaGNC">         130 :         role := roleOf(node)</span></span>
-<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC">         130 :         name := nameOf(node)</span></span>
-<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">         130 : </span></span>
+<span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaGNC">         108 :         role := roleOf(node)</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC">         108 :         name := nameOf(node)</span></span>
+<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">         108 : </span></span>
 <span id="L260"><span class="lineNum">     260</span>                 :             :         // Indent for tree structure.</span>
-<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">         130 :         b.WriteString(strings.Repeat(&quot;  &quot;, depth))</span></span>
-<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">         130 : </span></span>
+<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">         108 :         b.WriteString(strings.Repeat(&quot;  &quot;, depth))</span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">         108 : </span></span>
 <span id="L263"><span class="lineNum">     263</span>                 :             :         // Assign a ref number to interactive elements.</span>
-<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">         130 :         if isInteractive(role) &amp;&amp; node.BackendDOMNodeID != 0 {</span></span>
-<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaGNC">          18 :                 *refCounter++</span></span>
-<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaGNC">          18 :                 ref := fmt.Sprintf(&quot;[%d]&quot;, *refCounter)</span></span>
-<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">          18 :                 b.WriteString(ref)</span></span>
-<span id="L268"><span class="lineNum">     268</span>                 :<span class="tlaGNC">          18 :                 b.WriteString(&quot; &quot;)</span></span>
-<span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaGNC">          18 :                 refs[ref] = &amp;axNode{</span></span>
-<span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaGNC">          18 :                         backendDOMID: node.BackendDOMNodeID,</span></span>
-<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">          18 :                         role:         role,</span></span>
-<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">          18 :                         name:         name,</span></span>
-<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">          18 :                 }</span></span>
+<span id="L264"><span class="lineNum">     264</span>                 :<span class="tlaGNC">         108 :         if isInteractive(role) &amp;&amp; node.BackendDOMNodeID != 0 {</span></span>
+<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaGNC">          15 :                 *refCounter++</span></span>
+<span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaGNC">          15 :                 ref := fmt.Sprintf(&quot;[%d]&quot;, *refCounter)</span></span>
+<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">          15 :                 b.WriteString(ref)</span></span>
+<span id="L268"><span class="lineNum">     268</span>                 :<span class="tlaGNC">          15 :                 b.WriteString(&quot; &quot;)</span></span>
+<span id="L269"><span class="lineNum">     269</span>                 :<span class="tlaGNC">          15 :                 refs[ref] = &amp;axNode{</span></span>
+<span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaGNC">          15 :                         backendDOMID: node.BackendDOMNodeID,</span></span>
+<span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">          15 :                         role:         role,</span></span>
+<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">          15 :                         name:         name,</span></span>
+<span id="L273"><span class="lineNum">     273</span>                 :<span class="tlaGNC">          15 :                 }</span></span>
 <span id="L274"><span class="lineNum">     274</span>                 :             :         }</span>
 <span id="L275"><span class="lineNum">     275</span>                 :             : </span>
 <span id="L276"><span class="lineNum">     276</span>                 :             :         // Write role and name.</span>
-<span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaGNC">         130 :         b.WriteString(role)</span></span>
-<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaGNC">         130 :         if name != &quot;&quot; {</span></span>
-<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">         110 :                 b.WriteString(&quot;: &quot;)</span></span>
-<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC">         110 :                 b.WriteString(name)</span></span>
-<span id="L281"><span class="lineNum">     281</span>                 :<span class="tlaGNC">         110 :         }</span></span>
+<span id="L277"><span class="lineNum">     277</span>                 :<span class="tlaGNC">         108 :         b.WriteString(role)</span></span>
+<span id="L278"><span class="lineNum">     278</span>                 :<span class="tlaGNC">         108 :         if name != &quot;&quot; {</span></span>
+<span id="L279"><span class="lineNum">     279</span>                 :<span class="tlaGNC">          91 :                 b.WriteString(&quot;: &quot;)</span></span>
+<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC">          91 :                 b.WriteString(name)</span></span>
+<span id="L281"><span class="lineNum">     281</span>                 :<span class="tlaGNC">          91 :         }</span></span>
 <span id="L282"><span class="lineNum">     282</span>                 :             : </span>
 <span id="L283"><span class="lineNum">     283</span>                 :             :         // Include value for certain roles (e.g., textbox current value).</span>
-<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">         130 :         if value := axValue(node.Value); value != &quot;&quot; {</span></span>
-<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaGNC">           1 :                 b.WriteString(&quot; (value: &quot;)</span></span>
-<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaGNC">           1 :                 b.WriteString(value)</span></span>
-<span id="L287"><span class="lineNum">     287</span>                 :<span class="tlaGNC">           1 :                 b.WriteString(&quot;)&quot;)</span></span>
-<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">         108 :         if value := axValue(node.Value); value != &quot;&quot; {</span></span>
+<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 b.WriteString(&quot; (value: &quot;)</span></span>
+<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaUNC">           0 :                 b.WriteString(value)</span></span>
+<span id="L287"><span class="lineNum">     287</span>                 :<span class="tlaUNC">           0 :                 b.WriteString(&quot;)&quot;)</span></span>
+<span id="L288"><span class="lineNum">     288</span>                 :<span class="tlaUNC">           0 :         }</span></span>
 <span id="L289"><span class="lineNum">     289</span>                 :             : </span>
-<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC">         130 :         b.WriteString(&quot;\n&quot;)</span></span>
-<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaGNC">         130 : </span></span>
+<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC tlaBgGNC">         108 :         b.WriteString(&quot;\n&quot;)</span></span>
+<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaGNC">         108 : </span></span>
 <span id="L292"><span class="lineNum">     292</span>                 :             :         // Recurse into children.</span>
-<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC">         130 :         for _, childID := range node.ChildIDs {</span></span>
-<span id="L294"><span class="lineNum">     294</span>                 :<span class="tlaGNC">         103 :                 if child, ok := byID[childID]; ok {</span></span>
-<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">         103 :                         t.buildAXSerial(b, child, byID, depth+1, refCounter, refs)</span></span>
-<span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaGNC">         103 :                 }</span></span>
+<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC">         108 :         for _, childID := range node.ChildIDs {</span></span>
+<span id="L294"><span class="lineNum">     294</span>                 :<span class="tlaGNC">          86 :                 if child, ok := byID[childID]; ok {</span></span>
+<span id="L295"><span class="lineNum">     295</span>                 :<span class="tlaGNC">          86 :                         t.buildAXSerial(b, child, byID, depth+1, refCounter, refs)</span></span>
+<span id="L296"><span class="lineNum">     296</span>                 :<span class="tlaGNC">          86 :                 }</span></span>
 <span id="L297"><span class="lineNum">     297</span>                 :             :         }</span>
 <span id="L298"><span class="lineNum">     298</span>                 :             : }</span>
 <span id="L299"><span class="lineNum">     299</span>                 :             : </span>
@@ -522,38 +522,38 @@
 <span id="L451"><span class="lineNum">     451</span>                 :             : // raw JSON; gson's Str unquotes strings and passes non-string scalars</span>
 <span id="L452"><span class="lineNum">     452</span>                 :             : // (numbers, bools) through as text.</span>
 <span id="L453"><span class="lineNum">     453</span>                 :             : func axValue(v *proto.AccessibilityAXValue) string {</span>
-<span id="L454"><span class="lineNum">     454</span>                 :<span class="tlaGNC">         674 :         if v == nil || v.Value.Nil() {</span></span>
-<span id="L455"><span class="lineNum">     455</span>                 :<span class="tlaGNC">         129 :                 return &quot;&quot;</span></span>
-<span id="L456"><span class="lineNum">     456</span>                 :<span class="tlaGNC">         129 :         }</span></span>
-<span id="L457"><span class="lineNum">     457</span>                 :<span class="tlaGNC">         545 :         return v.Value.Str()</span></span>
+<span id="L454"><span class="lineNum">     454</span>                 :<span class="tlaGNC">         560 :         if v == nil || v.Value.Nil() {</span></span>
+<span id="L455"><span class="lineNum">     455</span>                 :<span class="tlaGNC">         108 :                 return &quot;&quot;</span></span>
+<span id="L456"><span class="lineNum">     456</span>                 :<span class="tlaGNC">         108 :         }</span></span>
+<span id="L457"><span class="lineNum">     457</span>                 :<span class="tlaGNC">         452 :         return v.Value.Str()</span></span>
 <span id="L458"><span class="lineNum">     458</span>                 :             : }</span>
 <span id="L459"><span class="lineNum">     459</span>                 :             : </span>
 <span id="L460"><span class="lineNum">     460</span>                 :             : // roleOf safely extracts the role value from an AX node.</span>
 <span id="L461"><span class="lineNum">     461</span>                 :             : func roleOf(n *proto.AccessibilityAXNode) string {</span>
-<span id="L462"><span class="lineNum">     462</span>                 :<span class="tlaGNC">         272 :         if role := axValue(n.Role); role != &quot;&quot; {</span></span>
-<span id="L463"><span class="lineNum">     463</span>                 :<span class="tlaGNC">         272 :                 return role</span></span>
-<span id="L464"><span class="lineNum">     464</span>                 :<span class="tlaGNC">         272 :         }</span></span>
+<span id="L462"><span class="lineNum">     462</span>                 :<span class="tlaGNC">         226 :         if role := axValue(n.Role); role != &quot;&quot; {</span></span>
+<span id="L463"><span class="lineNum">     463</span>                 :<span class="tlaGNC">         226 :                 return role</span></span>
+<span id="L464"><span class="lineNum">     464</span>                 :<span class="tlaGNC">         226 :         }</span></span>
 <span id="L465"><span class="lineNum">     465</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return &quot;unknown&quot;</span></span>
 <span id="L466"><span class="lineNum">     466</span>                 :             : }</span>
 <span id="L467"><span class="lineNum">     467</span>                 :             : </span>
 <span id="L468"><span class="lineNum">     468</span>                 :             : // nameOf safely extracts the accessible name value from an AX node.</span>
 <span id="L469"><span class="lineNum">     469</span>                 :             : func nameOf(n *proto.AccessibilityAXNode) string {</span>
-<span id="L470"><span class="lineNum">     470</span>                 :<span class="tlaGNC tlaBgGNC">         272 :         return axValue(n.Name)</span></span>
-<span id="L471"><span class="lineNum">     471</span>                 :<span class="tlaGNC">         272 : }</span></span>
+<span id="L470"><span class="lineNum">     470</span>                 :<span class="tlaGNC tlaBgGNC">         226 :         return axValue(n.Name)</span></span>
+<span id="L471"><span class="lineNum">     471</span>                 :<span class="tlaGNC">         226 : }</span></span>
 <span id="L472"><span class="lineNum">     472</span>                 :             : </span>
 <span id="L473"><span class="lineNum">     473</span>                 :             : // isInteractive reports whether the AX role represents an element the</span>
 <span id="L474"><span class="lineNum">     474</span>                 :             : // user can interact with (and thus should get a ref number). Chrome's role</span>
 <span id="L475"><span class="lineNum">     475</span>                 :             : // casing is inconsistent across versions (e.g. &quot;textbox&quot; vs &quot;textBox&quot;),</span>
 <span id="L476"><span class="lineNum">     476</span>                 :             : // so the match is case-insensitive.</span>
 <span id="L477"><span class="lineNum">     477</span>                 :             : func isInteractive(role string) bool {</span>
-<span id="L478"><span class="lineNum">     478</span>                 :<span class="tlaGNC">         137 :         switch strings.ToLower(role) {</span></span>
+<span id="L478"><span class="lineNum">     478</span>                 :<span class="tlaGNC">         115 :         switch strings.ToLower(role) {</span></span>
 <span id="L479"><span class="lineNum">     479</span>                 :             :         case &quot;button&quot;, &quot;link&quot;, &quot;textbox&quot;, &quot;searchbox&quot;, &quot;combobox&quot;,</span>
 <span id="L480"><span class="lineNum">     480</span>                 :             :                 &quot;checkbox&quot;, &quot;radiobutton&quot;, &quot;slider&quot;, &quot;spinbutton&quot;,</span>
 <span id="L481"><span class="lineNum">     481</span>                 :             :                 &quot;menuitem&quot;, &quot;menuitemcheckbox&quot;, &quot;menuitemradio&quot;,</span>
 <span id="L482"><span class="lineNum">     482</span>                 :             :                 &quot;tab&quot;, &quot;switch&quot;, &quot;treeitem&quot;, &quot;option&quot;:</span>
-<span id="L483"><span class="lineNum">     483</span>                 :<span class="tlaGNC">          22 :                 return true</span></span>
+<span id="L483"><span class="lineNum">     483</span>                 :<span class="tlaGNC">          19 :                 return true</span></span>
 <span id="L484"><span class="lineNum">     484</span>                 :             :         default:</span>
-<span id="L485"><span class="lineNum">     485</span>                 :<span class="tlaGNC">         115 :                 return false</span></span>
+<span id="L485"><span class="lineNum">     485</span>                 :<span class="tlaGNC">          96 :                 return false</span></span>
 <span id="L486"><span class="lineNum">     486</span>                 :             :         }</span>
 <span id="L487"><span class="lineNum">     487</span>                 :             : }</span>
 <span id="L488"><span class="lineNum">     488</span>                 :             : </span>
@@ -562,22 +562,22 @@
 <span id="L491"><span class="lineNum">     491</span>                 :             : // Like isInteractive, the match is case-insensitive.</span>
 <span id="L492"><span class="lineNum">     492</span>                 :             : func isSkippable(role, name string) bool {</span>
 <span id="L493"><span class="lineNum">     493</span>                 :             :         // Keep nodes with names — they carry information.</span>
-<span id="L494"><span class="lineNum">     494</span>                 :<span class="tlaGNC">         146 :         if name != &quot;&quot; {</span></span>
-<span id="L495"><span class="lineNum">     495</span>                 :<span class="tlaGNC">         111 :                 return false</span></span>
-<span id="L496"><span class="lineNum">     496</span>                 :<span class="tlaGNC">         111 :         }</span></span>
-<span id="L497"><span class="lineNum">     497</span>                 :<span class="tlaGNC">          35 :         switch strings.ToLower(role) {</span></span>
+<span id="L494"><span class="lineNum">     494</span>                 :<span class="tlaGNC">         122 :         if name != &quot;&quot; {</span></span>
+<span id="L495"><span class="lineNum">     495</span>                 :<span class="tlaGNC">          92 :                 return false</span></span>
+<span id="L496"><span class="lineNum">     496</span>                 :<span class="tlaGNC">          92 :         }</span></span>
+<span id="L497"><span class="lineNum">     497</span>                 :<span class="tlaGNC">          30 :         switch strings.ToLower(role) {</span></span>
 <span id="L498"><span class="lineNum">     498</span>                 :             :         case &quot;none&quot;, &quot;generic&quot;, &quot;inlinetextbox&quot;, &quot;linebreak&quot;,</span>
 <span id="L499"><span class="lineNum">     499</span>                 :             :                 &quot;layouttable&quot;, &quot;layouttablecell&quot;, &quot;layouttablerow&quot;:</span>
-<span id="L500"><span class="lineNum">     500</span>                 :<span class="tlaGNC">          14 :                 return true</span></span>
+<span id="L500"><span class="lineNum">     500</span>                 :<span class="tlaGNC">          12 :                 return true</span></span>
 <span id="L501"><span class="lineNum">     501</span>                 :             :         default:</span>
-<span id="L502"><span class="lineNum">     502</span>                 :<span class="tlaGNC">          21 :                 return false</span></span>
+<span id="L502"><span class="lineNum">     502</span>                 :<span class="tlaGNC">          18 :                 return false</span></span>
 <span id="L503"><span class="lineNum">     503</span>                 :             :         }</span>
 <span id="L504"><span class="lineNum">     504</span>                 :             : }</span>
 <span id="L505"><span class="lineNum">     505</span>                 :             : </span>
 <span id="L506"><span class="lineNum">     506</span>                 :             : // runeCount returns the number of runes in a string.</span>
 <span id="L507"><span class="lineNum">     507</span>                 :             : func runeCount(s string) int {</span>
-<span id="L508"><span class="lineNum">     508</span>                 :<span class="tlaGNC">          10 :         return len([]rune(s))</span></span>
-<span id="L509"><span class="lineNum">     509</span>                 :<span class="tlaGNC">          10 : }</span></span>
+<span id="L508"><span class="lineNum">     508</span>                 :<span class="tlaGNC">           9 :         return len([]rune(s))</span></span>
+<span id="L509"><span class="lineNum">     509</span>                 :<span class="tlaGNC">           9 : }</span></span>
 <span id="L510"><span class="lineNum">     510</span>                 :             : </span>
 <span id="L511"><span class="lineNum">     511</span>                 :             : // truncateRunes returns the first n runes of s.</span>
 <span id="L512"><span class="lineNum">     512</span>                 :             : func truncateRunes(s string, n int) string {</span>

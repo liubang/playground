@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -119,25 +119,25 @@
 <span id="L48"><span class="lineNum">      48</span>                 :             : // Open initializes a content-addressed artifact store. maxBytes is a hard</span>
 <span id="L49"><span class="lineNum">      49</span>                 :             : // per-artifact limit and must be positive.</span>
 <span id="L50"><span class="lineNum">      50</span>                 :             : func Open(root string, maxBytes int64) (*Store, error) {</span>
-<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC tlaBgGNC">         170 :         root = strings.TrimSpace(root)</span></span>
-<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">         170 :         if root == &quot;&quot; {</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC tlaBgGNC">         176 :         root = strings.TrimSpace(root)</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">         176 :         if root == &quot;&quot; {</span></span>
 <span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, domain.NewError(domain.ErrInvalidInput, &quot;artifact root is required&quot;)</span></span>
 <span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC tlaBgGNC">         170 :         if maxBytes &lt;= 0 {</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC tlaBgGNC">         176 :         if maxBytes &lt;= 0 {</span></span>
 <span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, domain.NewError(domain.ErrInvalidInput, &quot;artifact size limit must be positive&quot;)</span></span>
 <span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC tlaBgGNC">         170 :         absolute, err := filepath.Abs(root)</span></span>
-<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">         170 :         if err != nil {</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC tlaBgGNC">         176 :         absolute, err := filepath.Abs(root)</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">         176 :         if err != nil {</span></span>
 <span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, artifactError(&quot;resolve artifact root&quot;, err)</span></span>
 <span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC tlaBgGNC">         170 :         if err := ensurePrivateDirectory(absolute); err != nil {</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC tlaBgGNC">         176 :         if err := ensurePrivateDirectory(absolute); err != nil {</span></span>
 <span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">           1 :                 return nil, err</span></span>
 <span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">         169 :         blobRoot := filepath.Join(absolute, &quot;sha256&quot;)</span></span>
-<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">         169 :         if err := ensurePrivateDirectory(blobRoot); err != nil {</span></span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">         175 :         blobRoot := filepath.Join(absolute, &quot;sha256&quot;)</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">         175 :         if err := ensurePrivateDirectory(blobRoot); err != nil {</span></span>
 <span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
 <span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC tlaBgGNC">         169 :         return &amp;Store{root: absolute, blobRoot: blobRoot, maxBytes: maxBytes}, nil</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC tlaBgGNC">         175 :         return &amp;Store{root: absolute, blobRoot: blobRoot, maxBytes: maxBytes}, nil</span></span>
 <span id="L70"><span class="lineNum">      70</span>                 :             : }</span>
 <span id="L71"><span class="lineNum">      71</span>                 :             : </span>
 <span id="L72"><span class="lineNum">      72</span>                 :             : // Root returns the canonical store root.</span>
@@ -379,32 +379,32 @@
 <span id="L308"><span class="lineNum">     308</span>                 :             : // The grace period closes the window between publishing a blob and durably</span>
 <span id="L309"><span class="lineNum">     309</span>                 :             : // recording its reference in the session store.</span>
 <span id="L310"><span class="lineNum">     310</span>                 :             : func (s *Store) CollectGarbage(ctx context.Context, referenced map[domain.ArtifactID]int64, gracePeriod time.Duration, now time.Time) (GCReport, error) {</span>
-<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC">          23 :         if s == nil {</span></span>
+<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC">          27 :         if s == nil {</span></span>
 <span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return GCReport{}, domain.NewError(domain.ErrInvalidInput, &quot;artifact store is required&quot;)</span></span>
 <span id="L313"><span class="lineNum">     313</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC tlaBgGNC">          23 :         if gracePeriod &lt; 0 {</span></span>
+<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC tlaBgGNC">          27 :         if gracePeriod &lt; 0 {</span></span>
 <span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return GCReport{}, domain.NewError(domain.ErrInvalidInput, &quot;artifact GC grace period must be non-negative&quot;)</span></span>
 <span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaGNC tlaBgGNC">          23 :         if now.IsZero() {</span></span>
+<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaGNC tlaBgGNC">          27 :         if now.IsZero() {</span></span>
 <span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 now = time.Now()</span></span>
 <span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC tlaBgGNC">          23 :         cutoff := now.Add(-gracePeriod)</span></span>
-<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">          23 :         var report GCReport</span></span>
-<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC">          23 :         dirtyDirs := make(map[string]struct{})</span></span>
-<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">          23 :         err := filepath.WalkDir(s.blobRoot, func(path string, entry os.DirEntry, walkErr error) error {</span></span>
-<span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaGNC">          43 :                 if walkErr != nil {</span></span>
+<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC tlaBgGNC">          27 :         cutoff := now.Add(-gracePeriod)</span></span>
+<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">          27 :         var report GCReport</span></span>
+<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC">          27 :         dirtyDirs := make(map[string]struct{})</span></span>
+<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">          27 :         err := filepath.WalkDir(s.blobRoot, func(path string, entry os.DirEntry, walkErr error) error {</span></span>
+<span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaGNC">          47 :                 if walkErr != nil {</span></span>
 <span id="L325"><span class="lineNum">     325</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return walkErr</span></span>
 <span id="L326"><span class="lineNum">     326</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
-<span id="L327"><span class="lineNum">     327</span>                 :<span class="tlaGNC tlaBgGNC">          43 :                 if ctx != nil {</span></span>
-<span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaGNC">          43 :                         select {</span></span>
+<span id="L327"><span class="lineNum">     327</span>                 :<span class="tlaGNC tlaBgGNC">          47 :                 if ctx != nil {</span></span>
+<span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaGNC">          47 :                         select {</span></span>
 <span id="L329"><span class="lineNum">     329</span>                 :             :                         case &lt;-ctx.Done():</span>
 <span id="L330"><span class="lineNum">     330</span>                 :<span class="tlaGNC">           1 :                                 return ctx.Err()</span></span>
-<span id="L331"><span class="lineNum">     331</span>                 :<span class="tlaGNC">          42 :                         default:</span></span>
+<span id="L331"><span class="lineNum">     331</span>                 :<span class="tlaGNC">          46 :                         default:</span></span>
 <span id="L332"><span class="lineNum">     332</span>                 :             :                         }</span>
 <span id="L333"><span class="lineNum">     333</span>                 :             :                 }</span>
-<span id="L334"><span class="lineNum">     334</span>                 :<span class="tlaGNC">          42 :                 if entry.IsDir() {</span></span>
-<span id="L335"><span class="lineNum">     335</span>                 :<span class="tlaGNC">          32 :                         return nil</span></span>
-<span id="L336"><span class="lineNum">     336</span>                 :<span class="tlaGNC">          32 :                 }</span></span>
+<span id="L334"><span class="lineNum">     334</span>                 :<span class="tlaGNC">          46 :                 if entry.IsDir() {</span></span>
+<span id="L335"><span class="lineNum">     335</span>                 :<span class="tlaGNC">          36 :                         return nil</span></span>
+<span id="L336"><span class="lineNum">     336</span>                 :<span class="tlaGNC">          36 :                 }</span></span>
 <span id="L337"><span class="lineNum">     337</span>                 :<span class="tlaGNC">          10 :                 if strings.HasPrefix(entry.Name(), &quot;.artifact-&quot;) {</span></span>
 <span id="L338"><span class="lineNum">     338</span>                 :<span class="tlaGNC">           1 :                         info, ok, err := walkEntryInfo(entry)</span></span>
 <span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaGNC">           1 :                         if err != nil {</span></span>
@@ -468,7 +468,7 @@
 <span id="L397"><span class="lineNum">     397</span>                 :<span class="tlaGNC">           3 :                 dirtyDirs[filepath.Dir(path)] = struct{}{}</span></span>
 <span id="L398"><span class="lineNum">     398</span>                 :<span class="tlaGNC">           3 :                 return nil</span></span>
 <span id="L399"><span class="lineNum">     399</span>                 :             :         })</span>
-<span id="L400"><span class="lineNum">     400</span>                 :<span class="tlaGNC">          23 :         if err != nil {</span></span>
+<span id="L400"><span class="lineNum">     400</span>                 :<span class="tlaGNC">          27 :         if err != nil {</span></span>
 <span id="L401"><span class="lineNum">     401</span>                 :<span class="tlaGNC">           1 :                 if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {</span></span>
 <span id="L402"><span class="lineNum">     402</span>                 :<span class="tlaGNC">           1 :                         return report, domain.NewError(domain.ErrCancelled, &quot;artifact garbage collection cancelled&quot;, domain.WithCause(err))</span></span>
 <span id="L403"><span class="lineNum">     403</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
@@ -478,12 +478,12 @@
 <span id="L407"><span class="lineNum">     407</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
 <span id="L408"><span class="lineNum">     408</span>                 :<span class="tlaUNC">           0 :                 return report, artifactError(&quot;collect artifact garbage&quot;, err)</span></span>
 <span id="L409"><span class="lineNum">     409</span>                 :             :         }</span>
-<span id="L410"><span class="lineNum">     410</span>                 :<span class="tlaGNC tlaBgGNC">          22 :         for dir := range dirtyDirs {</span></span>
+<span id="L410"><span class="lineNum">     410</span>                 :<span class="tlaGNC tlaBgGNC">          26 :         for dir := range dirtyDirs {</span></span>
 <span id="L411"><span class="lineNum">     411</span>                 :<span class="tlaGNC">           4 :                 if err := syncDirectory(dir); err != nil {</span></span>
 <span id="L412"><span class="lineNum">     412</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return report, err</span></span>
 <span id="L413"><span class="lineNum">     413</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
 <span id="L414"><span class="lineNum">     414</span>                 :             :         }</span>
-<span id="L415"><span class="lineNum">     415</span>                 :<span class="tlaGNC tlaBgGNC">          22 :         return report, nil</span></span>
+<span id="L415"><span class="lineNum">     415</span>                 :<span class="tlaGNC tlaBgGNC">          26 :         return report, nil</span></span>
 <span id="L416"><span class="lineNum">     416</span>                 :             : }</span>
 <span id="L417"><span class="lineNum">     417</span>                 :             : </span>
 <span id="L418"><span class="lineNum">     418</span>                 :             : // walkEntryInfo stats a walked entry; ok=false means the entry vanished</span>
@@ -642,22 +642,22 @@
 <span id="L571"><span class="lineNum">     571</span>                 :             : }</span>
 <span id="L572"><span class="lineNum">     572</span>                 :             : </span>
 <span id="L573"><span class="lineNum">     573</span>                 :             : func ensurePrivateDirectory(path string) error {</span>
-<span id="L574"><span class="lineNum">     574</span>                 :<span class="tlaGNC tlaBgGNC">         390 :         if err := os.MkdirAll(path, 0o700); err != nil {</span></span>
+<span id="L574"><span class="lineNum">     574</span>                 :<span class="tlaGNC tlaBgGNC">         402 :         if err := os.MkdirAll(path, 0o700); err != nil {</span></span>
 <span id="L575"><span class="lineNum">     575</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return artifactError(&quot;create artifact directory&quot;, err)</span></span>
 <span id="L576"><span class="lineNum">     576</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L577"><span class="lineNum">     577</span>                 :<span class="tlaGNC tlaBgGNC">         390 :         info, err := os.Lstat(path)</span></span>
-<span id="L578"><span class="lineNum">     578</span>                 :<span class="tlaGNC">         390 :         if err != nil {</span></span>
+<span id="L577"><span class="lineNum">     577</span>                 :<span class="tlaGNC tlaBgGNC">         402 :         info, err := os.Lstat(path)</span></span>
+<span id="L578"><span class="lineNum">     578</span>                 :<span class="tlaGNC">         402 :         if err != nil {</span></span>
 <span id="L579"><span class="lineNum">     579</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return artifactError(&quot;inspect artifact directory&quot;, err)</span></span>
 <span id="L580"><span class="lineNum">     580</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L581"><span class="lineNum">     581</span>                 :<span class="tlaGNC tlaBgGNC">         390 :         if !info.IsDir() || info.Mode()&amp;os.ModeSymlink != 0 {</span></span>
+<span id="L581"><span class="lineNum">     581</span>                 :<span class="tlaGNC tlaBgGNC">         402 :         if !info.IsDir() || info.Mode()&amp;os.ModeSymlink != 0 {</span></span>
 <span id="L582"><span class="lineNum">     582</span>                 :<span class="tlaGNC">           1 :                 return domain.NewError(domain.ErrSecurity, &quot;artifact path is not a real directory&quot;)</span></span>
 <span id="L583"><span class="lineNum">     583</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L584"><span class="lineNum">     584</span>                 :<span class="tlaGNC">         389 :         if info.Mode().Perm()&amp;0o077 != 0 {</span></span>
+<span id="L584"><span class="lineNum">     584</span>                 :<span class="tlaGNC">         401 :         if info.Mode().Perm()&amp;0o077 != 0 {</span></span>
 <span id="L585"><span class="lineNum">     585</span>                 :<span class="tlaGNC">          29 :                 if err := os.Chmod(path, 0o700); err != nil {</span></span>
 <span id="L586"><span class="lineNum">     586</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return artifactError(&quot;protect artifact directory&quot;, err)</span></span>
 <span id="L587"><span class="lineNum">     587</span>                 :<span class="tlaUNC">           0 :                 }</span></span>
 <span id="L588"><span class="lineNum">     588</span>                 :             :         }</span>
-<span id="L589"><span class="lineNum">     589</span>                 :<span class="tlaGNC tlaBgGNC">         389 :         return nil</span></span>
+<span id="L589"><span class="lineNum">     589</span>                 :<span class="tlaGNC tlaBgGNC">         401 :         return nil</span></span>
 <span id="L590"><span class="lineNum">     590</span>                 :             : }</span>
 <span id="L591"><span class="lineNum">     591</span>                 :             : </span>
 <span id="L592"><span class="lineNum">     592</span>                 :             : func validateExisting(path string, info os.FileInfo, digest string, size int64) error {</span>

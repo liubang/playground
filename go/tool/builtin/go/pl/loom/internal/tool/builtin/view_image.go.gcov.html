@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -203,33 +203,33 @@
 <span id="L132"><span class="lineNum">     132</span>                 :             : // NewViewImageTool creates a view_image tool bound to the workspace validator.</span>
 <span id="L133"><span class="lineNum">     133</span>                 :             : // The artifact store is required: it is the image's only delivery channel.</span>
 <span id="L134"><span class="lineNum">     134</span>                 :             : func NewViewImageTool(validator *workspacepkg.PathValidator, artifacts domain.ArtifactStore) (*ViewImageTool, error) {</span>
-<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">          55 :         if artifacts == nil {</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">          64 :         if artifacts == nil {</span></span>
 <span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, domain.NewError(domain.ErrInvalidInput, &quot;view_image artifact store is required&quot;)</span></span>
 <span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC tlaBgGNC">          55 :         base, err := newBaseTool(domain.ToolDefinition{</span></span>
-<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">          55 :                 Name: &quot;view_image&quot;,</span></span>
-<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          55 :                 Description: &quot;Attach a local image file (png, jpeg, gif, webp) to the conversation so you can see it. &quot; +</span></span>
-<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">          55 :                         &quot;Relative paths resolve inside the workspace; absolute paths outside the workspace work too (credential locations are always denied). &quot; +</span></span>
-<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">          55 :                         &quot;Typical use: the user gives you a path to a screenshot, diagram, mockup, or photo of an error that you need to look at. &quot; +</span></span>
-<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">          55 :                         &quot;Call it only with an explicit path — from the user or one you have verified exists — never reconstruct a path from memory or context. &quot; +</span></span>
-<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">          55 :                         &quot;Images the user attached directly to their message are already provided to you inline: never call this tool for those. &quot; +</span></span>
-<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">          55 :                         &quot;The image is persisted as an artifact and attached for your review at model-request time (large images are rescaled automatically); &quot; +</span></span>
-<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">          55 :                         &quot;it is NOT shown to the user — call present_image as well if the user should see it, and use present_image instead &quot; +</span></span>
-<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">          55 :                         &quot;when you only want to DISPLAY an image (e.g. a plot you just generated) without seeing it yourself. &quot; +</span></span>
-<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">          55 :                         &quot;Files larger than 64MB are rejected; downscale or crop them first (e.g. with run_cmd sips/ImageMagick) if you must view them.&quot;,</span></span>
-<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">          55 :                 InputSchema:  json.RawMessage(`{&quot;type&quot;:&quot;object&quot;,&quot;additionalProperties&quot;:false,&quot;properties&quot;:{&quot;path&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:4096}},&quot;required&quot;:[&quot;path&quot;]}`),</span></span>
-<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">          55 :                 Capabilities: []domain.Capability{domain.CapFSRead},</span></span>
-<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">          55 :                 Source:       domain.ToolSourceBuiltin,</span></span>
-<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">          55 :         }, validator)</span></span>
-<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">          55 :         if err != nil {</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC tlaBgGNC">          64 :         base, err := newBaseTool(domain.ToolDefinition{</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">          64 :                 Name: &quot;view_image&quot;,</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">          64 :                 Description: &quot;Attach a local image file (png, jpeg, gif, webp) to the conversation so you can see it. &quot; +</span></span>
+<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaGNC">          64 :                         &quot;Relative paths resolve inside the workspace; absolute paths outside the workspace work too (credential locations are always denied). &quot; +</span></span>
+<span id="L142"><span class="lineNum">     142</span>                 :<span class="tlaGNC">          64 :                         &quot;Typical use: the user gives you a path to a screenshot, diagram, mockup, or photo of an error that you need to look at. &quot; +</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">          64 :                         &quot;Call it only with an explicit path — from the user or one you have verified exists — never reconstruct a path from memory or context. &quot; +</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">          64 :                         &quot;Images the user attached directly to their message are already provided to you inline: never call this tool for those. &quot; +</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">          64 :                         &quot;The image is persisted as an artifact and attached for your review at model-request time (large images are rescaled automatically); &quot; +</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaGNC">          64 :                         &quot;it is NOT shown to the user — call present_image as well if the user should see it, and use present_image instead &quot; +</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">          64 :                         &quot;when you only want to DISPLAY an image (e.g. a plot you just generated) without seeing it yourself. &quot; +</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">          64 :                         &quot;Files larger than 64MB are rejected; downscale or crop them first (e.g. with run_cmd sips/ImageMagick) if you must view them.&quot;,</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">          64 :                 InputSchema:  json.RawMessage(`{&quot;type&quot;:&quot;object&quot;,&quot;additionalProperties&quot;:false,&quot;properties&quot;:{&quot;path&quot;:{&quot;type&quot;:&quot;string&quot;,&quot;minLength&quot;:1,&quot;maxLength&quot;:4096}},&quot;required&quot;:[&quot;path&quot;]}`),</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">          64 :                 Capabilities: []domain.Capability{domain.CapFSRead},</span></span>
+<span id="L151"><span class="lineNum">     151</span>                 :<span class="tlaGNC">          64 :                 Source:       domain.ToolSourceBuiltin,</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">          64 :         }, validator)</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">          64 :         if err != nil {</span></span>
 <span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return nil, err</span></span>
 <span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC tlaBgGNC">          55 :         return &amp;ViewImageTool{base: base, artifacts: artifacts}, nil</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC tlaBgGNC">          64 :         return &amp;ViewImageTool{base: base, artifacts: artifacts}, nil</span></span>
 <span id="L157"><span class="lineNum">     157</span>                 :             : }</span>
 <span id="L158"><span class="lineNum">     158</span>                 :             : </span>
 <span id="L159"><span class="lineNum">     159</span>                 :             : func (t *ViewImageTool) Definition() domain.ToolDefinition {</span>
-<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">          86 :         return t.base.Def</span></span>
-<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">          86 : }</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">         104 :         return t.base.Def</span></span>
+<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">         104 : }</span></span>
 <span id="L162"><span class="lineNum">     162</span>                 :             : </span>
 <span id="L163"><span class="lineNum">     163</span>                 :             : // ConcurrentSafe implements domain.ConcurrentSafely: reads are independent.</span>
 <span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaUNC tlaBgUNC">           0 : func (t *ViewImageTool) ConcurrentSafe() bool { return true }</span></span>

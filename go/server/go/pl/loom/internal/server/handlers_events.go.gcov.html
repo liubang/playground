@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryLo">70.0&nbsp;%</td>
+            <td class="headerCovTableEntryLo">69.4&nbsp;%</td>
             <td class="headerCovTableEntry">180</td>
-            <td class="headerCovTableEntry">126</td>
+            <td class="headerCovTableEntry">125</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -185,9 +185,9 @@
 <span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">           4 :         heartbeat := time.NewTicker(sseHeartbeatInterval)</span></span>
 <span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">           4 :         defer heartbeat.Stop()</span></span>
 <span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">           4 :         for {</span></span>
-<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">          53 :                 select {</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">          41 :                 select {</span></span>
 <span id="L118"><span class="lineNum">     118</span>                 :             :                 case evt, ok := &lt;-events:</span>
-<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">          50 :                         if !ok {</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">          38 :                         if !ok {</span></span>
 <span id="L120"><span class="lineNum">     120</span>                 :             :                                 // The stream ended: slow-consumer drop, idle reclaim, pump</span>
 <span id="L121"><span class="lineNum">     121</span>                 :             :                                 // resync, or service shutdown. Draining gets its named</span>
 <span id="L122"><span class="lineNum">     122</span>                 :             :                                 // signal so clients stop reconnecting; everything else is</span>
@@ -198,8 +198,8 @@
 <span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaUNC">           0 :                                 }</span></span>
 <span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                                 return</span></span>
 <span id="L129"><span class="lineNum">     129</span>                 :             :                         }</span>
-<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">          49 :                         writeSSEFrame(w, evt)</span></span>
-<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">          49 :                         flusher.Flush()</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">          37 :                         writeSSEFrame(w, evt)</span></span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">          37 :                         flusher.Flush()</span></span>
 <span id="L132"><span class="lineNum">     132</span>                 :             :                 case &lt;-heartbeat.C:</span>
 <span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         fmt.Fprintf(w, &quot;: hb %d\n\n&quot;, time.Now().Unix())</span></span>
 <span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaUNC">           0 :                         flusher.Flush()</span></span>
@@ -245,13 +245,13 @@
 <span id="L174"><span class="lineNum">     174</span>                 :             : </span>
 <span id="L175"><span class="lineNum">     175</span>                 :             : // writeSSEFrame writes one runtime event as an SSE frame.</span>
 <span id="L176"><span class="lineNum">     176</span>                 :             : func writeSSEFrame(w io.Writer, evt runtimeevent.RuntimeEvent) {</span>
-<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">          50 :         data, err := json.Marshal(evt)</span></span>
-<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">          50 :         if err != nil {</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">          38 :         data, err := json.Marshal(evt)</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">          38 :         if err != nil {</span></span>
 <span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return</span></span>
 <span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC tlaBgGNC">          50 :         fmt.Fprintf(w, &quot;id: %d\n&quot;, evt.Sequence)</span></span>
-<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">          50 :         fmt.Fprintf(w, &quot;event: %s\n&quot;, evt.Kind)</span></span>
-<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">          50 :         fmt.Fprintf(w, &quot;data: %s\n\n&quot;, data)</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC tlaBgGNC">          38 :         fmt.Fprintf(w, &quot;id: %d\n&quot;, evt.Sequence)</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">          38 :         fmt.Fprintf(w, &quot;event: %s\n&quot;, evt.Kind)</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :<span class="tlaGNC">          38 :         fmt.Fprintf(w, &quot;data: %s\n\n&quot;, data)</span></span>
 <span id="L184"><span class="lineNum">     184</span>                 :             : }</span>
 <span id="L185"><span class="lineNum">     185</span>                 :             : </span>
 <span id="L186"><span class="lineNum">     186</span>                 :             : // writeSSEEvent writes a named server event (server.resync /</span>
@@ -382,15 +382,15 @@
 <span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC">           1 :         for {</span></span>
 <span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC">           2 :                 select {</span></span>
 <span id="L313"><span class="lineNum">     313</span>                 :             :                 case evt, ok := &lt;-events:</span>
-<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">           2 :                         if !ok {</span></span>
-<span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaGNC">           1 :                                 if s.draining() {</span></span>
-<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                         var buf bytes.Buffer</span></span>
+<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">           1 :                         if !ok {</span></span>
+<span id="L315"><span class="lineNum">     315</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 if s.draining() {</span></span>
+<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaUNC">           0 :                                         var buf bytes.Buffer</span></span>
 <span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaUNC">           0 :                                         writeSSEEvent(&amp;buf, &quot;server.draining&quot;, map[string]string{&quot;reason&quot;: &quot;shutdown&quot;})</span></span>
 <span id="L318"><span class="lineNum">     318</span>                 :<span class="tlaUNC">           0 :                                         _ = writeWSMessage(conn, buf.Bytes())</span></span>
 <span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaUNC">           0 :                                 }</span></span>
-<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                                 return</span></span>
+<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaUNC">           0 :                                 return</span></span>
 <span id="L321"><span class="lineNum">     321</span>                 :             :                         }</span>
-<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC">           1 :                         var buf bytes.Buffer</span></span>
+<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                         var buf bytes.Buffer</span></span>
 <span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">           1 :                         writeSSEFrame(&amp;buf, evt)</span></span>
 <span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaGNC">           1 :                         if err := writeWSMessage(conn, buf.Bytes()); err != nil {</span></span>
 <span id="L325"><span class="lineNum">     325</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 return</span></span>
@@ -405,9 +405,9 @@
 <span id="L334"><span class="lineNum">     334</span>                 :<span class="tlaUNC">           0 :                         _ = writeWSMessage(conn, buf.Bytes())</span></span>
 <span id="L335"><span class="lineNum">     335</span>                 :<span class="tlaUNC">           0 :                         return</span></span>
 <span id="L336"><span class="lineNum">     336</span>                 :             :                 case &lt;-closed:</span>
-<span id="L337"><span class="lineNum">     337</span>                 :<span class="tlaUNC">           0 :                         return</span></span>
+<span id="L337"><span class="lineNum">     337</span>                 :<span class="tlaGNC tlaBgGNC">           1 :                         return</span></span>
 <span id="L338"><span class="lineNum">     338</span>                 :             :                 case &lt;-r.Context().Done():</span>
-<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaUNC">           0 :                         return</span></span>
+<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return</span></span>
 <span id="L340"><span class="lineNum">     340</span>                 :             :                 }</span>
 <span id="L341"><span class="lineNum">     341</span>                 :             :         }</span>
 <span id="L342"><span class="lineNum">     342</span>                 :             : }</span>

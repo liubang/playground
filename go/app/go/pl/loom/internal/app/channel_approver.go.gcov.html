@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -150,16 +150,16 @@
 <span id="L79"><span class="lineNum">      79</span>                 :             : </span>
 <span id="L80"><span class="lineNum">      80</span>                 :             : // NewChannelApprover creates a new ChannelApprover.</span>
 <span id="L81"><span class="lineNum">      81</span>                 :             : func NewChannelApprover(opts ...ChannelApproverOption) *ChannelApprover {</span>
-<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC tlaBgGNC">         174 :         a := &amp;ChannelApprover{</span></span>
-<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">         174 :                 pending: make(map[domain.EventID]pendingApproval),</span></span>
-<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">         174 :                 early:   make(map[domain.EventID]earlyDecision),</span></span>
-<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">         174 :                 done:    make(chan struct{}),</span></span>
-<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">         174 :                 notify:  true,</span></span>
-<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC">         174 :         }</span></span>
-<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">         174 :         for _, opt := range opts {</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC tlaBgGNC">         182 :         a := &amp;ChannelApprover{</span></span>
+<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">         182 :                 pending: make(map[domain.EventID]pendingApproval),</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">         182 :                 early:   make(map[domain.EventID]earlyDecision),</span></span>
+<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">         182 :                 done:    make(chan struct{}),</span></span>
+<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">         182 :                 notify:  true,</span></span>
+<span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC">         182 :         }</span></span>
+<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">         182 :         for _, opt := range opts {</span></span>
 <span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 opt(a)</span></span>
 <span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC tlaBgGNC">         174 :         return a</span></span>
+<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC tlaBgGNC">         182 :         return a</span></span>
 <span id="L92"><span class="lineNum">      92</span>                 :             : }</span>
 <span id="L93"><span class="lineNum">      93</span>                 :             : </span>
 <span id="L94"><span class="lineNum">      94</span>                 :             : // RequestApproval implements domain.Approver. It creates a pending approval</span>
@@ -284,7 +284,7 @@
 <span id="L213"><span class="lineNum">     213</span>                 :             : // DenyAll denies all pending approvals and prevents future requests. It is</span>
 <span id="L214"><span class="lineNum">     214</span>                 :             : // idempotent and safe to call during concurrent shutdown paths.</span>
 <span id="L215"><span class="lineNum">     215</span>                 :             : func (a *ChannelApprover) DenyAll() {</span>
-<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">         170 :         a.doneOnce.Do(func() { close(a.done) })</span></span>
+<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">         174 :         a.doneOnce.Do(func() { close(a.done) })</span></span>
 <span id="L217"><span class="lineNum">     217</span>                 :             : }</span>
 <span id="L218"><span class="lineNum">     218</span>                 :             : </span>
 <span id="L219"><span class="lineNum">     219</span>                 :             : // PendingCount returns the number of pending approvals.</span>
@@ -296,13 +296,13 @@
 <span id="L225"><span class="lineNum">     225</span>                 :             : </span>
 <span id="L226"><span class="lineNum">     226</span>                 :             : // PendingApprovals returns a list of all pending approval IDs.</span>
 <span id="L227"><span class="lineNum">     227</span>                 :             : func (a *ChannelApprover) PendingApprovals() []domain.EventID {</span>
-<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">          81 :         a.mu.Lock()</span></span>
-<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">          81 :         defer a.mu.Unlock()</span></span>
-<span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">          81 :         out := make([]domain.EventID, 0, len(a.pending))</span></span>
-<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">          81 :         for id := range a.pending {</span></span>
+<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">          87 :         a.mu.Lock()</span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">          87 :         defer a.mu.Unlock()</span></span>
+<span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">          87 :         out := make([]domain.EventID, 0, len(a.pending))</span></span>
+<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">          87 :         for id := range a.pending {</span></span>
 <span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 out = append(out, id)</span></span>
 <span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC tlaBgGNC">          81 :         return out</span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC tlaBgGNC">          87 :         return out</span></span>
 <span id="L235"><span class="lineNum">     235</span>                 :             : }</span>
         </pre>
               </td>

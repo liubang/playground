@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -118,17 +118,17 @@
 <span id="L47"><span class="lineNum">      47</span>                 :             : // NewResponseCache creates a bounded LRU cache. A zero or negative</span>
 <span id="L48"><span class="lineNum">      48</span>                 :             : // maxEntries disables caching entirely (Put becomes a no-op).</span>
 <span id="L49"><span class="lineNum">      49</span>                 :             : func NewResponseCache[T any](maxEntries, maxBodyBytes int, ttl time.Duration, now func() time.Time) *ResponseCache[T] {</span>
-<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC tlaBgGNC">         136 :         if now == nil {</span></span>
-<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">          76 :                 now = time.Now</span></span>
-<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">          76 :         }</span></span>
-<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">         136 :         return &amp;ResponseCache[T]{</span></span>
-<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">         136 :                 ll:           list.New(),</span></span>
-<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">         136 :                 items:        make(map[string]*list.Element),</span></span>
-<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">         136 :                 maxEntries:   maxEntries,</span></span>
-<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">         136 :                 maxBodyBytes: maxBodyBytes,</span></span>
-<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">         136 :                 ttl:          ttl,</span></span>
-<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">         136 :                 now:          now,</span></span>
-<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">         136 :         }</span></span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC tlaBgGNC">         154 :         if now == nil {</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">          85 :                 now = time.Now</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">          85 :         }</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">         154 :         return &amp;ResponseCache[T]{</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">         154 :                 ll:           list.New(),</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">         154 :                 items:        make(map[string]*list.Element),</span></span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">         154 :                 maxEntries:   maxEntries,</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">         154 :                 maxBodyBytes: maxBodyBytes,</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">         154 :                 ttl:          ttl,</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">         154 :                 now:          now,</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">         154 :         }</span></span>
 <span id="L61"><span class="lineNum">      61</span>                 :             : }</span>
 <span id="L62"><span class="lineNum">      62</span>                 :             : </span>
 <span id="L63"><span class="lineNum">      63</span>                 :             : // Get returns the cached value for key, moving it to the front of the</span>

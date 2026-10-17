@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -292,107 +292,110 @@
 <span id="L221"><span class="lineNum">     221</span>                 :             : #   proxy:</span>
 <span id="L222"><span class="lineNum">     222</span>                 :             : #     unmatched: allow            # allow（默认：无规则覆盖的目的地放行，拒绝列表在连接时强制，全部记录）</span>
 <span id="L223"><span class="lineNum">     223</span>                 :             : #                                 # | deny（白名单姿态，适合敏感工作区）</span>
-<span id="L224"><span class="lineNum">     224</span>                 :             : </span>
-<span id="L225"><span class="lineNum">     225</span>                 :             : # Langfuse 追踪（host 与两个 key 都填写才启用；key 也支持 *_env 引用环境变量）：</span>
-<span id="L226"><span class="lineNum">     226</span>                 :             : # tracing:</span>
-<span id="L227"><span class="lineNum">     227</span>                 :             : #   host: &quot;&quot;</span>
-<span id="L228"><span class="lineNum">     228</span>                 :             : #   public_key: &quot;&quot;</span>
-<span id="L229"><span class="lineNum">     229</span>                 :             : #   secret_key: &quot;&quot;</span>
-<span id="L230"><span class="lineNum">     230</span>                 :             : #   environment: dev              # 默认 dev</span>
-<span id="L231"><span class="lineNum">     231</span>                 :             : #   include_content: true         # 默认 true；false 不上送对话原文</span>
-<span id="L232"><span class="lineNum">     232</span>                 :             : #   user: &quot;&quot;                      # 空则取 git user.email / $USER</span>
-<span id="L233"><span class="lineNum">     233</span>                 :             : #   cost_input_usd_per_mtok: 0    # 输入费率 USD/Mtok，0 = 不计成本</span>
-<span id="L234"><span class="lineNum">     234</span>                 :             : #   cost_output_usd_per_mtok: 0</span>
-<span id="L235"><span class="lineNum">     235</span>                 :             : #   cost_cache_read_usd_per_mtok: 0   # 缓存读费率，0 = 按 provider 默认折算</span>
-<span id="L236"><span class="lineNum">     236</span>                 :             : #   cost_cache_write_usd_per_mtok: 0  # 缓存写费率，0 = 按 provider 默认折算</span>
-<span id="L237"><span class="lineNum">     237</span>                 :             : </span>
-<span id="L238"><span class="lineNum">     238</span>                 :             : # 局域网分享（loom-desktop；固定端口使链接跨重启存活，只暴露只读页面，保存即热应用）：</span>
-<span id="L239"><span class="lineNum">     239</span>                 :             : # share:</span>
-<span id="L240"><span class="lineNum">     240</span>                 :             : #   enabled: false                # 默认 false</span>
-<span id="L241"><span class="lineNum">     241</span>                 :             : #   listen: 0.0.0.0:7681          # 默认 0.0.0.0:7681</span>
-<span id="L242"><span class="lineNum">     242</span>                 :             : </span>
-<span id="L243"><span class="lineNum">     243</span>                 :             : # 文件日志配额（&lt;loom home&gt;/logs 下按日文件）：</span>
-<span id="L244"><span class="lineNum">     244</span>                 :             : # logging:</span>
-<span id="L245"><span class="lineNum">     245</span>                 :             : #   max_file_mb: 0                # 0 = 内置 2048；负数关闭</span>
-<span id="L246"><span class="lineNum">     246</span>                 :             : #   max_total_mb: 0               # 0 = 内置 10240；负数关闭</span>
-<span id="L247"><span class="lineNum">     247</span>                 :             : </span>
-<span id="L248"><span class="lineNum">     248</span>                 :             : # 终端界面：</span>
-<span id="L249"><span class="lineNum">     249</span>                 :             : # ui:</span>
-<span id="L250"><span class="lineNum">     250</span>                 :             : #   icons: nerd                   # nerd（默认，Nerd Font）| plain</span>
-<span id="L251"><span class="lineNum">     251</span>                 :             : #   alt_screen: false             # 默认 false</span>
-<span id="L252"><span class="lineNum">     252</span>                 :             : #   keymap:                       # 快捷键覆盖: 上下文 → 动作 → 键</span>
-<span id="L253"><span class="lineNum">     253</span>                 :             : #     chat:</span>
-<span id="L254"><span class="lineNum">     254</span>                 :             : #       search_transcript: &quot;ctrl+s&quot;</span>
-<span id="L255"><span class="lineNum">     255</span>                 :             : </span>
-<span id="L256"><span class="lineNum">     256</span>                 :             : # 子代理（delegate_task 工具）：</span>
-<span id="L257"><span class="lineNum">     257</span>                 :             : # subagent:</span>
-<span id="L258"><span class="lineNum">     258</span>                 :             : #   enabled: true                 # 默认 true</span>
-<span id="L259"><span class="lineNum">     259</span>                 :             : #   max_tokens: 0                 # 默认 0 = 继承 limits.max_tokens</span>
-<span id="L260"><span class="lineNum">     260</span>                 :             : #   max_output_tokens: 8192       # 默认 8192；显式 0 = 继承 limits.max_output_tokens</span>
-<span id="L261"><span class="lineNum">     261</span>                 :             : #   model: &quot;&quot;                     # 空 = 跟随当前轮次模型</span>
-<span id="L262"><span class="lineNum">     262</span>                 :             : </span>
-<span id="L263"><span class="lineNum">     263</span>                 :             : # 长期记忆（后台提取/归纳流水线，启动时运行一次，之后每 run_interval 运行）：</span>
-<span id="L264"><span class="lineNum">     264</span>                 :             : # memory:</span>
-<span id="L265"><span class="lineNum">     265</span>                 :             : #   enabled: true                 # 默认 true</span>
-<span id="L266"><span class="lineNum">     266</span>                 :             : #   extract_model: &quot;&quot;             # 空 = 跟随默认模型，建议用便宜模型</span>
-<span id="L267"><span class="lineNum">     267</span>                 :             : #   consolidation_model: &quot;&quot;       # 空 = 跟随默认模型</span>
-<span id="L268"><span class="lineNum">     268</span>                 :             : #   max_jobs_per_run: 8           # 默认 8（1-128）</span>
-<span id="L269"><span class="lineNum">     269</span>                 :             : #   run_interval: 30m             # 默认 30m；0 = 只在启动时运行一次</span>
-<span id="L270"><span class="lineNum">     270</span>                 :             : #   min_session_idle: 1h          # 默认 1h，跳过近期活跃会话</span>
-<span id="L271"><span class="lineNum">     271</span>                 :             : #   max_session_age: 720h         # 默认 720h（30 天），跳过过旧会话</span>
-<span id="L272"><span class="lineNum">     272</span>                 :             : </span>
-<span id="L273"><span class="lineNum">     273</span>                 :             : # 会话生命周期（默认都关闭）：</span>
-<span id="L274"><span class="lineNum">     274</span>                 :             : # sessions:</span>
-<span id="L275"><span class="lineNum">     275</span>                 :             : #   auto_archive_after: &quot;0&quot;       # 如 &quot;720h&quot;：超龄未活跃会话自动归档（隐藏且只读）</span>
-<span id="L276"><span class="lineNum">     276</span>                 :             : #   gc_archived_after: &quot;0&quot;        # 如 &quot;720h&quot;：归档超龄后永久删除（含事件/检查点/历史）</span>
-<span id="L277"><span class="lineNum">     277</span>                 :             : </span>
-<span id="L278"><span class="lineNum">     278</span>                 :             : # 文生图（generate_image；provider 与 model 都设置即启用，复用 openai 类型 provider 凭据）：</span>
-<span id="L279"><span class="lineNum">     279</span>                 :             : # image:</span>
-<span id="L280"><span class="lineNum">     280</span>                 :             : #   provider: &quot;&quot;</span>
-<span id="L281"><span class="lineNum">     281</span>                 :             : #   model: &quot;&quot;</span>
-<span id="L282"><span class="lineNum">     282</span>                 :             : #   size: &quot;&quot;                      # 1024x1024 等；空 = auto</span>
-<span id="L283"><span class="lineNum">     283</span>                 :             : #   quality: &quot;&quot;                   # low | medium | high；空 = auto</span>
-<span id="L284"><span class="lineNum">     284</span>                 :             : </span>
-<span id="L285"><span class="lineNum">     285</span>                 :             : # 无头浏览器（默认启用，本地启动 Chrome）：</span>
-<span id="L286"><span class="lineNum">     286</span>                 :             : # browser:</span>
-<span id="L287"><span class="lineNum">     287</span>                 :             : #   enabled: true                 # 默认 true</span>
-<span id="L288"><span class="lineNum">     288</span>                 :             : #   chrome_path: &quot;&quot;               # 空 = 自动探测</span>
-<span id="L289"><span class="lineNum">     289</span>                 :             : #   cdp_url: &quot;&quot;                   # 设置后连接远程 Chrome（ws:// 或 http://），不再本地启动</span>
-<span id="L290"><span class="lineNum">     290</span>                 :             : #   idle_ttl: 5m                  # 默认 5m，空闲回收</span>
-<span id="L291"><span class="lineNum">     291</span>                 :             : #   nav_timeout_ms: 30000         # 默认 30000（5000-120000）</span>
-<span id="L292"><span class="lineNum">     292</span>                 :             : #   screenshot_quality: 80        # 默认 80（10-100）</span>
-<span id="L293"><span class="lineNum">     293</span>                 :             : #   viewport_width: 1280          # 默认 1280（320-4096）</span>
-<span id="L294"><span class="lineNum">     294</span>                 :             : #   viewport_height: 720          # 默认 720（320-4096）</span>
-<span id="L295"><span class="lineNum">     295</span>                 :             : </span>
-<span id="L296"><span class="lineNum">     296</span>                 :             : # MCP 服务器（command = stdio / url = streamable HTTP，二选一）：</span>
-<span id="L297"><span class="lineNum">     297</span>                 :             : # mcp_servers:</span>
-<span id="L298"><span class="lineNum">     298</span>                 :             : #   filesystem:</span>
-<span id="L299"><span class="lineNum">     299</span>                 :             : #     command: npx</span>
-<span id="L300"><span class="lineNum">     300</span>                 :             : #     args: [&quot;-y&quot;, &quot;@modelcontextprotocol/server-filesystem&quot;, &quot;/tmp&quot;]</span>
-<span id="L301"><span class="lineNum">     301</span>                 :             : #     # startup_timeout_sec: 30</span>
-<span id="L302"><span class="lineNum">     302</span>                 :             : #     # tool_timeout_sec: 300</span>
-<span id="L303"><span class="lineNum">     303</span>                 :             : #   remote:</span>
-<span id="L304"><span class="lineNum">     304</span>                 :             : #     url: https://mcp.example.com/mcp</span>
-<span id="L305"><span class="lineNum">     305</span>                 :             : #     headers:</span>
-<span id="L306"><span class="lineNum">     306</span>                 :             : #       Authorization: Bearer ${MCP_TOKEN}   # ${VAR} 加载时展开</span>
-<span id="L307"><span class="lineNum">     307</span>                 :             : </span>
-<span id="L308"><span class="lineNum">     308</span>                 :             : # 知识库（kb_search / kb_read；连接 minisearch 服务，opt-in，只读消费）：</span>
-<span id="L309"><span class="lineNum">     309</span>                 :             : # knowledge_base:</span>
-<span id="L310"><span class="lineNum">     310</span>                 :             : #   enabled: true</span>
-<span id="L311"><span class="lineNum">     311</span>                 :             : #   base_url: http://127.0.0.1:8200</span>
-<span id="L312"><span class="lineNum">     312</span>                 :             : #   api_key: msk_xxxxxxxxxxxxxxxx     # --auth=off 时留空</span>
-<span id="L313"><span class="lineNum">     313</span>                 :             : #   timeout_ms: 10000                 # 默认 10000（1000-60000）</span>
-<span id="L314"><span class="lineNum">     314</span>                 :             : #   default_top_k: 5                  # 默认 5（1-20）</span>
-<span id="L315"><span class="lineNum">     315</span>                 :             : #   default_collection: loom-kb       # 省略取 collections 第一项</span>
-<span id="L316"><span class="lineNum">     316</span>                 :             : #   collections:                      # 至少一个；description 帮助模型路由</span>
-<span id="L317"><span class="lineNum">     317</span>                 :             : #     - name: loom-kb</span>
-<span id="L318"><span class="lineNum">     318</span>                 :             : #       description: Loom 设计文档与使用手册</span>
-<span id="L319"><span class="lineNum">     319</span>                 :             : </span>
-<span id="L320"><span class="lineNum">     320</span>                 :             : # 预注册工作区（启动目录始终注册为默认工作区；root 支持 ~ 前缀）：</span>
-<span id="L321"><span class="lineNum">     321</span>                 :             : # workspaces:</span>
-<span id="L322"><span class="lineNum">     322</span>                 :             : #   - name: playground</span>
-<span id="L323"><span class="lineNum">     323</span>                 :             : #     root: ~/workspace/playground</span>
-<span id="L324"><span class="lineNum">     324</span>                 :             : `</span>
+<span id="L224"><span class="lineNum">     224</span>                 :             : #     deny_private: false         # 默认 false；true 时代理拒绝直连私网（RFC1918/CGNAT/ULA），</span>
+<span id="L225"><span class="lineNum">     225</span>                 :             : #                                 # 显式 allow 的 IP 字面量规则仍豁免</span>
+<span id="L226"><span class="lineNum">     226</span>                 :             : </span>
+<span id="L227"><span class="lineNum">     227</span>                 :             : # Langfuse 追踪（host 与两个 key 都填写才启用；key 也支持 *_env 引用环境变量）：</span>
+<span id="L228"><span class="lineNum">     228</span>                 :             : # tracing:</span>
+<span id="L229"><span class="lineNum">     229</span>                 :             : #   host: &quot;&quot;</span>
+<span id="L230"><span class="lineNum">     230</span>                 :             : #   public_key: &quot;&quot;</span>
+<span id="L231"><span class="lineNum">     231</span>                 :             : #   secret_key: &quot;&quot;</span>
+<span id="L232"><span class="lineNum">     232</span>                 :             : #   environment: dev              # 默认 dev</span>
+<span id="L233"><span class="lineNum">     233</span>                 :             : #   include_content: true         # 默认 true；false 不上送对话原文</span>
+<span id="L234"><span class="lineNum">     234</span>                 :             : #   user: &quot;&quot;                      # 空则取 git user.email / $USER</span>
+<span id="L235"><span class="lineNum">     235</span>                 :             : #   cost_input_usd_per_mtok: 0    # 输入费率 USD/Mtok，0 = 不计成本</span>
+<span id="L236"><span class="lineNum">     236</span>                 :             : #   cost_output_usd_per_mtok: 0</span>
+<span id="L237"><span class="lineNum">     237</span>                 :             : #   cost_cache_read_usd_per_mtok: 0   # 缓存读费率，0 = 按 provider 默认折算</span>
+<span id="L238"><span class="lineNum">     238</span>                 :             : #   cost_cache_write_usd_per_mtok: 0  # 缓存写费率，0 = 按 provider 默认折算</span>
+<span id="L239"><span class="lineNum">     239</span>                 :             : </span>
+<span id="L240"><span class="lineNum">     240</span>                 :             : # 局域网分享（loom-desktop；固定端口使链接跨重启存活，只暴露只读页面，保存即热应用）：</span>
+<span id="L241"><span class="lineNum">     241</span>                 :             : # share:</span>
+<span id="L242"><span class="lineNum">     242</span>                 :             : #   enabled: false                # 默认 false</span>
+<span id="L243"><span class="lineNum">     243</span>                 :             : #   listen: 0.0.0.0:7681          # 默认 0.0.0.0:7681</span>
+<span id="L244"><span class="lineNum">     244</span>                 :             : </span>
+<span id="L245"><span class="lineNum">     245</span>                 :             : # 文件日志配额（&lt;loom home&gt;/logs 下按日文件）：</span>
+<span id="L246"><span class="lineNum">     246</span>                 :             : # logging:</span>
+<span id="L247"><span class="lineNum">     247</span>                 :             : #   max_file_mb: 0                # 0 = 内置 2048；负数关闭</span>
+<span id="L248"><span class="lineNum">     248</span>                 :             : #   max_total_mb: 0               # 0 = 内置 10240；负数关闭</span>
+<span id="L249"><span class="lineNum">     249</span>                 :             : </span>
+<span id="L250"><span class="lineNum">     250</span>                 :             : # 终端界面：</span>
+<span id="L251"><span class="lineNum">     251</span>                 :             : # ui:</span>
+<span id="L252"><span class="lineNum">     252</span>                 :             : #   icons: nerd                   # nerd（默认，Nerd Font）| plain</span>
+<span id="L253"><span class="lineNum">     253</span>                 :             : #   alt_screen: false             # 默认 false</span>
+<span id="L254"><span class="lineNum">     254</span>                 :             : #   keymap:                       # 快捷键覆盖: 上下文 → 动作 → 键</span>
+<span id="L255"><span class="lineNum">     255</span>                 :             : #     chat:</span>
+<span id="L256"><span class="lineNum">     256</span>                 :             : #       search_transcript: &quot;ctrl+s&quot;</span>
+<span id="L257"><span class="lineNum">     257</span>                 :             : </span>
+<span id="L258"><span class="lineNum">     258</span>                 :             : # 子代理（delegate_task 工具）：</span>
+<span id="L259"><span class="lineNum">     259</span>                 :             : # subagent:</span>
+<span id="L260"><span class="lineNum">     260</span>                 :             : #   enabled: true                 # 默认 true</span>
+<span id="L261"><span class="lineNum">     261</span>                 :             : #   max_tokens: 0                 # 默认 0 = 继承 limits.max_tokens</span>
+<span id="L262"><span class="lineNum">     262</span>                 :             : #   max_output_tokens: 8192       # 默认 8192；显式 0 = 继承 limits.max_output_tokens</span>
+<span id="L263"><span class="lineNum">     263</span>                 :             : #   model: &quot;&quot;                     # 空 = 跟随当前轮次模型</span>
+<span id="L264"><span class="lineNum">     264</span>                 :             : </span>
+<span id="L265"><span class="lineNum">     265</span>                 :             : # 长期记忆（后台提取/归纳流水线，启动时运行一次，之后每 run_interval 运行）：</span>
+<span id="L266"><span class="lineNum">     266</span>                 :             : # memory:</span>
+<span id="L267"><span class="lineNum">     267</span>                 :             : #   enabled: true                 # 默认 true</span>
+<span id="L268"><span class="lineNum">     268</span>                 :             : #   extract_model: &quot;&quot;             # 空 = 跟随默认模型，建议用便宜模型</span>
+<span id="L269"><span class="lineNum">     269</span>                 :             : #   consolidation_model: &quot;&quot;       # 空 = 跟随默认模型</span>
+<span id="L270"><span class="lineNum">     270</span>                 :             : #   max_jobs_per_run: 8           # 默认 8（1-128）</span>
+<span id="L271"><span class="lineNum">     271</span>                 :             : #   run_interval: 30m             # 默认 30m；0 = 只在启动时运行一次</span>
+<span id="L272"><span class="lineNum">     272</span>                 :             : #   min_session_idle: 1h          # 默认 1h，跳过近期活跃会话</span>
+<span id="L273"><span class="lineNum">     273</span>                 :             : #   max_session_age: 720h         # 默认 720h（30 天），跳过过旧会话</span>
+<span id="L274"><span class="lineNum">     274</span>                 :             : </span>
+<span id="L275"><span class="lineNum">     275</span>                 :             : # 会话生命周期（默认都关闭）：</span>
+<span id="L276"><span class="lineNum">     276</span>                 :             : # sessions:</span>
+<span id="L277"><span class="lineNum">     277</span>                 :             : #   auto_archive_after: &quot;0&quot;       # 如 &quot;720h&quot;：超龄未活跃会话自动归档（隐藏且只读）</span>
+<span id="L278"><span class="lineNum">     278</span>                 :             : #   gc_archived_after: &quot;0&quot;        # 如 &quot;720h&quot;：归档超龄后永久删除（含事件/检查点/历史）</span>
+<span id="L279"><span class="lineNum">     279</span>                 :             : #   title_model: &quot;&quot;               # 会话标题生成模型（首轮后运行一次）；空 = 跟随会话模型，建议用便宜模型</span>
+<span id="L280"><span class="lineNum">     280</span>                 :             : </span>
+<span id="L281"><span class="lineNum">     281</span>                 :             : # 文生图（generate_image；provider 与 model 都设置即启用，复用 openai 类型 provider 凭据）：</span>
+<span id="L282"><span class="lineNum">     282</span>                 :             : # image:</span>
+<span id="L283"><span class="lineNum">     283</span>                 :             : #   provider: &quot;&quot;</span>
+<span id="L284"><span class="lineNum">     284</span>                 :             : #   model: &quot;&quot;</span>
+<span id="L285"><span class="lineNum">     285</span>                 :             : #   size: &quot;&quot;                      # 1024x1024 等；空 = auto</span>
+<span id="L286"><span class="lineNum">     286</span>                 :             : #   quality: &quot;&quot;                   # low | medium | high；空 = auto</span>
+<span id="L287"><span class="lineNum">     287</span>                 :             : </span>
+<span id="L288"><span class="lineNum">     288</span>                 :             : # 无头浏览器（默认启用，本地启动 Chrome）：</span>
+<span id="L289"><span class="lineNum">     289</span>                 :             : # browser:</span>
+<span id="L290"><span class="lineNum">     290</span>                 :             : #   enabled: true                 # 默认 true</span>
+<span id="L291"><span class="lineNum">     291</span>                 :             : #   chrome_path: &quot;&quot;               # 空 = 自动探测</span>
+<span id="L292"><span class="lineNum">     292</span>                 :             : #   cdp_url: &quot;&quot;                   # 设置后连接远程 Chrome（ws:// 或 http://），不再本地启动</span>
+<span id="L293"><span class="lineNum">     293</span>                 :             : #   idle_ttl: 5m                  # 默认 5m，空闲回收</span>
+<span id="L294"><span class="lineNum">     294</span>                 :             : #   nav_timeout_ms: 30000         # 默认 30000（5000-120000）</span>
+<span id="L295"><span class="lineNum">     295</span>                 :             : #   screenshot_quality: 80        # 默认 80（10-100）</span>
+<span id="L296"><span class="lineNum">     296</span>                 :             : #   viewport_width: 1280          # 默认 1280（320-4096）</span>
+<span id="L297"><span class="lineNum">     297</span>                 :             : #   viewport_height: 720          # 默认 720（320-4096）</span>
+<span id="L298"><span class="lineNum">     298</span>                 :             : </span>
+<span id="L299"><span class="lineNum">     299</span>                 :             : # MCP 服务器（command = stdio / url = streamable HTTP，二选一）：</span>
+<span id="L300"><span class="lineNum">     300</span>                 :             : # mcp_servers:</span>
+<span id="L301"><span class="lineNum">     301</span>                 :             : #   filesystem:</span>
+<span id="L302"><span class="lineNum">     302</span>                 :             : #     command: npx</span>
+<span id="L303"><span class="lineNum">     303</span>                 :             : #     args: [&quot;-y&quot;, &quot;@modelcontextprotocol/server-filesystem&quot;, &quot;/tmp&quot;]</span>
+<span id="L304"><span class="lineNum">     304</span>                 :             : #     # startup_timeout_sec: 30</span>
+<span id="L305"><span class="lineNum">     305</span>                 :             : #     # tool_timeout_sec: 300</span>
+<span id="L306"><span class="lineNum">     306</span>                 :             : #   remote:</span>
+<span id="L307"><span class="lineNum">     307</span>                 :             : #     url: https://mcp.example.com/mcp</span>
+<span id="L308"><span class="lineNum">     308</span>                 :             : #     headers:</span>
+<span id="L309"><span class="lineNum">     309</span>                 :             : #       Authorization: Bearer ${MCP_TOKEN}   # ${VAR} 加载时展开</span>
+<span id="L310"><span class="lineNum">     310</span>                 :             : </span>
+<span id="L311"><span class="lineNum">     311</span>                 :             : # 知识库（kb_search / kb_read；连接 minisearch 服务，opt-in，只读消费）：</span>
+<span id="L312"><span class="lineNum">     312</span>                 :             : # knowledge_base:</span>
+<span id="L313"><span class="lineNum">     313</span>                 :             : #   enabled: true</span>
+<span id="L314"><span class="lineNum">     314</span>                 :             : #   base_url: http://127.0.0.1:8200</span>
+<span id="L315"><span class="lineNum">     315</span>                 :             : #   api_key: msk_xxxxxxxxxxxxxxxx     # --auth=off 时留空</span>
+<span id="L316"><span class="lineNum">     316</span>                 :             : #   timeout_ms: 10000                 # 默认 10000（1000-60000）</span>
+<span id="L317"><span class="lineNum">     317</span>                 :             : #   default_top_k: 5                  # 默认 5（1-20）</span>
+<span id="L318"><span class="lineNum">     318</span>                 :             : #   default_collection: loom-kb       # 省略取 collections 第一项</span>
+<span id="L319"><span class="lineNum">     319</span>                 :             : #   collections:                      # 至少一个；description 帮助模型路由</span>
+<span id="L320"><span class="lineNum">     320</span>                 :             : #     - name: loom-kb</span>
+<span id="L321"><span class="lineNum">     321</span>                 :             : #       description: Loom 设计文档与使用手册</span>
+<span id="L322"><span class="lineNum">     322</span>                 :             : </span>
+<span id="L323"><span class="lineNum">     323</span>                 :             : # 预注册工作区（启动目录始终注册为默认工作区；root 支持 ~ 前缀）：</span>
+<span id="L324"><span class="lineNum">     324</span>                 :             : # workspaces:</span>
+<span id="L325"><span class="lineNum">     325</span>                 :             : #   - name: playground</span>
+<span id="L326"><span class="lineNum">     326</span>                 :             : #     root: ~/workspace/playground</span>
+<span id="L327"><span class="lineNum">     327</span>                 :             : `</span>
         </pre>
               </td>
             </tr>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -117,7 +117,7 @@
 <span id="L46"><span class="lineNum">      46</span>                 :             :         has    bool</span>
 <span id="L47"><span class="lineNum">      47</span>                 :             : }</span>
 <span id="L48"><span class="lineNum">      48</span>                 :             : </span>
-<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC tlaBgGNC">         225 : func NewGoalCell() *GoalCell { return &amp;GoalCell{} }</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC tlaBgGNC">         245 : func NewGoalCell() *GoalCell { return &amp;GoalCell{} }</span></span>
 <span id="L50"><span class="lineNum">      50</span>                 :             : </span>
 <span id="L51"><span class="lineNum">      51</span>                 :             : // Put stores an update for the loop to drain.</span>
 <span id="L52"><span class="lineNum">      52</span>                 :             : func (c *GoalCell) Put(u GoalUpdate) {</span>
@@ -128,17 +128,17 @@
 <span id="L57"><span class="lineNum">      57</span>                 :             : </span>
 <span id="L58"><span class="lineNum">      58</span>                 :             : // Take returns and clears the pending update, if any.</span>
 <span id="L59"><span class="lineNum">      59</span>                 :             : func (c *GoalCell) Take() (GoalUpdate, bool) {</span>
-<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">          18 :         c.mu.Lock()</span></span>
-<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">          18 :         defer c.mu.Unlock()</span></span>
-<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">          18 :         u, ok := c.update, c.has</span></span>
-<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">          18 :         c.update, c.has = GoalUpdate{}, false</span></span>
-<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">          18 :         return u, ok</span></span>
-<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">          18 : }</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">          19 :         c.mu.Lock()</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">          19 :         defer c.mu.Unlock()</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">          19 :         u, ok := c.update, c.has</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">          19 :         c.update, c.has = GoalUpdate{}, false</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">          19 :         return u, ok</span></span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">          19 : }</span></span>
 <span id="L66"><span class="lineNum">      66</span>                 :             : </span>
 <span id="L67"><span class="lineNum">      67</span>                 :             : func cloneGoal(goal *domain.Goal) *domain.Goal {</span>
-<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">         684 :         if goal == nil {</span></span>
-<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">         684 :                 return nil</span></span>
-<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">         684 :         }</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">         717 :         if goal == nil {</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">         717 :                 return nil</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">         717 :         }</span></span>
 <span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         cloned := *goal</span></span>
 <span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaUNC">           0 :         return &amp;cloned</span></span>
 <span id="L73"><span class="lineNum">      73</span>                 :             : }</span>
@@ -146,13 +146,13 @@
 <span id="L75"><span class="lineNum">      75</span>                 :             : // drainGoalUpdates applies a pending goal mutation to the run's goal and</span>
 <span id="L76"><span class="lineNum">      76</span>                 :             : // records the audit event. Called after every tool batch.</span>
 <span id="L77"><span class="lineNum">      77</span>                 :             : func (l *Loop) drainGoalUpdates() {</span>
-<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC tlaBgGNC">         225 :         if l.GoalCell == nil {</span></span>
+<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC tlaBgGNC">         226 :         if l.GoalCell == nil {</span></span>
 <span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">         211 :                 return</span></span>
 <span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">         211 :         }</span></span>
-<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">          14 :         update, ok := l.GoalCell.Take()</span></span>
-<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">          14 :         if !ok {</span></span>
-<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">           6 :                 return</span></span>
-<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">           6 :         }</span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">          15 :         update, ok := l.GoalCell.Take()</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">          15 :         if !ok {</span></span>
+<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">           7 :                 return</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">           7 :         }</span></span>
 <span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">           8 :         now := l.Run.Clock.Now()</span></span>
 <span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">           8 :         switch {</span></span>
 <span id="L87"><span class="lineNum">      87</span>                 :             :         case update.Close == domain.GoalStatusComplete || update.Close == domain.GoalStatusBlocked:</span>
@@ -193,15 +193,15 @@
 <span id="L122"><span class="lineNum">     122</span>                 :             : // The wrap-up state shares Run.WrapUpPending with the resource-budget</span>
 <span id="L123"><span class="lineNum">     123</span>                 :             : // soft landing (docs/CONTEXT_DESIGN.md §4.4.2).</span>
 <span id="L124"><span class="lineNum">     124</span>                 :             : func (l *Loop) continueGoalIfActive() bool {</span>
-<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">         172 :         if l.Run.WrapUpPending == wrapUpGoalTokens {</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">         175 :         if l.Run.WrapUpPending == wrapUpGoalTokens {</span></span>
 <span id="L126"><span class="lineNum">     126</span>                 :             :                 // The budget-limited goal's wrap-up turn just ended.</span>
 <span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">           2 :                 l.Run.WrapUpPending = &quot;&quot;</span></span>
 <span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaGNC">           2 :                 return false</span></span>
 <span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC">           2 :         }</span></span>
-<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">         170 :         goal := l.Run.Goal</span></span>
-<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">         170 :         if goal == nil || goal.Status != domain.GoalStatusActive {</span></span>
-<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">         165 :                 return false</span></span>
-<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">         165 :         }</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">         173 :         goal := l.Run.Goal</span></span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">         173 :         if goal == nil || goal.Status != domain.GoalStatusActive {</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">         168 :                 return false</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">         168 :         }</span></span>
 <span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">           5 :         if goal.TokenBudget &gt; 0 &amp;&amp; goal.TokensUsed &gt;= goal.TokenBudget {</span></span>
 <span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">           3 :                 goal.Status = domain.GoalStatusBudgetLimited</span></span>
 <span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">           3 :                 goal.UpdatedAt = l.Run.Clock.Now()</span></span>
@@ -297,28 +297,28 @@
 <span id="L226"><span class="lineNum">     226</span>                 :             : }</span>
 <span id="L227"><span class="lineNum">     227</span>                 :             : </span>
 <span id="L228"><span class="lineNum">     228</span>                 :             : func decodeUpdateGoalArgs(raw json.RawMessage) (updateGoalArgs, error) {</span>
-<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">          41 :         clean, stripped := stripCrossActionFields(raw, taskActionGoal)</span></span>
-<span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">          41 :         var args updateGoalArgs</span></span>
-<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">          41 :         dec := json.NewDecoder(strings.NewReader(string(clean)))</span></span>
-<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">          41 :         dec.DisallowUnknownFields()</span></span>
-<span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaGNC">          41 :         if err := dec.Decode(&amp;args); err != nil {</span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">          44 :         clean, stripped := stripCrossActionFields(raw, taskActionGoal)</span></span>
+<span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">          44 :         var args updateGoalArgs</span></span>
+<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">          44 :         dec := json.NewDecoder(strings.NewReader(string(clean)))</span></span>
+<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">          44 :         dec.DisallowUnknownFields()</span></span>
+<span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaGNC">          44 :         if err := dec.Decode(&amp;args); err != nil {</span></span>
 <span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return updateGoalArgs{}, domain.NewError(domain.ErrInvalidInput, `invalid update_task goal arguments (valid fields for action &quot;goal&quot;: action, objective, token_budget, status)`, domain.WithCause(err))</span></span>
 <span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaGNC tlaBgGNC">          41 :         if len(stripped) &gt; 0 {</span></span>
-<span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaGNC">           2 :                 args.IgnoredFields = stripped</span></span>
-<span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">           2 :         }</span></span>
+<span id="L236"><span class="lineNum">     236</span>                 :<span class="tlaGNC tlaBgGNC">          44 :         if len(stripped) &gt; 0 {</span></span>
+<span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaGNC">           3 :                 args.IgnoredFields = stripped</span></span>
+<span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">           3 :         }</span></span>
 <span id="L239"><span class="lineNum">     239</span>                 :             :         // An empty action means the caller inferred the route from the payload</span>
 <span id="L240"><span class="lineNum">     240</span>                 :             :         // (decodeUpdateTaskAction); pin it so the canonical arguments carry the</span>
 <span id="L241"><span class="lineNum">     241</span>                 :             :         // discriminator.</span>
-<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">          41 :         if args.Action == &quot;&quot; {</span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">          44 :         if args.Action == &quot;&quot; {</span></span>
 <span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaGNC">           2 :                 args.Action = taskActionGoal</span></span>
 <span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaGNC">           2 :         }</span></span>
-<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">          41 :         if args.Action != taskActionGoal {</span></span>
+<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">          44 :         if args.Action != taskActionGoal {</span></span>
 <span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">           1 :                 return updateGoalArgs{}, domain.NewError(domain.ErrInvalidInput,</span></span>
 <span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC">           1 :                         fmt.Sprintf(&quot;goal arguments require action %q, got %q&quot;, taskActionGoal, args.Action))</span></span>
 <span id="L248"><span class="lineNum">     248</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">          40 :         args.Objective = strings.TrimSpace(args.Objective)</span></span>
-<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">          40 :         switch {</span></span>
+<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">          43 :         args.Objective = strings.TrimSpace(args.Objective)</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">          43 :         switch {</span></span>
 <span id="L251"><span class="lineNum">     251</span>                 :             :         case args.TokenBudget &lt; 0:</span>
 <span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">           1 :                 return updateGoalArgs{}, domain.NewError(domain.ErrInvalidInput, &quot;token_budget must be positive&quot;)</span></span>
 <span id="L253"><span class="lineNum">     253</span>                 :             :         case args.Status != &quot;&quot; &amp;&amp; args.Status != string(domain.GoalStatusComplete) &amp;&amp; args.Status != string(domain.GoalStatusBlocked):</span>
@@ -330,7 +330,7 @@
 <span id="L259"><span class="lineNum">     259</span>                 :             :                 // token_budget only makes sense when (re)activating a goal.</span>
 <span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaGNC">           1 :                 return updateGoalArgs{}, domain.NewError(domain.ErrInvalidInput, &quot;token_budget cannot be combined with status&quot;)</span></span>
 <span id="L261"><span class="lineNum">     261</span>                 :             :         }</span>
-<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">          35 :         return args, nil</span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">          38 :         return args, nil</span></span>
 <span id="L263"><span class="lineNum">     263</span>                 :             : }</span>
         </pre>
               </td>

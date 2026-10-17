@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">92.4&nbsp;%</td>
+            <td class="headerCovTableEntryHi">95.5&nbsp;%</td>
             <td class="headerCovTableEntry">66</td>
-            <td class="headerCovTableEntry">61</td>
+            <td class="headerCovTableEntry">63</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -105,35 +105,35 @@
 <span id="L34"><span class="lineNum">      34</span>                 :             : // empty hosts, and ports outside 1-65535 — anything a client could use</span>
 <span id="L35"><span class="lineNum">      35</span>                 :             : // to make the policy layer and the dialer disagree about the target.</span>
 <span id="L36"><span class="lineNum">      36</span>                 :             : func parseAuthority(authority string, defaultPort int) (string, int, error) {</span>
-<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC tlaBgGNC">          41 :         if authority == &quot;&quot; {</span></span>
+<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC tlaBgGNC">          46 :         if authority == &quot;&quot; {</span></span>
 <span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">           1 :                 return &quot;&quot;, 0, errBadAuthority</span></span>
 <span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">          40 :         if strings.ContainsAny(authority, &quot;@/?# \t\r\n\x00&quot;) {</span></span>
+<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">          45 :         if strings.ContainsAny(authority, &quot;@/?# \t\r\n\x00&quot;) {</span></span>
 <span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">           6 :                 return &quot;&quot;, 0, errBadAuthority</span></span>
 <span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">           6 :         }</span></span>
-<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">          34 :         host, portStr, err := splitHostPort(authority)</span></span>
-<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC">          34 :         if err != nil {</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">          39 :         host, portStr, err := splitHostPort(authority)</span></span>
+<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC">          39 :         if err != nil {</span></span>
 <span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">           6 :                 return &quot;&quot;, 0, err</span></span>
 <span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">           6 :         }</span></span>
-<span id="L47"><span class="lineNum">      47</span>                 :<span class="tlaGNC">          28 :         port := defaultPort</span></span>
-<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">          28 :         if portStr != &quot;&quot; {</span></span>
-<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">          23 :                 port, err = parsePort(portStr)</span></span>
-<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">          23 :                 if err != nil {</span></span>
+<span id="L47"><span class="lineNum">      47</span>                 :<span class="tlaGNC">          33 :         port := defaultPort</span></span>
+<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">          33 :         if portStr != &quot;&quot; {</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">          28 :                 port, err = parsePort(portStr)</span></span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">          28 :                 if err != nil {</span></span>
 <span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">           6 :                         return &quot;&quot;, 0, err</span></span>
 <span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">           6 :                 }</span></span>
 <span id="L53"><span class="lineNum">      53</span>                 :             :         }</span>
-<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">          22 :         host = normalizeHost(host)</span></span>
-<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">          22 :         if err := validateHost(host); err != nil {</span></span>
-<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return &quot;&quot;, 0, err</span></span>
-<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC tlaBgGNC">          22 :         return host, port, nil</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">          27 :         host = normalizeHost(host)</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">          27 :         if err := validateHost(host); err != nil {</span></span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">           1 :                 return &quot;&quot;, 0, err</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">           1 :         }</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">          26 :         return host, port, nil</span></span>
 <span id="L59"><span class="lineNum">      59</span>                 :             : }</span>
 <span id="L60"><span class="lineNum">      60</span>                 :             : </span>
 <span id="L61"><span class="lineNum">      61</span>                 :             : // splitHostPort separates host and port, honouring bracketed IPv6</span>
 <span id="L62"><span class="lineNum">      62</span>                 :             : // ([::1]:443). A bare multi-colon string is accepted only if it parses</span>
 <span id="L63"><span class="lineNum">      63</span>                 :             : // as an IPv6 literal (then no port is split).</span>
 <span id="L64"><span class="lineNum">      64</span>                 :             : func splitHostPort(authority string) (host, port string, err error) {</span>
-<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">          34 :         if strings.HasPrefix(authority, &quot;[&quot;) {</span></span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">          39 :         if strings.HasPrefix(authority, &quot;[&quot;) {</span></span>
 <span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">           6 :                 close := strings.IndexByte(authority, ']')</span></span>
 <span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">           6 :                 if close == -1 {</span></span>
 <span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">           1 :                         return &quot;&quot;, &quot;&quot;, errBadAuthority</span></span>
@@ -152,13 +152,13 @@
 <span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                         return &quot;&quot;, &quot;&quot;, errBadAuthority</span></span>
 <span id="L82"><span class="lineNum">      82</span>                 :             :                 }</span>
 <span id="L83"><span class="lineNum">      83</span>                 :             :         }</span>
-<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC tlaBgGNC">          28 :         colons := strings.Count(authority, &quot;:&quot;)</span></span>
-<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">          28 :         switch {</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC tlaBgGNC">          33 :         colons := strings.Count(authority, &quot;:&quot;)</span></span>
+<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">          33 :         switch {</span></span>
 <span id="L86"><span class="lineNum">      86</span>                 :             :         case colons == 0:</span>
 <span id="L87"><span class="lineNum">      87</span>                 :<span class="tlaGNC">           3 :                 return authority, &quot;&quot;, nil</span></span>
 <span id="L88"><span class="lineNum">      88</span>                 :             :         case colons == 1:</span>
-<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">          21 :                 idx := strings.LastIndexByte(authority, ':')</span></span>
-<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">          21 :                 return authority[:idx], authority[idx+1:], nil</span></span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">          26 :                 idx := strings.LastIndexByte(authority, ':')</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">          26 :                 return authority[:idx], authority[idx+1:], nil</span></span>
 <span id="L91"><span class="lineNum">      91</span>                 :             :         default:</span>
 <span id="L92"><span class="lineNum">      92</span>                 :             :                 // Multi-colon without brackets: only acceptable as a bare IPv6</span>
 <span id="L93"><span class="lineNum">      93</span>                 :             :                 // literal (never split a trailing hextet into a &quot;port&quot;).</span>
@@ -173,41 +173,47 @@
 <span id="L102"><span class="lineNum">     102</span>                 :             : }</span>
 <span id="L103"><span class="lineNum">     103</span>                 :             : </span>
 <span id="L104"><span class="lineNum">     104</span>                 :             : func parsePort(s string) (int, error) {</span>
-<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC">          23 :         port, err := strconv.Atoi(s)</span></span>
-<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">          23 :         if err != nil || port &lt; 1 || port &gt; 65535 {</span></span>
+<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC">          28 :         port, err := strconv.Atoi(s)</span></span>
+<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">          28 :         if err != nil || port &lt; 1 || port &gt; 65535 {</span></span>
 <span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">           6 :                 return 0, errBadAuthority</span></span>
 <span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">           6 :         }</span></span>
-<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">          17 :         return port, nil</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">          22 :         return port, nil</span></span>
 <span id="L110"><span class="lineNum">     110</span>                 :             : }</span>
 <span id="L111"><span class="lineNum">     111</span>                 :             : </span>
 <span id="L112"><span class="lineNum">     112</span>                 :             : // normalizeHost canonicalizes the spelling every downstream consumer</span>
 <span id="L113"><span class="lineNum">     113</span>                 :             : // (policy, guard, dial, log record) shares: lowercased, trailing dot</span>
 <span id="L114"><span class="lineNum">     114</span>                 :             : // stripped.</span>
 <span id="L115"><span class="lineNum">     115</span>                 :             : func normalizeHost(host string) string {</span>
-<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">          28 :         host = strings.TrimSpace(host)</span></span>
-<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">          28 :         host = strings.TrimSuffix(host, &quot;.&quot;)</span></span>
-<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">          28 :         return strings.ToLower(host)</span></span>
-<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">          28 : }</span></span>
+<span id="L116"><span class="lineNum">     116</span>                 :<span class="tlaGNC">          33 :         host = strings.TrimSpace(host)</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">          33 :         host = strings.TrimSuffix(host, &quot;.&quot;)</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">          33 :         return strings.ToLower(host)</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">          33 : }</span></span>
 <span id="L120"><span class="lineNum">     120</span>                 :             : </span>
-<span id="L121"><span class="lineNum">     121</span>                 :             : // validateHost rejects hosts that could corrupt logs or resolvers:</span>
-<span id="L122"><span class="lineNum">     122</span>                 :             : // empty, or carrying control characters (SOCKS5 DOMAINNAME arrives as a</span>
-<span id="L123"><span class="lineNum">     123</span>                 :             : // length-prefixed raw byte string with zero protocol validation).</span>
-<span id="L124"><span class="lineNum">     124</span>                 :             : func validateHost(host string) error {</span>
-<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">          31 :         if host == &quot;&quot; {</span></span>
-<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return errBadAuthority</span></span>
-<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaGNC tlaBgGNC">          31 :         for _, r := range host {</span></span>
-<span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC">         325 :                 if r &lt; 0x20 || r == 0x7f {</span></span>
-<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">           3 :                         return fmt.Errorf(&quot;%w: control character in host&quot;, errBadAuthority)</span></span>
-<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">           3 :                 }</span></span>
-<span id="L132"><span class="lineNum">     132</span>                 :             :         }</span>
-<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">          28 :         return nil</span></span>
-<span id="L134"><span class="lineNum">     134</span>                 :             : }</span>
-<span id="L135"><span class="lineNum">     135</span>                 :             : </span>
-<span id="L136"><span class="lineNum">     136</span>                 :             : // isLoopbackName reports RFC 6761 loopback names.</span>
-<span id="L137"><span class="lineNum">     137</span>                 :             : func isLoopbackName(host string) bool {</span>
-<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">          17 :         return host == &quot;localhost&quot; || strings.HasSuffix(host, &quot;.localhost&quot;)</span></span>
-<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">          17 : }</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :             : // validateHost rejects hosts that could corrupt logs, resolvers, or</span>
+<span id="L122"><span class="lineNum">     122</span>                 :             : // the policy layer: empty, or carrying anything outside printable</span>
+<span id="L123"><span class="lineNum">     123</span>                 :             : // ASCII. Control characters would forge log lines (SOCKS5 DOMAINNAME</span>
+<span id="L124"><span class="lineNum">     124</span>                 :             : // arrives as a length-prefixed raw byte string with zero protocol</span>
+<span id="L125"><span class="lineNum">     125</span>                 :             : // validation); spaces are never valid in a DNS name or URL host; and</span>
+<span id="L126"><span class="lineNum">     126</span>                 :             : // non-ASCII (IDN) spellings must arrive as punycode — otherwise an</span>
+<span id="L127"><span class="lineNum">     127</span>                 :             : // IDNA-aware resolver (macOS getaddrinfo) can resolve a homograph the</span>
+<span id="L128"><span class="lineNum">     128</span>                 :             : // policy's deny rules never matched. Everything downstream — policy</span>
+<span id="L129"><span class="lineNum">     129</span>                 :             : // matching, guard, logging — compares ASCII spellings only.</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             : func validateHost(host string) error {</span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">          39 :         if host == &quot;&quot; {</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 return errBadAuthority</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaUNC">           0 :         }</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC tlaBgGNC">          39 :         for _, r := range host {</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">         397 :                 if r &lt; 0x21 || r &gt; 0x7e {</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">           6 :                         return fmt.Errorf(&quot;%w: non-printable-ASCII character in host&quot;, errBadAuthority)</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">           6 :                 }</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :             :         }</span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">          33 :         return nil</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :             : }</span>
+<span id="L141"><span class="lineNum">     141</span>                 :             : </span>
+<span id="L142"><span class="lineNum">     142</span>                 :             : // isLoopbackName reports RFC 6761 loopback names.</span>
+<span id="L143"><span class="lineNum">     143</span>                 :             : func isLoopbackName(host string) bool {</span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">          20 :         return host == &quot;localhost&quot; || strings.HasSuffix(host, &quot;.localhost&quot;)</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">          20 : }</span></span>
         </pre>
               </td>
             </tr>

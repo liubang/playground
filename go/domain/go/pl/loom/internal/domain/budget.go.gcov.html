@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -118,36 +118,36 @@
 <span id="L47"><span class="lineNum">      47</span>                 :             : // DefaultContextConfig returns the standard context configuration. The</span>
 <span id="L48"><span class="lineNum">      48</span>                 :             : // defaults must pass Validate — that invariant is covered by tests.</span>
 <span id="L49"><span class="lineNum">      49</span>                 :             : func DefaultContextConfig() ContextConfig {</span>
-<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC tlaBgGNC">         195 :         return ContextConfig{</span></span>
-<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">         195 :                 Utilization:         0.95,</span></span>
-<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">         195 :                 CompactTriggerRatio: 0.80,</span></span>
-<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">         195 :                 CompactTargetRatio:  0.50,</span></span>
-<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">         195 :                 NoticeLevels:        []float64{0.60, 0.75},</span></span>
-<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">         195 :         }</span></span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC tlaBgGNC">         199 :         return ContextConfig{</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">         199 :                 Utilization:         0.95,</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">         199 :                 CompactTriggerRatio: 0.80,</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">         199 :                 CompactTargetRatio:  0.50,</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">         199 :                 NoticeLevels:        []float64{0.60, 0.75},</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">         199 :         }</span></span>
 <span id="L56"><span class="lineNum">      56</span>                 :             : }</span>
 <span id="L57"><span class="lineNum">      57</span>                 :             : </span>
 <span id="L58"><span class="lineNum">      58</span>                 :             : // Validate enforces the ordering invariants; violations are hard config</span>
 <span id="L59"><span class="lineNum">      59</span>                 :             : // errors at startup.</span>
 <span id="L60"><span class="lineNum">      60</span>                 :             : func (c ContextConfig) Validate() error {</span>
-<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">         123 :         if c.Utilization &lt;= 0 || c.Utilization &gt; 1 {</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">         127 :         if c.Utilization &lt;= 0 || c.Utilization &gt; 1 {</span></span>
 <span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">           2 :                 return fmt.Errorf(&quot;context.utilization must be in (0, 1], got %v&quot;, c.Utilization)</span></span>
 <span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">           2 :         }</span></span>
-<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">         121 :         if c.CompactTriggerRatio &lt;= 0 || c.CompactTriggerRatio &gt;= 1 {</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">         125 :         if c.CompactTriggerRatio &lt;= 0 || c.CompactTriggerRatio &gt;= 1 {</span></span>
 <span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">           2 :                 return fmt.Errorf(&quot;context.compact_trigger_ratio must be in (0, 1), got %v&quot;, c.CompactTriggerRatio)</span></span>
 <span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">           2 :         }</span></span>
-<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">         119 :         if c.CompactTargetRatio &lt;= 0 || c.CompactTargetRatio &gt;= c.CompactTriggerRatio {</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">         123 :         if c.CompactTargetRatio &lt;= 0 || c.CompactTargetRatio &gt;= c.CompactTriggerRatio {</span></span>
 <span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">           3 :                 return fmt.Errorf(&quot;context.compact_target_ratio must be in (0, compact_trigger_ratio), got %v (trigger %v)&quot;,</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">           3 :                         c.CompactTargetRatio, c.CompactTriggerRatio)</span></span>
 <span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">           3 :         }</span></span>
-<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">         116 :         for i, level := range c.NoticeLevels {</span></span>
-<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">         226 :                 if level &lt;= 0 || level &gt;= c.CompactTriggerRatio {</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">         120 :         for i, level := range c.NoticeLevels {</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">         234 :                 if level &lt;= 0 || level &gt;= c.CompactTriggerRatio {</span></span>
 <span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">           4 :                         return fmt.Errorf(&quot;context.notice_levels[%d] must be in (0, compact_trigger_ratio), got %v&quot;, i, level)</span></span>
 <span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">           4 :                 }</span></span>
-<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">         222 :                 if i &gt; 0 &amp;&amp; level &lt;= c.NoticeLevels[i-1] {</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">         230 :                 if i &gt; 0 &amp;&amp; level &lt;= c.NoticeLevels[i-1] {</span></span>
 <span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">           1 :                         return fmt.Errorf(&quot;context.notice_levels must be strictly ascending, got %v&quot;, c.NoticeLevels)</span></span>
 <span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">           1 :                 }</span></span>
 <span id="L78"><span class="lineNum">      78</span>                 :             :         }</span>
-<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">         111 :         return nil</span></span>
+<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">         115 :         return nil</span></span>
 <span id="L80"><span class="lineNum">      80</span>                 :             : }</span>
 <span id="L81"><span class="lineNum">      81</span>                 :             : </span>
 <span id="L82"><span class="lineNum">      82</span>                 :             : // RunawayConfig tunes behavior-based runaway detection</span>
@@ -176,20 +176,20 @@
 <span id="L105"><span class="lineNum">     105</span>                 :             : </span>
 <span id="L106"><span class="lineNum">     106</span>                 :             : // DefaultRunawayConfig returns the standard runaway-detection thresholds.</span>
 <span id="L107"><span class="lineNum">     107</span>                 :             : func DefaultRunawayConfig() RunawayConfig {</span>
-<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">        1397 :         return RunawayConfig{</span></span>
-<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">        1397 :                 MaxRepeatedCalls:       3,</span></span>
-<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">        1397 :                 MaxConsecutiveFailures: 5,</span></span>
-<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">        1397 :                 StallWarnTurns:         10,</span></span>
-<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">        1397 :                 StallTimeout:           15 * time.Minute,</span></span>
-<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">        1397 :         }</span></span>
+<span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">        1422 :         return RunawayConfig{</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaGNC">        1422 :                 MaxRepeatedCalls:       3,</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">        1422 :                 MaxConsecutiveFailures: 5,</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">        1422 :                 StallWarnTurns:         10,</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :<span class="tlaGNC">        1422 :                 StallTimeout:           15 * time.Minute,</span></span>
+<span id="L113"><span class="lineNum">     113</span>                 :<span class="tlaGNC">        1422 :         }</span></span>
 <span id="L114"><span class="lineNum">     114</span>                 :             : }</span>
 <span id="L115"><span class="lineNum">     115</span>                 :             : </span>
 <span id="L116"><span class="lineNum">     116</span>                 :             : // Validate rejects negative thresholds.</span>
 <span id="L117"><span class="lineNum">     117</span>                 :             : func (c RunawayConfig) Validate() error {</span>
-<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">         111 :         if c.MaxRepeatedCalls &lt; 0 || c.MaxConsecutiveFailures &lt; 0 || c.StallWarnTurns &lt; 0 || c.StallTimeout &lt; 0 {</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">         115 :         if c.MaxRepeatedCalls &lt; 0 || c.MaxConsecutiveFailures &lt; 0 || c.StallWarnTurns &lt; 0 || c.StallTimeout &lt; 0 {</span></span>
 <span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">           2 :                 return fmt.Errorf(&quot;runaway thresholds must be &gt;= 0, got %+v&quot;, c)</span></span>
 <span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">           2 :         }</span></span>
-<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">         109 :         return nil</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">         113 :         return nil</span></span>
 <span id="L122"><span class="lineNum">     122</span>                 :             : }</span>
         </pre>
               </td>

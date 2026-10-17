@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-10-04 11:57:42</td>
+            <td class="headerValue">2026-10-17 18:01:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -137,11 +137,11 @@
 <span id="L66"><span class="lineNum">      66</span>                 :             : // endpoint. Returns an error when the override names a provider whose</span>
 <span id="L67"><span class="lineNum">      67</span>                 :             : // required key is missing.</span>
 <span id="L68"><span class="lineNum">      68</span>                 :             : func selectProvider(getenv func(string) string) (searchProvider, error) {</span>
-<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC tlaBgGNC">          59 :         if getenv == nil {</span></span>
-<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">          52 :                 getenv = os.Getenv</span></span>
-<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">          52 :         }</span></span>
-<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">          59 :         override := strings.ToLower(strings.TrimSpace(getenv(&quot;LOOM_WEB_SEARCH_PROVIDER&quot;)))</span></span>
-<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">          59 :         if override != &quot;&quot; {</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC tlaBgGNC">          68 :         if getenv == nil {</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">          61 :                 getenv = os.Getenv</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">          61 :         }</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">          68 :         override := strings.ToLower(strings.TrimSpace(getenv(&quot;LOOM_WEB_SEARCH_PROVIDER&quot;)))</span></span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">          68 :         if override != &quot;&quot; {</span></span>
 <span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">           4 :                 switch override {</span></span>
 <span id="L75"><span class="lineNum">      75</span>                 :             :                 case providerBrave:</span>
 <span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">           1 :                         key := strings.TrimSpace(getenv(&quot;BRAVE_SEARCH_API_KEY&quot;))</span></span>
@@ -161,13 +161,13 @@
 <span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">           1 :                         return nil, domain.NewError(domain.ErrInvalidInput, fmt.Sprintf(&quot;unsupported LOOM_WEB_SEARCH_PROVIDER %q (want brave, tavily, or duckduckgo)&quot;, override))</span></span>
 <span id="L91"><span class="lineNum">      91</span>                 :             :                 }</span>
 <span id="L92"><span class="lineNum">      92</span>                 :             :         }</span>
-<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">          55 :         if key := strings.TrimSpace(getenv(&quot;BRAVE_SEARCH_API_KEY&quot;)); key != &quot;&quot; {</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">          64 :         if key := strings.TrimSpace(getenv(&quot;BRAVE_SEARCH_API_KEY&quot;)); key != &quot;&quot; {</span></span>
 <span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">           1 :                 return &amp;braveProvider{endpoint: braveEndpoint, apiKey: key}, nil</span></span>
 <span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">          54 :         if key := strings.TrimSpace(getenv(&quot;TAVILY_API_KEY&quot;)); key != &quot;&quot; {</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">          63 :         if key := strings.TrimSpace(getenv(&quot;TAVILY_API_KEY&quot;)); key != &quot;&quot; {</span></span>
 <span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">           1 :                 return &amp;tavilyProvider{endpoint: tavilyEndpoint, apiKey: key}, nil</span></span>
 <span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC">           1 :         }</span></span>
-<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">          53 :         return &amp;duckDuckGoProvider{endpoint: duckDuckGoEndpoint}, nil</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">          62 :         return &amp;duckDuckGoProvider{endpoint: duckDuckGoEndpoint}, nil</span></span>
 <span id="L100"><span class="lineNum">     100</span>                 :             : }</span>
 <span id="L101"><span class="lineNum">     101</span>                 :             : </span>
 <span id="L102"><span class="lineNum">     102</span>                 :             : // readResponseBody bounds and validates a provider HTTP response.</span>
