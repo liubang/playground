@@ -283,19 +283,15 @@ func TestMemoryBootstrapWithoutModel(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if prepared.Risk != domain.R3 {
-					t.Fatalf("destructive memory must prepare R3: %+v", prepared)
+				if prepared.Risk != domain.R2 {
+					t.Fatalf("memory mutation must prepare R2 (no approval): %+v", prepared)
 				}
 				for _, mode := range []permission.ApprovalMode{permission.ModeOnRequest, permission.ModeDangerOnly, permission.ModeNever} {
 					if err := first.SetApprovalMode(ctx, mode); err != nil {
 						t.Fatal(err)
 					}
-					want := domain.DecisionAsk
-					if mode == permission.ModeNever {
-						want = domain.DecisionDeny
-					}
-					if verdict := first.CurrentPolicy().Evaluate(prepared); verdict.Decision != want {
-						t.Fatalf("bootstrap memory policy in mode %s: %+v, want %s", mode, verdict, want)
+					if verdict := first.CurrentPolicy().Evaluate(prepared); verdict.Decision != domain.DecisionAllow {
+						t.Fatalf("bootstrap memory policy in mode %s: %+v, want allow", mode, verdict)
 					}
 				}
 			}

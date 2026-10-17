@@ -46,8 +46,11 @@ type memoryArgs struct {
 	MaxResults int    `json:"max_results,omitzero"`
 }
 
-// MemoryTool exposes active records only. Approval signs the normalized mutation,
-// while the host-bound Store and ToolContext supply scope and source attribution.
+// MemoryTool exposes active records only. Prepare normalizes and signs the
+// mutation, while the host-bound Store and ToolContext supply scope and
+// source attribution. All actions run without approval: memory is advisory
+// context (recoverable by restating a fact), and the background extraction
+// pipeline already writes to the same store unattended.
 type MemoryTool struct {
 	def   domain.ToolDefinition
 	store *Store
@@ -132,9 +135,6 @@ func (a *memoryArgs) validate() (domain.RiskLevel, error) {
 		} else if a.Content == "" || len(a.Content) > MaxContentBytes || !utf8.ValidString(a.Content) {
 			return invalid("content must be valid UTF-8 and between 1 and 4096 bytes")
 		}
-		if a.ID != "" {
-			return domain.R3, nil
-		}
 		return domain.R2, nil
 	default:
 		return invalid("unknown memory action")
@@ -159,13 +159,6 @@ func (t *MemoryTool) Prepare(_ context.Context, call domain.ToolCall) (domain.Pr
 	}
 	call.Arguments = canonical
 	description := fmt.Sprintf("Memory %s (%s): %s", args.Action, args.Scope, toolkit.Ellipsize(args.Content+args.ID+args.Query, 120))
-	if args.ID != "" && risk == domain.R3 {
-		area := "this workspace"
-		if args.Scope == "global" {
-			area = "all workspaces"
-		}
-		description += "; invalidates all automatically inferred memories in " + area + " to prevent stale evidence from restoring this fact"
-	}
 	return domain.PreparedCall{Call: call, Definition: t.def, Risk: risk, ApprovalDesc: description, ArgsHash: toolkit.ArgsFingerprint(canonical)}, nil
 }
 

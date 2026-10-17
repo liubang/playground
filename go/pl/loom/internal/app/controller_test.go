@@ -1871,9 +1871,6 @@ func TestPublishingStoreApprovalPreservesActualRisk(t *testing.T) {
 			if !ok || card.Risk != tc.risk || card.Source != tc.source || card.Consequence != approvalConsequence(derivation) {
 				t.Fatalf("pending card diverged from actual Prepare: %+v, %+v", card, derivation)
 			}
-			if tc.name == "memory" && tc.risk == domain.R3 && (card.Consequence == "" || !strings.Contains(card.Consequence, "memory mutation revokes shared evidence")) {
-				t.Fatalf("memory R3 destructive consequence missing: %+v", card)
-			}
 			select {
 			case event := <-events:
 				if event.Kind != runtimeevent.KindApprovalRequested {

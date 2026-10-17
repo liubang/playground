@@ -47,30 +47,36 @@ func needsWrite(p string) func(*domain.ExecRequest) {
 	return func(req *domain.ExecRequest) { req.WritablePaths = []string{p} }
 }
 
-func TestDeriveDestructiveMemoryRequiresApproval(t *testing.T) {
+// Memory mutations are R2 confined writes: they auto-allow in every
+// approval mode, matching the background extraction pipeline, which also
+// writes memory unattended. Memory is advisory context — a wrong mutation
+// is recovered by restating the fact, not by an approval gate.
+func TestDeriveMemoryMutationAutoAllowed(t *testing.T) {
 	call := domain.PreparedCall{
 		Call:       domain.ToolCall{Name: "memory", Arguments: json.RawMessage(`{"action":"forget","id":"mem-1","revision":1}`)},
 		Definition: domain.ToolDefinition{Name: "memory", Source: domain.ToolSourceBuiltin},
-		Risk:       domain.R3,
+		Risk:       domain.R2,
 	}
 	d := DeriveEffect(call, DeriveEnv{})
-	if d.Effect.Consequence != ConsequenceSharedDestructive || len(d.Effect.Indicators) == 0 || d.ForcedAsk == "" {
-		t.Fatalf("R3 memory lost destructive classification: %+v", d)
+	if !reflect.DeepEqual(d.Effect, ZeroEffect) || d.ForcedAsk != "" {
+		t.Fatalf("R2 memory must derive the zero effect without a forced ask: %+v", d)
 	}
 	for _, mode := range []ApprovalMode{ModeOnRequest, ModeDangerOnly, ModeNever} {
 		policy := DefaultPolicy()
 		policy.Mode = mode
-		want := domain.DecisionAsk
-		if mode == ModeNever {
-			want = domain.DecisionDeny
-		}
-		if got := policy.Evaluate(call); got.Decision != want {
-			t.Errorf("mode %s: %+v, want %s", mode, got, want)
+		if got := policy.Evaluate(call); got.Decision != domain.DecisionAllow {
+			t.Errorf("mode %s: %+v, want allow", mode, got)
 		}
 	}
-	call.Risk = domain.R2
-	if got := DefaultPolicy().Evaluate(call); got.Decision != domain.DecisionAllow {
-		t.Fatalf("non-destructive memory no longer allowed: %+v", got)
+	// An R3+ plain builtin whose cost is not a capability (a quota spender
+	// like generate_image) keeps the generic forced ask — without any
+	// destructive classification.
+	call.Risk = domain.R3
+	call.Call.Name = "generate_image"
+	call.Definition.Name = "generate_image"
+	d = DeriveEffect(call, DeriveEnv{})
+	if d.ForcedAsk == "" || d.Effect.Consequence != ConsequenceConfined || len(d.Effect.Indicators) != 0 {
+		t.Fatalf("R3 plain builtin lost its generic forced ask: %+v", d)
 	}
 }
 
@@ -321,8 +327,10 @@ func TestDeriveRawArgsPreservesActualRisk(t *testing.T) {
 					t.Fatalf("raw derivation = %+v, prepared = %+v", got, want)
 				}
 				if source == domain.ToolSourceBuiltin {
-					if (got.Effect.Consequence == ConsequenceSharedDestructive) != (risk >= domain.R3) {
-						t.Fatalf("memory consequence does not reflect actual risk: %+v", got)
+					// Memory mutations stay confined at any risk; the generic
+					// forced ask starts above R2.
+					if got.Effect.Consequence != ConsequenceConfined || (got.ForcedAsk != "") != (risk > domain.R2) {
+						t.Fatalf("memory derivation does not reflect actual risk: %+v", got)
 					}
 				} else if got.Effect.Proven || (got.ForcedAsk != "") != (risk > domain.R1) {
 					t.Fatalf("MCP actual risk or identity lost: %+v", got)

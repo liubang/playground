@@ -323,18 +323,10 @@ func (d *Derivation) deriveMCP(call domain.PreparedCall) {
 // R3+ tools whose cost is not a capability (provider quota spenders like
 // generate_image) keep a forced ask.
 func (d *Derivation) derivePlainBuiltin(call domain.PreparedCall) {
-	if call.Risk <= domain.R2 {
-		d.Effect = ZeroEffect
-		return
-	}
 	d.Effect = ZeroEffect
-	if call.Call.Name == "memory" {
-		// R3 memory mutations revoke shared evidence, unlike quota spenders:
-		// danger-only must not bypass approval for these destructive calls.
-		d.Effect.Consequence = ConsequenceSharedDestructive
-		d.Effect.Indicators = []string{"memory mutation revokes shared evidence"}
+	if call.Risk > domain.R2 {
+		d.ForcedAsk = "R3+ builtin operation requires approval"
 	}
-	d.ForcedAsk = "R3+ builtin operation requires approval"
 }
 
 // derivePlan computes a nested plan's effect (recursive sh -c analysis).
