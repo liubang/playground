@@ -757,8 +757,9 @@ func runChatCompletions(ctx context.Context, parser *sse.Parser, state *canonica
 			if message == "" {
 				message = "openai provider: stream error frame"
 			}
+			errCode, retryable := classifyStreamError(code, message)
 			wireutil.EmitStreamFailure(emit, errors.New(message), domain.StopProviderError,
-				isTransientProviderError(code, message), func() { _ = state.closeOpen(emit) })
+				errCode, retryable, func() { _ = state.closeOpen(emit) })
 			return
 		}
 
@@ -876,7 +877,7 @@ func runResponses(ctx context.Context, parser *sse.Parser, state *canonicalState
 				finishWithError(state, fmt.Errorf("openai provider: received %q before response.created", eventName), domain.StopProviderError, emit)
 				return
 			}
-			if err := state.prepareBufferedTerminal(state.responsesCompletedStop(), responseUsage(envelope.Response), "", false, emit); err != nil {
+			if err := state.prepareBufferedTerminal(state.responsesCompletedStop(), responseUsage(envelope.Response), "", "", false, emit); err != nil {
 				finishWithError(state, err, domain.StopProviderError, emit)
 				return
 			}
@@ -894,20 +895,25 @@ func runResponses(ctx context.Context, parser *sse.Parser, state *canonicalState
 				// the run after the full generation cost was already paid — the
 				// failure mode that wiped out whole sub-agent explorations
 				// (docs/SUBAGENT_DESIGN.md §12).
-				if err := state.prepareBufferedTerminal(stop, responseUsage(envelope.Response), "", false, emit); err != nil {
+				if err := state.prepareBufferedTerminal(stop, responseUsage(envelope.Response), "", "", false, emit); err != nil {
 					finishWithError(state, err, domain.StopProviderError, emit)
 					return
 				}
-			} else if err := state.prepareBufferedTerminal(stop, nil, incompleteMessage(reason), isTransientProviderError("", reason), emit); err != nil {
-				finishWithError(state, err, domain.StopProviderError, emit)
-				return
+			} else {
+				reasonText := incompleteMessage(reason)
+				errCode, retryable := classifyStreamError("", reason)
+				if err := state.prepareBufferedTerminal(stop, nil, reasonText, errCode, retryable, emit); err != nil {
+					finishWithError(state, err, domain.StopProviderError, emit)
+					return
+				}
 			}
 		case "response.failed", "error":
 			code, message := responseFailureError(eventName, envelope)
 			// A server-side failure frame (overload, scheduler capacity, internal
 			// hiccup) is as transient as a dropped connection: classify it so the
 			// agent loop waits and retries instead of killing the run.
-			if err := state.prepareBufferedTerminal(domain.StopProviderError, nil, message, isTransientProviderError(code, message), emit); err != nil {
+			errCode, retryable := classifyStreamError(code, message)
+			if err := state.prepareBufferedTerminal(domain.StopProviderError, nil, message, errCode, retryable, emit); err != nil {
 				finishWithError(state, err, domain.StopProviderError, emit)
 				return
 			}
@@ -935,7 +941,13 @@ func finishChatDone(state *canonicalState, emit stream.Emitter) {
 // yet.
 func finishReadFailure(state *canonicalState, emit stream.Emitter) func(error, domain.StopReason, bool) {
 	return func(err error, stop domain.StopReason, retryable bool) {
-		wireutil.EmitStreamFailure(emit, err, stop, retryable, func() { _ = state.closeOpen(emit) })
+		// Read failures are transport-layer truncations/drops: transient
+		// unavailability, never a rate window.
+		code := domain.ErrorCode("")
+		if retryable {
+			code = domain.ErrUnavailable
+		}
+		wireutil.EmitStreamFailure(emit, err, stop, code, retryable, func() { _ = state.closeOpen(emit) })
 	}
 }
 
@@ -968,7 +980,7 @@ func finishResponsesReadError(ctx context.Context, state *canonicalState, err er
 }
 
 func finishWithError(state *canonicalState, err error, stop domain.StopReason, emit stream.Emitter) {
-	wireutil.EmitStreamFailure(emit, err, stop, false, func() { _ = state.closeOpen(emit) })
+	wireutil.EmitStreamFailure(emit, err, stop, "", false, func() { _ = state.closeOpen(emit) })
 }
 
 type canonicalState struct {
@@ -979,6 +991,7 @@ type canonicalState struct {
 	finalStop              domain.StopReason
 	bufferedUsage          *usageInfo
 	bufferedError          string
+	bufferedErrorCode      domain.ErrorCode
 	bufferedErrorRetryable bool
 	toolUse                bool
 	tools                  map[int]*toolState
@@ -1150,7 +1163,7 @@ func (s *canonicalState) applyResponseToolArgsDone(index int, arguments string, 
 	return s.emitToolArgumentSnapshot(tool, arguments, emit)
 }
 
-func (s *canonicalState) prepareBufferedTerminal(stop domain.StopReason, usage *usageInfo, streamErr string, retryable bool, emit func(domain.ModelEvent) bool) error {
+func (s *canonicalState) prepareBufferedTerminal(stop domain.StopReason, usage *usageInfo, streamErr string, errCode domain.ErrorCode, retryable bool, emit func(domain.ModelEvent) bool) error {
 	if s.finishSeen {
 		return fmt.Errorf("openai provider: duplicate terminal event")
 	}
@@ -1160,6 +1173,7 @@ func (s *canonicalState) prepareBufferedTerminal(stop domain.StopReason, usage *
 	s.finishSeen = true
 	s.finalStop = stop
 	s.bufferedError = streamErr
+	s.bufferedErrorCode = errCode
 	s.bufferedErrorRetryable = retryable
 	s.bufferedUsage = usage
 	if streamErr != "" {
@@ -1174,6 +1188,7 @@ func (s *canonicalState) flushBufferedTerminal(emit func(domain.ModelEvent) bool
 			Kind:      domain.ModelEventStreamError,
 			Error:     s.bufferedError,
 			Retryable: s.bufferedErrorRetryable,
+			ErrorCode: s.bufferedErrorCode,
 		})
 	}
 	if s.bufferedUsage != nil {
@@ -1537,7 +1552,10 @@ var transientProviderErrorCodes = map[string]bool{
 	"temporarily_unavailable": true,
 	"scheduler_unavailable":   true,
 	"rate_limit":              true,
+	"rate_limit_error":        true,
 	"rate_limit_exceeded":     true,
+	"request_rate_limited":    true,
+	"too_many_requests":       true,
 	"timeout":                 true,
 	"request_timeout":         true,
 }
@@ -1554,7 +1572,8 @@ var nonRetryableErrorMarkers = []string{
 var transientErrorMarkers = []string{
 	"scheduler unavailable", "overloaded", "temporarily", "service unavailable",
 	"internal error", "internal server", "capacity", "timed out", "timeout",
-	"rate limit", "too many requests", "try again", "unavailable",
+	"rate limit", "too many requests", "too many concurrent", "concurrency limit",
+	"try again", "unavailable", "每分钟", "限流",
 }
 
 // isTransientProviderError classifies an in-band provider error frame. The
@@ -1578,6 +1597,46 @@ func isTransientProviderError(code, message string) bool {
 		}
 	}
 	return false
+}
+
+// rateLimitProviderErrorCodes are wire error codes that specifically mean
+// "slow down" — a rate/concurrency window, not generic unavailability.
+var rateLimitProviderErrorCodes = map[string]bool{
+	"rate_limit":           true,
+	"rate_limit_error":     true,
+	"rate_limit_exceeded":  true,
+	"request_rate_limited": true,
+	"too_many_requests":    true,
+}
+
+// rateLimitErrorMarkers catch rate-window phrases in free-text messages
+// when the wire code is missing or unrecognized — including gateways that
+// answer in Chinese ("每分钟请求次数超过限制") and gateway-global
+// concurrency notices ("Too many concurrent ... requests").
+var rateLimitErrorMarkers = []string{
+	"rate limit", "too many requests", "requests per minute",
+	"concurrency limit", "too many concurrent",
+	"每分钟", "限流",
+}
+
+// classifyStreamError maps an in-band provider error frame onto the domain
+// error vocabulary so the agent loop can tell "wait out a rate window"
+// apart from a generic transient failure (and both from request-shaped
+// problems, which stay unclassified and non-retryable).
+func classifyStreamError(code, message string) (domain.ErrorCode, bool) {
+	if !isTransientProviderError(code, message) {
+		return "", false
+	}
+	if rateLimitProviderErrorCodes[strings.ToLower(strings.TrimSpace(code))] {
+		return domain.ErrRateLimited, true
+	}
+	lowerMessage := strings.ToLower(message)
+	for _, marker := range rateLimitErrorMarkers {
+		if strings.Contains(lowerMessage, marker) {
+			return domain.ErrRateLimited, true
+		}
+	}
+	return domain.ErrUnavailable, true
 }
 
 func mapIncompleteStopReason(reason string) domain.StopReason {

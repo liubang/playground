@@ -1446,6 +1446,71 @@ func TestStreamResponsesTransientFailureFrameIsRetryable(t *testing.T) {
 	}
 }
 
+func TestClassifyStreamError(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		code      string
+		message   string
+		wantCode  domain.ErrorCode
+		wantRetry bool
+	}{
+		{"rate limit code", "rate_limit_exceeded", "slow down", domain.ErrRateLimited, true},
+		{"per-minute window in Chinese", "rate_limit_exceeded", "每分钟请求次数超过限制", domain.ErrRateLimited, true},
+		{"gateway concurrency window", "request_rate_limited", "Too many concurrent responses create requests; global concurrency limit reached (96/96)", domain.ErrRateLimited, true},
+		{"rate limit message without code", "", "Rate limit reached, please try again later", domain.ErrRateLimited, true},
+		{"scheduler capacity stays unavailable", "", "Scheduler unavailable", domain.ErrUnavailable, true},
+		{"internal code stays unavailable", "internal", "boom", domain.ErrUnavailable, true},
+		{"quota exhaustion stays terminal", "", "quota exhausted, try again after topping up", "", false},
+		{"invalid request stays terminal", "invalid_request_error", "messages: unexpected role", "", false},
+		{"unknown frame stays terminal", "weird_code", "something strange happened", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			code, retryable := classifyStreamError(tc.code, tc.message)
+			if code != tc.wantCode || retryable != tc.wantRetry {
+				t.Fatalf("classifyStreamError(%q, %q) = (%q, %v), want (%q, %v)",
+					tc.code, tc.message, code, retryable, tc.wantCode, tc.wantRetry)
+			}
+		})
+	}
+}
+
+// Regression: an in-band rate-limit frame (a compatible gateway rejecting
+// with HTTP 200 + a response.failed frame) must surface as rate_limited so
+// the agent loop waits out the per-minute window instead of treating it as
+// generic unavailability.
+func TestStreamResponsesRateLimitFrameIsClassified(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "event: response.failed\ndata: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\",\"error\":{\"code\":\"rate_limit_exceeded\",\"message\":\"每分钟请求次数超过限制\"}}}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	provider := newTestProviderWithWireAPI(t, server.URL+"/v1", server.Client(), 0, WireAPIResponses)
+	stream, err := provider.Stream(context.Background(), domain.ModelRequest{
+		ModelName: "gpt-test",
+		Messages:  []domain.Message{textMessage(domain.RoleUser, "hi")},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	defer stream.Close()
+
+	events := collectEvents(t, stream)
+	assertEventKinds(t, events, domain.ModelEventStreamError, domain.ModelEventResponseEnd)
+	if !events[0].Retryable {
+		t.Fatalf("rate-limit frame must be retryable: %+v", events[0])
+	}
+	if events[0].ErrorCode != domain.ErrRateLimited {
+		t.Fatalf("ErrorCode = %q, want %q", events[0].ErrorCode, domain.ErrRateLimited)
+	}
+}
+
 // A request-shaped failure frame (auth, invalid input, quota) must stay
 // non-retryable so the loop surfaces it instead of burning retry budget.
 func TestStreamResponsesNonTransientFailureFrameStaysTerminal(t *testing.T) {

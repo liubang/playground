@@ -45,6 +45,15 @@ const (
 	// model — long pastes and logs cost input tokens without improving
 	// the title.
 	titlePromptMaxRunes = 2000
+	// titleGenAttempts bounds the sidecar's own retries of transient
+	// failures: a rate-limited gateway rejects the fire-and-forget title
+	// call exactly when the main request is fighting the same window, and
+	// the one-shot trigger means a dropped first attempt loses the title
+	// forever. Retrying inside the (already bounded) sidecar budget keeps
+	// the failure silent while giving the window time to clear.
+	titleGenAttempts = 3
+	// titleGenRetryWait seeds the linear retry spacing (5s, 10s).
+	titleGenRetryWait = 5 * time.Second
 )
 
 const titleSystemPrompt = `You name conversations for a coding assistant's session list. Given the user's first message, reply with a concise title for the conversation. Rules:
@@ -60,6 +69,12 @@ type TitleSidecar struct {
 	store    *session.SQLiteStore
 	resolved func() *config.ResolvedConfig
 	logger   *slog.Logger
+	// attempts bounds the sidecar's own retries of transient failures;
+	// zero selects titleGenAttempts. retryWait seeds the linear retry
+	// spacing; zero selects titleGenRetryWait. Tests shrink both to keep
+	// the suite fast.
+	attempts  int
+	retryWait time.Duration
 }
 
 // NewTitleSidecar assembles the sidecar; resolved is read per run so a
@@ -125,6 +140,20 @@ func (t *TitleSidecar) Generate(sessionID domain.SessionID, ref config.ProviderM
 			return
 		}
 		title, err := runTitleCall(ctx, model, ref.Model, prompt)
+		attempts := t.attempts
+		if attempts <= 0 {
+			attempts = titleGenAttempts
+		}
+		retryWait := t.retryWait
+		if retryWait <= 0 {
+			retryWait = titleGenRetryWait
+		}
+		for attempt := 1; err != nil && domain.IsRetryable(err) && attempt < attempts; attempt++ {
+			if waitErr := waitTitleRetry(ctx, retryWait*time.Duration(attempt)); waitErr != nil {
+				break
+			}
+			title, err = runTitleCall(ctx, model, ref.Model, prompt)
+		}
 		if err != nil {
 			t.logger.Warn("session title generation failed", "session", sessionID, "error", err)
 			done("")
@@ -195,6 +224,19 @@ func (c *Controller) TitlePending() bool {
 	return c.titlePending
 }
 
+// waitTitleRetry sleeps out one sidecar retry backoff, returning early
+// with the context error when the sidecar's timeout fires mid-wait.
+func waitTitleRetry(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
 // runTitleCall makes the one-shot title request and returns the cleaned
 // title. No tools are offered and the stream is consumed off the UI event
 // path — the sidecar is invisible in the transcript.
@@ -223,6 +265,8 @@ func runTitleCall(ctx context.Context, model domain.Model, modelName, prompt str
 
 	var text strings.Builder
 	var streamErr string
+	var streamErrCode domain.ErrorCode
+	var streamRetryable bool
 	for {
 		event, err := stream.Recv()
 		if err != nil {
@@ -240,9 +284,20 @@ func runTitleCall(ctx context.Context, model domain.Model, modelName, prompt str
 			// collected before the break must not become the permanent
 			// write-once title.
 			streamErr = event.Error
+			streamErrCode = event.ErrorCode
+			streamRetryable = event.Retryable
 		}
 	}
 	if streamErr != "" {
+		if streamRetryable {
+			// Keep the provider's classification so the sidecar retries rate
+			// limits and transient failures instead of dropping the title.
+			code := streamErrCode
+			if code == "" {
+				code = domain.ErrUnavailable
+			}
+			return "", domain.NewError(code, streamErr, domain.WithRetryable(true))
+		}
 		return "", errors.New(streamErr)
 	}
 	title := cleanGeneratedTitle(text.String())

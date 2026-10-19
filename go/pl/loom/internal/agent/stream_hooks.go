@@ -246,9 +246,14 @@ func (a *StreamAggregator) Apply(evt domain.ModelEvent) error {
 			evt.Error = "provider stream error"
 		}
 		if evt.Retryable {
-			// A transient stream failure (truncation, transport drop) keeps
-			// its classification so the loop can re-issue the request.
-			return domain.NewError(domain.ErrUnavailable, evt.Error, domain.WithRetryable(true))
+			// A transient stream failure keeps the provider's classification
+			// (rate limit vs generic unavailability) so the loop can pick the
+			// right retry envelope; unclassified errors stay ErrUnavailable.
+			code := evt.ErrorCode
+			if code == "" {
+				code = domain.ErrUnavailable
+			}
+			return domain.NewError(code, evt.Error, domain.WithRetryable(true))
 		}
 		return errors.New(evt.Error)
 	case domain.ModelEventResponseEnd:

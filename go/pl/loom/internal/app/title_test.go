@@ -249,6 +249,84 @@ func TestTitleSidecarStreamFailure(t *testing.T) {
 	}
 }
 
+// flakyTitleModel fails the first failTimes calls with a retryable
+// rate-limited stream error, then plays a success — the
+// rate-limited-then-recovers gateway shape.
+type flakyTitleModel struct {
+	failTimes int
+	calls     int
+}
+
+func (m *flakyTitleModel) Stream(context.Context, domain.ModelRequest) (domain.ModelStream, error) {
+	m.calls++
+	if m.calls <= m.failTimes {
+		return &stubStream{events: []domain.ModelEvent{
+			{Kind: domain.ModelEventStreamError, Error: "rate limited", Retryable: true, ErrorCode: domain.ErrRateLimited},
+			{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopProviderError},
+		}}, nil
+	}
+	return &stubStream{events: []domain.ModelEvent{
+		{Kind: domain.ModelEventTextDelta, TextDelta: "Recovered Title"},
+		{Kind: domain.ModelEventResponseEnd, StopReason: domain.StopEndTurn},
+	}}, nil
+}
+
+// A transient (rate-limited) failure must not drop the title: the sidecar
+// waits out the window and retries within its bounded budget.
+func TestTitleSidecarRetriesTransientFailure(t *testing.T) {
+	ctx := context.Background()
+	model := &flakyTitleModel{failTimes: 2}
+	proc, store := newTitleTestRuntime(t, model)
+	proc.TitleSidecar.retryWait = time.Millisecond
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	done := make(chan string, 1)
+	proc.TitleSidecar.Generate(sessionID, config.ProviderModelRef{Provider: "fake", Model: "model-a"}, "prompt", func(title string) { done <- title })
+	awaitTitle(t, store, sessionID, "Recovered Title")
+	if model.calls != 3 {
+		t.Fatalf("model calls = %d, want 3 (2 transient failures + success)", model.calls)
+	}
+	select {
+	case title := <-done:
+		if title != "Recovered Title" {
+			t.Fatalf("onDone = %q", title)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("onDone was not called")
+	}
+}
+
+// A persistently failing provider exhausts the bounded retry budget and
+// falls back to the truncated prompt — the failure stays silent.
+func TestTitleSidecarExhaustsTransientRetries(t *testing.T) {
+	ctx := context.Background()
+	model := &flakyTitleModel{failTimes: 10} // never recovers
+	proc, store := newTitleTestRuntime(t, model)
+	proc.TitleSidecar.retryWait = time.Millisecond
+	sessionID := domain.NewSessionID()
+	if err := store.CreateSession(ctx, sessionID, domain.WorkspaceID{}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	done := make(chan string, 1)
+	proc.TitleSidecar.Generate(sessionID, config.ProviderModelRef{Provider: "fake", Model: "model-a"}, "prompt", func(title string) { done <- title })
+	select {
+	case title := <-done:
+		if title != "" {
+			t.Fatalf("onDone = %q, want empty after exhausting retries", title)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("onDone was not called after exhausting retries")
+	}
+	if model.calls != titleGenAttempts {
+		t.Fatalf("model calls = %d, want %d (bounded retries)", model.calls, titleGenAttempts)
+	}
+	if title, err := store.SessionTitle(ctx, sessionID); err != nil || title != "" {
+		t.Fatalf("title = %q, %v; a failed sidecar must not persist anything", title, err)
+	}
+}
+
 func TestMaybeGenerateSessionTitleGate(t *testing.T) {
 	ctx := context.Background()
 	// Three script entries: the fired session, the one-shot session and

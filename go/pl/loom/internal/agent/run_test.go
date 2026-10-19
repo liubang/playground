@@ -2071,6 +2071,20 @@ func TestStreamAggregatorStreamErrorClassification(t *testing.T) {
 	if !domain.IsRetryable(err) {
 		t.Fatalf("retryable stream error = %v, want retryable", err)
 	}
+	// Unclassified retryable errors fall back to ErrUnavailable.
+	agentErr, ok := errors.AsType[*domain.AgentError](err)
+	if !ok || agentErr.Code != domain.ErrUnavailable {
+		t.Fatalf("unclassified retryable stream error = %v, want code %q", err, domain.ErrUnavailable)
+	}
+	// The provider's classification survives: a rate-limited stream error
+	// reaches the loop as ErrRateLimited, selecting the wider retry
+	// envelope in startRetryWait.
+	agg = NewStreamAggregator(domain.RealClock{}, StreamHooks{})
+	err = agg.Apply(domain.ModelEvent{Kind: domain.ModelEventStreamError, Error: "rate limited", Retryable: true, ErrorCode: domain.ErrRateLimited})
+	agentErr, ok = errors.AsType[*domain.AgentError](err)
+	if !ok || agentErr.Code != domain.ErrRateLimited || !agentErr.Retryable {
+		t.Fatalf("rate-limited stream error = %v, want code %q retryable", err, domain.ErrRateLimited)
+	}
 	agg = NewStreamAggregator(domain.RealClock{}, StreamHooks{})
 	err = agg.Apply(domain.ModelEvent{Kind: domain.ModelEventStreamError, Error: "malformed chunk JSON"})
 	if domain.IsRetryable(err) {
@@ -2338,29 +2352,56 @@ func TestStartRetryWait(t *testing.T) {
 	loop := &Loop{StartRetry: StartRetryPolicy{
 		MaxAttempts: 3, InitialWait: 2 * time.Second, MaxWait: 5 * time.Second, MaxHintWait: time.Minute,
 	}}
+	unavailable := func() error {
+		return domain.NewError(domain.ErrUnavailable, "transient 5xx", domain.WithRetryable(true))
+	}
 
-	if _, retry := loop.startRetryWait(errors.New("plain failure"), 1); retry {
+	if _, _, retry := loop.startRetryWait(errors.New("plain failure"), 1); retry {
 		t.Fatal("non-retryable error must not be retried")
 	}
-	if _, retry := loop.startRetryWait(rateLimitedStartError(), 3); retry {
+	if _, _, retry := loop.startRetryWait(unavailable(), 3); retry {
 		t.Fatal("reaching MaxAttempts must give up")
 	}
+	// An explicitly configured MaxAttempts is the operator's bound: even
+	// rate-limited failures give up at 3 under this policy.
+	if _, _, retry := loop.startRetryWait(rateLimitedStartError(), 3); retry {
+		t.Fatal("explicit MaxAttempts must win over the rate-limit envelope")
+	}
 	// attempt 2 backoff: base 4s, half-jittered into [2s, 4s].
-	wait, retry := loop.startRetryWait(rateLimitedStartError(), 2)
+	wait, _, retry := loop.startRetryWait(unavailable(), 2)
 	if !retry || wait < 2*time.Second || wait > 4*time.Second {
 		t.Fatalf("startRetryWait(attempt 2) = %s, %v; want [2s, 4s], true", wait, retry)
 	}
+
+	// The default policy widens for rate-limited failures: more attempts
+	// and floored waits, so the cumulative backoff spans the gateway's
+	// per-minute window.
+	defaultLoop := &Loop{}
+	wait, maxAttempts, retry := defaultLoop.startRetryWait(rateLimitedStartError(), 3)
+	if !retry || maxAttempts != defaultRateLimitMaxAttempts {
+		t.Fatalf("startRetryWait(rate-limited attempt 3) = %s, %d, %v; want retry with %d attempts", wait, maxAttempts, retry, defaultRateLimitMaxAttempts)
+	}
+	if wait < rateLimitMinWait || wait > rateLimitMinWait+rateLimitMinWait/2 {
+		t.Fatalf("startRetryWait(rate-limited attempt 3) wait = %s, want [%s, %s]", wait, rateLimitMinWait, rateLimitMinWait+rateLimitMinWait/2)
+	}
+	if _, _, retry := defaultLoop.startRetryWait(rateLimitedStartError(), defaultRateLimitMaxAttempts); retry {
+		t.Fatal("reaching the widened rate-limit envelope must give up")
+	}
+	if _, _, retry := defaultLoop.startRetryWait(unavailable(), defaultStartRetryMaxAttempts); retry {
+		t.Fatal("the generic envelope must stay at the default MaxAttempts")
+	}
+
 	// A Retry-After hint above the backoff but within the cap wins.
 	hinted := domain.NewError(domain.ErrRateLimited, "slow down", domain.WithRetryable(true),
 		domain.WithCause(&httpc.StatusError{Code: 429, Status: "429", RetryAfter: 30 * time.Second}))
-	if wait, retry := loop.startRetryWait(hinted, 1); !retry || wait != 30*time.Second {
+	if wait, _, retry := loop.startRetryWait(hinted, 1); !retry || wait != 30*time.Second {
 		t.Fatalf("startRetryWait(hint 30s) = %s, %v; want 30s, true", wait, retry)
 	}
-	// A hint beyond the cap is ignored.
+	// A hint beyond the cap is ignored; the rate-limit floor still applies.
 	bigHint := domain.NewError(domain.ErrRateLimited, "slow down", domain.WithRetryable(true),
 		domain.WithCause(&httpc.StatusError{Code: 429, Status: "429", RetryAfter: time.Hour}))
-	if wait, retry := loop.startRetryWait(bigHint, 1); !retry || wait > 2*time.Second {
-		t.Fatalf("startRetryWait(hint 1h) = %s, %v; want <= 2s (hint ignored), true", wait, retry)
+	if wait, _, retry := defaultLoop.startRetryWait(bigHint, 1); !retry || wait < rateLimitMinWait || wait > rateLimitMinWait+rateLimitMinWait/2 {
+		t.Fatalf("startRetryWait(hint 1h) = %s, %v; want [%s, %s] (hint ignored, floor applied)", wait, retry, rateLimitMinWait, rateLimitMinWait+rateLimitMinWait/2)
 	}
 }
 

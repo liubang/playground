@@ -1046,6 +1046,16 @@ const (
 	defaultStartRetryInitialWait = 2 * time.Second
 	defaultStartRetryMaxWait     = 30 * time.Second
 	defaultStartRetryMaxHintWait = 60 * time.Second
+	// defaultRateLimitMaxAttempts widens the attempt envelope for
+	// rate-limited failures: gateways enforce per-minute windows, so a
+	// retry only has a chance once the cumulative wait spans a full
+	// window. The generic envelope (~25s over 5 attempts) always dies
+	// inside the window that produced the rejection.
+	defaultRateLimitMaxAttempts = 8
+	// rateLimitMinWait floors the per-attempt wait for rate-limited
+	// failures; the generic sub-second-to-few-seconds backoff would burn
+	// every attempt inside a single minute window.
+	rateLimitMinWait = 10 * time.Second
 )
 
 func (p StartRetryPolicy) withDefaults() StartRetryPolicy {
@@ -1880,7 +1890,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 			})
 			return l.handleContextOverflow(ctx, err)
 		}
-		wait, retry := l.startRetryWait(err, attemptBase+attempt)
+		wait, maxAttempts, retry := l.startRetryWait(err, attemptBase+attempt)
 		if !retry {
 			l.Run.appendEvent(domain.EventModelRequestFailed, modelRequestFailedPayload{
 				RequestID: req.ID, Stage: stage, Code: errorCodeForAudit(err), Message: err.Error(),
@@ -1893,7 +1903,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 		// then sleep it out instead of killing the run on the first 429.
 		l.Run.appendEvent(domain.EventModelRequestRetrying, modelRequestRetryingPayload{
 			RequestID: req.ID, Stage: stage, Code: errorCodeForAudit(err), Message: err.Error(),
-			Attempt: attemptBase + attempt, MaxAttempts: l.StartRetry.withDefaults().MaxAttempts, WaitMs: wait.Milliseconds(),
+			Attempt: attemptBase + attempt, MaxAttempts: maxAttempts, WaitMs: wait.Milliseconds(),
 		})
 		if err := l.flushEvents(ctx); err != nil {
 			l.terminate(ctx, domain.OutcomeFailed)
@@ -2957,14 +2967,26 @@ var requestTooLargeNeedles = []string{
 
 // startRetryWait decides whether a start-stage failure is worth waiting
 // out, and for how long. attempt is 1-based (attempt 1 = the first
-// failure); reaching MaxAttempts gives up. The backoff doubles per
-// attempt with half jitter — guaranteed spacing (unlike full jitter's
-// possible ~0) while still decorrelating concurrently throttled clients —
-// and a bounded provider Retry-After hint raises the wait.
-func (l *Loop) startRetryWait(err error, attempt int) (time.Duration, bool) {
+// failure); reaching the effective MaxAttempts gives up. The backoff
+// doubles per attempt with half jitter — guaranteed spacing (unlike full
+// jitter's possible ~0) while still decorrelating concurrently throttled
+// clients — and a bounded provider Retry-After hint raises the wait.
+//
+// Rate-limited failures get a wider envelope (more attempts, floored
+// waits): per-minute windows need >60s of cumulative waiting before a
+// retry can succeed, which the generic envelope never reaches. The
+// returned int is the effective MaxAttempts for the retrying event.
+func (l *Loop) startRetryWait(err error, attempt int) (time.Duration, int, bool) {
 	policy := l.StartRetry.withDefaults()
-	if !domain.IsRetryable(err) || attempt >= policy.MaxAttempts {
-		return 0, false
+	rateLimited := errorCodeForAudit(err) == string(domain.ErrRateLimited)
+	maxAttempts := policy.MaxAttempts
+	if rateLimited && l.StartRetry.MaxAttempts <= 0 {
+		// Only the default envelope widens: an explicitly configured
+		// MaxAttempts is the operator's bound and always wins.
+		maxAttempts = max(maxAttempts, defaultRateLimitMaxAttempts)
+	}
+	if !domain.IsRetryable(err) || attempt >= maxAttempts {
+		return 0, maxAttempts, false
 	}
 	// Capped doubling instead of a bit shift: a shift by attempt-1 can
 	// overflow int64 with an absurdly large configured MaxAttempts.
@@ -2976,10 +2998,19 @@ func (l *Loop) startRetryWait(err error, attempt int) (time.Duration, bool) {
 		wait = policy.MaxWait
 	}
 	wait = wait/2 + time.Duration(rand.Float64()*float64(wait/2))
+	if rateLimited {
+		// Floor the wait so the cumulative backoff can span the gateway's
+		// per-minute window — but never past the configured MaxWait: an
+		// explicit cap is the operator's longest acceptable wait.
+		floor := min(rateLimitMinWait, policy.MaxWait)
+		if wait < floor {
+			wait = floor + time.Duration(rand.Float64()*float64(floor/2))
+		}
+	}
 	if se, ok := httpc.AsStatusError(err); ok && se.RetryAfter > wait && se.RetryAfter <= policy.MaxHintWait {
 		wait = se.RetryAfter
 	}
-	return wait, true
+	return wait, maxAttempts, true
 }
 
 // sleepContext waits for d, returning early with the context error when

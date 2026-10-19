@@ -207,12 +207,15 @@ func ToolResultText(result domain.ToolResult) string {
 
 // EmitStreamFailure terminates the canonical event stream on a failure:
 // any provider-open blocks are closed defensively (closeOpen, may be nil),
-// then the StreamError + ResponseEnd pair is emitted.
-func EmitStreamFailure(emit stream.Emitter, err error, stop domain.StopReason, retryable bool, closeOpen func()) {
+// then the StreamError + ResponseEnd pair is emitted. code is the
+// provider's classification of the failure (domain.ErrRateLimited, ...) —
+// empty leaves a retryable error unclassified (the aggregator falls back
+// to ErrUnavailable).
+func EmitStreamFailure(emit stream.Emitter, err error, stop domain.StopReason, code domain.ErrorCode, retryable bool, closeOpen func()) {
 	if closeOpen != nil {
 		closeOpen()
 	}
-	emit(domain.ModelEvent{Kind: domain.ModelEventStreamError, Error: err.Error(), Retryable: retryable})
+	emit(domain.ModelEvent{Kind: domain.ModelEventStreamError, Error: err.Error(), Retryable: retryable, ErrorCode: code})
 	emit(domain.ModelEvent{Kind: domain.ModelEventResponseEnd, StopReason: stop})
 }
 

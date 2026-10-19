@@ -922,21 +922,25 @@ func (s *streamState) onStreamError(data string, emit stream.Emitter) {
 	if err := json.Unmarshal([]byte(data), &evt); err == nil && evt.Error.Message != "" {
 		message = fmt.Sprintf("anthropic provider: %s: %s", evt.Error.Type, evt.Error.Message)
 	}
+	code, retryable := classifyStreamErrorType(evt.Error.Type)
 	wireutil.EmitStreamFailure(emit, errors.New(message), domain.StopProviderError,
-		isTransientErrorType(evt.Error.Type), func() { s.closeOpenBlocks(emit) })
+		code, retryable, func() { s.closeOpenBlocks(emit) })
 }
 
-// isTransientErrorType reports whether a protocol-level error type signals a
-// server-side transient condition worth retrying (overload, internal error,
-// rate limit) instead of killing the run. Request-shaped problems
-// (invalid_request_error, authentication_error, request_too_large, ...) stay
+// classifyStreamErrorType maps a protocol-level error type onto the domain
+// error vocabulary: a rate limit gets its own code so the agent loop waits
+// out the gateway's rate window; overload/internal errors are generic
+// transient unavailability. Request-shaped problems (invalid_request_error,
+// authentication_error, request_too_large, ...) stay unclassified and
 // non-retryable.
-func isTransientErrorType(errorType string) bool {
+func classifyStreamErrorType(errorType string) (domain.ErrorCode, bool) {
 	switch errorType {
-	case "overloaded_error", "api_error", "rate_limit_error":
-		return true
+	case "rate_limit_error":
+		return domain.ErrRateLimited, true
+	case "overloaded_error", "api_error":
+		return domain.ErrUnavailable, true
 	default:
-		return false
+		return "", false
 	}
 }
 
@@ -967,12 +971,18 @@ func (s *streamState) closeOpenBlocks(emit stream.Emitter) {
 func finishReadError(ctx context.Context, state *streamState, err error, emit stream.Emitter) {
 	wireutil.FinishReadError(ctx, err, "anthropic", "message_stop", nil,
 		func(err error, stop domain.StopReason, retryable bool) {
-			wireutil.EmitStreamFailure(emit, err, stop, retryable, func() { state.closeOpenBlocks(emit) })
+			// Read failures are transport-layer truncations/drops: transient
+			// unavailability, never a rate window.
+			code := domain.ErrorCode("")
+			if retryable {
+				code = domain.ErrUnavailable
+			}
+			wireutil.EmitStreamFailure(emit, err, stop, code, retryable, func() { state.closeOpenBlocks(emit) })
 		})
 }
 
 func finishWithError(state *streamState, err error, emit stream.Emitter) {
-	wireutil.EmitStreamFailure(emit, err, domain.StopProviderError, false, func() { state.closeOpenBlocks(emit) })
+	wireutil.EmitStreamFailure(emit, err, domain.StopProviderError, "", false, func() { state.closeOpenBlocks(emit) })
 }
 
 func mapStopReason(reason string) domain.StopReason {

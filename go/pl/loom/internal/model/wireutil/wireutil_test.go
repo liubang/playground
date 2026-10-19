@@ -157,7 +157,7 @@ func collectEvents() (func(domain.ModelEvent) bool, func() []domain.ModelEvent) 
 func TestEmitStreamFailure(t *testing.T) {
 	emit, events := collectEvents()
 	closed := 0
-	EmitStreamFailure(emit, errors.New("boom"), domain.StopProviderError, true, func() { closed++ })
+	EmitStreamFailure(emit, errors.New("boom"), domain.StopProviderError, domain.ErrRateLimited, true, func() { closed++ })
 
 	if closed != 1 {
 		t.Fatalf("closeOpen called %d times", closed)
@@ -168,6 +168,9 @@ func TestEmitStreamFailure(t *testing.T) {
 	}
 	if got[0].Kind != domain.ModelEventStreamError || got[0].Error != "boom" || !got[0].Retryable {
 		t.Fatalf("event[0] = %+v", got[0])
+	}
+	if got[0].ErrorCode != domain.ErrRateLimited {
+		t.Fatalf("event[0].ErrorCode = %q, want %q", got[0].ErrorCode, domain.ErrRateLimited)
 	}
 	if got[1].Kind != domain.ModelEventResponseEnd || got[1].StopReason != domain.StopProviderError {
 		t.Fatalf("event[1] = %+v", got[1])
@@ -318,7 +321,7 @@ func TestStartStreamIdleWatchdog(t *testing.T) {
 			buf := make([]byte, 4096)
 			for {
 				if _, err := body.Read(buf); err != nil {
-					EmitStreamFailure(emit, err, domain.StopProviderError, true, nil)
+					EmitStreamFailure(emit, err, domain.StopProviderError, domain.ErrUnavailable, true, nil)
 					return
 				}
 			}

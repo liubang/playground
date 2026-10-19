@@ -241,6 +241,11 @@ type ModelEvent struct {
 	// drop): re-issuing the request is safe while nothing was delivered
 	// yet. The agent loop only honors it for streams with no activity.
 	Retryable bool `json:"retryable,omitempty"`
+	// ErrorCode is the provider's classification of a stream_error (e.g.
+	// rate_limited): it lets the agent loop tell "wait out a rate window"
+	// apart from a generic transient failure. Empty means unclassified —
+	// a retryable error then falls back to ErrUnavailable.
+	ErrorCode ErrorCode `json:"error_code,omitempty"`
 }
 
 // ModelStream is a pull-based stream of model events.
