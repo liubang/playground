@@ -23,7 +23,7 @@ fastapi==0.136.1
     # via -r cpp/pl/minisearch/embedding_server/requirements.in
 filelock==3.29.0
     # via huggingface-hub
-fsspec==2026.4.0
+fsspec==2026.6.0
     # via huggingface-hub
 h11==0.16.0
     # via
