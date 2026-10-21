@@ -628,7 +628,7 @@ private struct WorkspaceGroup: View {
                     // chevron column (chevron center = 10 tree padding
                     // + 6 header padding + 6 half-slot).
                     Rectangle()
-                        .fill(hovered ? Theme.bg3 : Theme.bg2)
+                        .fill(hovered ? Theme.line : Theme.lineSoft)
                         .frame(width: 1)
                         .padding(.leading, 11.5)
                     VStack(spacing: 1) {
@@ -929,13 +929,10 @@ private struct SessionRow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        // Active = primary tint + a 2.5pt leading indicator. The
-        // bg-step washes (bg2, then bg3) sat within ~3% luminance of
-        // the sidebar and the selection was nearly invisible; the
-        // accent bar marks the current session at a glance, in either
-        // appearance. Marked (batch-selected) rows keep the steady bg2.
+        // Quiet selection wash; the thin semantic accent keeps the current
+        // session discoverable in either appearance. Batch marks retain bg2.
         .background(
-            isMarked ? Theme.bg2 : (isActive ? Theme.primary.opacity(0.12) : (hovered ? Theme.bg2.opacity(0.55) : Color.clear)),
+            isMarked ? Theme.bg2 : (isActive ? Theme.bg2 : (hovered ? Theme.bg2.opacity(0.4) : Color.clear)),
             in: UnevenRoundedRectangle(
                 topLeadingRadius: isChild ? 0 : Theme.radiusSm,
                 bottomLeadingRadius: isChild ? 0 : Theme.radiusSm,
@@ -947,7 +944,7 @@ private struct SessionRow: View {
             if isActive, !isMarked {
                 Capsule()
                     .fill(Theme.primary)
-                    .frame(width: 2.5)
+                    .frame(width: 2)
                     .padding(.vertical, 4)
                     .padding(.leading, 2)
             }
@@ -956,7 +953,7 @@ private struct SessionRow: View {
         .overlay(alignment: .leading) {
             if isChild {
                 Rectangle()
-                    .fill(Theme.bg2)
+                    .fill(Theme.lineSoft)
                     .frame(width: 1)
             }
         }

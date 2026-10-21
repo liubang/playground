@@ -57,6 +57,7 @@ export function App({ controller }: { controller: AppController }) {
   const rightPanelWidth = useStore(controller.store, (s) => s.rightPanelWidth)
   const sessionId = useStore(controller.store, (s) => s.sessionId)
   const sessionLoading = useStore(controller.store, (s) => s.sessionLoading)
+  const busy = useStore(controller.store, (s) => s.busy)
   const connState = useStore(controller.store, (s) => s.connState)
   const [revealWs, setRevealWs] = useState<{ wsId: string; seq: number } | null>(null)
 
@@ -268,6 +269,7 @@ export function App({ controller }: { controller: AppController }) {
                         io={transcriptIO}
                         scrollerOut={controller.scrollerRef}
                         loading={sessionLoading}
+                        active={busy}
                         className={
                           connState !== 'live' && connState !== '' ? 'is-offline' : undefined
                         }

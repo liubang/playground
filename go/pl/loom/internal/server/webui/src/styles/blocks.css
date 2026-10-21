@@ -24,13 +24,13 @@
 .user-bubble {
   background: var(--bubble-user);
   color: var(--fg);
-  border-radius: 14px 14px 4px 14px;
-  padding: 9px 14px;
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
 }
 .block-user .user-text {
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 14px;
+  font-size: var(--text-md);
   line-height: 1.6;
 }
 
@@ -66,7 +66,8 @@
 }
 .block-assistant .md {
   font-size: var(--text-lg);
-  line-height: 1.7;
+  line-height: 1.8;
+  color: var(--fg);
 }
 /* Break long URLs / spaceless tokens between words so they don't break the content column
    (prevents page-level horizontal scroll on mobile). white-space: pre inside pre is unaffected;
@@ -82,21 +83,50 @@
 .md h1,
 .md h2,
 .md h3,
-.md h4 {
-  font-size: 15px;
+.md h4,
+.md h5,
+.md h6 {
   font-weight: 600;
-  margin: 14px 0 6px;
+  line-height: 1.4;
+  margin: 22px 0 10px;
   color: var(--fg);
 }
+.md h1 {
+  font-size: 22px;
+}
+.md h2 {
+  font-size: 18px;
+}
+.md h3 {
+  font-size: 16px;
+}
+.md h4,
+.md h5,
+.md h6 {
+  font-size: 15px;
+}
+/* Streaming wrappers are display:contents, not real content edges. Reset
+   only the outermost rendered element, preserving paragraph rhythm at the
+   stable/tail seam. :has(> *) ignores whitespace-only HTML wrappers. */
+.md > :first-child:not(.md-stable):not(.md-tail),
+.md > .md-stable > :first-child,
+.md:not(:has(> .md-stable > *)) > .md-tail > :first-child {
+  margin-top: 0;
+}
+.md > :last-child:not(.md-stable):not(.md-tail),
+.md > .md-tail > :last-child,
+.md:not(:has(> .md-tail > *)) > .md-stable > :last-child {
+  margin-bottom: 0;
+}
 .md p {
-  margin: 8px 0;
+  margin: 12px 0;
 }
 .md ul,
 .md ol {
-  margin: 6px 0 6px 20px;
+  margin: 12px 0 12px 22px;
 }
 .md li {
-  margin: 3px 0;
+  margin: 5px 0;
 }
 .md code {
   background: var(--bg2);
@@ -369,12 +399,13 @@
   overflow-y: auto;
 }
 
-/* Tool block: card style */
+/* Tool block: flat rows, preserving output and status affordances. */
 .block-tool {
-  background: var(--bg1);
-  border: 1px solid var(--bg2);
-  border-radius: 10px;
-  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--line-soft);
+  border-radius: 0;
+  padding: 10px 0;
 }
 .block-tool .tool-head {
   display: flex;
@@ -384,7 +415,7 @@
   min-width: 0;
 }
 .block-tool .tool-name {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--fg);
   flex: none;
 }
@@ -417,6 +448,7 @@
 .block-tool .tool-dur {
   margin-left: auto;
   color: var(--muted);
+  font-size: var(--text-xs);
   flex: none;
 }
 .tool-status {
@@ -464,7 +496,7 @@
   margin-top: 6px;
   font-size: var(--text-sm);
   line-height: 1.55;
-  background: var(--bg0);
+  background: var(--bg1);
   border-radius: var(--radius-sm);
   padding: 8px 12px;
   white-space: pre-wrap;

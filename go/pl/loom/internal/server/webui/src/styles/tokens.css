@@ -5,10 +5,9 @@
   --bg0: #1e2326;
   --bg1: #272e33;
   --bg2: #2e383c;
-  /* Elevated surface above --bg2 (active user bubble etc.); previously referenced by
-     shell.css but never defined, so the claim silently fell through to --bg2 */
   --bg3: #3d484d;
   --fg: #d3c6aa;
+  --line-soft: var(--bg2);
   /* AA on --bg0 (>=4.5:1) for secondary text/icons; was #859289 (~2.8:1, illegible on
      dark chrome: trace meta, badges, inactive tab labels…) */
   --muted: #9da9a0;
@@ -40,6 +39,7 @@
   /* AA even on --bg2 cards (>=4.5:1); was #939f91 (~2.5:1 on --bg0), then
      #5c6e5e which still dips to ~4.4:1 on --bg2 */
   --muted: #576b59;
+  --line-soft: var(--bg2);
   /* Deepened for AA: white label text (~5:1) and text-on-canvas usage (~4.8:1) both pass;
      the previous #3a94c5 failed against --on-accent */
   --primary: #2273a8;

@@ -448,6 +448,9 @@ private struct TranscriptView: View {
     /// background sizing semantics that differ across macOS
     /// releases. Global frames have no such ambiguity.
     @State private var awayFromBottom = false
+    @State private var toolRevealRequest: ToolRevealRequest?
+    @State private var locateSequence: UInt64 = 0
+    @State private var locateTask: Task<Void, Never>?
     @State private var scrollFrame: CGRect = .zero
     @State private var sentinelMinY: CGFloat = 0
     /// Global minY of the sentinel at the content's TOP edge: the
@@ -528,6 +531,7 @@ private struct TranscriptView: View {
                                 artifactLoader: { await store.artifactData($0) },
                                 hidesInterruptedStatus: store.turnFeedback != nil && !store.isBusy
                                     && row.id == store.transcript.rows.last?.id,
+                                toolRevealRequest: toolRevealRequest,
                             )
                             // Rows are values precomputed at turn
                             // boundaries: a streaming frame only mutates
@@ -620,11 +624,11 @@ private struct TranscriptView: View {
                             updateAwayFromBottom()
                         }
                 }
-                .padding(.horizontal, 24)
                 .padding(.top, 24)
                 .padding(.bottom, 12)
                 .frame(maxWidth: Theme.contentWidth)
                 .frame(maxWidth: .infinity)
+                .padding(.horizontal, Theme.conversationGutter)
             }
             // Pins the view to the latest content, including while a turn
             // streams — but releases as soon as the user scrolls up, unlike
@@ -713,6 +717,16 @@ private struct TranscriptView: View {
                 locateRequest = nil
                 locate(request, proxy: proxy)
             }
+            .onChange(of: store.sessionId) { _, _ in
+                locateTask?.cancel()
+                locateTask = nil
+                toolRevealRequest = nil
+            }
+            .onDisappear {
+                locateTask?.cancel()
+                locateTask = nil
+                toolRevealRequest = nil
+            }
         }
     }
 
@@ -784,24 +798,18 @@ private struct TranscriptView: View {
     ///    to 4s for the same class of race.)
     private func locate(_ request: LocateRequest, proxy: ScrollViewProxy) {
         let rows = store.transcript.rows
+        locateTask?.cancel()
+        locateSequence &+= 1
+        let reveal = ToolRevealRequest(callId: request.callId, sequence: locateSequence)
+        toolRevealRequest = reveal
         var targetId: String?
         var targetRowId: String?
         var anchor: UnitPoint = .center
         if let callId = request.callId,
-           let row = rows.first(where: { row in
-               if case let .message(model) = row {
-                   return model.items.contains { item in
-                       if case let .tool(tool) = item {
-                           return tool.callId == callId
-                       }
-                       return false
-                   }
-               }
-               return false
-           })
+           let location = store.transcript.toolLocation(callId: callId)
         {
-            targetId = "chat-row-\(row.id)"
-            targetRowId = row.id
+            targetId = location.scrollId
+            targetRowId = location.rowId
         } else if let messageId = turnAnchors[request.turn] {
             targetId = "chat-turn-\(messageId)"
             targetRowId = messageId
@@ -816,10 +824,19 @@ private struct TranscriptView: View {
             tailWindow = rows.count
         }
 
-        proxy.scrollTo(targetId, anchor: anchor)
-        Task { @MainActor in
+        // First materialize the enclosing row (also works with a lazy stack).
+        // The tool anchor only exists after the group's reveal has laid out.
+        locateTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled, toolRevealRequest == reveal else { return }
+            proxy.scrollTo("chat-row-\(targetRowId)", anchor: anchor)
             for delay in [80, 240] {
-                try? await Task.sleep(for: .milliseconds(delay))
+                do {
+                    try await Task.sleep(for: .milliseconds(delay))
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled, toolRevealRequest == reveal else { return }
                 proxy.scrollTo(targetId, anchor: anchor)
             }
         }

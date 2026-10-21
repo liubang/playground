@@ -8,7 +8,17 @@ const SEEK_INTERVAL_MS = 100
 export function seekToAnchor(getRoot: () => HTMLElement | null, selector: string) {
   let tries = 0
   const seek = () => {
-    const target = getRoot()?.querySelector(selector)
+    const root = getRoot()
+    // Virtualized transcript views reveal the authoritative target before the
+    // DOM lookup. Other destination views simply ignore this view-only event.
+    root?.dispatchEvent(new CustomEvent('loom-reveal-anchor', { detail: selector }))
+    let target: Element | null | undefined
+    try {
+      target = root?.querySelector(selector)
+    } catch {
+      // A malformed selector must not escape or schedule repeated failed seeks.
+      return
+    }
     // offsetParent is null while the owning view is hidden.
     if (target instanceof HTMLElement && target.offsetParent !== null) {
       target.scrollIntoView({ block: 'center', behavior: 'smooth' })

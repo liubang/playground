@@ -35,6 +35,8 @@ enum Theme {
     // Text
     static let fg = adaptive(dark: fgHex.dark, light: fgHex.light)
     static let muted = adaptive(dark: mutedHex.dark, light: mutedHex.light)
+    static let line = bg3
+    static let lineSoft = bg2
 
     // Accents
     static let primary = adaptive(dark: 0x7FBBB3, light: 0x2273A8)
@@ -101,8 +103,9 @@ enum Theme {
 
     // Keep the custom toolbar compact and aligned with the native window controls.
     static let toolbarHeight: CGFloat = 32
-    static let contentWidth: CGFloat = 960
-    static let sidebarWidth: CGFloat = 288
+    static let contentWidth: CGFloat = 840
+    static let sidebarWidth: CGFloat = 260
+    static let conversationGutter: CGFloat = 28
     /// Sidebar drag-resize clamp (SidebarDivider).
     static let sidebarMinWidth: CGFloat = 220
     static let sidebarMaxWidth: CGFloat = 420
@@ -265,9 +268,9 @@ struct Hairline: View {
     var body: some View {
         switch axis {
         case .horizontal:
-            Rectangle().fill(Theme.bg2).frame(height: 1).frame(maxWidth: .infinity)
+            Rectangle().fill(Theme.lineSoft).frame(height: 1).frame(maxWidth: .infinity)
         case .vertical:
-            Rectangle().fill(Theme.bg2).frame(width: 1).frame(maxHeight: .infinity)
+            Rectangle().fill(Theme.lineSoft).frame(width: 1).frame(maxHeight: .infinity)
         }
     }
 }

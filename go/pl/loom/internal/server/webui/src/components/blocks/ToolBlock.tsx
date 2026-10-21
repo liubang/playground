@@ -4,6 +4,7 @@
 
 import { memo, useMemo, useState } from 'react'
 import type { ToolCompletion } from '../../app/transcript'
+import { combinedToolTime, type ToolModel } from '../../lib/toolGroups'
 import { fmtDuration, copyText } from '../../lib/format'
 import { diffForToolCall } from '../../lib/diff'
 import { Icon, type IconName } from '../../lib/icons'
@@ -58,6 +59,12 @@ function toolMeta(toolName: string): [IconName, string] {
   if (meta) return meta
   if (toolName.startsWith('mcp__')) return ['plug', toolName.slice(5) || 'mcp']
   return ['gear', toolName || 'tool']
+}
+
+export function toolGroupSummary(tools: readonly ToolModel[]) {
+  const verbs = [...new Set(tools.map((tool) => toolMeta(tool.toolName)[1]))].join(' · ')
+  const duration = combinedToolTime(tools)
+  return { verbs, duration }
 }
 
 // Tools whose display target is a workspace file path (and thus revealable in

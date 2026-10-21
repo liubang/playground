@@ -27,6 +27,7 @@ struct MessageRow: View {
     /// artifact parts fall back to a plain label when absent.
     var artifactLoader: ((ContentPart.Artifact) async -> (data: Data, mediaType: String?)?)?
     var hidesInterruptedStatus = false
+    var toolRevealRequest: ToolRevealRequest?
 
     private var message: Message {
         row.message
@@ -45,8 +46,7 @@ struct MessageRow: View {
 
     // MARK: User (.block-user)
 
-    /// Right-aligned bubble (--bubble-user, asymmetric 14/14/4/14 corners,
-    /// ~72% max width) with the action row below it.
+    /// Quiet right-aligned user bubble with uniform corners and actions below.
     private var userRow: some View {
         VStack(alignment: .trailing, spacing: 4) {
             VStack(alignment: .leading, spacing: 8) {
@@ -54,8 +54,8 @@ struct MessageRow: View {
                     switch part {
                     case let .text(text):
                         Text(text)
-                            .font(.system(size: 14))
-                            .lineSpacing(5.5) // ≈ the WebUI's 1.6 line-height at 14px
+                            .font(.system(size: Theme.textMd))
+                            .lineSpacing(6)
                             .foregroundStyle(Theme.fg)
                             .textSelection(.enabled)
                     case let .image(image):
@@ -65,16 +65,11 @@ struct MessageRow: View {
                     }
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
             .background(
                 Theme.bubbleUser,
-                in: UnevenRoundedRectangle(
-                    topLeadingRadius: 14,
-                    bottomLeadingRadius: 14,
-                    bottomTrailingRadius: 4,
-                    topTrailingRadius: 14,
-                ),
+                in: RoundedRectangle(cornerRadius: Theme.radiusMd),
             )
 
             // .block-user .msg-actions: right-aligned, time left of copy.
@@ -104,6 +99,13 @@ struct MessageRow: View {
                     )
                 case let .tool(model):
                     ToolBlock(model: model, artifactLoader: artifactLoader)
+                        .id(ToolRevealRequest.scrollId(callId: model.callId ?? message.id))
+                case let .toolGroup(group):
+                    ToolGroupView(
+                        group: group, artifactLoader: artifactLoader,
+                        toolRevealRequest: toolRevealRequest,
+                    )
+                    .id(group.id)
                 case let .image(image):
                     InlineImageView(mediaType: image.mediaType, data: image.data, maxDim: 360)
                 case let .artifact(artifact):
@@ -166,6 +168,7 @@ extension MessageRow: Equatable {
     /// flush re-evaluated every row in the transcript).
     static func == (lhs: MessageRow, rhs: MessageRow) -> Bool {
         lhs.row == rhs.row && lhs.hidesInterruptedStatus == rhs.hidesInterruptedStatus
+            && lhs.toolRevealRequest == rhs.toolRevealRequest
     }
 }
 
@@ -403,9 +406,63 @@ func reasoningExcerpt(_ text: String, fromEnd: Bool) -> String? {
     return nil
 }
 
+/// Completed read-only tools start collapsed; expansion retains the original
+/// ToolBlock output disclosures, copy controls and artifact-loader behavior.
+struct ToolGroupView: View {
+    let group: ToolGroupModel
+    var artifactLoader: ((ContentPart.Artifact) async -> (data: Data, mediaType: String?)?)?
+    var toolRevealRequest: ToolRevealRequest?
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button { expanded.toggle() } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: Theme.textXs))
+                    Text("\(group.tools.count) tools · \(group.verbs.joined(separator: " · "))")
+                        .font(.system(size: Theme.textSm))
+                        .foregroundStyle(Theme.fg)
+                    Spacer(minLength: 4)
+                    if let duration = group.combinedDurationMs {
+                        Text("Combined tool time · \(formatDuration(duration))")
+                            .font(.system(size: Theme.textXs))
+                    }
+                }
+                .foregroundStyle(Theme.muted)
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(group.tools.count) successful read-only tools: \(group.verbs.joined(separator: ", "))")
+            .accessibilityValue(expanded ? "Expanded" : "Collapsed")
+            .accessibilityHint("Toggle tool details")
+            if expanded {
+                ForEach(group.tools, id: \.callId) { tool in
+                    ToolBlock(model: tool, artifactLoader: artifactLoader)
+                        .id(ToolRevealRequest.scrollId(callId: tool.callId!))
+                }
+            }
+        }
+        .overlay(alignment: .top) {
+            Rectangle().fill(Theme.lineSoft).frame(height: 1)
+        }
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Theme.lineSoft).frame(height: 1)
+        }
+        .onChange(of: toolRevealRequest, initial: true) { _, request in
+            // Reveal on mount as well as on navigation. A different or cleared
+            // target never overrides the user's expanded/collapsed state.
+            if group.containsTool(callId: request?.callId) {
+                expanded = true
+            }
+        }
+    }
+}
+
 // MARK: - Tool block (.block-tool)
 
-/// The WebUI's tool card: bg1 panel, header row (kind icon · verb ·
+/// Quiet tool boundary, header row (kind icon · verb ·
 /// target · status · duration), error line, collapsible output preview,
 /// and an optional diff. Pure layout — the render model arrives fully
 /// derived (ToolRenderModel, built by TranscriptModel or the live
@@ -503,13 +560,11 @@ struct ToolBlock: View {
                     .padding(.top, 8)
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 2)
         .padding(.vertical, 10)
-        .background(Theme.bg1, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Theme.bg3, lineWidth: 1),
-        )
+        .overlay(alignment: .top) {
+            Rectangle().fill(Theme.lineSoft).frame(height: 1)
+        }
     }
 
     // MARK: Header (.tool-head)
@@ -522,7 +577,7 @@ struct ToolBlock: View {
                 .help(model.name)
 
             Text(ToolMeta.verb(for: model.name))
-                .font(.system(size: Theme.textSm, weight: .semibold, design: .monospaced))
+                .font(.system(size: Theme.textSm, weight: .medium))
                 .foregroundStyle(Theme.fg)
                 .fixedSize()
 
@@ -543,7 +598,7 @@ struct ToolBlock: View {
 
             if let durationMs = model.durationMs {
                 Text(formatDuration(durationMs))
-                    .font(Theme.monoSm)
+                    .font(Theme.monoXs)
                     .foregroundStyle(Theme.muted)
                     .fixedSize()
             }
@@ -634,7 +689,7 @@ struct ToolBlock: View {
                         .padding(.vertical, 8)
                 }
                 .frame(maxHeight: 200)
-                .background(Theme.bg0, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
+                .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
                 if let artifactLoader {
                     ForEach(model.outputAttachments, id: \.name) { entry in
                         RunCmdAttachmentView(name: entry.name, artifact: entry.artifact, loader: artifactLoader)
@@ -767,7 +822,7 @@ enum ToolMeta {
         switch toolName {
         case "read_file": return "eye"
         case "list_dir": return "folder"
-        case "glob", "search", "search_text", "web_search": return "magnifyingglass"
+        case "glob", "grep", "search", "search_text", "web_search": return "magnifyingglass"
         case "edit": return "square.and.pencil"
         case "write": return "doc"
         case "run_cmd", "exec_session", "write_stdin": return "terminal"
@@ -791,7 +846,7 @@ enum ToolMeta {
         case "read_file": return "read"
         case "list_dir": return "list"
         case "glob": return "glob"
-        case "search", "search_text": return "search"
+        case "grep", "search", "search_text": return "search"
         case "edit": return "edit"
         case "write": return "write"
         case "run_cmd": return "run"

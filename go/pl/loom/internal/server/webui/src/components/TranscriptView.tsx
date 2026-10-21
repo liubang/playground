@@ -12,6 +12,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -34,7 +35,14 @@ import {
   TurnSummaryBlock,
   UserBlock,
 } from './blocks/blocks'
-import { ToolBlock } from './blocks/ToolBlock'
+import { ToolBlock, toolGroupSummary } from './blocks/ToolBlock'
+import {
+  lowerBound,
+  projectRenderItems,
+  readingAnchorTop,
+  type RenderItem,
+} from '../lib/toolGroups'
+import { fmtDuration } from '../lib/format'
 import { ApprovalCard, QuestionCard } from './blocks/cards'
 import { ArtifactBlock, InlineImage } from './blocks/images'
 import { useRafScroll } from '../lib/rafScroll'
@@ -216,6 +224,50 @@ const BlockView = memo(
   (prev, next) => prev.block === next.block && prev.io === next.io,
 )
 
+function ToolGroupView({
+  item,
+  io,
+  open,
+  onToggle,
+}: {
+  item: Extract<RenderItem, { kind: 'tool-group' }>
+  io: TranscriptViewIO
+  open: boolean
+  onToggle: () => void
+}) {
+  const contentId = useId()
+  const { verbs, duration } = toolGroupSummary(item.tools)
+  return (
+    <div className="tool-group">
+      <button
+        type="button"
+        className="tool-group-toggle"
+        aria-expanded={open}
+        aria-controls={contentId}
+        onClick={onToggle}
+      >
+        <span className="tool-group-caret" aria-hidden="true">
+          {open ? '▾' : '▸'}
+        </span>
+        <span>
+          {item.tools.length} successful tools · {verbs}
+        </span>
+        {duration != null && (
+          <span className="tool-group-duration">Combined tool time · {fmtDuration(duration)}</span>
+        )}
+      </button>
+      <div id={contentId} hidden={!open}>
+        {open &&
+          item.tools.map((tool) => (
+            <div key={tool.callId} data-block-id={tool.id}>
+              <BlockView block={tool} io={io} />
+            </div>
+          ))}
+      </div>
+    </div>
+  )
+}
+
 // MeasuredBlock wraps a rendered block and reports its height via ResizeObserver
 // so the virtualizer can maintain per-block offsets. The wrapper carries the
 // flex-column context (so .block-user's align-self:flex-end still works) and the
@@ -255,17 +307,6 @@ function MeasuredBlock({
   )
 }
 
-function lowerBound(offsets: number[], value: number): number {
-  let lo = 0
-  let hi = offsets.length
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1
-    if (offsets[mid] < value) lo = mid + 1
-    else hi = mid
-  }
-  return lo
-}
-
 export interface EmptyState {
   hidden: boolean
   hint: string
@@ -280,6 +321,7 @@ export function TranscriptView({
   className,
   scrollerOut,
   loading,
+  active = true,
   children,
 }: {
   controller: TranscriptController
@@ -291,9 +333,22 @@ export function TranscriptView({
   // sessionLoading (snapshot fetch in flight): when old content exists, overlay it semi-transparently; when there are
   // no blocks, show a skeleton screen — avoids a "click did nothing" blank wait while a large snapshot loads
   loading?: boolean
+  // Unknown activity (e.g. share snapshots) is conservative: keep the last turn visible.
+  active?: boolean
   children?: ReactNode
 }) {
   const blocks = useStore(controller.store, (s) => s.blocks)
+  const search = useStore(controller.store, (s) => s.search)
+  const [expandedGroups, setExpandedGroups] = useState<ReadonlyMap<string, boolean>>(new Map())
+  const [revealedIds, setRevealedIds] = useState<ReadonlySet<string>>(new Set())
+  const [anchorTarget, setAnchorTarget] = useState<string | null>(null)
+  const items = useMemo(() => {
+    const excluded = new Set(revealedIds)
+    // Search targets stay singleton rows, so the existing block-id flash and
+    // navigation semantics work for every hit, including collapsed tools.
+    for (const id of search?.matches ?? []) excluded.add(id)
+    return projectRenderItems(blocks, active, excluded)
+  }, [blocks, active, revealedIds, search?.matches])
   const following = useStore(controller.store, (s) => s.following)
   const followSeq = useStore(controller.store, (s) => s.followSeq)
   const scrollerRef = useRef<HTMLDivElement>(null)
@@ -311,7 +366,7 @@ export function TranscriptView({
   const [viewport, setViewport] = useState({ top: 0, height: 0 })
 
   // Block height: the measured value wins; unmeasured blocks use the estimate cache (a stream block's v grows with text, so its cache entry invalidates automatically).
-  const heightOf = useCallback((b: BlockModel) => {
+  const blockHeightOf = useCallback((b: BlockModel) => {
     const measured = heightsRef.current.get(b.id)
     if (measured != null) return measured
     const cached = estRef.current.get(b.id)
@@ -321,13 +376,124 @@ export function TranscriptView({
     return h
   }, [])
 
+  // Group layout keys include membership, versions and disclosure state. A
+  // collapsed measurement must never be reused for an expanded virtual remount.
+  const layoutKey = useCallback(
+    (item: RenderItem) =>
+      item.kind === 'block'
+        ? item.id
+        : `${item.id}:${item.tools.map((b) => `${b.id}.${b.v}`).join(',')}:${expandedGroups.get(item.firstCallId) ? 'open' : 'closed'}`,
+    [expandedGroups],
+  )
+  const heightOf = useCallback(
+    (item: RenderItem) => {
+      if (item.kind === 'block') return blockHeightOf(item.block)
+      const measured = heightsRef.current.get(layoutKey(item))
+      if (measured != null) return measured
+      return expandedGroups.get(item.firstCallId)
+        ? 44 + item.tools.reduce((sum, b) => sum + blockHeightOf(b), 0)
+        : 44
+    },
+    [blockHeightOf, expandedGroups, layoutKey],
+  )
+  const lastLayoutKeyRef = useRef<string | undefined>(undefined)
+  lastLayoutKeyRef.current = items.length ? layoutKey(items[items.length - 1]) : undefined
+
   // --- search state (opened/closed by the TranscriptSearch bar) ---
-  const search = useStore(controller.store, (s) => s.search)
   const searchNavSeq = search?.navSeq ?? 0
 
+  const layoutSignature = useMemo(() => items.map(layoutKey).join('|'), [items, layoutKey])
+  // Shared geometry: scroll-only updates reuse these arrays, rather than scanning
+  // the transcript again. The snapshot owns old heights even after cache pruning.
+  const geometry = useMemo(() => {
+    const offsets: number[] = []
+    const heights: number[] = []
+    let total = 0
+    for (const item of items) {
+      offsets.push(total)
+      const height = heightOf(item)
+      heights.push(height)
+      total += height + BLOCK_GAP_PX
+    }
+    return { items, offsets, heights, total }
+  }, [items, measureTick, heightOf])
+  const previousLayoutRef = useRef<{
+    geometry: typeof geometry
+    firstBlockId?: string
+    controller: TranscriptController
+    top: number
+    inset: number
+    searchNavSeq: number
+    followSeq: number
+  } | null>(null)
+  // Record actual scroll intent before React changes the projection. Reading
+  // only the post-commit DOM scrollTop loses it when content shrinks/clamps.
+  const readingTopRef = useRef(0)
+  const restoredTopRef = useRef<number | null>(null)
+
+  useLayoutEffect(() => {
+    const el = scrollerRef.current
+    if (!el) return
+    const prev = previousLayoutRef.current
+    const state = controller.store.get()
+    const firstBlockId = blocks[0]?.id
+    const sameSession = prev?.controller === controller && prev.firstBlockId === firstBlockId
+    if (!sameSession) restoredTopRef.current = null
+    const inner = el.querySelector('.transcript-inner')
+    const inset = inner ? parseFloat(getComputedStyle(inner).paddingTop) || 0 : 24
+    const navigatingSearch = searchNavSeq !== 0 && searchNavSeq !== prev?.searchNavSeq
+    if (
+      prev &&
+      sameSession &&
+      firstBlockId &&
+      prev.geometry !== geometry &&
+      !state.following &&
+      state.preserveScrollTop == null &&
+      !anchorTarget &&
+      !navigatingSearch &&
+      prev.followSeq === followSeq &&
+      el.clientHeight > 0
+    ) {
+      const bottomInset = inner ? parseFloat(getComputedStyle(inner).paddingBottom) || 0 : 12
+      const top = readingAnchorTop(
+        prev.geometry,
+        geometry,
+        prev.top,
+        prev.inset,
+        inset,
+        bottomInset,
+        el.clientHeight,
+      )
+      if (top != null) {
+        // A shrinking layout may already have clamped scrollTop. Still mark
+        // the restoration so that clamp is not mistaken for user follow intent.
+        if (top !== el.scrollTop) el.scrollTop = top
+        readingTopRef.current = el.scrollTop
+        restoredTopRef.current = el.scrollTop
+        setViewport({ top: el.scrollTop, height: el.clientHeight })
+      }
+    }
+    previousLayoutRef.current = {
+      geometry,
+      firstBlockId,
+      controller,
+      top: readingTopRef.current,
+      inset,
+      searchNavSeq,
+      followSeq,
+    }
+  }, [geometry, blocks, controller, searchNavSeq, followSeq, anchorTarget])
+
+  // Programmatic search/jump/follow/snapshot effects publish their final top
+  // through viewport; ordinary scroll updates also refresh this without scans.
+  useLayoutEffect(() => {
+    readingTopRef.current = viewport.top
+    if (previousLayoutRef.current) previousLayoutRef.current.top = viewport.top
+  }, [viewport.top])
+
   // Block ids are globally monotonically increasing and never reused: not clearing heights/seenIds on session switch
-  // is a slow leak (old session ids occupy the Maps forever). Clear them outright when blocks are emptied (before
-  // clear/rebuild); while running, grow-prune ids that no longer exist once above the threshold.
+  // is a slow leak (old session ids occupy the Maps forever). Clear on empty/reset
+  // and prune stale layout keys and disclosure state after projection changes.
   useLayoutEffect(() => {
     const heights = heightsRef.current
     const ests = estRef.current
@@ -336,14 +502,33 @@ export function TranscriptView({
       heights.clear()
       ests.clear()
       seen.clear()
+      setExpandedGroups((prev) => (prev.size ? new Map() : prev))
+      setRevealedIds((prev) => (prev.size ? new Set() : prev))
+      setAnchorTarget(null)
       return
     }
-    if (seen.size <= blocks.length + 200) return
-    const ids = new Set(blocks.map((b) => b.id))
-    for (const id of [...heights.keys()]) if (!ids.has(id)) heights.delete(id)
-    for (const id of [...ests.keys()]) if (!ids.has(id)) ests.delete(id)
-    for (const id of [...seen]) if (!ids.has(id)) seen.delete(id)
-  }, [blocks])
+    const callIds = new Set(
+      blocks.flatMap((b) => (b.kind === 'tool' && b.callId ? [b.callId] : [])),
+    )
+    setExpandedGroups((prev) => {
+      if ([...prev.keys()].every((id) => callIds.has(id))) return prev
+      return new Map([...prev].filter(([id]) => callIds.has(id)))
+    })
+    const blockIds = new Set(blocks.map((b) => b.id))
+    if (anchorTarget && !blockIds.has(anchorTarget)) setAnchorTarget(null)
+    setRevealedIds((prev) => {
+      if ([...prev].every((id) => blockIds.has(id))) return prev
+      return new Set([...prev].filter((id) => blockIds.has(id)))
+    })
+    const layoutIds = new Set(items.map(layoutKey))
+    // Grouped children are not individually measured. Discard their old
+    // singleton measurements: a later ungroup/remount resets child disclosures
+    // and must use estimates until ResizeObserver measures the new layout.
+    for (const id of [...heights.keys()]) if (!layoutIds.has(id)) heights.delete(id)
+    for (const id of [...ests.keys()]) if (!blockIds.has(id)) ests.delete(id)
+    const seenIds = new Set([...blockIds, ...layoutIds])
+    for (const id of [...seen]) if (!seenIds.has(id)) seen.delete(id)
+  }, [blocks, items, layoutKey, anchorTarget])
 
   const measure = useCallback(
     (id: string, h: number) => {
@@ -356,7 +541,7 @@ export function TranscriptView({
         // being toggled) produce no store update, so no follow request is
         // scheduled — re-snap here when following to keep the bottom pinned.
         const st = controller.store.get()
-        if (st.following && st.blocks[st.blocks.length - 1]?.id === id) {
+        if (st.following && lastLayoutKeyRef.current === id) {
           controller.followNow()
         }
       }
@@ -382,6 +567,64 @@ export function TranscriptView({
       scrollerOut.el = null
     }
   }, [scrollerOut])
+
+  // Cross-view jumps use the same seeking mechanism as Trace/Maze/share. Match
+  // the selector against a detached anchor, so even unmounted grouped children
+  // remain discoverable without parsing CSS escapes or touching the model.
+  useLayoutEffect(() => {
+    const el = scrollerRef.current
+    if (!el) return
+    const reveal = (event: Event) => {
+      const selector = (event as CustomEvent<string>).detail
+      if (typeof selector !== 'string') return
+      let target: BlockModel | undefined
+      try {
+        const current = el.querySelector(selector)
+        if (current instanceof HTMLElement && current.offsetParent !== null) {
+          controller.setFollowing(false)
+          return
+        }
+        const probe = document.createElement('div')
+        target = blocks.find((b) => {
+          if (b.kind !== 'tool' || !b.callId) return false
+          probe.dataset.callId = b.callId
+          return probe.matches(selector)
+        })
+      } catch {
+        // Ignore malformed view-only anchor requests without changing scroll intent.
+        return
+      }
+      if (!target) return
+      controller.setFollowing(false)
+      setRevealedIds((prev) => (prev.has(target.id) ? prev : new Set([...prev, target.id])))
+      setAnchorTarget(target.id)
+    }
+    el.addEventListener('loom-reveal-anchor', reveal)
+    return () => el.removeEventListener('loom-reveal-anchor', reveal)
+  }, [blocks, controller])
+
+  useLayoutEffect(() => {
+    if (!anchorTarget) return
+    const el = scrollerRef.current
+    if (!el || el.clientHeight === 0) return
+    let offset = 24 // transcript-inner top padding
+    for (const item of items) {
+      if (item.kind === 'block' && item.id === anchorTarget) {
+        el.scrollTop = Math.max(0, offset - 80)
+        setViewport({ top: el.scrollTop, height: el.clientHeight })
+        setAnchorTarget(null)
+        break
+      }
+      offset += heightOf(item) + BLOCK_GAP_PX
+    }
+  }, [anchorTarget, items, heightOf, viewport.height])
+
+  // A projection/disclosure change can shrink earlier rows without resizing the
+  // last singleton. Keep a following reader pinned even in that case; never
+  // steal an up-scrolled reader's position.
+  useLayoutEffect(() => {
+    if (controller.store.get().following) controller.followNow()
+  }, [layoutSignature, controller])
 
   // Snap-to-bottom requests: the controller's rAF callback bumps followSeq; this consumes it
   useLayoutEffect(() => {
@@ -429,7 +672,7 @@ export function TranscriptView({
     // The target block may never have entered the render window (unmeasured): accumulate with the same estimates the virtualizer uses
     let offset: number | null = null
     let acc = 0
-    for (const b of blocks) {
+    for (const b of items) {
       if (b.id === targetId) {
         offset = acc
         break
@@ -460,7 +703,7 @@ export function TranscriptView({
       cancelAnimationFrame(raf)
       if (timer) clearTimeout(timer)
     }
-  }, [searchNavSeq, search, blocks, controller, heightOf])
+  }, [searchNavSeq, search, items, controller, heightOf])
 
   // During streaming output: quietly refresh the hit count (new blocks may match the current query; no scrolling is triggered).
   useEffect(() => {
@@ -471,18 +714,9 @@ export function TranscriptView({
 
   // --- visible range computation ---
   const { renderStart, renderEnd, topPad, bottomPad } = useMemo(() => {
-    const n = blocks.length
+    const n = geometry.items.length
     if (n === 0) return { renderStart: 0, renderEnd: 0, topPad: 0, bottomPad: 0 }
-    // offsets[i] = top offset of block i = sum(heights[0..i-1]) + i*GAP
-    const offsets: number[] = new Array(n)
-    let acc = 0
-    for (let i = 0; i < n; i++) {
-      offsets[i] = acc
-      acc += heightOf(blocks[i]) + BLOCK_GAP_PX
-    }
-    // total content height = sum(heights) + (n-1)*GAP
-    const lastH = heightOf(blocks[n - 1])
-    const total = acc - BLOCK_GAP_PX + lastH
+    const { offsets, total } = geometry
 
     const top = viewport.top
     const bottom = top + viewport.height
@@ -494,12 +728,25 @@ export function TranscriptView({
     const topPad = rs > 0 ? offsets[rs] : 0
     const bottomPad = re < n ? total - offsets[re] : 0
     return { renderStart: rs, renderEnd: re, topPad, bottomPad }
-  }, [blocks, viewport, measureTick, heightOf])
+  }, [geometry, viewport])
 
   const visible = useMemo(
-    () => blocks.slice(renderStart, renderEnd),
-    [blocks, renderStart, renderEnd],
+    () => items.slice(renderStart, renderEnd),
+    [items, renderStart, renderEnd],
   )
+
+  const onTranscriptScroll = useRafScroll<HTMLDivElement>((el) => {
+    readingTopRef.current = el.scrollTop
+    if (previousLayoutRef.current) previousLayoutRef.current.top = el.scrollTop
+    setViewport({ top: el.scrollTop, height: el.clientHeight })
+    const restoredTop = restoredTopRef.current
+    restoredTopRef.current = null
+    // Shrinking history can clamp an up-scroll anchor near the bottom. That
+    // programmatic restore is not permission to resume streaming follow.
+    if (restoredTop != null && Math.abs(el.scrollTop - restoredTop) < 1) return
+    const gap = el.scrollHeight - el.scrollTop - el.clientHeight
+    controller.setFollowing(gap < FOLLOW_THRESHOLD_PX)
+  })
 
   const cls =
     'transcript' +
@@ -510,11 +757,12 @@ export function TranscriptView({
       id="transcript"
       className={cls}
       ref={scrollerRef}
-      onScroll={useRafScroll<HTMLDivElement>((el) => {
-        setViewport({ top: el.scrollTop, height: el.clientHeight })
-        const gap = el.scrollHeight - el.scrollTop - el.clientHeight
-        controller.setFollowing(gap < FOLLOW_THRESHOLD_PX)
-      })}
+      onScroll={(event) => {
+        // Capture top synchronously; the layout may change before the rAF flush.
+        readingTopRef.current = event.currentTarget.scrollTop
+        if (previousLayoutRef.current) previousLayoutRef.current.top = readingTopRef.current
+        onTranscriptScroll(event)
+      }}
     >
       <div id="blocks" className="transcript-inner">
         {loading && blocks.length === 0 && (
@@ -528,8 +776,28 @@ export function TranscriptView({
         )}
         {topPad > 0 && <div style={{ height: topPad }} aria-hidden="true" />}
         {visible.map((b) => (
-          <MeasuredBlock key={b.id} id={b.id} measure={measure} seenIds={seenIdsRef.current}>
-            <BlockView block={b} io={io} />
+          <MeasuredBlock
+            key={b.id}
+            id={layoutKey(b)}
+            measure={measure}
+            seenIds={seenIdsRef.current}
+          >
+            {b.kind === 'block' ? (
+              <BlockView block={b.block} io={io} />
+            ) : (
+              <ToolGroupView
+                item={b}
+                io={io}
+                open={expandedGroups.get(b.firstCallId) ?? false}
+                onToggle={() =>
+                  setExpandedGroups((prev) => {
+                    const next = new Map(prev)
+                    next.set(b.firstCallId, !prev.get(b.firstCallId))
+                    return next
+                  })
+                }
+              />
+            )}
           </MeasuredBlock>
         ))}
         {bottomPad > 0 && <div style={{ height: bottomPad }} aria-hidden="true" />}

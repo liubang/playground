@@ -1,6 +1,8 @@
 /* transcript */
 .transcript {
   overflow-y: auto;
+  /* Projection changes preserve their own authoritative reading anchor. */
+  overflow-anchor: none;
   /* Contain overscroll at the transcript edge so it never chains to a parent. */
   overscroll-behavior: contain;
   /* Backstop: clip any residual horizontal overflow from children so it never bubbles up
@@ -31,11 +33,9 @@ overflow-x scroll container and are unaffected. */
   background: linear-gradient(to top, var(--bg0), transparent);
 }
 .transcript-inner {
-  max-width: var(--content-width);
+  max-width: calc(var(--content-width) + 2 * var(--content-gutter));
   margin: 0 auto;
-  /* Horizontal breathing room follows the viewport instead of a fixed 24px, so mid-sized
-   windows keep a balanced gutter; bottom padding is unchanged */
-  padding: 24px clamp(16px, 4vw, 24px) 12px;
+  padding: 24px var(--content-gutter) 12px;
   display: flex;
   flex-direction: column;
 }

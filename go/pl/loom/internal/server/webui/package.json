@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "test": "node --experimental-strip-types --test src/lib/*.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

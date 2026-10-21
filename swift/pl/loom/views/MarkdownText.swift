@@ -16,7 +16,7 @@ import AppKit
 import SwiftUI
 
 /// Block-split markdown rendering, styled after the WebUI's `.md` rules
-/// (blocks.css): prose at 14.5/1.7, headings squashed to 15/600, inline
+/// (blocks.css): prose at 14.5/1.7, distinct heading levels, inline
 /// code in orange on --bg2 chips, fenced blocks as bg1+border panels.
 /// VStack transcripts re-evaluate every row's body on each streaming
 /// frame; markdown parsing is the hot path, so both block splitting
@@ -642,11 +642,10 @@ private struct ProseText: View {
                 .foregroundStyle(Self.cursorGradient)
         }
         return text
-            // SwiftUI's system text reads heavier than WKWebView's antialiased
-            // 400-weight prose at the same point size on dark surfaces.
-            .font(.system(size: Theme.textLg, weight: .light))
+            // Keep regular-weight prose readable in either appearance.
+            .font(.system(size: Theme.textLg, weight: .regular))
             .foregroundStyle(Theme.fg)
-            .lineSpacing(7) // ≈ the WebUI's 1.7 line-height
+            .lineSpacing(8.5) // ≈ the WebUI's 1.8 line-height
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -776,7 +775,7 @@ func stableProsePrefixSplit(_ markdown: String) -> String.Index? {
 }
 
 /// Inline markdown → AttributedString with the WebUI's .md styling:
-/// orange mono chips for inline code, headings squashed to 15/600.
+/// orange mono chips for inline code, distinct heading levels.
 /// Shared by prose paragraphs (size textLg) and table cells (textMd)
 /// — pass the surrounding point size so strong-emphasis runs match it.
 func renderInlineMarkdown(_ source: String, size: CGFloat = Theme.textLg) -> AttributedString {
@@ -885,21 +884,19 @@ private func parseInlineMarkdown(_ source: String, size: CGFloat) -> AttributedS
             parsed[run.range][SwiftUIAttrs.FontAttribute.self] = Theme.monoSm
             continue
         }
-        // The WebUI flattens all heading levels to 15px/600.
         if let intent = run.presentationIntent,
-           (1 ... 6).contains(where: { level in
+           let level = (1 ... 6).first(where: { level in
                intent.components.contains { $0.kind == .header(level: level) }
            })
         {
             parsed[run.range][SwiftUIAttrs.FontAttribute.self] =
-                Font.system(size: 15, weight: .semibold)
+                Font.system(size: markdownHeadingSize(level), weight: .semibold)
             continue
         }
-        // Preserve a clear step above the lighter native prose without
-        // making **-heavy assistant replies look uniformly bold.
+        // Strong emphasis stays clearly above regular-weight prose.
         if run.inlinePresentationIntent?.contains(.stronglyEmphasized) == true {
             parsed[run.range][SwiftUIAttrs.FontAttribute.self] =
-                Font.system(size: size, weight: .medium)
+                Font.system(size: size, weight: .semibold)
         }
     }
     return parsed
@@ -907,22 +904,30 @@ private func parseInlineMarkdown(_ source: String, size: CGFloat) -> AttributedS
 
 // MARK: - Heading / list blocks
 
-/// Heading block: the WebUI flattens all levels to 15px/600
-/// (blocks.css .md h1–h6). Inline code chips inside the heading keep
-/// their mono font (explicit run attributes beat the view font).
+/// Shared prose hierarchy: h1 22, h2 18, h3 16, h4–h6 15.
+func markdownHeadingSize(_ level: Int) -> CGFloat {
+    switch level {
+    case 1: 22
+    case 2: 18
+    case 3: 16
+    default: 15
+    }
+}
+
+/// Inline code keeps its explicit mono font inside headings.
 private struct HeadingText: View {
     let level: Int
     let text: String
 
     var body: some View {
-        Text(renderInlineMarkdown(text))
-            .font(.system(size: 15, weight: .semibold))
+        Text(renderInlineMarkdown(text, size: markdownHeadingSize(level)))
+            .font(.system(size: markdownHeadingSize(level), weight: .semibold))
             .foregroundStyle(Theme.fg)
             .lineSpacing(5)
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 4)
-            .accessibilityHeading(level <= 3 ? .h1 : .h3)
+            .padding(.top, level <= 2 ? 10 : 6)
+            .accessibilityHeading(level == 1 ? .h1 : (level == 2 ? .h2 : (level == 3 ? .h3 : .h4)))
     }
 }
 
@@ -934,9 +939,9 @@ private struct QuoteText: View {
 
     var body: some View {
         Text(renderInlineMarkdown(text))
-            .font(.system(size: Theme.textLg, weight: .light))
+            .font(.system(size: Theme.textLg, weight: .regular))
             .foregroundStyle(Theme.muted)
-            .lineSpacing(7)
+            .lineSpacing(8.5)
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 12)
@@ -960,9 +965,9 @@ private struct MarkdownListView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 7) {
                     marker(item)
                     Text(renderInlineMarkdown(item.text))
-                        .font(.system(size: Theme.textLg, weight: .light))
+                        .font(.system(size: Theme.textLg, weight: .regular))
                         .foregroundStyle(Theme.fg)
-                        .lineSpacing(7)
+                        .lineSpacing(8.5)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -981,7 +986,7 @@ private struct MarkdownListView: View {
                 .frame(width: 16, alignment: .center)
         } else if let ordinal = item.ordinal {
             Text("\(ordinal).")
-                .font(.system(size: Theme.textLg, weight: .light))
+                .font(.system(size: Theme.textLg, weight: .regular))
                 .foregroundStyle(Theme.muted)
                 .frame(minWidth: 16, alignment: .trailing)
         } else {
@@ -1068,7 +1073,7 @@ private struct MarkdownTableView: View {
         // would collapse the cell to a short bordered strip floating
         // inside the row — reading as a doubled border.
         Text(renderInlineMarkdown(text.isEmpty ? " " : text, size: Theme.textMd))
-            .font(.system(size: Theme.textMd, weight: isHeader ? .semibold : .light)
+            .font(.system(size: Theme.textMd, weight: isHeader ? .semibold : .regular)
                 .monospacedDigit())
             .foregroundStyle(Theme.fg)
             .lineSpacing(5.5) // .md table inherits the body's 1.65 line-height at 13px

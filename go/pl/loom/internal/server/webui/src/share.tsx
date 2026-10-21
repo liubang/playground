@@ -211,6 +211,7 @@ function ShareApp() {
           <BlocksIOContext.Provider value={blocksIO}>
             <TranscriptView
               controller={transcript}
+              active={false}
               io={{}}
               className="share-transcript"
               scrollerOut={scrollerRef.current}

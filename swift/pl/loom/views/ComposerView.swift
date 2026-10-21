@@ -15,8 +15,8 @@
 import SwiftUI
 
 /// Message composer, after the WebUI's composer.css: the plan panel
-/// pinned above, then a bg1 capsule box (radius 16) holding the
-/// textarea, and a bottom bar — separated by a top hairline — with the
+/// pinned above, then a bg1 composer box (radius 12) holding the
+/// textarea, and a quiet bottom bar without a divider, with the
 /// model/reasoning/approval picker capsules on the left, and on the
 /// right a quiet 28px ctx-gauge ring next to the 32px send/stop button
 /// — deliberately NOT a twin pair: the gauge is ambient information,
@@ -36,7 +36,7 @@ struct ComposerView: View {
     /// Increment to focus the editor (appear, composerFocusRequest) —
     /// see ComposerTextView.focusRequest for why this isn't a FocusState.
     @State private var focusToken = 0
-    @ScaledMetric(relativeTo: .body) private var inputFontSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .body) private var inputFontSize: CGFloat = Theme.textLg
     /// The ctx-gauge's instant hover card (system tooltips lag 1–2s,
     /// which reads as "no hover feedback at all").
     @State private var gaugeCardShown = false
@@ -119,9 +119,8 @@ struct ComposerView: View {
                 .accessibilityLabel("Message")
                 .accessibilityHint("Return to send, Shift-Return for a new line")
 
-                // composer-bar: hairline-separated button row; negative
-                // horizontal margins stretch the divider to the box's
-                // full width (composer.css: margin 2px -6px 0).
+                // Quiet composer toolbar; negative margins retain its full-width
+                // alignment within the editor's horizontal inset.
                 HStack(spacing: 8) {
                     modelPicker
                     reasoningPicker
@@ -160,28 +159,22 @@ struct ComposerView: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
                 .padding(.horizontal, -6)
-                .overlay(alignment: .top) {
-                    Hairline(axis: .horizontal)
-                }
             }
             // Keep the queue flush with the box edge while the editor and
             // toolbar retain their 6px horizontal inset.
             .padding(.horizontal, 6)
-            .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusXl))
-            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusXl))
-            // Focus treatment (composer.css .composer-box:focus-within):
-            // a crisp 1px primary border plus a crisp 3px halo drawn
-            // just OUTSIDE the box (the CSS `0 0 0 3px` spread) — no
-            // blurred neon; the ambient shadow stays barely-there.
+            .background(Theme.bg1, in: RoundedRectangle(cornerRadius: Theme.radiusLg))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusLg))
+            // Restore the theme's focus border and subtle outer halo.
             .overlay(
-                RoundedRectangle(cornerRadius: Theme.radiusXl)
+                RoundedRectangle(cornerRadius: Theme.radiusLg)
                     .strokeBorder(
                         editorFocused ? Theme.primary.opacity(0.5) : Theme.bg3,
                         lineWidth: 1,
                     ),
             )
             .overlay(
-                RoundedRectangle(cornerRadius: Theme.radiusXl + 1.5)
+                RoundedRectangle(cornerRadius: Theme.radiusLg + 1.5)
                     .strokeBorder(Theme.primary.opacity(editorFocused ? 0.12 : 0), lineWidth: 3)
                     .padding(-1.5),
             )
@@ -195,7 +188,7 @@ struct ComposerView: View {
             .frame(maxWidth: Theme.contentWidth)
             .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, Theme.conversationGutter)
         .padding(.top, 12)
         .padding(.bottom, 14)
         .background(Theme.bg0)
@@ -375,19 +368,17 @@ struct ComposerView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.onAccent)
                     .frame(width: 32, height: 32)
-                    .background(Theme.error, in: Circle())
+                    .background(Theme.error, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.escape, modifiers: [])
             .help("Stop the current turn (⎋)")
             .accessibilityLabel("Stop the current turn")
         } else {
-            // Quiet-but-present: the disabled button keeps its button
-            // SHAPE — a bg2 disc one notch above the composer's bg1,
+            // Quiet-but-present: the disabled button keeps its rounded-square
+            // shape — a bg2 surface one notch above the composer's bg1,
             // muted glyph — so the primary action stays discoverable
-            // without competing with the gauge. Typing ARMS it:
-            // primary fill with a 0.96→1 spring pop (slight overshoot),
-            // the clearest "you can send now" signal.
+            // without competing with the gauge. Typing enables its primary fill.
             Button(action: send) {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 15, weight: .bold))
@@ -395,13 +386,12 @@ struct ComposerView: View {
                     .frame(width: 32, height: 32)
                     .background(
                         canSend ? (sendHovered ? Theme.primaryHover : Theme.primary) : Theme.bg2,
-                        in: Circle(),
+                        in: RoundedRectangle(cornerRadius: Theme.radiusSm),
                     )
-                    .scaleEffect(canSend || reduceMotion ? 1 : 0.96)
             }
             .buttonStyle(.plain)
             .onHover { sendHovered = $0 }
-            .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.65), value: canSend)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.12), value: canSend)
             .animation(.easeInOut(duration: 0.12), value: sendHovered)
             .disabled(!canSend)
             .keyboardShortcut(.return, modifiers: .command)
@@ -413,22 +403,19 @@ struct ComposerView: View {
     // MARK: Pickers (.picker-btn)
 
     private var currentModelRef: String {
-        // WebUI applySnapshotMeta: provider/model when both are known;
-        // a bare snapshot model name falls back to the catalog's
-        // default ref so the picker still marks the active row.
-        if !store.providerName.isEmpty, !store.modelName.isEmpty {
-            return "\(store.providerName)/\(store.modelName)"
-        }
-        return store.defaultModelRef ?? store.modelName
+        currentModelReference(
+            provider: store.providerName, model: store.modelName,
+            defaultRef: store.defaultModelRef,
+        )
     }
 
     @ViewBuilder private var modelPicker: some View {
         if !models.isEmpty {
             PickerCapsule(
                 icon: "square.3.layers.3d",
-                label: store.modelName.isEmpty ? "model" : store.modelName,
+                label: currentModelRef.isEmpty ? "model" : currentModelRef,
                 isActive: false,
-                help: "Switch model",
+                help: "Switch model (current: \(currentModelRef))",
             ) { close in
                 ForEach(models, id: \.self) { model in
                     let ref = "\(model.provider)/\(model.name)"
@@ -813,7 +800,7 @@ struct PlanPanel: View {
                 .overlay {
                     if expanded {
                         RoundedRectangle(cornerRadius: Theme.radiusLg)
-                            .strokeBorder(Theme.bg2.opacity(0.65), lineWidth: 1)
+                            .strokeBorder(Theme.lineSoft, lineWidth: 1)
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: expanded ? Theme.radiusLg : Theme.radiusMd))

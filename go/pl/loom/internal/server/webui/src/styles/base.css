@@ -48,9 +48,10 @@ body {
   --radius-xl: 16px;
   --radius-full: 999px;
   /* Conversation column width (shared by transcript/composer/plan panel) */
-  --content-width: 960px;
+  --content-width: 840px;
+  --content-gutter: clamp(12px, 3vw, 28px);
   /* Side chrome widths (grid tracks; mid-range screens tighten both via the 1360px breakpoint) */
-  --sidebar-w: 288px;
+  --sidebar-w: 260px;
   --rpanel-w: 360px;
   /* Stacking scale: follow button < narrow drawer < dropdown menu < confirm modal < toast */
   --z-follow: 10;

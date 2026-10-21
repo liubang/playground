@@ -190,6 +190,318 @@ final class TranscriptModelTests: XCTestCase {
         )
     }
 
+    // MARK: Read-only success grouping
+
+    private func readTool(
+        _ id: String, name: String = "read_file", status: String = "success",
+        content: [ContentPart] = [.text("output")], durationMs: Int64? = nil,
+        error: ContentPart.ToolResult.ResultError? = nil,
+    ) -> ToolRenderModel {
+        let start = durationMs.map { _ in Date(timeIntervalSince1970: 1000) }
+        return ToolRenderModel(item: ToolBlockItem(
+            call: ContentPart.ToolCall(id: id, name: name, arguments: nil),
+            result: ContentPart.ToolResult(
+                callId: id, status: status, content: content, error: error,
+                startedAt: start,
+                finishedAt: durationMs.map { start!.addingTimeInterval(Double($0) / 1000) },
+            ),
+        ))
+    }
+
+    private func flatten(_ items: [TranscriptModel.Item]) -> [TranscriptModel.Item] {
+        items.flatMap { item in
+            if case let .toolGroup(group) = item {
+                return group.tools.map { TranscriptModel.Item.tool($0) }
+            }
+            return [item]
+        }
+    }
+
+    func testReadOnlySuccessGroupsAtTwoAndKeepsSingleton() {
+        let first = readTool("c1")
+        let second = readTool("c2", name: "list_dir")
+        XCTAssertEqual(TranscriptModel.groupReadOnlyTools([.tool(first)]), [.tool(first)])
+        let source: [TranscriptModel.Item] = [.tool(first), .tool(second)]
+        let grouped = TranscriptModel.groupReadOnlyTools(source)
+        guard case let .toolGroup(group) = grouped.first else { return XCTFail("expected group") }
+        XCTAssertEqual(grouped.count, 1)
+        XCTAssertEqual(group.id, "tool-group-c1")
+        XCTAssertEqual(group.tools, [first, second])
+        XCTAssertEqual(group.verbs, ["read", "list"])
+        XCTAssertEqual(flatten(grouped), source)
+        XCTAssertEqual(grouped, TranscriptModel.groupReadOnlyTools(source))
+    }
+
+    func testReadOnlyGroupCapEightPreservesOrderAndRemainder() {
+        for count in [8, 9, 10, 17] {
+            let source = (0 ..< count).map { TranscriptModel.Item.tool(readTool("c\($0)")) }
+            let grouped = TranscriptModel.groupReadOnlyTools(source)
+            XCTAssertEqual(flatten(grouped), source)
+            XCTAssertEqual(grouped.count, (count + 7) / 8)
+            for item in grouped {
+                if case let .toolGroup(group) = item {
+                    XCTAssertTrue((2 ... 8).contains(group.tools.count))
+                }
+            }
+            if count % 8 == 1 {
+                XCTAssertEqual(grouped.last, source.last)
+            }
+        }
+    }
+
+    func testEveryVisibleContentKindBreaksToolGroups() {
+        let boundaries: [TranscriptModel.Item] = [
+            .markdown("answer"),
+            .reasoning(ContentPart.Reasoning(text: "thinking", redacted: nil, durationMs: nil)),
+            .image(ContentPart.ImageContent(mediaType: "image/png", data: "image")),
+            .artifact(ContentPart.Artifact(id: "art", size: 1, mediaType: "text/plain")),
+        ]
+        for boundary in boundaries {
+            let source: [TranscriptModel.Item] = [
+                .tool(readTool("c1")), .tool(readTool("c2")), boundary,
+                .tool(readTool("c3")), .tool(readTool("c4")),
+            ]
+            let grouped = TranscriptModel.groupReadOnlyTools(source)
+            XCTAssertEqual(grouped.count, 3)
+            XCTAssertEqual(grouped[1], boundary)
+            XCTAssertEqual(flatten(grouped), source)
+        }
+    }
+
+    func testRunningFailedCancelledAndUnknownSuccessAliasesStayUngrouped() {
+        var tools = ["failed", "cancelled", "running", "ok", "done", "unknown"].map {
+            readTool("c-\($0)", status: $0)
+        }
+        tools.append(ToolRenderModel(item: ToolBlockItem(
+            call: ContentPart.ToolCall(id: "running", name: "read_file", arguments: nil), result: nil,
+        )))
+        tools.append(readTool("error", error: .init(code: "error", message: "")))
+        var live = ToolCallState(id: "live", name: "read_file")
+        live.status = .success
+        tools.append(ToolRenderModel(live: live))
+        for tool in tools {
+            let source: [TranscriptModel.Item] = [.tool(readTool("first")), .tool(tool), .tool(readTool("last"))]
+            XCTAssertFalse(tool.canGroupReadOnlySuccess)
+            XCTAssertEqual(TranscriptModel.groupReadOnlyTools(source), source)
+        }
+    }
+
+    func testOnlyExactWhitelistNamesAreEligible() {
+        let allowed = ["read_file", "list_dir", "glob", "grep", "search", "search_text", "web_fetch",
+                       "web_search", "kb_search", "kb_read", "read_skill"]
+        for name in allowed {
+            XCTAssertTrue(readTool(name, name: name).canGroupReadOnlySuccess, name)
+        }
+        let excluded = ["edit", "write", "run_cmd", "update_plan", "delegate_task", "resource",
+                        "read_skill_resource", "mcp__read_file", "Read_file", "read_file_extra"]
+        for name in excluded {
+            XCTAssertFalse(readTool(name, name: name).canGroupReadOnlySuccess, name)
+        }
+    }
+
+    func testRichResultsErrorsAttachmentsAndDiffNeverGroup() {
+        var hiddenArtifact = ContentPart.Artifact(id: "hidden", size: 1, mediaType: "text/plain")
+        hiddenArtifact.modelOnly = true
+        let artifact = ContentPart.Artifact(id: "art", size: 1, mediaType: "text/plain")
+        let image = ContentPart.ImageContent(mediaType: "image/png", data: "image")
+        var attachment = readTool("attachment")
+        attachment.outputAttachments = [.init(name: "stdout", artifact: artifact)]
+        var diff = readTool("diff")
+        diff.diff = "+ rich"
+        var error = readTool("error")
+        error.errorMessage = ""
+        let tools = [
+            readTool("image", content: [.image(image)]),
+            readTool("artifact", content: [.artifact(artifact)]),
+            readTool("hidden", content: [.artifact(hiddenArtifact)]),
+            readTool("both", content: [.image(image), .artifact(artifact)]),
+            attachment, diff, error,
+        ]
+        for tool in tools {
+            XCTAssertFalse(tool.canGroupReadOnlySuccess)
+            let source: [TranscriptModel.Item] = [.tool(readTool("first")), .tool(tool), .tool(readTool("last"))]
+            XCTAssertEqual(TranscriptModel.groupReadOnlyTools(source), source)
+        }
+    }
+
+    func testGroupDurationIsSumOnlyWhenAllDefinedAndVerbsDeduplicate() {
+        let first = readTool("c1", name: "grep", durationMs: 250)
+        let second = readTool("c2", name: "search_text", durationMs: 750)
+        let group = ToolGroupModel(tools: [first, second])
+        XCTAssertEqual(group.combinedDurationMs, 1000)
+        XCTAssertEqual(group.verbs, ["search"])
+        XCTAssertNil(ToolGroupModel(tools: [first, readTool("missing")]).combinedDurationMs)
+        var overflowing = first
+        overflowing.durationMs = Int64.max
+        XCTAssertNil(ToolGroupModel(tools: [overflowing, second]).combinedDurationMs)
+    }
+
+    func testBuildGroupsWithinMessageAndDoesNotMutateSource() {
+        let messages = [assistant("a", [call("c1"), call("c2"), result("c1"), result("c2")])]
+        let before = messages
+        let model = TranscriptModel.build(messages: messages, midTurn: false)
+        guard case let .message(row) = model.rows.first,
+              case let .toolGroup(group) = row.items.first else { return XCTFail("expected history group") }
+        XCTAssertEqual(row.message, messages[0])
+        XCTAssertEqual(group.tools.map(\.callId), ["c1", "c2"])
+        XCTAssertEqual(messages, before)
+        XCTAssertEqual(model, TranscriptModel.build(messages: messages, midTurn: false))
+    }
+
+    func testMessageRunUserSystemAndSummaryBoundariesRemainIntact() {
+        var first = assistant("a1", [call("c1"), result("c1")])
+        first.metadata = ["run_id": "run1"]
+        var second = assistant("a2", [call("c2"), result("c2")])
+        second.metadata = ["run_id": "run2"]
+        let system = Message(id: "system", role: .system, status: .final, parts: [.text("notice")], createdAt: nil)
+        let model = TranscriptModel.build(messages: [first, second, system, user("u", "next")], midTurn: false,
+                                          turnSummaries: [summary("run1", ["file"])])
+        XCTAssertEqual(model.rows.map(\.id), ["a1", "tsm-run1", "a2", "system", "u"])
+        for row in model.rows {
+            if case let .message(message) = row {
+                XCTAssertFalse(message.items.contains {
+                    if case .toolGroup = $0 {
+                        return true
+                    }; return false
+                })
+            }
+        }
+    }
+
+    func testInterruptedAndActionRowsKeepIndividualTools() {
+        let interrupted = Message(
+            id: "interrupted", role: .assistant, status: .interrupted,
+            parts: [call("c1"), call("c2"), result("c1"), result("c2")], createdAt: nil,
+        )
+        let action = assistant("action", [.text("answer"), call("c3"), call("c4"), result("c3"), result("c4")])
+        let model = TranscriptModel.build(messages: [interrupted, action], midTurn: false)
+        for row in model.rows {
+            guard case let .message(message) = row else { return XCTFail("expected message") }
+            XCTAssertFalse(message.items.contains {
+                if case .toolGroup = $0 {
+                    return true
+                }; return false
+            })
+        }
+        guard case let .message(last) = model.rows.last else { return XCTFail("expected action row") }
+        XCTAssertTrue(last.showActions)
+    }
+
+    func testInvisibleTextAndArtifactPartsStillBreakGrouping() {
+        var artifact = ContentPart.Artifact(id: "hidden", size: 1, mediaType: "text/plain")
+        artifact.modelOnly = true
+        for boundary in [ContentPart.text(" \n"), .artifact(artifact)] {
+            let model = TranscriptModel.build(messages: [assistant("a", [
+                call("c1"), boundary, call("c2"), result("c1"), result("c2"),
+            ])], midTurn: false)
+            guard case let .message(row) = model.rows.first else { return XCTFail("expected row") }
+            XCTAssertEqual(row.items.count, 2)
+            XCTAssertFalse(row.items.contains {
+                if case .toolGroup = $0 {
+                    return true
+                }; return false
+            })
+        }
+    }
+
+    func testMidTurnGroupsPastHistoryButNotCurrentPersistedFinalSegments() {
+        let messages = [
+            user("past-user", "past"),
+            assistant("past", [call("p1"), call("p2"), result("p1"), result("p2")]),
+            user("current-user", "current"),
+            assistant("current", [call("c1"), call("c2"), result("c1"), result("c2")]),
+            assistant("current-later", [call("c3"), call("c4"), result("c3"), result("c4")]),
+        ]
+        let active = TranscriptModel.build(messages: messages, midTurn: true)
+        let settled = TranscriptModel.build(messages: messages, midTurn: false)
+        for (index, id) in [(1, "past"), (3, "current"), (4, "current-later")] {
+            guard case let .message(activeRow) = active.rows[index],
+                  case let .message(settledRow) = settled.rows[index],
+                  case .toolGroup = settledRow.items.first else { return XCTFail("expected settled group") }
+            XCTAssertEqual(activeRow.message.id, id)
+            XCTAssertEqual(flatten(activeRow.items), flatten(settledRow.items))
+            if id == "past" {
+                XCTAssertEqual(activeRow, settledRow)
+            } else {
+                XCTAssertEqual(activeRow.items.count, 2)
+                for item in activeRow.items {
+                    guard case .tool = item else { return XCTFail("active tool must remain visible") }
+                }
+            }
+        }
+    }
+
+    func testMidTurnWithoutUserBoundaryKeepsAllToolsVisible() {
+        let messages = [assistant("a", [call("c1"), call("c2"), result("c1"), result("c2")])]
+        let model = TranscriptModel.build(messages: messages, midTurn: true)
+        guard case let .message(row) = model.rows.first else { return XCTFail("expected row") }
+        XCTAssertEqual(row.items.count, 2)
+        for item in row.items {
+            guard case .tool = item else { return XCTFail("active tool must remain visible") }
+        }
+    }
+
+    func testTraceToolLookupFindsGroupedAndIndividualCallsWithoutChangingIdentity() {
+        let model = TranscriptModel.build(messages: [assistant("a", [
+            call("c1"), call("c2"), result("c1"), result("c2"),
+            call("edit", name: "edit"), result("edit"),
+        ])], midTurn: true)
+        // Put the same source into a finished earlier turn so grouping is enabled.
+        guard case let .message(source) = model.rows.first else { return XCTFail("expected row") }
+        let grouped = TranscriptModel.build(messages: [source.message, user("next", "next")], midTurn: true)
+        guard case let .message(row) = grouped.rows.first,
+              case let .toolGroup(group) = row.items.first else { return XCTFail("expected group") }
+        let identity = group.id
+        XCTAssertTrue(row.containsTool(callId: "c1"))
+        XCTAssertTrue(row.containsTool(callId: "c2"))
+        XCTAssertTrue(row.containsTool(callId: "edit"))
+        XCTAssertFalse(row.containsTool(callId: "missing"))
+        XCTAssertTrue(group.containsTool(callId: "c2"))
+        XCTAssertFalse(group.containsTool(callId: "edit"))
+        XCTAssertFalse(group.containsTool(callId: nil))
+        XCTAssertEqual(group.id, identity)
+        XCTAssertEqual(row.message, source.message)
+        for callId in ["c1", "c2", "edit"] {
+            XCTAssertEqual(grouped.toolLocation(callId: callId), TranscriptModel.ToolLocation(
+                rowId: "a", scrollId: "chat-tool-\(callId)",
+            ))
+        }
+        XCTAssertNil(grouped.toolLocation(callId: "missing"))
+        XCTAssertNotEqual(grouped.toolLocation(callId: "c1"), grouped.toolLocation(callId: "c2"))
+    }
+
+    func testMessageRowEqualityIncludesRevealTarget() {
+        let source = assistant("a", [call("c1"), call("c2"), result("c1"), result("c2")])
+        let model = TranscriptModel.build(messages: [source], midTurn: false)
+        guard case let .message(row) = model.rows.first else { return XCTFail("expected row") }
+        let plain = MessageRow(row: row)
+        let request = ToolRevealRequest(callId: "c2", sequence: 1)
+        let targeted = MessageRow(row: row, toolRevealRequest: request)
+        XCTAssertNotEqual(plain, targeted)
+        XCTAssertEqual(targeted, MessageRow(row: row, toolRevealRequest: request))
+        XCTAssertNotEqual(targeted, MessageRow(
+            row: row, toolRevealRequest: ToolRevealRequest(callId: "c1", sequence: 1),
+        ))
+        // A repeated locate invalidates equality even for the same call.
+        XCTAssertNotEqual(targeted, MessageRow(
+            row: row, toolRevealRequest: ToolRevealRequest(callId: "c2", sequence: 2),
+        ))
+    }
+
+    func testCurrentModelReferenceDoesNotMislabelBareSnapshotModel() {
+        XCTAssertEqual(currentModelReference(provider: "p", model: "actual", defaultRef: "q/default"), "p/actual")
+        XCTAssertEqual(currentModelReference(provider: "", model: "actual", defaultRef: "q/default"), "actual")
+        // Even matching names cannot identify a provider unambiguously.
+        XCTAssertEqual(currentModelReference(provider: "", model: "default", defaultRef: "q/default"), "default")
+        XCTAssertEqual(currentModelReference(provider: "", model: "actual", defaultRef: nil), "actual")
+        XCTAssertEqual(currentModelReference(provider: "", model: "", defaultRef: "q/default"), "q/default")
+        XCTAssertEqual(currentModelReference(provider: "", model: "", defaultRef: nil), "")
+    }
+
+    func testMarkdownHeadingScaleMatchesDesignContract() {
+        XCTAssertEqual((1 ... 6).map(markdownHeadingSize), [22, 18, 16, 15, 15, 15])
+    }
+
     // MARK: ToolRenderModel
 
     func testStatusMappingAndDuration() {

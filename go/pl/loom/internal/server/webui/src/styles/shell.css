@@ -25,7 +25,7 @@
 /* Sidebar */
 .sidebar {
   background: var(--bg1);
-  border-right: 1px solid var(--bg2);
+  border-right: 1px solid var(--line-soft);
   padding: 12px 10px;
   display: flex;
   flex-direction: column;
@@ -114,6 +114,7 @@
 }
 .sess-item.is-active {
   background: var(--bg2);
+  box-shadow: inset 2px 0 var(--primary);
 }
 .sess-item .t {
   flex: 1;
@@ -138,7 +139,7 @@
 .sess-item.is-child {
   margin-left: 12px;
   width: calc(100% - 12px);
-  border-left: 1px solid var(--bg2);
+  border-left: 1px solid var(--line-soft);
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
 /* Session item status dot: solid for live; awaiting_approval pulses amber
@@ -208,7 +209,7 @@
   align-items: center;
   gap: 8px;
   padding: 8px 6px 2px;
-  border-top: 1px solid var(--bg2);
+  border-top: 1px solid var(--line-soft);
   margin-top: 6px;
 }
 .sidebar-foot-brand {
@@ -352,7 +353,7 @@
   gap: 1px;
 }
 .ws-group:hover .ws-sessions {
-  border-left-color: var(--bg2);
+  border-left-color: var(--line-soft);
 }
 .ws-empty {
   padding: 4px 10px;
@@ -383,7 +384,7 @@
   padding: 0 20px;
   min-height: 44px;
   background: var(--bg0);
-  border-bottom: 1px solid var(--bg2);
+  border-bottom: 1px solid var(--line-soft);
   font-size: var(--text-md);
 }
 .app-header .sess {

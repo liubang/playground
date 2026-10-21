@@ -1,4 +1,38 @@
 /* ============================== Tool-block kind icons / approval picker ============================== */
+.tool-group {
+  border-top: 1px solid var(--line-soft);
+}
+.tool-group-toggle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 0;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.tool-group-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.tool-group-caret {
+  flex: none;
+  width: 12px;
+}
+.tool-group-duration {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
 .tool-kind {
   color: var(--muted);
   flex: none;

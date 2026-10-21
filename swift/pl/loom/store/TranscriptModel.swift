@@ -16,6 +16,24 @@ import AppKit
 import CryptoKit
 import Foundation
 
+/// Navigation is an event, not just a target: repeating the same call must
+/// reveal it again after the user manually collapses its group.
+struct ToolRevealRequest: Equatable {
+    let callId: String?
+    let sequence: UInt64
+
+    static func scrollId(callId: String) -> String {
+        "chat-tool-\(callId)"
+    }
+}
+
+/// Never substitute the catalog default for a known session model whose
+/// provider is missing. A bare name is preferable to a false qualified ref.
+func currentModelReference(provider: String, model: String, defaultRef: String?) -> String {
+    guard !model.isEmpty else { return defaultRef ?? "" }
+    return provider.isEmpty ? model : "\(provider)/\(model)"
+}
+
 // MARK: - Transcript model (derived render data, built on state change)
 
 /// Everything the transcript view needs, derived from the authoritative
@@ -27,7 +45,7 @@ import Foundation
 /// rebuilds this model only when `messages` or `state` actually change
 /// (turn boundaries), and the per-tool render model is memoized by
 /// call content, so a body re-evaluation is pure lookup.
-struct TranscriptModel {
+struct TranscriptModel: Equatable {
     /// One transcript line: a message row, or a turn-summary card
     /// appended at a finished turn's boundary (WebUI closeTurn — the
     /// card has no message of its own; it is keyed by run_id).
@@ -52,6 +70,16 @@ struct TranscriptModel {
         let message: Message
         let items: [Item]
         let showActions: Bool
+
+        func containsTool(callId: String) -> Bool {
+            items.contains { item in
+                switch item {
+                case let .tool(tool): tool.callId == callId
+                case let .toolGroup(group): group.containsTool(callId: callId)
+                default: false
+                }
+            }
+        }
     }
 
     /// One render unit inside an assistant row (tool_call + tool_result
@@ -60,6 +88,7 @@ struct TranscriptModel {
         case markdown(String)
         case reasoning(ContentPart.Reasoning)
         case tool(ToolRenderModel)
+        case toolGroup(ToolGroupModel)
         case image(ContentPart.ImageContent)
         case artifact(ContentPart.Artifact)
     }
@@ -67,6 +96,21 @@ struct TranscriptModel {
     static let empty = TranscriptModel(rows: [])
 
     let rows: [Row]
+
+    struct ToolLocation: Equatable {
+        let rowId: String
+        let scrollId: String
+    }
+
+    func toolLocation(callId: String) -> ToolLocation? {
+        guard let row = rows.first(where: {
+            if case let .message(model) = $0 {
+                return model.containsTool(callId: callId)
+            }
+            return false
+        }) else { return nil }
+        return ToolLocation(rowId: row.id, scrollId: ToolRevealRequest.scrollId(callId: callId))
+    }
 
     /// Builds the model from the authoritative history. `midTurn` is
     /// the ChatView gate (running/cancelling/awaitingApproval) that
@@ -137,7 +181,10 @@ struct TranscriptModel {
             rows.append(.turnSummary(summary))
         }
 
-        for message in messages {
+        // Persisted final segments in the active turn remain individually visible,
+        // just like DraftView. Without a user boundary treat all history as active.
+        let activeTurnStart = midTurn ? (messages.lastIndex { $0.role == .user } ?? 0) : messages.count
+        for (index, message) in messages.enumerated() {
             switch message.role {
             case .user:
                 // Turn boundary: close out the previous turn's file
@@ -154,7 +201,11 @@ struct TranscriptModel {
                         lastRunId = runId
                     }
                 }
-                let items = assistantItems(of: message, toolResults: toolResults)
+                let items = assistantItems(
+                    of: message, toolResults: toolResults,
+                    groupTools: index < activeTurnStart && message.status == .final
+                        && !actionIds.contains(message.id),
+                )
                 // Pure tool_result carriers fold into their call's block
                 // and leave no row of their own (WebUI parity).
                 if items.isEmpty {
@@ -173,6 +224,34 @@ struct TranscriptModel {
         return TranscriptModel(rows: rows)
     }
 
+    /// A bounded, lossless projection within one source message. Row identity,
+    /// run boundaries, action bars and interrupted markers remain untouched.
+    static func groupReadOnlyTools(_ items: [Item]) -> [Item] {
+        var projected: [Item] = []
+        var pending: [ToolRenderModel] = []
+        func flush() {
+            if pending.count >= 2 {
+                projected.append(.toolGroup(ToolGroupModel(tools: pending)))
+            } else if let tool = pending.first {
+                projected.append(.tool(tool))
+            }
+            pending.removeAll(keepingCapacity: true)
+        }
+        for item in items {
+            if case let .tool(tool) = item, tool.canGroupReadOnlySuccess {
+                pending.append(tool)
+                if pending.count == 8 {
+                    flush()
+                }
+            } else {
+                flush()
+                projected.append(item)
+            }
+        }
+        flush()
+        return projected
+    }
+
     /// Flattens an assistant message's parts into render items, folding
     /// each tool_call together with the tool_result that shares its
     /// call_id (WebUI buildFromSnapshot: results only PATCH the block
@@ -180,9 +259,21 @@ struct TranscriptModel {
     private static func assistantItems(
         of message: Message,
         toolResults: [String: ContentPart.ToolResult],
+        groupTools: Bool,
     ) -> [Item] {
         var items: [Item] = []
+        var pendingTools: [Item] = []
+        func flushTools() {
+            items.append(contentsOf: groupTools
+                ? groupReadOnlyTools(pendingTools) : pendingTools)
+            pendingTools.removeAll(keepingCapacity: true)
+        }
         for part in message.parts {
+            // Even invisible text and model-only media are source boundaries.
+            switch part {
+            case .toolCall, .toolResult: break
+            default: flushTools()
+            }
             switch part {
             case let .text(text):
                 if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -191,7 +282,7 @@ struct TranscriptModel {
             case let .reasoning(reasoning):
                 items.append(.reasoning(reasoning))
             case let .toolCall(call):
-                items.append(.tool(ToolRenderModel(
+                pendingTools.append(.tool(ToolRenderModel(
                     item: ToolBlockItem(call: call, result: toolResults[call.id]),
                 )))
             case .toolResult:
@@ -210,7 +301,40 @@ struct TranscriptModel {
                 break
             }
         }
+        flushTools()
         return items
+    }
+}
+
+/// Immutable group payload; summaries are derived once, not per streaming frame.
+struct ToolGroupModel: Equatable, Identifiable {
+    let tools: [ToolRenderModel]
+    let verbs: [String]
+    let combinedDurationMs: Int64?
+
+    var id: String {
+        "tool-group-\(tools[0].callId!)"
+    }
+
+    func containsTool(callId: String?) -> Bool {
+        guard let callId else { return false }
+        return tools.contains { $0.callId == callId }
+    }
+
+    init(tools: [ToolRenderModel]) {
+        precondition((2 ... 8).contains(tools.count) && tools.allSatisfy(\.canGroupReadOnlySuccess))
+        self.tools = tools
+        var seen: Set<String> = []
+        verbs = tools.map { ToolMeta.verb(for: $0.name) }.filter { seen.insert($0).inserted }
+        var total: Int64 = 0
+        var complete = true
+        for tool in tools {
+            guard let duration = tool.durationMs else { complete = false; break }
+            let sum = total.addingReportingOverflow(duration)
+            guard !sum.overflow else { complete = false; break }
+            total = sum.partialValue
+        }
+        combinedDurationMs = complete ? total : nil
     }
 }
 
@@ -267,6 +391,19 @@ struct ToolRenderModel: Equatable {
     var outputAttachments: [OutputAttachment] = []
     var commandOutputTruncated = false
     var commandOutputFormatted = false
+    /// Do not inherit the renderer's lenient status aliases or filtered media.
+    /// Only an explicit historical success with no raw rich result is eligible.
+    private var explicitPlainSuccess = false
+    private static let readOnlyNames: Set<String> = [
+        "read_file", "list_dir", "glob", "grep", "search", "search_text",
+        "web_fetch", "web_search", "kb_search", "kb_read", "read_skill",
+    ]
+
+    var canGroupReadOnlySuccess: Bool {
+        explicitPlainSuccess && Self.readOnlyNames.contains(name)
+            && callId?.isEmpty == false && status == .success && errorMessage == nil
+            && images.isEmpty && artifacts.isEmpty && outputAttachments.isEmpty && diff == nil
+    }
 
     struct OutputAttachment: Equatable {
         let name: String
@@ -308,6 +445,13 @@ struct ToolRenderModel: Equatable {
         artifacts = Self.resultArtifacts(of: item, images: images)
         mergeCommandOutput()
         diff = Self.diffText(of: item)
+        explicitPlainSuccess = item.result?.status == "success" && item.result?.error == nil
+            && !(item.result?.content ?? []).contains { part in
+                switch part {
+                case .image, .artifact: true
+                default: false
+                }
+            }
     }
 
     /// Live draft-turn block: the event stream's ToolCallState —

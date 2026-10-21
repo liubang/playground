@@ -109,8 +109,8 @@
 
   /* Composer / statusbar: tightened margins + bottom safe area (notch home indicator) */
   .composer {
-    padding: 8px max(10px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom))
-      max(10px, env(safe-area-inset-left));
+    padding: 8px max(var(--content-gutter), env(safe-area-inset-right))
+      calc(8px + env(safe-area-inset-bottom)) max(var(--content-gutter), env(safe-area-inset-left));
   }
   .statusbar {
     padding: 0 max(10px, env(safe-area-inset-right));
@@ -120,8 +120,8 @@
   }
   /* Transcript: right/left safe-area insets so content clears the notch / rounded corners */
   .transcript-inner {
-    padding-left: max(24px, env(safe-area-inset-left));
-    padding-right: max(24px, env(safe-area-inset-right));
+    padding-left: max(var(--content-gutter), env(safe-area-inset-left));
+    padding-right: max(var(--content-gutter), env(safe-area-inset-right));
   }
 
   /* Share page narrow-screen adaptation: tighter margins, wider bubbles, secondary meta hidden —
