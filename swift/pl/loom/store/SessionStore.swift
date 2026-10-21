@@ -309,11 +309,11 @@ final class SessionStore {
     /// quick toggle is a workspace-level override.
     let workspaceId: String?
     private let api: APIClient
-    private let eventStream: EventStreamClient
+    private let eventFrames: @Sendable (String, UInt64) -> AsyncThrowingStream<SSEFrame, Error>
 
     private(set) var state: SessionState = .booting {
         didSet {
-            if !applyingSnapshot {
+            if !applyingSnapshot, Self.isBusy(oldValue) != isBusy {
                 rebuildTranscript()
             }
         }
@@ -349,12 +349,13 @@ final class SessionStore {
     }
 
     /// Precomputed transcript render data (rows, merged tool blocks,
-    /// diffs, action-row flags). Rebuilt ONLY when messages/state
-    /// change — never on draft frames — so view-body evaluation is a
-    /// pure lookup instead of three O(history) walks plus an LCS diff
+    /// diffs, action-row flags). Rebuilt ONLY when messages/summaries or
+    /// the state's busy boolean change — never on draft frames — so
+    /// view-body evaluation is a pure lookup instead of three O(history) walks plus an LCS diff
     /// per edit call. (Previously these were ChatView computed
     /// properties re-derived on every streaming frame.)
     private(set) var transcript: TranscriptModel = .empty
+    /// Batch canonical snapshots and turn-start render inputs into one build.
     private var applyingSnapshot = false
     /// Composer input, kept in the store so it survives session
     /// switches (SessionListStore keeps stores warm; the chat view
@@ -435,20 +436,37 @@ final class SessionStore {
     /// replaced by the next snapshot watermark, never merged with it.
     private var resetCursorOnSnapshot = false
     private var instance: String?
-    private var lastFrameAt = Date()
+    private let watchdogTimeout: Duration
+    private let watchdogPollInterval: Duration
     private var loopTask: Task<Void, Never>?
     private var stopped = false
     private var reconnectAttempt = 0
+    private var loopEpoch = 0
+    private var reconcileNeeded = true
 
-    init(sessionId: String, workspaceId: String? = nil, api: APIClient) {
+    init(
+        sessionId: String, workspaceId: String? = nil, api: APIClient,
+        eventFrames: (@Sendable (String, UInt64) -> AsyncThrowingStream<SSEFrame, Error>)? = nil,
+        watchdogTimeout: Duration = .seconds(45), watchdogPollInterval: Duration = .seconds(5),
+    ) {
+        precondition(watchdogTimeout > .zero && watchdogPollInterval > .zero)
+        self.watchdogTimeout = watchdogTimeout
+        self.watchdogPollInterval = watchdogPollInterval
         self.sessionId = sessionId
         self.workspaceId = workspaceId
         self.api = api
-        eventStream = EventStreamClient(baseURL: api.baseURL, token: api.token)
+        let client = EventStreamClient(baseURL: api.baseURL, token: api.token)
+        self.eventFrames = eventFrames ?? { sessionId, after in
+            client.frames(sessionId: sessionId, after: after)
+        }
+    }
+
+    private static func isBusy(_ state: SessionState) -> Bool {
+        state == .running || state == .awaitingApproval || state == .cancelling
     }
 
     var isBusy: Bool {
-        state == .running || state == .awaitingApproval || state == .cancelling
+        Self.isBusy(state)
     }
 
     /// SSE-driven activity signal: bumps on substantive execution events
@@ -474,9 +492,8 @@ final class SessionStore {
     }
 
     private func rebuildTranscript() {
-        let midTurn = state == .running || state == .cancelling || state == .awaitingApproval
         transcript = TranscriptModel.build(
-            messages: messages, midTurn: midTurn, turnSummaries: turnSummaries,
+            messages: messages, midTurn: isBusy, turnSummaries: turnSummaries,
         )
     }
 
@@ -532,7 +549,14 @@ final class SessionStore {
 
     func start() {
         guard loopTask == nil, !stopped else { return }
-        loopTask = Task { [weak self] in await self?.eventLoop() }
+        loopEpoch += 1
+        let epoch = loopEpoch
+        reconcileNeeded = true
+        resyncRequested = false
+        drainRequested = false
+        turnRefreshRequested = false
+        connection = .connecting
+        loopTask = Task { [weak self] in await self?.eventLoop(epoch: epoch) }
         Task { [weak self] in await self?.loadApprovalMode() }
     }
 
@@ -551,6 +575,7 @@ final class SessionStore {
     /// hold N streams for the rest of the app's lifetime.
     func pause() {
         guard !stopped else { return }
+        loopEpoch += 1
         loopTask?.cancel()
         loopTask = nil
         deltaFlushTask?.cancel()
@@ -562,6 +587,7 @@ final class SessionStore {
 
     func stop() {
         stopped = true
+        loopEpoch += 1
         loopTask?.cancel()
         loopTask = nil
         deltaFlushTask?.cancel()
@@ -933,36 +959,56 @@ final class SessionStore {
     /// Full resync: re-read the snapshot and re-stitch the cursor. Called
     /// on start, on server.resync, on instance change, and after every
     /// turn end to swap the lossy draft for canonical messages.
-    func refresh() async {
-        guard !stopped else { return }
+    enum RefreshResult: Equatable {
+        case committed, superseded, failed, stopped
+    }
+
+    @discardableResult
+    func refresh() async -> RefreshResult {
+        guard !stopped, !Task.isCancelled else { return .stopped }
         snapshotRequest += 1
         let request = snapshotRequest
         let revision = projectionRevision
+        let epoch = loopEpoch
+        func invalidation() -> RefreshResult? {
+            if stopped || Task.isCancelled || epoch != loopEpoch {
+                return .stopped
+            }
+            if request != snapshotRequest || revision != projectionRevision {
+                return .superseded
+            }
+            return nil
+        }
         do {
-            let snap = try await api.snapshot(sessionId)
-            commitSnapshot(snap, request: request, revision: revision)
-        } catch let LoomAPIError.http(status, _, _) where status == 404 {
-            // Session not alive in this process — resume, then snapshot.
-            guard request == snapshotRequest, revision == projectionRevision, !Task.isCancelled else { return }
+            let snap: Snapshot
             do {
-                try await api.createSession(resume: sessionId)
-                guard request == snapshotRequest, revision == projectionRevision, !Task.isCancelled else { return }
-                let snap = try await api.snapshot(sessionId)
-                commitSnapshot(snap, request: request, revision: revision)
-            } catch {
-                if request == snapshotRequest, revision == projectionRevision, !Task.isCancelled {
-                    lastError = error.localizedDescription
+                snap = try await api.snapshot(sessionId)
+            } catch let LoomAPIError.http(status, _, _) where status == 404 {
+                // Session not alive in this process — resume, then snapshot.
+                if let result = invalidation() {
+                    return result
                 }
+                try await api.createSession(resume: sessionId)
+                if let result = invalidation() {
+                    return result
+                }
+                snap = try await api.snapshot(sessionId)
             }
+            if let result = invalidation() {
+                return result
+            }
+            commitSnapshot(snap)
+            return .committed
         } catch {
-            if request == snapshotRequest, revision == projectionRevision, !Task.isCancelled {
-                lastError = error.localizedDescription
+            if let result = invalidation() {
+                return result
             }
+            lastError = error.localizedDescription
+            return .failed
         }
     }
 
-    private func commitSnapshot(_ snap: Snapshot, request: Int, revision: Int) {
-        guard !stopped, request == snapshotRequest, revision == projectionRevision, !Task.isCancelled else { return }
+    private func commitSnapshot(_ snap: Snapshot) {
         // Within one server instance the broker sequence is global and monotonic.
         // A snapshot may trail the terminal frame (the server projects idle before
         // publishing turn.finished), so preserve the larger observed cursor.
@@ -973,6 +1019,7 @@ final class SessionStore {
         )
         resetCursorOnSnapshot = false
         snapshotCommit += 1
+        reconcileNeeded = false
     }
 
     /// A terminal event may arrive after the server captured its snapshot
@@ -1055,41 +1102,51 @@ final class SessionStore {
         case drained
     }
 
-    private func eventLoop() async {
-        await refresh()
-        var backoffNs: UInt64 = 1_000_000_000 // 1s
+    private func isCurrentLoop(_ epoch: Int) -> Bool {
+        !stopped && !Task.isCancelled && epoch == loopEpoch
+    }
 
-        while !Task.isCancelled, !stopped {
+    /// No frame projection may cross a missing canonical baseline. A newer
+    /// manual refresh can satisfy this barrier even if our request loses the race.
+    private func reconcile(epoch: Int) async -> Bool {
+        var backoffNs: UInt64 = 1_000_000_000
+        while isCurrentLoop(epoch), reconcileNeeded {
+            let result = await refresh()
+            guard isCurrentLoop(epoch), result != .stopped else { return false }
+            if !reconcileNeeded {
+                reconnectAttempt = 0
+                return true
+            }
+            reconnectAttempt += 1
+            connection = .offline(attempt: reconnectAttempt)
+            let sleepNs = UInt64(Double(backoffNs) * Double.random(in: 0.75 ... 1.25))
+            try? await Task.sleep(nanoseconds: sleepNs)
+            backoffNs = min(backoffNs * 2, 15_000_000_000)
+        }
+        return isCurrentLoop(epoch)
+    }
+
+    private func eventLoop(epoch: Int) async {
+        var backoffNs: UInt64 = 1_000_000_000
+        while isCurrentLoop(epoch) {
+            guard await reconcile(epoch: epoch) else { return }
             if connection != .live {
                 connection = reconnectAttempt == 0 ? .connecting : .offline(attempt: reconnectAttempt)
             }
-
-            let outcome = await consumeStream()
-            if Task.isCancelled || stopped {
-                return
-            }
-
+            let outcome = await consumeStream(epoch: epoch)
+            guard isCurrentLoop(epoch) else { return }
             switch outcome {
             case .drained:
                 connection = .drained
                 return
-            case .resync, .interrupted:
-                if case .resync = outcome {
-                    let previousCommit = snapshotCommit
-                    await refresh()
-                    if snapshotCommit != previousCommit {
-                        reconnectAttempt = 0
-                        backoffNs = 1_000_000_000
-                        continue
-                    }
-                }
-                // A deleted session cannot be resumed. Back off instead of
-                // repeatedly requesting its 404 snapshot and SSE endpoint.
+            case .resync:
+                // The handler already marked the barrier. A newer manual
+                // snapshot must not be invalidated again after consumption ends.
+                backoffNs = 1_000_000_000
+            case .interrupted:
                 reconnectAttempt += 1
                 connection = .offline(attempt: reconnectAttempt)
-                // 1s → 15s exponential with ±25% jitter (sse.ts:10-11).
-                let jitter = Double.random(in: 0.75 ... 1.25)
-                let sleepNs = UInt64(Double(backoffNs) * jitter)
+                let sleepNs = UInt64(Double(backoffNs) * Double.random(in: 0.75 ... 1.25))
                 try? await Task.sleep(nanoseconds: sleepNs)
                 backoffNs = min(backoffNs * 2, 15_000_000_000)
             }
@@ -1099,25 +1156,27 @@ final class SessionStore {
     /// One connection attempt: consume frames until end/error/watchdog.
     /// The 45s watchdog mirrors the web client — server heartbeats every
     /// 15s, so 45s of silence means the connection is silently dead.
-    private func consumeStream() async -> ConsumeOutcome {
-        lastFrameAt = Date()
+    private func consumeStream(epoch: Int) async -> ConsumeOutcome {
+        let watchdog = StreamWatchdog()
         return await withTaskGroup(of: ConsumeOutcome.self, returning: ConsumeOutcome.self) { group in
-            group.addTask { [eventStream, sessionId, cursor] in
+            group.addTask { [eventFrames, sessionId, cursor] in
+                guard await self.isCurrentLoop(epoch) else { return .interrupted }
                 do {
-                    for try await frame in eventStream.frames(sessionId: sessionId, after: cursor) {
-                        await self.handleFrame(frame)
-                        if await self.takeTurnRefreshRequest() {
-                            // Keep the stream's event projection paused until the
-                            // canonical snapshot has replaced the finished draft.
-                            await self.refresh()
+                    for try await frame in eventFrames(sessionId, cursor) {
+                        guard await self.isCurrentLoop(epoch) else { return .interrupted }
+                        await self.handleFrame(frame, epoch: epoch, watchdog: watchdog)
+                        if await self.takeTurnRefreshRequest(epoch: epoch) {
+                            if let outcome = await self.reconcileStream(epoch: epoch, watchdog: watchdog) {
+                                return outcome
+                            }
                         }
                         // Control frames end this consumption immediately —
                         // server.resync/server.draining are followed by the
                         // server closing the stream, but we don't wait for it.
-                        if await self.takeDrainRequest() {
+                        if await self.takeDrainRequest(epoch: epoch) {
                             return .drained
                         }
-                        if await self.takeResyncRequest() {
+                        if await self.takeResyncRequest(epoch: epoch) {
                             return .resync
                         }
                     }
@@ -1125,6 +1184,8 @@ final class SessionStore {
                 } catch is CancellationError {
                     return .interrupted
                 } catch SSEClient.StreamError.sessionNotAlive {
+                    await self.requestResync(epoch: epoch)
+                    _ = await self.takeResyncRequest(epoch: epoch)
                     return .resync // refresh() resumes dead sessions
                 } catch SSEClient.StreamError.rateLimited {
                     try? await Task.sleep(nanoseconds: 30_000_000_000)
@@ -1133,14 +1194,14 @@ final class SessionStore {
                     return .interrupted
                 }
             }
-            group.addTask {
+            group.addTask { [watchdogPollInterval] in
                 while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 5_000_000_000)
+                    try? await Task.sleep(for: watchdogPollInterval)
                     if Task.isCancelled {
                         break
                     }
-                    let silence = await self.secondsSinceLastFrame()
-                    if silence > 45 {
+                    guard await self.isCurrentLoop(epoch) else { return .interrupted }
+                    if await self.watchdogExpired(watchdog, epoch: epoch) {
                         return .interrupted
                     }
                 }
@@ -1152,15 +1213,54 @@ final class SessionStore {
         }
     }
 
-    private func secondsSinceLastFrame() -> TimeInterval {
-        Date().timeIntervalSince(lastFrameAt)
+    /// Owned by one consumption, never shared with a restarted loop or its
+    /// old workers. Use monotonic time; wall-clock changes are not silence.
+    @MainActor
+    private final class StreamWatchdog {
+        var lastFrameAt = ContinuousClock.now
+        var reconciliationPaused = false
+        var connected = false
+    }
+
+    private func watchdogExpired(_ watchdog: StreamWatchdog, epoch: Int) -> Bool {
+        isCurrentLoop(epoch) && !watchdog.reconciliationPaused
+            && watchdog.lastFrameAt.duration(to: .now) > watchdogTimeout
+    }
+
+    /// Keep the transport only for one successful snapshot request. A failed
+    /// request releases the stream before offline retries, bounding accumulation
+    /// to this request rather than the entire recovery backoff.
+    private func reconcileStream(epoch: Int, watchdog: StreamWatchdog) async -> ConsumeOutcome? {
+        guard isCurrentLoop(epoch) else { return .interrupted }
+        watchdog.reconciliationPaused = true
+        defer {
+            // Reset the silence baseline before enabling the watchdog. This
+            // only touches this consumption's state, including on cancellation.
+            watchdog.lastFrameAt = .now
+            watchdog.reconciliationPaused = false
+        }
+        let result = await refresh()
+        guard isCurrentLoop(epoch), result != .stopped else { return .interrupted }
+        if reconcileNeeded {
+            // Do not reset the cursor: the terminal frame is valid, and the
+            // new snapshot watermark plus broker replay close the gap.
+            reconnectAttempt += 1
+            connection = .offline(attempt: reconnectAttempt)
+            return .resync
+        }
+        // A superseding manual snapshot can also satisfy the barrier.
+        if watchdog.connected, !resyncRequested, !drainRequested {
+            reconnectAttempt = 0
+            connection = .live
+        }
+        return nil
     }
 
     // MARK: Frame handling
 
-    private func handleFrame(_ frame: SSEFrame) {
-        guard !stopped else { return }
-        lastFrameAt = Date()
+    private func handleFrame(_ frame: SSEFrame, epoch: Int, watchdog: StreamWatchdog) {
+        guard isCurrentLoop(epoch) else { return }
+        watchdog.lastFrameAt = .now
 
         switch frame.content {
         case let .comment(text):
@@ -1168,12 +1268,12 @@ final class SessionStore {
             if let existing = instance, existing != newInstance {
                 // Server restarted: sequence space reset — full resync.
                 instance = newInstance
-                projectionRevision += 1
                 resetCursorOnSnapshot = true
-                resyncRequested = true
+                requestResync(epoch: epoch)
             } else {
                 instance = newInstance
                 reconnectAttempt = 0
+                watchdog.connected = true
                 connection = .live
             }
 
@@ -1185,9 +1285,8 @@ final class SessionStore {
                 // Keeping the old cursor after the snapshot would immediately
                 // request the same invalid replay again. Invalidate snapshots
                 // already in flight from before the rejection, too.
-                projectionRevision += 1
                 resetCursorOnSnapshot = true
-                resyncRequested = true
+                requestResync(epoch: epoch)
             case "server.draining":
                 drainRequested = true
             default:
@@ -1196,7 +1295,7 @@ final class SessionStore {
                 else {
                     // The cursor cannot safely advance past an undecodable frame.
                     // Reconcile from a snapshot rather than silently dropping it.
-                    resyncRequested = true
+                    requestResync(epoch: epoch)
                     return
                 }
                 // A snapshot can include events still queued on this SSE stream.
@@ -1205,6 +1304,11 @@ final class SessionStore {
                 cursor = max(cursor, runtime.sequence)
                 projectionRevision += 1
                 apply(runtime)
+                // Pause atomically with the terminal frame, before another
+                // worker can check silence between the consumer's actor hops.
+                if turnRefreshRequested {
+                    watchdog.reconciliationPaused = true
+                }
             }
         }
     }
@@ -1216,19 +1320,30 @@ final class SessionStore {
     private var drainRequested = false
     private var turnRefreshRequested = false
 
-    private func takeTurnRefreshRequest() -> Bool {
+    private func takeTurnRefreshRequest(epoch: Int) -> Bool {
+        guard isCurrentLoop(epoch) else { return false }
         defer { turnRefreshRequested = false }
         return turnRefreshRequested
     }
 
-    private func takeResyncRequest() -> Bool {
+    private func takeResyncRequest(epoch: Int) -> Bool {
+        guard isCurrentLoop(epoch) else { return false }
         defer { resyncRequested = false }
         return resyncRequested
     }
 
-    private func takeDrainRequest() -> Bool {
+    private func takeDrainRequest(epoch: Int) -> Bool {
+        guard isCurrentLoop(epoch) else { return false }
         defer { drainRequested = false }
         return drainRequested
+    }
+
+    private func requestResync(epoch: Int) {
+        guard isCurrentLoop(epoch) else { return }
+        projectionRevision += 1
+        resyncRequested = true
+        reconcileNeeded = true
+        connection = .connecting
     }
 
     /// Parses the `: connected, instance=<id>` handshake comment.
@@ -1326,6 +1441,7 @@ final class SessionStore {
             let payload = tryDecode(TurnStartedPayload.self, from: event)
             turnFeedback = nil
             dismissedTurnFailure = nil
+            applyingSnapshot = true
             state = .running
             pendingSteers = []
             // The previous turn's resolved-card receipts end their
@@ -1342,6 +1458,8 @@ final class SessionStore {
                 ))
             }
             draft = DraftTurn(turnIndex: payload?.turnIndex)
+            applyingSnapshot = false
+            rebuildTranscript()
 
         case .runPhaseChanged:
             let payload = tryDecode(RunPhaseChangedPayload.self, from: event)
@@ -1554,8 +1672,9 @@ final class SessionStore {
             break // progress ticks: not rendered (yet)
 
         case .modelRequestFailed:
+            // A request can fail before forced compaction and a retry in the
+            // same turn. Only turn.finished closes the turn's activity.
             draft?.sealAll()
-            state = .idle
 
         case .runCancelRequested:
             state = .cancelling
@@ -1567,6 +1686,7 @@ final class SessionStore {
             draft?.sealAll()
             state = .idle
             turnRefreshRequested = true
+            reconcileNeeded = true
             onTurnActivity?()
             onFileActivity?()
 

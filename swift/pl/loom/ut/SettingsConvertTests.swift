@@ -15,11 +15,505 @@
 @testable import Loom
 import XCTest
 
+/// Config requests remain suspended until the test supplies a response.
+private final class SettingsRequestProtocol: URLProtocol {
+    static let lock = NSLock()
+    nonisolated(unsafe) static var controls: [String: SettingsRequests] = [:]
+    private let responseLock = NSRecursiveLock()
+    private var stopped = false
+
+    override class func canInit(with _: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        Self.lock.lock()
+        let control = Self.controls[request.url!.host!]
+        Self.lock.unlock()
+        if request.url!.path == "/v1/config" {
+            if let control {
+                control.receive(RequestControl(self))
+            } else {
+                complete("{}", status: 500)
+            }
+        } else {
+            complete(#"{"servers":[]}"#)
+        }
+    }
+
+    func requestSnapshot() -> URLRequest {
+        responseLock.lock()
+        defer { responseLock.unlock() }
+        return request
+    }
+
+    func complete(_ body: String, status: Int = 200) {
+        responseLock.lock()
+        defer { responseLock.unlock() }
+        guard !stopped else { return }
+        stopped = true
+        let response = HTTPURLResponse(
+            url: request.url!, statusCode: status, httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"],
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {
+        responseLock.lock()
+        stopped = true
+        responseLock.unlock()
+    }
+}
+
+/// Only locked request snapshots and replies cross the test's concurrency boundary.
+private struct RequestControl: @unchecked Sendable {
+    private let transport: SettingsRequestProtocol
+
+    init(_ transport: SettingsRequestProtocol) {
+        self.transport = transport
+    }
+
+    var request: URLRequest {
+        transport.requestSnapshot()
+    }
+
+    func reply(_ body: String, status: Int = 200) {
+        transport.complete(body, status: status)
+    }
+}
+
+private final class SettingsRequests: @unchecked Sendable {
+    private let lock = NSLock()
+    private var expected: [(String, XCTestExpectation)] = []
+    private var received: [RequestControl] = []
+    private let host = "settings-\(UUID().uuidString.lowercased()).test"
+    private var session: URLSession?
+
+    func makeAPI() -> APIClient {
+        SettingsRequestProtocol.lock.lock()
+        SettingsRequestProtocol.controls[host] = self
+        SettingsRequestProtocol.lock.unlock()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [SettingsRequestProtocol.self]
+        let session = URLSession(configuration: config)
+        self.session = session
+        return APIClient(baseURL: URL(string: "http://\(host)")!, token: "test", session: session)
+    }
+
+    func close() {
+        session?.invalidateAndCancel()
+        SettingsRequestProtocol.lock.lock()
+        SettingsRequestProtocol.controls.removeValue(forKey: host)
+        SettingsRequestProtocol.lock.unlock()
+    }
+
+    func expect(_ method: String) -> XCTestExpectation {
+        let expectation = XCTestExpectation(description: "config \(method)")
+        lock.lock()
+        expected.append((method, expectation))
+        lock.unlock()
+        return expectation
+    }
+
+    func receive(_ request: RequestControl) {
+        lock.lock()
+        let index = received.count
+        received.append(request)
+        let entry = index < expected.count ? expected[index] : nil
+        lock.unlock()
+        guard let entry else {
+            XCTFail("Unexpected config request")
+            request.reply("{}", status: 500)
+            return
+        }
+        XCTAssertEqual(request.request.httpMethod, entry.0)
+        entry.1.fulfill()
+    }
+
+    func request(_ index: Int) -> URLRequest {
+        lock.lock()
+        defer { lock.unlock() }
+        return received[index].request
+    }
+
+    func reply(_ index: Int, _ body: String, status: Int = 200) {
+        lock.lock()
+        let request = received[index]
+        lock.unlock()
+        request.reply(body, status: status)
+    }
+
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return received.count
+    }
+}
+
 /// Fill/collect round-trip semantics for the settings panel's spec
 /// engine (ports of the WebUI settings/convert.ts + cfgpath.ts rules):
 /// blank = key not written; every field type maps config values to raw
 /// control state and back.
 final class SettingsConvertTests: XCTestCase {
+    // MARK: Request ordering
+
+    private let initialConfig = #"{"path":"/tmp/settings.yaml","exists":true,"revision":"r1","config":{"providers":[{"name":"provider","base_url":"https://example.com","models":[{"name":"model"}]}],"default":"provider/model","limits":{"max_tokens":100},"future_section":{"keep":true}}}"#
+
+    @MainActor
+    private func loadedStore(_ requests: SettingsRequests) async -> SettingsStore {
+        let store = SettingsStore(api: requests.makeAPI())
+        let arrival = requests.expect("GET")
+        let task = Task { await store.load() }
+        await fulfillment(of: [arrival], timeout: 2)
+        requests.reply(0, initialConfig)
+        await task.value
+        XCTAssertEqual(store.revision, "r1")
+        return store
+    }
+
+    private func putBody(_ requests: SettingsRequests, _ index: Int) throws -> JSONValue {
+        let request = requests.request(index)
+        let data: Data
+        if let body = request.httpBody {
+            data = body
+        } else {
+            let stream = try XCTUnwrap(request.httpBodyStream)
+            stream.open()
+            defer { stream.close() }
+            var body = Data()
+            var buffer = [UInt8](repeating: 0, count: 1024)
+            while stream.hasBytesAvailable {
+                let count = stream.read(&buffer, maxLength: buffer.count)
+                guard count > 0 else { break }
+                body.append(contentsOf: buffer.prefix(count))
+            }
+            data = body
+        }
+        return try LoomJSON.decoder.decode(JSONValue.self, from: data)
+    }
+
+    @MainActor
+    func testSaveSuccessClearsDirtyAndNoOpReloadKeepsCardIdentity() async {
+        let requests = SettingsRequests()
+        defer { requests.close() }
+        let store = await loadedStore(requests)
+        store.setGlobal("limits.max_tokens", .text("200"))
+        let id = store.draft.providers[0].id
+        let arrival = requests.expect("PUT")
+        let save = Task { await store.save() }
+        await fulfillment(of: [arrival], timeout: 2)
+        requests.reply(1, #"{"revision":"r2"}"#)
+        await save.value
+        XCTAssertFalse(store.dirty)
+        XCTAssertFalse(store.saving)
+        XCTAssertEqual(store.revision, "r2")
+        XCTAssertEqual(getPath(store.origCfg, "limits.max_tokens"), .int(200))
+        let reloadArrival = requests.expect("GET")
+        let reload = Task { await store.load() }
+        await fulfillment(of: [reloadArrival], timeout: 2)
+        requests.reply(2, initialConfig
+            .replacingOccurrences(of: "r1", with: "r2")
+            .replacingOccurrences(of: "100", with: "200"))
+        await reload.value
+        XCTAssertEqual(store.draft.providers[0].id, id)
+        XCTAssertEqual(store.draft.globals["limits.max_tokens"], .text("200"))
+    }
+
+    @MainActor
+    func testSaveWaitingEditsKeepDraftAndSubmittedBaseline() async throws {
+        for direct in [false, true] {
+            let requests = SettingsRequests()
+            defer { requests.close() }
+            let store = await loadedStore(requests)
+            store.setGlobal("limits.max_tokens", .text("200"))
+            let arrival = requests.expect("PUT")
+            let save = Task { await store.save() }
+            await fulfillment(of: [arrival], timeout: 2)
+            let submitted = try putBody(requests, 1)
+            XCTAssertEqual(submitted["revision"], .string("r1"))
+            if direct {
+                store.draft.globals["limits.max_tokens"] = .text("300")
+            } else {
+                store.setGlobal("limits.max_tokens", .text("300"))
+            }
+            await store.save()
+            XCTAssertEqual(requests.count, 2, "Repeated save must not issue another PUT")
+            XCTAssertTrue(store.saving)
+            requests.reply(1, #"{"revision":"r2"}"#)
+            await save.value
+            XCTAssertTrue(store.dirty)
+            XCTAssertEqual(store.draft.globals["limits.max_tokens"], .text("300"))
+            XCTAssertEqual(.object(store.origCfg), submitted["config"])
+            XCTAssertEqual(store.revision, "r2")
+            let secondArrival = requests.expect("PUT")
+            let second = Task { await store.save() }
+            await fulfillment(of: [secondArrival], timeout: 2)
+            let next = try putBody(requests, 2)
+            XCTAssertEqual(next["revision"], .string("r2"))
+            XCTAssertEqual(next["config"]?["limits"]?["max_tokens"], .int(300))
+            requests.reply(2, #"{"revision":"r3"}"#)
+            await second.value
+            XCTAssertFalse(store.dirty)
+        }
+    }
+
+    @MainActor
+    func testMarkDirtyDuringSaveKeepsDirtyWithoutDraftChange() async {
+        let requests = SettingsRequests()
+        defer { requests.close() }
+        let store = await loadedStore(requests)
+        store.markDirty()
+        let arrival = requests.expect("PUT")
+        let save = Task { await store.save() }
+        await fulfillment(of: [arrival], timeout: 2)
+        store.markDirty()
+        requests.reply(1, #"{"revision":"r2"}"#)
+        await save.value
+        XCTAssertTrue(store.dirty)
+        XCTAssertEqual(store.revision, "r2")
+    }
+
+    @MainActor
+    func testLoadWaitingNewEditPreservesDraftAndBaseline() async {
+        let requests = SettingsRequests()
+        defer { requests.close() }
+        let store = await loadedStore(requests)
+        let baseline = store.origCfg
+        let arrival = requests.expect("GET")
+        let reload = Task { await store.load() }
+        await fulfillment(of: [arrival], timeout: 2)
+        store.draft.globals["limits.max_tokens"] = .text("300")
+        let edited = store.draft
+        requests.reply(1, initialConfig.replacingOccurrences(of: "r1", with: "external"))
+        await reload.value
+        XCTAssertEqual(store.draft, edited)
+        XCTAssertTrue(store.dirty)
+        XCTAssertEqual(store.revision, "r1")
+        XCTAssertEqual(store.origCfg, baseline)
+        XCTAssertEqual(store.loadState, .loaded)
+    }
+
+    @MainActor
+    func testSaveInvalidatesOlderLoadInEitherCompletionOrder() async {
+        for loadFirst in [true, false] {
+            let requests = SettingsRequests()
+            defer { requests.close() }
+            let store = await loadedStore(requests)
+            let loadArrival = requests.expect("GET")
+            let reload = Task { await store.load() }
+            await fulfillment(of: [loadArrival], timeout: 2)
+            store.setGlobal("limits.max_tokens", .text("200"))
+            let saveArrival = requests.expect("PUT")
+            let save = Task { await store.save() }
+            await fulfillment(of: [saveArrival], timeout: 2)
+            store.setGlobal("limits.max_tokens", .text("300"))
+            await store.load()
+            XCTAssertEqual(requests.count, 3, "Loads during saving are ignored")
+            if loadFirst {
+                requests.reply(1, initialConfig)
+                await reload.value
+                XCTAssertEqual(store.draft.globals["limits.max_tokens"], .text("300"))
+            }
+            requests.reply(2, #"{"revision":"r2"}"#)
+            await save.value
+            if !loadFirst {
+                requests.reply(1, initialConfig)
+                await reload.value
+            }
+            XCTAssertEqual(store.revision, "r2")
+            XCTAssertEqual(getPath(store.origCfg, "limits.max_tokens"), .int(200))
+            XCTAssertEqual(store.draft.globals["limits.max_tokens"], .text("300"))
+            XCTAssertTrue(store.dirty)
+            XCTAssertEqual(store.loadState, .loaded)
+        }
+    }
+
+    @MainActor
+    func testOldReloadFailureCannotReplaceSaveSuccessMessage() async {
+        let requests = SettingsRequests()
+        defer { requests.close() }
+        let store = await loadedStore(requests)
+        store.setGlobal("limits.max_tokens", .text("200"))
+        let reloadArrival = requests.expect("GET")
+        let reload = Task { await store.load() }
+        await fulfillment(of: [reloadArrival], timeout: 2)
+        let saveArrival = requests.expect("PUT")
+        let save = Task { await store.save() }
+        await fulfillment(of: [saveArrival], timeout: 2)
+        requests.reply(2, #"{"revision":"r2"}"#)
+        await save.value
+        let message = store.msg
+        requests.reply(1, "{}", status: 500)
+        await reload.value
+        XCTAssertEqual(store.msg, message)
+        XCTAssertFalse(store.msgIsError)
+        XCTAssertFalse(store.dirty)
+        XCTAssertEqual(store.revision, "r2")
+        XCTAssertEqual(getPath(store.origCfg, "limits.max_tokens"), .int(200))
+    }
+
+    @MainActor
+    func testEmptyCardsRemainInDraftButAreOmittedFromSubmittedConfig() async throws {
+        let requests = SettingsRequests()
+        defer { requests.close() }
+        let store = await loadedStore(requests)
+        store.draft.providers.append(ProviderDraft())
+        store.draft.providers[0].models.append(CardDraft())
+        store.draft.mcpServers.append(McpDraft())
+        store.addWorkspaceCard()
+        let edited = store.draft
+        let arrival = requests.expect("PUT")
+        let save = Task { await store.save() }
+        await fulfillment(of: [arrival], timeout: 2)
+        let body = try putBody(requests, 1)
+        XCTAssertNil(body["config"]?["mcp_servers"])
+        XCTAssertNil(body["config"]?["workspaces"])
+        requests.reply(1, #"{"revision":"r2"}"#)
+        await save.value
+        XCTAssertEqual(store.draft, edited)
+        XCTAssertEqual(store.origCfg["providers"], .array([.object([
+            "name": .string("provider"), "base_url": .string("https://example.com"),
+            "models": .array([.object(["name": .string("model")])]),
+        ])]))
+        XCTAssertFalse(store.dirty, "Empty placeholder cards are not unsaved partial cards")
+        XCTAssertFalse(store.msgIsError)
+    }
+
+    @MainActor
+    func testInitialLoadCancelledOrEditedRestoresIdleState() async {
+        for cancel in [false, true] {
+            let requests = SettingsRequests()
+            defer { requests.close() }
+            let store = SettingsStore(api: requests.makeAPI())
+            let arrival = requests.expect("GET")
+            let load = Task { await store.load() }
+            await fulfillment(of: [arrival], timeout: 2)
+            store.setGlobal("limits.max_tokens", .text("200"))
+            if cancel {
+                load.cancel()
+            } else {
+                requests.reply(0, initialConfig)
+            }
+            await load.value
+            XCTAssertEqual(store.loadState, .idle)
+            XCTAssertEqual(store.revision, "")
+            XCTAssertTrue(store.origCfg.isEmpty)
+            XCTAssertTrue(store.dirty)
+            XCTAssertEqual(store.draft.globals["limits.max_tokens"], .text("200"))
+        }
+    }
+
+    @MainActor
+    func testSaveRenameCascadeUsesSubmittedBaselineForNextRename() async throws {
+        let requests = SettingsRequests()
+        defer { requests.close() }
+        let store = await loadedStore(requests)
+        let id = store.draft.providers[0].id
+        store.patchProvider(id, key: "name", .text("renamed"))
+        let arrival = requests.expect("PUT")
+        let save = Task { await store.save() }
+        await fulfillment(of: [arrival], timeout: 2)
+        XCTAssertEqual(store.draft.globals[defaultModelField.key], .text("renamed/model"))
+        store.patchProvider(id, key: "name", .text("latest"))
+        requests.reply(1, #"{"revision":"r2"}"#)
+        await save.value
+        XCTAssertTrue(store.dirty)
+        XCTAssertEqual(store.draft.providers[0].fields["name"], .text("latest"))
+        let nextArrival = requests.expect("PUT")
+        let nextSave = Task { await store.save() }
+        await fulfillment(of: [nextArrival], timeout: 2)
+        XCTAssertEqual(try putBody(requests, 2)["config"]?[defaultModelField.key], .string("latest/model"))
+        requests.reply(2, #"{"revision":"r3"}"#)
+        await nextSave.value
+        XCTAssertFalse(store.dirty)
+    }
+
+    @MainActor
+    func testSaveAndLoadFailurePreserveEditsAndBaseline() async {
+        let requests = SettingsRequests()
+        defer { requests.close() }
+        let store = await loadedStore(requests)
+        let baseline = store.origCfg
+        store.setGlobal("limits.max_tokens", .text("200"))
+        let arrival = requests.expect("PUT")
+        let save = Task { await store.save() }
+        await fulfillment(of: [arrival], timeout: 2)
+        store.setGlobal("limits.max_tokens", .text("300"))
+        requests.reply(1, #"{"error":{"code":"config_conflict","message":"conflict"}}"#, status: 409)
+        await save.value
+        XCTAssertTrue(store.msgIsError)
+        XCTAssertFalse(store.saving)
+        let reloadArrival = requests.expect("GET")
+        let reload = Task { await store.load() }
+        await fulfillment(of: [reloadArrival], timeout: 2)
+        requests.reply(2, "{}", status: 500)
+        await reload.value
+        XCTAssertTrue(store.dirty)
+        XCTAssertEqual(store.draft.globals["limits.max_tokens"], .text("300"))
+        XCTAssertEqual(store.origCfg, baseline)
+        XCTAssertEqual(store.revision, "r1")
+    }
+
+    @MainActor
+    func testCancelledSaveAndLoadPreserveEditsAndCanRetry() async {
+        let requests = SettingsRequests()
+        defer { requests.close() }
+        let store = await loadedStore(requests)
+        let baseline = store.origCfg
+        store.setGlobal("limits.max_tokens", .text("200"))
+        let arrival = requests.expect("PUT")
+        let save = Task { await store.save() }
+        await fulfillment(of: [arrival], timeout: 2)
+        save.cancel()
+        await save.value
+        XCTAssertFalse(store.saving)
+        XCTAssertTrue(store.dirty)
+        XCTAssertEqual(store.origCfg, baseline)
+        XCTAssertEqual(store.revision, "r1")
+        let reloadArrival = requests.expect("GET")
+        let reload = Task { await store.load() }
+        await fulfillment(of: [reloadArrival], timeout: 2)
+        reload.cancel()
+        await reload.value
+        XCTAssertEqual(store.loadState, .loaded)
+        XCTAssertTrue(store.dirty)
+        XCTAssertEqual(store.draft.globals["limits.max_tokens"], .text("200"))
+        let retryArrival = requests.expect("PUT")
+        let retry = Task { await store.save() }
+        await fulfillment(of: [retryArrival], timeout: 2)
+        requests.reply(3, #"{"revision":"r2"}"#)
+        await retry.value
+        XCTAssertFalse(store.dirty)
+    }
+
+    @MainActor
+    func testLatestLoadWinsAndExplicitReloadDiscardsExistingDirtyDraft() async {
+        let requests = SettingsRequests()
+        defer { requests.close() }
+        let store = await loadedStore(requests)
+        store.setGlobal("limits.max_tokens", .text("200"))
+        let firstArrival = requests.expect("GET")
+        let first = Task { await store.load() }
+        await fulfillment(of: [firstArrival], timeout: 2)
+        let secondArrival = requests.expect("GET")
+        let second = Task { await store.load() }
+        await fulfillment(of: [secondArrival], timeout: 2)
+        requests.reply(2, initialConfig.replacingOccurrences(of: "r1", with: "r2"))
+        await second.value
+        requests.reply(1, initialConfig)
+        await first.value
+        XCTAssertEqual(store.revision, "r2")
+        XCTAssertEqual(store.draft.globals["limits.max_tokens"], .text("100"))
+        XCTAssertFalse(store.dirty)
+    }
+
     // MARK: Save validation
 
     private func provider(_ name: String) -> ProviderDraft {

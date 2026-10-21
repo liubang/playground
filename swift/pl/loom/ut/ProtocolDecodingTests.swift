@@ -963,3 +963,253 @@ final class ProtocolDecodingTests: XCTestCase {
         XCTAssertEqual(value["b"]?["c"], .int(-3))
     }
 }
+
+/// Deliberately ignores task cancellation until explicitly resumed. Tests
+/// control request ordering without sleeps, HTTP timing, or a running app.
+@MainActor
+private final class ControlledMazeLoad {
+    private(set) var count = 0
+    var nextRequest: XCTestExpectation?
+    private var pending: [Int: CheckedContinuation<MazeData, Error>] = [:]
+
+    func load() async throws -> MazeData {
+        try await withCheckedThrowingContinuation { continuation in
+            let index = count
+            count += 1
+            pending[index] = continuation
+            nextRequest?.fulfill()
+            nextRequest = nil
+        }
+    }
+
+    func complete(_ index: Int, _ result: Result<MazeData, Error>) {
+        let continuation = pending.removeValue(forKey: index)
+        XCTAssertNotNil(continuation, "Request must be started and completed only once")
+        continuation?.resume(with: result)
+    }
+
+    func cancelAll() {
+        let continuations = Array(pending.values)
+        pending.removeAll()
+        for continuation in continuations {
+            continuation.resume(throwing: CancellationError())
+        }
+    }
+}
+
+final class MazeStoreTests: XCTestCase {
+    private func projection(_ tmax: Double) -> MazeData {
+        MazeData(tmax: tmax, lanes: [])
+    }
+
+    @MainActor
+    private func start(_ store: MazeStore, _ source: ControlledMazeLoad) async throws -> Task<Void, Never> {
+        let expectedCount = source.count + 1
+        let started = expectation(description: "controlled maze load \(source.count)")
+        source.nextRequest = started
+        let worker = try XCTUnwrap(store.requestRefresh())
+        await fulfillment(of: [started], timeout: 5)
+        source.nextRequest = nil
+        // A timeout must throw into deferred cleanup rather than await an
+        // unresumed worker forever if a regression prevents the load starting.
+        _ = try XCTUnwrap(source.count == expectedCount ? worker : nil)
+        return worker
+    }
+
+    @MainActor
+    func testCancelPreservesLastSuccessErrorAndFetchedAt() async throws {
+        let source = ControlledMazeLoad()
+        let store = MazeStore { try await source.load() }
+        defer { store.cancel(); source.cancelAll() }
+        let initial = try await start(store, source)
+        source.complete(0, .success(projection(1)))
+        await initial.value
+        let fetchedAt = try XCTUnwrap(store.fetchedAt)
+
+        let failed = try await start(store, source)
+        source.complete(1, .failure(URLError(.notConnectedToInternet)))
+        await failed.value
+        let error = try XCTUnwrap(store.error)
+
+        let cancelled = try await start(store, source)
+        store.cancel()
+        XCTAssertNil(store.requestRefresh()) // inactive lifecycle cannot restart
+        XCTAssertEqual(store.data?.tmax, 1)
+        XCTAssertEqual(store.error, error)
+        XCTAssertEqual(store.fetchedAt, fetchedAt)
+        // Always resume the source, including cancelled requests.
+        source.complete(2, .success(projection(99)))
+        await cancelled.value
+        XCTAssertEqual(store.data?.tmax, 1)
+        XCTAssertEqual(store.error, error)
+        XCTAssertEqual(store.fetchedAt, fetchedAt)
+        XCTAssertEqual(source.count, 3)
+    }
+
+    @MainActor
+    func testLateOldSuccessAndFailureCannotOverwriteNewLifecycle() async throws {
+        for oldFails in [false, true] {
+            let source = ControlledMazeLoad()
+            let store = MazeStore { try await source.load() }
+            defer { store.cancel(); source.cancelAll() }
+            let oldLifecycle = store.activate()
+            let older = try await start(store, source)
+            store.cancel()
+            store.activate()
+            let newer = try await start(store, source)
+            // A previous view task's delayed defer must not stop the new one.
+            store.cancel(lifecycle: oldLifecycle)
+            source.complete(1, .success(projection(2)))
+            await newer.value
+            let fetchedAt = try XCTUnwrap(store.fetchedAt)
+            source.complete(0, oldFails
+                ? .failure(URLError(.badServerResponse)) : .success(projection(99)))
+            await older.value
+            XCTAssertEqual(store.data?.tmax, 2)
+            XCTAssertNil(store.error)
+            XCTAssertEqual(store.fetchedAt, fetchedAt)
+            // Old completion must not clear or poison the next worker.
+            let retry = try await start(store, source)
+            source.complete(2, .success(projection(3)))
+            await retry.value
+            XCTAssertEqual(store.data?.tmax, 3)
+        }
+    }
+
+    @MainActor
+    func testOldCompletionCannotClearPendingNewWorker() async throws {
+        for oldFails in [false, true] {
+            let source = ControlledMazeLoad()
+            let store = MazeStore { try await source.load() }
+            defer { store.cancel(); source.cancelAll() }
+            let older = try await start(store, source)
+            store.activate()
+            let newer = try await start(store, source)
+            let generation = store.generation
+
+            source.complete(0, oldFails
+                ? .failure(URLError(.badServerResponse)) : .success(projection(99)))
+            await older.value
+            XCTAssertNil(store.data)
+            XCTAssertNil(store.error)
+            XCTAssertNil(store.fetchedAt)
+
+            let coalesced = try XCTUnwrap(store.requestRefresh())
+            XCTAssertEqual(store.generation, generation + 1)
+            XCTAssertEqual(source.count, 2)
+            let followUp = expectation(description: "pending new worker keeps refresh intent")
+            source.nextRequest = followUp
+            source.complete(1, .success(projection(2)))
+            await fulfillment(of: [followUp], timeout: 5)
+            source.nextRequest = nil
+            _ = try XCTUnwrap(source.count == 3 ? newer : nil)
+            XCTAssertEqual(store.data?.tmax, 2)
+            source.complete(2, .success(projection(3)))
+            await newer.value
+            await coalesced.value
+            XCTAssertEqual(source.count, 3)
+            XCTAssertEqual(store.data?.tmax, 3)
+            XCTAssertNil(store.error)
+        }
+    }
+
+    @MainActor
+    func testInitialLoadOverlappingFinalActivityCoalescesAndRefreshesWhileIdle() async throws {
+        let source = ControlledMazeLoad()
+        let store = MazeStore { try await source.load() }
+        defer { store.cancel(); source.cancelAll() }
+        let initial = try await start(store, source)
+        XCTAssertNil(store.data)
+        let initialGeneration = store.generation
+        // Final activity arrives before the first snapshot, then the run idles.
+        // Neither a data != nil nor an isBusy condition may gate this intent.
+        for _ in 0 ..< 20 {
+            store.requestRefresh()
+        }
+        XCTAssertEqual(store.generation, initialGeneration + 20)
+        XCTAssertEqual(source.count, 1) // no parallel/cancelled network storm
+        let followUp = expectation(description: "final activity follow-up")
+        source.nextRequest = followUp
+        source.complete(0, .success(projection(1)))
+        await fulfillment(of: [followUp], timeout: 5)
+        source.nextRequest = nil
+        _ = try XCTUnwrap(source.count == 2 ? initial : nil)
+        XCTAssertEqual(store.data?.tmax, 1) // progress is not starved by activity
+        XCTAssertEqual(source.count, 2)
+        source.complete(1, .success(projection(2)))
+        await initial.value
+        XCTAssertEqual(store.data?.tmax, 2)
+        XCTAssertNil(store.error)
+        XCTAssertNotNil(store.fetchedAt)
+        XCTAssertEqual(source.count, 2)
+    }
+
+    @MainActor
+    func testFailureThenRetryClearsErrorOnlyAfterSuccess() async throws {
+        let source = ControlledMazeLoad()
+        let store = MazeStore { try await source.load() }
+        defer { store.cancel(); source.cancelAll() }
+        let failed = try await start(store, source)
+        source.complete(0, .failure(URLError(.badServerResponse)))
+        await failed.value
+        let error = try XCTUnwrap(store.error)
+        XCTAssertNil(store.data)
+        XCTAssertNil(store.fetchedAt)
+        let retry = try await start(store, source)
+        XCTAssertEqual(store.error, error)
+        source.complete(1, .success(projection(2)))
+        await retry.value
+        XCTAssertEqual(store.data?.tmax, 2)
+        XCTAssertNil(store.error)
+        XCTAssertNotNil(store.fetchedAt)
+    }
+
+    @MainActor
+    func testSourceCancellationPreservesValidSnapshotAndAllowsRetry() async throws {
+        let source = ControlledMazeLoad()
+        let store = MazeStore { try await source.load() }
+        defer { store.cancel(); source.cancelAll() }
+        let initial = try await start(store, source)
+        source.complete(0, .success(projection(1)))
+        await initial.value
+        let fetchedAt = store.fetchedAt
+        // Establish a visible refresh error before either cancellation form.
+        let failed = try await start(store, source)
+        source.complete(1, .failure(URLError(.notConnectedToInternet)))
+        await failed.value
+        let error = try XCTUnwrap(store.error)
+        let cancellations: [Error] = [CancellationError(), URLError(.cancelled)]
+        for (offset, cancellation) in cancellations.enumerated() {
+            let cancelled = try await start(store, source)
+            source.complete(offset + 2, .failure(cancellation))
+            await cancelled.value
+            XCTAssertEqual(store.data?.tmax, 1)
+            XCTAssertEqual(store.error, error)
+            XCTAssertEqual(store.fetchedAt, fetchedAt)
+        }
+        let retry = try await start(store, source)
+        source.complete(4, .success(projection(2)))
+        await retry.value
+        XCTAssertEqual(store.data?.tmax, 2)
+        XCTAssertNil(store.error)
+    }
+
+    @MainActor
+    func testActivityDuringFailedLoadStillGetsFollowUp() async throws {
+        let source = ControlledMazeLoad()
+        let store = MazeStore { try await source.load() }
+        defer { store.cancel(); source.cancelAll() }
+        let initial = try await start(store, source)
+        store.requestRefresh()
+        let followUp = expectation(description: "follow-up after failure")
+        source.nextRequest = followUp
+        source.complete(0, .failure(URLError(.badServerResponse)))
+        await fulfillment(of: [followUp], timeout: 5)
+        source.nextRequest = nil
+        _ = try XCTUnwrap(source.count == 2 ? initial : nil)
+        source.complete(1, .success(projection(2)))
+        await initial.value
+        XCTAssertEqual(store.data?.tmax, 2)
+        XCTAssertNil(store.error)
+    }
+}

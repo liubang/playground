@@ -80,7 +80,20 @@ final class SettingsStore {
     private(set) var revision = ""
     private(set) var origCfg: [String: JSONValue] = [:]
     private(set) var cfgPath = ""
-    var draft = SettingsDraft()
+    var draft = SettingsDraft() {
+        didSet {
+            if !replacingDraft {
+                markDirty()
+            }
+        }
+    }
+
+    // Direct bindings and explicit markDirty calls both advance this version.
+    // No draft comparison or serialization is needed on the input path.
+    private var editVersion: UInt64 = 0
+    private var replacingDraft = false
+    private var loadGeneration: UInt64 = 0
+    private var loadFallbackState: LoadState = .idle
     var dirty = false
     var saving = false
     /// Footer status line (WebUI settings-msg).
@@ -122,6 +135,7 @@ final class SettingsStore {
     }
 
     func markDirty() {
+        editVersion &+= 1
         dirty = true
         invalid = nil
     }
@@ -131,13 +145,30 @@ final class SettingsStore {
     /// manual: the user clicked 重新加载 — the result is toasted
     /// (WebUI: '已是最新，配置无变化' / '配置已重新加载').
     func load(manual: Bool = false) async {
+        // Saving owns the config baseline; reloads during a save are no-ops.
+        guard !saving, !Task.isCancelled else { return }
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        let version = editVersion
         if loadState != .loaded {
+            if loadState != .loading {
+                loadFallbackState = loadState
+            }
             loadState = .loading
+        }
+        defer {
+            if generation == loadGeneration, loadState == .loading {
+                loadState = loadFallbackState
+            }
         }
         let prevRevision = revision
         let wasDirty = dirty
         do {
             let envelope = try await api.getConfig()
+            // Never pair a new baseline with edits made against an older one.
+            guard generation == loadGeneration, !saving, !Task.isCancelled,
+                  version == editVersion, revision == prevRevision
+            else { return }
             let config: [String: JSONValue] = if case let .object(map) = envelope.config {
                 map
             } else {
@@ -151,11 +182,14 @@ final class SettingsStore {
             // Skip rebuilding the draft when nothing changed: scroll
             // position and expansion state survive a no-op reload.
             if loadState != .loaded || wasDirty || envelope.revision != prevRevision {
+                replacingDraft = true
                 draft = Self.buildDraft(from: config)
+                replacingDraft = false
                 loadState = .loaded
             } else {
                 await loadMcpStatus()
             }
+            guard generation == loadGeneration, !Task.isCancelled else { return }
             if manual {
                 ToastCenter.shared.post(
                     envelope.revision == prevRevision ? "已是最新，配置无变化" : "配置已重新加载",
@@ -163,6 +197,9 @@ final class SettingsStore {
                 )
             }
         } catch {
+            guard generation == loadGeneration, !saving, !Task.isCancelled,
+                  version == editVersion, revision == prevRevision
+            else { return }
             showMsg("配置加载失败：\(error.localizedDescription)", isError: true)
             if manual {
                 ToastCenter.shared.post("配置加载失败：\(error.localizedDescription)")
@@ -593,9 +630,9 @@ final class SettingsStore {
     }
 
     func save() async {
-        if saving {
+        if saving || Task.isCancelled {
             return
-        } // a repeated PUT carries the old revision and inevitably 409s
+        } // Repeated saves are ignored, not queued with an obsolete revision.
         saving = true
         defer { saving = false }
         let cascaded = cascadeProviderRenames()
@@ -605,15 +642,20 @@ final class SettingsStore {
             ToastCenter.shared.post(bad.msg)
             return
         }
+        // Capture after rename cascading and validation, before any suspension.
+        let submittedDraft = draft
+        let submittedVersion = editVersion
+        let submittedRevision = revision
+        let baseline = origCfg
         var cfg: [String: JSONValue] = [:]
         var skippedCards = 0
         for spec in globalFieldSpecs() {
-            let state = draft.globals[spec.key]
+            let state = submittedDraft.globals[spec.key]
                 ?? (spec.type == .bool || spec.type == .flagList ? .flag(false) : .text(""))
             collectValue(spec, state, into: &cfg)
         }
         var providers: [JSONValue] = []
-        for card in draft.providers {
+        for card in submittedDraft.providers {
             var p: [String: JSONValue] = [:]
             collectFields(providerAllFields, card.fields, into: &p)
             var models: [JSONValue] = []
@@ -639,7 +681,7 @@ final class SettingsStore {
             cfg["providers"] = .array(providers)
         }
         var servers: [String: JSONValue] = [:]
-        for card in draft.mcpServers {
+        for card in submittedDraft.mcpServers {
             let name = card.name.trimmingCharacters(in: .whitespaces)
             if name.isEmpty {
                 continue
@@ -660,7 +702,7 @@ final class SettingsStore {
             cfg["mcp_servers"] = .object(servers)
         }
         var wss: [JSONValue] = []
-        for card in draft.workspaces {
+        for card in submittedDraft.workspaces {
             var ws: [String: JSONValue] = [:]
             collectFields([FieldSpec("name"), FieldSpec("root")], card.fields, into: &ws)
             if ws["root"] != nil {
@@ -672,17 +714,24 @@ final class SettingsStore {
         if !wss.isEmpty {
             cfg["workspaces"] = .array(wss)
         }
-        preserveUnmanaged(&cfg, orig: origCfg)
+        preserveUnmanaged(&cfg, orig: baseline)
+        // A PUT invalidates every earlier GET, regardless of completion order.
+        loadGeneration &+= 1
+        if loadState == .loading {
+            loadState = loadFallbackState
+        }
         if skippedCards > 0 {
             ToastCenter.shared.post("\(skippedCards) 张卡片因缺少必填字段（名称/根目录）未被保存")
         }
         showMsg("正在保存…（MCP 变更需要建立连接，可能需要几秒）")
         do {
-            let result = try await api.putConfig(revision: revision, config: .object(cfg))
-            revision = result.revision ?? revision
-            let pathExtraChanged = getPath(cfg, "tools.path_extra") != getPath(origCfg, "tools.path_extra")
+            let result = try await api.putConfig(revision: submittedRevision, config: .object(cfg))
+            try Task.checkCancellation()
+            revision = result.revision ?? submittedRevision
+            let pathExtraChanged = getPath(cfg, "tools.path_extra") != getPath(baseline, "tools.path_extra")
             origCfg = cfg
-            dirty = skippedCards > 0
+            loadState = .loaded
+            dirty = skippedCards > 0 || editVersion != submittedVersion
             var success = applyMsg(result)
             if !cascaded.isEmpty {
                 success += "；已同步更新引用：" + cascaded.joined(separator: "、")
@@ -703,9 +752,11 @@ final class SettingsStore {
             }
             onConfigSaved?()
         } catch let LoomAPIError.http(_, code, _) where code == "config_conflict" {
+            guard !Task.isCancelled else { return }
             showMsg("配置文件已被外部修改——请重新加载后再保存", isError: true)
             ToastCenter.shared.post("配置文件已被外部修改——请重新加载后再保存")
         } catch {
+            guard !Task.isCancelled else { return }
             showMsg("保存失败：\(error.localizedDescription)", isError: true)
             ToastCenter.shared.post("保存失败：\(error.localizedDescription)")
         }

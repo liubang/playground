@@ -79,6 +79,7 @@ private struct TraceTurnGroup: Identifiable {
     }
 }
 
+@MainActor
 struct SessionTraceView: View {
     let store: SessionStore
     let locateInChat: (Int, String?) -> Void
@@ -87,7 +88,9 @@ struct SessionTraceView: View {
     @State private var query = ""
     @State private var debouncedQuery = ""
     @State private var expanded: Set<String> = []
-    @State private var maze: MazeData?
+    @State private var mazeStore: MazeStore
+    @State private var mazeSessionId: String
+    @State private var observedActivity: Int
     @State private var following = true
     /// Arbitration for the bottom sentinel leaving the viewport (see its
     /// onDisappear): cancelled when the sentinel reappears in time.
@@ -97,12 +100,23 @@ struct SessionTraceView: View {
 
     private static let bottomId = "trace-bottom"
 
+    init(store: SessionStore, locateInChat: @escaping (Int, String?) -> Void,
+         targetTurn: Binding<Int?>)
+    {
+        self.store = store
+        self.locateInChat = locateInChat
+        _targetTurn = targetTurn
+        _mazeStore = State(initialValue: MazeStore { try await store.maze() })
+        _mazeSessionId = State(initialValue: store.sessionId)
+        _observedActivity = State(initialValue: store.activityGeneration)
+    }
+
     var body: some View {
         let groups = visibleGroups
         VStack(spacing: 0) {
             toolbar
             Hairline(axis: .horizontal)
-            if let maze, let lane = maze.lanes.first, lane.stats.steps > 0 {
+            if let maze = mazeStore.data, let lane = maze.lanes.first, lane.stats.steps > 0 {
                 // Turn anchors come from the unfiltered groups (TraceView.tsx
                 // inputs): searching must not shift the strip's seek targets.
                 RhythmStrip(data: maze, inputs: self.groups.map(\.inputTs).filter { $0 >= 0 }) { turn in
@@ -135,12 +149,19 @@ struct SessionTraceView: View {
             debouncedQuery = query
         }
         .task(id: store.sessionId) {
-            // Session switch: reset view state (the WebUI remounts with
-            // key={sessionId}) and drop the previous maze before refetch.
-            maze = nil
+            guard !Task.isCancelled else { return }
+            if mazeSessionId != store.sessionId {
+                mazeStore.cancel()
+                mazeStore = MazeStore { try await store.maze() }
+                mazeSessionId = store.sessionId
+                observedActivity = store.activityGeneration
+            }
+            let projection = mazeStore
+            let lifecycle = projection.activate()
+            defer { projection.cancel(lifecycle: lifecycle) }
             expanded = []
             following = true
-            await refreshMaze()
+            refreshMaze()
             // Slow backstop poll while the run is active: SSE events are
             // the primary freshness signal now, but a reconnect gap or a
             // long tool call emits none (see SessionMazeView).
@@ -148,24 +169,25 @@ struct SessionTraceView: View {
                 try? await Task.sleep(for: .seconds(5))
                 guard !Task.isCancelled else { return }
                 if store.isBusy {
-                    await refreshMaze()
+                    refreshMaze()
                 }
             }
         }
         .task(id: store.activityGeneration) {
-            // SSE events bump activityGeneration (tool lifecycle, model
-            // responses, turn boundaries…); task(id:) cancellation IS
-            // the debounce, so the rhythm strip grows live with the run
-            // and settles with the final projection.
-            guard maze != nil else { return }
+            // Skip task(id:)'s initial value, not an activity arriving while
+            // the initial load is pending. Debounce only the refresh intent.
+            let activity = store.activityGeneration
+            guard activity != observedActivity else { return }
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
-            await refreshMaze()
+            observedActivity = activity
+            refreshMaze()
         }
+        .onDisappear { mazeStore.cancel() }
     }
 
-    private func refreshMaze() async {
-        maze = try? await store.maze()
+    private func refreshMaze() {
+        mazeStore.requestRefresh()
     }
 
     // MARK: Row model (TraceView.tsx buildGroups)

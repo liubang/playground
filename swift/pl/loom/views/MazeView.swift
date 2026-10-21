@@ -208,12 +208,14 @@ private struct MazeHitFrame {
 
 // MARK: - SessionMazeView
 
+@MainActor
 struct SessionMazeView: View {
     let store: SessionStore
     let locateInTrace: (Int) -> Void
 
-    @State private var data: MazeData?
-    @State private var error: String?
+    @State private var mazeStore: MazeStore
+    @State private var mazeSessionId: String
+    @State private var observedActivity: Int
     @State private var selected: MazeNode?
     @State private var failOnly = false
     @State private var query = ""
@@ -228,17 +230,21 @@ struct SessionMazeView: View {
     /// (the old code hardcoded a 240px width guess while the card can be
     /// ~320px wide — so it overflowed the window's right edge).
     @State private var hoverCardSize: CGSize = .zero
-    @State private var refreshGeneration = 0
     /// Vertical scroll offset of the maze content (wheel-driven; the
     /// content is taller than the viewport only on dense maps).
     @State private var scrollY: CGFloat = 0
-    /// Wall-clock of the last successful /maze fetch — the base for the
-    /// live capsules' between-refresh extrapolation.
-    @State private var fetchedAt = Date()
     /// First-seen timestamp per "lane:step" — drives the ~150ms fade-in
     /// of freshly materialized nodes while the pulse ticker runs.
     @State private var firstSeen: [String: Date] = [:]
     @FocusState private var searchFocused: Bool
+
+    init(store: SessionStore, locateInTrace: @escaping (Int) -> Void) {
+        self.store = store
+        self.locateInTrace = locateInTrace
+        _mazeStore = State(initialValue: MazeStore { try await store.maze() })
+        _mazeSessionId = State(initialValue: store.sessionId)
+        _observedActivity = State(initialValue: store.activityGeneration)
+    }
 
     private enum DragMode { case brush, pan }
 
@@ -255,13 +261,13 @@ struct SessionMazeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let error {
+            if mazeStore.data == nil, let error = mazeStore.error {
                 ContentUnavailableView("Maze unavailable", systemImage: "exclamationmark.triangle",
                                        description: Text(error))
                     .overlay(alignment: .bottom) {
-                        Button("Retry") { Task { await refresh() } }.padding(20)
+                        Button("Retry") { refresh() }.padding(20)
                     }
-            } else if let data {
+            } else if let data = mazeStore.data {
                 if data.lanes.isEmpty || data.lanes.allSatisfy({ $0.stats.steps == 0 }) {
                     ContentUnavailableView(
                         store.isBusy ? "Building execution path…" : "No execution trace yet",
@@ -289,69 +295,62 @@ struct SessionMazeView: View {
             debouncedQuery = query
         }
         .task(id: store.sessionId) {
-            // Session switch: reset the view state (the WebUI remounts
-            // with key={sessionId}) and drop the previous maze BEFORE
-            // fetching — otherwise the old session's map flashes under
-            // the new one (useMazeData).
-            data = nil
-            error = nil
+            guard !Task.isCancelled else { return }
+            if mazeSessionId != store.sessionId {
+                mazeStore.cancel()
+                mazeStore = MazeStore { try await store.maze() }
+                mazeSessionId = store.sessionId
+                observedActivity = store.activityGeneration
+            }
+            let projection = mazeStore
+            let lifecycle = projection.activate()
+            defer { projection.cancel(lifecycle: lifecycle) }
             window = nil
             selected = nil
             hover = nil
             scrollY = 0
             firstSeen = [:]
-            await refresh()
-            // Slow backstop poll while the run is active: SSE events are
-            // the primary freshness signal now, but a reconnect gap or a
-            // long tool call emits none — the poll re-anchors the live
-            // extrapolation and catches whatever the stream missed.
+            applySnapshot()
+            refresh()
+            // Slow backstop while active; events are the primary signal.
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
                 guard !Task.isCancelled else { return }
                 if store.isBusy {
-                    await refresh()
+                    refresh()
                 }
             }
         }
         .task(id: store.activityGeneration) {
-            // SSE events bump activityGeneration (tool lifecycle, model
-            // responses, turn boundaries…). task(id:) cancellation IS
-            // the debounce: a burst of events collapses into one
-            // refetch, and the turn.finished bump captures the final
-            // projection after the run settles.
-            guard data != nil else { return }
+            // Skip the initial task value, not activity arriving in flight.
+            let activity = store.activityGeneration
+            guard activity != observedActivity else { return }
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
-            await refresh()
+            observedActivity = activity
+            refresh()
         }
+        .onChange(of: mazeStore.fetchedAt) { _, _ in applySnapshot() }
+        .onDisappear { mazeStore.cancel() }
     }
 
-    private func refresh() async {
-        refreshGeneration += 1
-        let generation = refreshGeneration
-        do {
-            let fresh = try await store.maze()
-            guard !Task.isCancelled, generation == refreshGeneration else { return }
-            data = fresh
-            error = nil
-            fetchedAt = Date()
-            for lane in fresh.lanes {
-                for node in lane.main + lane.detours {
-                    let key = "\(lane.key):\(node.step)"
-                    if firstSeen[key] == nil {
-                        firstSeen[key] = fetchedAt
-                    }
+    private func refresh() {
+        mazeStore.requestRefresh()
+    }
+
+    private func applySnapshot() {
+        guard let fresh = mazeStore.data, let fetchedAt = mazeStore.fetchedAt else { return }
+        for lane in fresh.lanes {
+            for node in lane.main + lane.detours {
+                let key = "\(lane.key):\(node.step)"
+                if firstSeen[key] == nil {
+                    firstSeen[key] = fetchedAt
                 }
             }
-            if let selected {
-                self.selected = fresh.lanes.first?.main.first { $0.step == selected.step }
-                    ?? fresh.lanes.first?.detours.first { $0.step == selected.step }
-            }
-        } catch {
-            guard !Task.isCancelled, generation == refreshGeneration else { return }
-            if data == nil {
-                self.error = error.localizedDescription
-            }
+        }
+        if let selected {
+            self.selected = fresh.lanes.first?.main.first { $0.step == selected.step }
+                ?? fresh.lanes.first?.detours.first { $0.step == selected.step }
         }
     }
 
@@ -565,7 +564,7 @@ struct SessionMazeView: View {
                 // freezing until the next server projection.
                 let liveScene = MazeScene(
                     data: data, width: scene.width, window: window,
-                    liveElapsed: context.date.timeIntervalSince(fetchedAt),
+                    liveElapsed: mazeStore.fetchedAt.map { context.date.timeIntervalSince($0) } ?? 0,
                 )
                 mazeCanvas(scene: liveScene, dimmed: dimmed,
                            pulse: pulseValue(at: context.date), fadeNow: context.date)

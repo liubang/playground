@@ -62,6 +62,28 @@ final class WorkspaceExplorerStore {
         self.api = api
     }
 
+    private struct RequestIdentity: Equatable {
+        let workspaceId: String
+        let generation: UInt64
+        let sequence: UInt64
+    }
+
+    private var bindingGeneration: UInt64 = 0
+    private var requestSequence: UInt64 = 0
+
+    private func nextRequest() -> RequestIdentity? {
+        guard let workspaceId else { return nil }
+        requestSequence += 1
+        return RequestIdentity(
+            workspaceId: workspaceId, generation: bindingGeneration, sequence: requestSequence,
+        )
+    }
+
+    private func isCurrent(_ request: RequestIdentity, _ active: RequestIdentity?) -> Bool {
+        request == active && request.generation == bindingGeneration
+            && request.workspaceId == workspaceId
+    }
+
     // MARK: Binding
 
     /// Points the panel at another workspace. Selection-scoped UI
@@ -69,28 +91,30 @@ final class WorkspaceExplorerStore {
     /// per workspace and stays warm for the switch back.
     func bind(workspaceId: String?) {
         guard workspaceId != self.workspaceId else { return }
+        bindingGeneration += 1
         self.workspaceId = workspaceId
+        gitRequest = nil
+        gitLoading = false
+        statusByPath = [:]
+        dirRequests = [:]
+        loadingDirs = []
+        activityTask?.cancel()
+        activityTask = nil
+        resetDetail()
         route = .list
         expanded = []
         searchQuery = ""
         searchResults = []
         searchTruncated = false
-        preview = nil
-        previewImage = nil
-        previewImageSize = nil
-        previewImageFailed = false
-        previewImageTask?.cancel()
-        previewImageTask = nil
-        diff = nil
         git = nil
         gitError = nil
         guard workspaceId != nil else { return }
-        Task { await self.reloadAll() }
-    }
-
-    private func reloadAll() async {
-        await refreshGit()
+        let generation = bindingGeneration
         loadDir("")
+        Task { [weak self] in
+            guard let self, bindingGeneration == generation else { return }
+            await refreshGit()
+        }
     }
 
     // MARK: Git status (changes tab, badge, tree colouring)
@@ -107,22 +131,20 @@ final class WorkspaceExplorerStore {
         return git.files?.count ?? 0
     }
 
-    private var gitSeq = 0
+    private var gitRequest: RequestIdentity?
 
     func refreshGit() async {
-        guard let workspaceId else { return }
-        gitSeq += 1
-        let seq = gitSeq
+        guard let request = nextRequest() else { return }
+        gitRequest = request
         gitLoading = true
         defer {
-            if seq == gitSeq {
+            if isCurrent(request, gitRequest) {
                 gitLoading = false
             }
         }
         do {
-            let status = try await api.workspaceGitStatus(workspaceId)
-            // A newer fetch or a workspace switch invalidates this one.
-            guard seq == gitSeq, self.workspaceId == workspaceId else { return }
+            let status = try await api.workspaceGitStatus(request.workspaceId)
+            guard isCurrent(request, gitRequest) else { return }
             git = status
             statusByPath = Dictionary(
                 (status.files ?? []).map { ($0.path, $0.status) },
@@ -130,7 +152,7 @@ final class WorkspaceExplorerStore {
             )
             gitError = nil
         } catch {
-            guard seq == gitSeq else { return }
+            guard isCurrent(request, gitRequest) else { return }
             gitError = error.localizedDescription
         }
     }
@@ -145,10 +167,12 @@ final class WorkspaceExplorerStore {
     func noteFileActivity() {
         guard workspaceId != nil else { return }
         activityTask?.cancel()
+        let generation = bindingGeneration
         activityTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(600))
-            guard !Task.isCancelled, let self else { return }
+            guard !Task.isCancelled, let self, bindingGeneration == generation else { return }
             await refreshGit()
+            guard !Task.isCancelled, bindingGeneration == generation else { return }
             revalidateLoadedDirs()
         }
     }
@@ -157,7 +181,11 @@ final class WorkspaceExplorerStore {
     /// another loom client) never produce local events.
     func noteAppFocus() {
         guard workspaceId != nil else { return }
-        Task { await refreshGit() }
+        let generation = bindingGeneration
+        Task { [weak self] in
+            guard let self, bindingGeneration == generation else { return }
+            await refreshGit()
+        }
     }
 
     // MARK: File tree (files tab)
@@ -171,7 +199,7 @@ final class WorkspaceExplorerStore {
     /// Directory listings keyed "wsId\0path": warm across workspace
     /// switches, revalidated conditionally (ETag) on file activity.
     private var directories: [String: DirectoryState] = [:]
-    private var dirRequests: Set<String> = []
+    private var dirRequests: [String: RequestIdentity] = [:]
     private(set) var loadingDirs: Set<String> = []
     private(set) var expanded: Set<String> = []
 
@@ -199,26 +227,29 @@ final class WorkspaceExplorerStore {
     }
 
     /// Fetches a directory listing, conditional on the cached ETag when
-    /// one exists. In-flight requests for the same path are deduped
+    /// one exists. In-flight requests for the same workspace/path are deduped
     /// (revalidation walks overlap free-form toggles).
     func loadDir(_ path: String) {
-        guard let workspaceId, !dirRequests.contains(path) else { return }
-        dirRequests.insert(path)
+        let key = dirKey(path)
+        guard dirRequests[key] == nil, let request = nextRequest() else { return }
+        dirRequests[key] = request
         loadingDirs.insert(path)
-        let cachedEtag = directories[dirKey(path)]?.etag
+        let cachedEtag = directories[key]?.etag
         Task { [weak self] in
             defer {
-                self?.dirRequests.remove(path)
-                self?.loadingDirs.remove(path)
+                if let self, isCurrent(request, dirRequests[key]) {
+                    dirRequests.removeValue(forKey: key)
+                    loadingDirs.remove(path)
+                }
             }
             do {
                 guard let self else { return }
                 let result = try await api.workspaceFiles(
-                    workspaceId, path: path, ifNoneMatch: cachedEtag,
+                    request.workspaceId, path: path, ifNoneMatch: cachedEtag,
                 )
-                guard !Task.isCancelled, self.workspaceId == workspaceId else { return }
+                guard isCurrent(request, dirRequests[key]) else { return }
                 if case let .modified(response, etag) = result {
-                    directories[dirKey(path)] = DirectoryState(
+                    directories[key] = DirectoryState(
                         entries: response.entries, etag: etag,
                         truncated: response.truncated ?? false,
                     )
@@ -276,27 +307,38 @@ final class WorkspaceExplorerStore {
     private(set) var searchResults: [WorkspaceFileMatch] = []
     private(set) var searchTruncated = false
     private(set) var searching = false
-    private var searchTask: Task<Void, Never>?
+    private var searchRequest: RequestIdentity?
+    @ObservationIgnored private var searchTask: Task<Void, Never>?
+
+    deinit {
+        searchTask?.cancel()
+    }
 
     private func scheduleSearch() {
+        searchRequest = nil
         searchTask?.cancel()
+        searchTask = nil
         let q = searchQuery.trimmingCharacters(in: .whitespaces)
-        guard !q.isEmpty, let workspaceId else {
+        guard !q.isEmpty, let request = nextRequest() else {
             searchResults = []
             searchTruncated = false
             searching = false
             return
         }
+        searchRequest = request
         searching = true
         searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(250))
-            guard !Task.isCancelled, let self else { return }
-            defer { searching = false }
+            guard !Task.isCancelled, let self, isCurrent(request, searchRequest) else { return }
+            defer {
+                if isCurrent(request, searchRequest) {
+                    searching = false
+                    searchTask = nil
+                }
+            }
             do {
-                let response = try await api.searchWorkspaceFiles(workspaceId, query: q)
-                // Stale answers (query moved on) are dropped.
-                guard !Task.isCancelled,
-                      searchQuery.trimmingCharacters(in: .whitespaces) == q else { return }
+                let response = try await api.searchWorkspaceFiles(request.workspaceId, query: q)
+                guard !Task.isCancelled, isCurrent(request, searchRequest) else { return }
                 searchResults = response.matches
                 searchTruncated = response.truncated ?? false
             } catch {
@@ -329,50 +371,75 @@ final class WorkspaceExplorerStore {
     private(set) var diffLoading = false
     private(set) var diffError: String?
 
-    func openPreview(_ path: String) {
-        route = .preview(path)
-        guard let workspaceId else { return }
+    private var detailRequest: RequestIdentity?
+    private var imageRequest: RequestIdentity?
+
+    private func resetDetail() {
+        detailRequest = nil
+        imageRequest = nil
         preview = nil
         previewError = nil
-        previewLoading = true
+        previewLoading = false
+        diff = nil
+        diffError = nil
+        diffLoading = false
+        previewImageTask?.cancel()
+        previewImageTask = nil
         previewImage = nil
         previewImageSize = nil
         previewImageFailed = false
-        previewImageTask?.cancel()
-        previewImageTask = nil
+    }
+
+    func openPreview(_ path: String) {
+        resetDetail()
+        route = .preview(path)
+        guard let request = nextRequest() else { return }
+        detailRequest = request
+        previewLoading = true
         Task { [weak self] in
-            defer { self?.previewLoading = false }
+            guard let self else { return }
+            defer {
+                if isCurrent(request, detailRequest) {
+                    previewLoading = false
+                }
+            }
             do {
-                let content = try await self?.api.workspaceFileContent(workspaceId, path: path)
-                guard let self, route == .preview(path) else { return }
+                let content = try await api.workspaceFileContent(request.workspaceId, path: path)
+                guard isCurrent(request, detailRequest) else { return }
                 preview = content
             } catch {
-                guard let self, route == .preview(path) else { return }
+                guard isCurrent(request, detailRequest) else { return }
                 previewError = error.localizedDescription
             }
         }
     }
 
     func openDiff(_ path: String) {
+        resetDetail()
         route = .diff(path)
-        guard let workspaceId else { return }
-        diff = nil
-        diffError = nil
+        guard let request = nextRequest() else { return }
+        detailRequest = request
         diffLoading = true
         Task { [weak self] in
-            defer { self?.diffLoading = false }
+            guard let self else { return }
+            defer {
+                if isCurrent(request, detailRequest) {
+                    diffLoading = false
+                }
+            }
             do {
-                let result = try await self?.api.workspaceGitDiff(workspaceId, path: path)
-                guard let self, route == .diff(path) else { return }
+                let result = try await api.workspaceGitDiff(request.workspaceId, path: path)
+                guard isCurrent(request, detailRequest) else { return }
                 diff = result
             } catch {
-                guard let self, route == .diff(path) else { return }
+                guard isCurrent(request, detailRequest) else { return }
                 diffError = error.localizedDescription
             }
         }
     }
 
     func back() {
+        resetDetail()
         route = .list
     }
 
@@ -451,9 +518,11 @@ final class WorkspaceExplorerStore {
     /// view when the path's extension is a raster image type. Rapid
     /// navigation cancels the superseded fetch/decode.
     func loadPreviewImage(_ path: String) {
-        guard let workspaceId else { return }
+        guard route == .preview(path), let request = nextRequest() else { return }
+        imageRequest = request
         previewImageTask?.cancel()
-        let key = "\(workspaceId)\n\(path)" as NSString
+        previewImageTask = nil
+        let key = "\(request.workspaceId)\n\(path)" as NSString
         if let cached = ImageCache.shared.object(forKey: key) {
             previewImage = cached.image
             previewImageSize = cached.sourceSize
@@ -466,20 +535,19 @@ final class WorkspaceExplorerStore {
         previewImageTask = Task { [weak self] in
             do {
                 guard let self else { return }
-                let (data, _) = try await api.workspaceFileRaw(workspaceId, path: path)
+                let (data, _) = try await api.workspaceFileRaw(request.workspaceId, path: path)
                 try Task.checkCancellation()
-                // Trailing-closure syntax is ambiguous inside guard:
-                // pass the operation explicitly.
+                guard isCurrent(request, imageRequest), route == .preview(path) else { return }
                 let decode = Task.detached(priority: .userInitiated) { Self.decodePreview(data) }
-                guard let decoded = await decode.value else {
+                let decoded = await decode.value
+                try Task.checkCancellation()
+                guard isCurrent(request, imageRequest), route == .preview(path) else { return }
+                guard let decoded else {
                     // Undecodable payload (e.g. an SVG served raw):
                     // the view falls back to its placeholder.
-                    guard route == .preview(path) else { return }
                     previewImageFailed = true
                     return
                 }
-                try Task.checkCancellation()
-                guard route == .preview(path) else { return }
                 let image = NSImage(
                     cgImage: decoded.cgImage,
                     size: NSSize(width: decoded.cgImage.width, height: decoded.cgImage.height),
@@ -491,7 +559,8 @@ final class WorkspaceExplorerStore {
                 previewImage = image
                 previewImageSize = decoded.sourceSize
             } catch {
-                guard !Task.isCancelled, let self, route == .preview(path) else { return }
+                guard !Task.isCancelled, let self,
+                      isCurrent(request, imageRequest), route == .preview(path) else { return }
                 previewImageFailed = true
             }
         }

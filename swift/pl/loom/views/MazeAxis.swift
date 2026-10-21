@@ -152,7 +152,7 @@ struct MazeAxis: Sendable {
     /// least `minTickPx` between marks.
     func ticks(dStart: Double, dEnd: Double, maxTicks: Int = 50, pxWidth: Double = 0) -> [MazeTick] {
         let span = dEnd - dStart
-        guard span > 0 else { return [] }
+        guard dStart.isFinite, dEnd.isFinite, span.isFinite, span > 0 else { return [] }
         // Pick the coarsest tick step (real seconds) that stays within
         // maxTicks AND leaves enough room per label.
         var step = Self.tickSteps[Self.tickSteps.count - 1]
@@ -166,25 +166,103 @@ struct MazeAxis: Sendable {
             step = s
             break
         }
+        let epsilon = 1e-6
         var ticks: [MazeTick] = []
-        for (segS, segE) in segments {
-            if segE < dStart || segS > dEnd {
-                continue
+
+        /// Each piece is affine. Invert the clipped display window once, not
+        /// once per tick, and start on the original real-second tick lattice.
+        func appendPiece(
+            realStart: Double, realEnd: Double, origin: Double,
+            displayOrigin: Double, displayEnd: Double,
+        ) -> Bool {
+            guard realStart.isFinite, realEnd.isFinite,
+                  displayOrigin.isFinite, displayEnd.isFinite
+            else {
+                return false
             }
-            let realStart = unmap(segS)
-            var t = (realStart / step).rounded(.up) * step
-            while true {
-                let d = map(t)
-                if d > segE + 1e-6 {
+            let lower = max(realStart, origin + (dStart - epsilon - displayOrigin))
+            let upper = min(
+                realEnd, origin + (min(dEnd + epsilon, displayEnd) - displayOrigin),
+            )
+            guard lower.isFinite, upper.isFinite, lower <= upper else { return false }
+            let first = (realStart / step).rounded(.up) * step
+            // One predecessor protects inclusive epsilon edges from rounding
+            // during inversion; the forward display check remains authoritative.
+            var t = max(first, ((lower / step).rounded(.up) - 1) * step)
+            let last = (upper / step).rounded(.down) * step + step
+            while t <= last {
+                guard t.isFinite, t >= 0, t / 3600 < Double(Int.max) else { break }
+                let d = t <= origin ? displayOrigin : t + (displayOrigin - origin)
+                if !d.isFinite || d > displayEnd || d > dEnd + epsilon {
                     break
                 }
-                if d >= dStart - 1e-6, d <= dEnd + 1e-6 {
+                if t <= realEnd, d <= displayEnd, d >= dStart - epsilon, d <= dEnd + epsilon {
                     ticks.append(MazeTick(d: d, t: t, label: mazeFormatTick(t)))
+                    if ticks.count > 200 {
+                        return true
+                    } // preserve the original cap/return order
                 }
-                if ticks.count > 200 {
-                    return ticks
-                } // defensive cap
-                t += step
+                let next = t + step
+                guard next.isFinite, next > t else { break }
+                t = next
+            }
+            return false
+        }
+
+        for i in spans.indices {
+            let s = spans[i]
+            // Keep the original exact segment intersection (no epsilon here).
+            if s.dEnd < dStart || s.dStart > dEnd {
+                continue
+            }
+            if appendPiece(
+                realStart: s.realStart, realEnd: s.realEnd, origin: s.realStart,
+                displayOrigin: s.dStart, displayEnd: s.dEnd + epsilon,
+            ) {
+                return ticks
+            }
+
+            // The old map(t) can admit a tick just past the activity endpoint:
+            // gaps use a 3-second affine seam even below the fold threshold.
+            // Preserve that epsilon tail without walking the entire idle gap.
+            guard dEnd + epsilon >= s.dEnd else { continue }
+            var t = (s.realEnd / step).rounded(.down) * step + step
+            while t.isFinite, t > s.realEnd, t / 3600 < Double(Int.max) {
+                // Find the last span starting at or before this candidate.
+                // Dense short spans must not rescan the suffix for every i.
+                var low = i
+                var high = spans.count
+                while low + 1 < high {
+                    let mid = low + (high - low) / 2
+                    if spans[mid].realStart <= t {
+                        low = mid
+                    } else {
+                        high = mid
+                    }
+                }
+                let cursor = low
+                let current = spans[cursor]
+                let d: Double
+                if t <= current.realEnd {
+                    d = t <= current.realStart
+                        ? current.dStart : t + (current.dStart - current.realStart)
+                } else if cursor + 1 < spans.count {
+                    let frac = (t - current.realEnd)
+                        / (spans[cursor + 1].realStart - current.realEnd)
+                    d = current.dEnd + frac * Self.foldToSecs
+                } else {
+                    d = t + offset
+                }
+                guard d.isFinite, d <= s.dEnd + epsilon, d <= dEnd + epsilon else { break }
+                if d >= dStart - epsilon {
+                    ticks.append(MazeTick(d: d, t: t, label: mazeFormatTick(t)))
+                    if ticks.count > 200 {
+                        return ticks
+                    }
+                }
+                let next = t + step
+                guard next.isFinite, next > t else { break }
+                t = next
             }
         }
         return ticks.sorted { $0.d < $1.d }

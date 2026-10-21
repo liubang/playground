@@ -47,78 +47,125 @@ private enum MarkdownCache {
 }
 
 /// Incremental block parser for a live (append-only) streaming source,
-/// held per MarkdownText view via @State. Scan only newly completed
-/// lines for a fence-balanced blank-line boundary; every block type
+/// held per MarkdownText view via @State. Scan only appended bytes
+/// for a fence-balanced blank-line boundary; every block type
 /// terminates at a blank line, so the sealed prefix's blocks are
 /// reused as-is and only the growing tail re-parses per frame. Live,
 /// one-shot full-text keys never reach the shared NSCache.
 final class LiveBlockCache {
-    private var parsedPrefix = ""
+    private var previousSource = ""
     private var prefixBlocks: [MarkdownText.Block] = []
-    private var scannedSource = ""
-    private var scannedFences = 0
+    // UTF-8 offsets, never indices from an earlier String. Appending a
+    // combining scalar (or LF after CR) can change Character boundaries.
+    private var scannedOffset = 0
+    private var lineStartOffset = 0
+    private var parsedOffset = 0
     private var stableOffset = 0
+    private var inCode = false
+    private var inTable = false
+    private var tableHeader = false
+    private var inQuote = false
 
     func blocks(for source: String) -> [MarkdownText.Block] {
-        guard let split = stableBoundary(of: source) else {
-            // No fence-balanced paragraph boundary yet (a short text,
-            // or one still inside its first block): the whole source
-            // is a changing tail — same cost as before, minus the
-            // cache pollution.
+        let bytes = source.utf8
+        // Validate the ENTIRE previous input, including the incomplete
+        // tail. String.hasPrefix is canonically equivalent, not byte-exact;
+        // a normalization replacement could invalidate our byte offsets.
+        // This comparison remains linear: the caller supplies snapshots,
+        // not trusted deltas, so skipping it would miss prefix edits.
+        if !bytes.starts(with: previousSource.utf8) {
+            reset()
+        }
+        scan(source)
+        previousSource = source
+
+        guard stableOffset > 0 else {
             return MarkdownText.splitBlocks(source)
         }
-        let prefix = source[..<split]
-        if prefix != parsedPrefix[...] {
-            // The prefix only ever GROWS while live; a mismatch means
-            // the source was replaced wholesale, so re-derive rather
-            // than trust the stale parse.
-            prefixBlocks = MarkdownText.splitBlocks(String(prefix))
-            parsedPrefix = String(prefix)
+        let split = bytes.index(bytes.startIndex, offsetBy: stableOffset)
+        if stableOffset > parsedOffset {
+            let start = bytes.index(bytes.startIndex, offsetBy: parsedOffset)
+            // Both ends follow completed blank lines outside fences.
+            // Only newly sealed blocks parse, never the accumulated prefix.
+            let sealed = String(decoding: bytes[start ..< split], as: UTF8.self)
+            prefixBlocks.append(contentsOf: MarkdownText.splitBlocks(sealed))
+            parsedOffset = stableOffset
         }
-        let tail = String(source[split...])
-        if tail.isEmpty {
+        if split == bytes.endIndex {
             return prefixBlocks
         }
-        let tailBlocks = MarkdownText.splitBlocks(tail)
-        // Every block terminates at a blank line, so the boundary
-        // always seals whole blocks: prefix + tail equals the
-        // whole-source parse exactly.
-        return prefixBlocks + tailBlocks
+        let tail = String(decoding: bytes[split...], as: UTF8.self)
+        return prefixBlocks + MarkdownText.splitBlocks(tail)
     }
 
-    /// Byte offset just past the last completed, fence-balanced blank
-    /// line. An open fence disqualifies boundaries inside it.
-    private func stableBoundary(of source: String) -> String.Index? {
-        // Validate append-only input, then inspect only lines not already
-        // scanned. Keep the incomplete final line for the next frame.
-        if !source.hasPrefix(scannedSource) {
-            scannedSource = ""
-            scannedFences = 0
-            stableOffset = 0
-            parsedPrefix = ""
-            prefixBlocks = []
-        }
-        let suffix = source.dropFirst(scannedSource.count)
-        let scannedBytes = scannedSource.utf8.count
-        var completeBytes = 0
-        for line in suffix.split(separator: "\n", omittingEmptySubsequences: false).dropLast() {
-            let trimmed = line.drop(while: { $0 == " " || $0 == "\t" })
-            if trimmed.hasPrefix("```") {
-                scannedFences += 1
+    private func reset() {
+        prefixBlocks = []
+        scannedOffset = 0
+        lineStartOffset = 0
+        parsedOffset = 0
+        stableOffset = 0
+        inCode = false
+        inTable = false
+        tableHeader = false
+        inQuote = false
+    }
+
+    /// Scan new bytes once, retaining only the start of an incomplete
+    /// line. LF is a byte delimiter, including when CR/LF arrive separately.
+    private func scan(_ source: String) {
+        let bytes = source.utf8
+        var index = bytes.index(bytes.startIndex, offsetBy: scannedOffset)
+        var lineStart = bytes.index(bytes.startIndex, offsetBy: lineStartOffset)
+        while index < bytes.endIndex {
+            let byte = bytes[index]
+            let next = bytes.index(after: index)
+            scannedOffset += 1
+            if byte == 0x0A {
+                let line = String(decoding: bytes[lineStart ..< index], as: UTF8.self)
+                scanLine(line, endOffset: scannedOffset)
+                lineStart = next
+                lineStartOffset = scannedOffset
             }
-            completeBytes += line.utf8.count + 1
-            if line.allSatisfy({ $0 == " " || $0 == "\t" || $0 == "\r" }),
-               scannedFences % 2 == 0
-            {
-                stableOffset = scannedBytes + completeBytes
+            index = next
+        }
+    }
+
+    private func scanLine(_ line: String, endOffset: Int) {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        // A table consumes ALL pipe rows, even rows that resemble fences.
+        // Use the whole parser's predicates and precedence, rather than
+        // counting backticks that the parser never visits as fence lines.
+        if inTable {
+            if MarkdownText.isTableRow(line), !trimmed.isEmpty {
+                return
             }
+            inTable = false
         }
-        if completeBytes > 0 {
-            let end = source.utf8.index(source.startIndex, offsetBy: scannedBytes + completeBytes)
-            scannedSource = String(source[..<end])
+        if !inCode, tableHeader, MarkdownText.isSeparatorRow(line) {
+            tableHeader = false
+            inTable = true
+            inQuote = false
+            return
         }
-        guard stableOffset > 0 else { return nil }
-        return source.utf8.index(source.startIndex, offsetBy: stableOffset)
+        tableHeader = false
+        if trimmed.hasPrefix("```") {
+            inCode.toggle()
+            inQuote = false
+            return
+        }
+        guard !inCode else { return }
+        if trimmed.isEmpty {
+            stableOffset = endOffset
+            inQuote = false
+            return
+        }
+        let isQuote = MarkdownText.parseQuoteLine(line) != nil
+        // Consecutive quote lines are consumed by the parser's quote loop,
+        // so only the first could be considered a table header.
+        if !inQuote || !isQuote {
+            tableHeader = MarkdownText.isTableRow(line)
+        }
+        inQuote = isQuote
     }
 }
 
@@ -133,9 +180,9 @@ struct MarkdownText: View {
     /// the END of the rendered content while the segment streams.
     var streamCursor = false
 
-    /// Per-view append-only scan state. Reuse sealed code/table blocks
-    /// where safe; prose spanning blank lines remains a growing block
-    /// and is parsed whole, without polluting the shared block cache.
+    /// Per-view append-only scan state. Reuse all safely sealed blocks;
+    /// only the unsealed tail parses whole, without polluting the shared
+    /// block cache.
     @State private var liveCache = LiveBlockCache()
 
     enum Block: Equatable {
@@ -435,7 +482,7 @@ struct MarkdownText: View {
     /// Blockquote line (CommonMark): up to 3 leading spaces, ">",
     /// then one optional space. The marker is consumed; nested quotes
     /// (">>") keep the inner marker as literal text.
-    private static func parseQuoteLine(_ line: String) -> String? {
+    fileprivate static func parseQuoteLine(_ line: String) -> String? {
         var rest = Substring(line)
         var leading = 0
         while rest.first == " ", leading < 3 {
@@ -491,7 +538,7 @@ struct MarkdownText: View {
     /// candidate table row. Single-pipe prose stays prose. `\|`
     /// (a backslash-escaped pipe) is literal cell content, not a
     /// boundary, so it doesn't count.
-    private static func isTableRow(_ line: String) -> Bool {
+    fileprivate static func isTableRow(_ line: String) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         if trimmed.hasPrefix("|") {
             return true
@@ -520,7 +567,7 @@ struct MarkdownText: View {
 
     /// The GFM separator row: only pipes, dashes, colons and spaces,
     /// with at least one dash (| --- | :--- |).
-    private static func isSeparatorRow(_ line: String) -> Bool {
+    fileprivate static func isSeparatorRow(_ line: String) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard trimmed.contains("-"), trimmed.contains("|") else { return false }
         return trimmed.allSatisfy { $0 == "|" || $0 == "-" || $0 == ":" || $0 == " " }

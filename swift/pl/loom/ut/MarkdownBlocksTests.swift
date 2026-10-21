@@ -376,6 +376,270 @@ final class MarkdownBlocksTests: XCTestCase {
         assertIncrementalMatchesWhole(["你好\r\n", "\r\n", "世界\r\n", "\r\n", "```swift\n", "let 名 = 1\n", "```\n"])
     }
 
+    func testLiveUnicodeScalarAppendsAndCombiningBoundaries() {
+        let sources = [
+            "e\u{301}\n\n中👩🏽‍💻\n\n🇨🇦\n\n각 tail",
+            "first\n\n \u{301}\n\n```swift\nlet café = \"👨‍👩‍👧\"\n\n```\n\nlast",
+            "first\n\n\u{301}tail\n\nsecond",
+            "a\r\n\r\nb\r\n\r\n```\r\nx\r\n\r\n```\r\n\r\nlast",
+        ]
+        for source in sources {
+            // Scalars, not Characters: expose appends that merge an old
+            // end Character, including ZWJ, combining marks and CR + LF.
+            assertIncrementalMatchesWhole(source.unicodeScalars.map { String($0) })
+        }
+    }
+
+    func testLiveReplacementResetsEvenWhenCompletedPrefixIsUnchanged() {
+        let cache = LiveBlockCache()
+        let sources = [
+            "first\n\nsecond\n\nunfinished tail",
+            "first\n\nsec", // Shorter, with the same sealed prefix.
+            "first\n\nsecond replacement grows beyond the previous source\n\nlast",
+            "first\n\nsecond replacement grows beyond the previous source\n\nchanged tail",
+            "first\n\n```swift\ncode\n\n", // Replace an unsealed tail with a fence.
+            "first\n\nplain\n\nlast", // Remove the open fence.
+            "FIRST\n\nplain\n\nlast", // Edit already sealed content.
+            "", "x", "x\n\n", "x\n\nagain",
+            "é\n\ntail",
+            "e\u{301}\n\ntail grows", // Canonically equal, different UTF-8 offsets.
+            "é\n\ntail grows further\n\nlast",
+        ]
+        for source in sources {
+            XCTAssertEqual(cache.blocks(for: source), MarkdownText.splitBlocks(source), source.debugDescription)
+            XCTAssertEqual(cache.blocks(for: source), MarkdownText.splitBlocks(source), "repeated snapshot")
+        }
+    }
+
+    func testLiveSealsMultipleRegionsInOneAppend() {
+        assertIncrementalMatchesWhole([
+            "first\n\n",
+            "second\n\nthird\n\n- one\n- two\n\n> quote\n> more\n\n",
+            "| a | b |\n| --- | --- |\n| 1 | 2 |\n\n```swift\ncode\n\n```\n\n",
+            "last\n\n\n",
+        ])
+    }
+
+    func testLiveFenceTableAndListBoundaryPrecedence() {
+        let sources = [
+            // Pipe rows inside a table are NOT parsed as fences.
+            "| a | b |\n| --- | --- |\n``` | body |\n\n```swift\ncode\n\n```\n\nafter",
+            // Only the first consecutive quote line can start a table.
+            "> quote\n> a | b |\n| --- | --- |\n```\n\ncode\n```\n\nafter",
+            "> a | b |\n| --- | --- |\n``` | row |\n\nafter",
+            "- a | b |\n| --- | --- |\n| 1 | 2 |\n\n- item\n  - nested\n\nafter",
+            "first\n\n\u{00A0}```swift\ncode\n\n```\n\nafter",
+            "first\n\n```\n\n```\n\n```py\n\nopen tail",
+            "first\n\n| header |\n\n| --- |\n\n---\n\nlast",
+        ]
+        for source in sources {
+            assertIncrementalMatchesWhole(source.unicodeScalars.map { String($0) })
+        }
+    }
+
+    func testLiveSingleLongTailWithAndWithoutSealedPrefix() {
+        let chunks = (0 ..< 64).map { "segment \($0) café 👩🏽‍💻 " + String(repeating: "x", count: 96) }
+        assertIncrementalMatchesWhole(chunks)
+        assertIncrementalMatchesWhole(["sealed\n\n"] + chunks + ["\n\n", "last"])
+        assertIncrementalMatchesWhole(["sealed\n\n```swift\n"] + chunks + ["\n\n", "```\n\nlast"])
+    }
+
+    /// No production instrumentation: run the previous cache in the test
+    /// itself. Prebuilt snapshots keep stream construction out of timing.
+    /// Report median cumulative/worst/p95 costs, without noisy speed gates.
+    func testBenchLiveNewlySealedPrefixAgainstPreviousCache() {
+        let benchmarkStart = ProcessInfo.processInfo.systemUptime
+        /// Keep the matrix bounded: 32 frames per growing tail, 64 repeated
+        /// frames, one warmup and three measured rounds. No nanosecond gates.
+        func snapshots(_ chunks: [String]) -> [String] {
+            var source = ""
+            return chunks.map {
+                source += $0
+                return source
+            }
+        }
+        func stream(_ source: String) -> [String] {
+            // Scalar chunks are valid UTF-8, but may split grapheme clusters.
+            let scalars = Array(source.unicodeScalars)
+            let step = max(1, (scalars.count + 31) / 32)
+            return snapshots(stride(from: 0, to: scalars.count, by: step).map { start in
+                String(String.UnicodeScalarView(scalars[start ..< min(start + step, scalars.count)]))
+            })
+        }
+        func ascii(_ bytes: Int) -> String {
+            String(String(repeating: "ordinary text ", count: bytes / 14 + 1).prefix(bytes))
+        }
+        func unicode(_ bytes: Int) -> String {
+            let unit = "中 e\u{301} 👩🏽‍💻 🇨🇦 "
+            return String(repeating: unit, count: bytes / unit.utf8.count)
+        }
+        var cases: [(name: String, snapshots: [String], useOld: Bool)] = []
+        for paragraphs in [160, 320] {
+            var chunks: [String] = []
+            for index in 0 ..< paragraphs {
+                chunks += ["Paragraph \(index): " + ascii(112), "\n", "\n"]
+            }
+            cases.append(("sealed-prefix-\(paragraphs)", snapshots(chunks), true))
+        }
+        cases += [
+            ("single-paragraph-short-4KB", stream(ascii(4096)), true),
+            ("single-paragraph-long-24KB", stream(ascii(24576)), true),
+            ("open-fence-24KB", stream("```swift\n" + ascii(24576)), true),
+            ("repeat-sealed-1KB", Array(repeating: ascii(1022) + "\n\n", count: 64), true),
+            ("unicode-single-paragraph-4KB", stream(unicode(4096)), false),
+            ("unicode-single-paragraph-24KB", stream(unicode(24576)), false),
+            ("unicode-open-fence-24KB", stream("```swift\n" + unicode(24576)), false),
+            ("unicode-repeat-sealed-1KB", Array(repeating: unicode(1022) + "\n\n", count: 64), false),
+        ]
+        let mixedChunks = [
+            "## Result\n", "\nIntro with **bold** and `code`", ".\n", "\n",
+            "- first", " item\n- [ ] second\n", "  - nested\n", "\n",
+            "```swift", "\nlet value = 1\n", "\nlet next = 2\n", "```", "\n", "\n",
+            "| key | value |\n", "| --- | --- |\n", "| a | 1 |\n", "| b | 2 |", "\n\n",
+            "> quote\n", "> continuation\n", "\n", "Final paragraph", ".\n\n",
+        ]
+        cases.append(("mixed-chunk-stream", snapshots(Array(repeating: mixedChunks, count: 3).flatMap(\.self)), true))
+        let unicodeMixed = mixedChunks.map {
+            $0.replacingOccurrences(of: "first", with: "中 e\u{301} 👩🏽‍💻")
+                .replacingOccurrences(of: "value", with: "值")
+                .replacingOccurrences(of: "paragraph", with: "段落 🇨🇦")
+        }
+        cases.append(("unicode-mixed-chunk-stream", snapshots(Array(repeating: unicodeMixed, count: 3).flatMap(\.self)), false))
+
+        /// Content-sensitive checksum, not just block counts: all text and
+        /// structural fields participate. Hashing and assertions are OUTSIDE
+        /// the timed parse. The same process uses the same Hasher seed.
+        func checksum(_ blocks: [MarkdownText.Block]) -> Int {
+            var hash = Hasher()
+            hash.combine(blocks.count)
+            for block in blocks {
+                switch block {
+                case let .prose(text):
+                    hash.combine(0); hash.combine(text)
+                case let .heading(level, text):
+                    hash.combine(1); hash.combine(level); hash.combine(text)
+                case let .list(items):
+                    hash.combine(2); hash.combine(items.count)
+                    for item in items {
+                        hash.combine(item.ordinal); hash.combine(item.indent)
+                        hash.combine(item.checkbox); hash.combine(item.text)
+                    }
+                case let .code(language, code):
+                    hash.combine(3); hash.combine(language); hash.combine(code)
+                case let .table(header, rows):
+                    hash.combine(4); hash.combine(header); hash.combine(rows)
+                case let .quote(text):
+                    hash.combine(5); hash.combine(text)
+                case .rule:
+                    hash.combine(6)
+                }
+            }
+            return hash.finalize()
+        }
+        func median(_ values: [Double]) -> Double {
+            values.sorted()[values.count / 2]
+        }
+        for benchmark in cases {
+            let expected = benchmark.snapshots.map { checksum(MarkdownText.splitBlocks($0)) }
+            func timed(_ parse: (String) -> [MarkdownText.Block]) -> (total: Double, worst: Double, p95: Double) {
+                var times: [Double] = []
+                times.reserveCapacity(benchmark.snapshots.count)
+                for (index, snapshot) in benchmark.snapshots.enumerated() {
+                    let start = ProcessInfo.processInfo.systemUptime
+                    let blocks = parse(snapshot)
+                    times.append((ProcessInfo.processInfo.systemUptime - start) * 1000)
+                    XCTAssertEqual(checksum(blocks), expected[index], "\(benchmark.name), frame \(index)")
+                }
+                let sorted = times.sorted()
+                return (times.reduce(0, +), sorted.last ?? 0, sorted[(sorted.count * 95 + 99) / 100 - 1])
+            }
+            func reference() -> (total: Double, worst: Double, p95: Double) {
+                benchmark.useOld
+                    ? timed(PreviousLiveBlockCache().blocks(for:))
+                    : timed(MarkdownText.splitBlocks)
+            }
+            // Warm BOTH paths. Fresh caches reproduce the entire stream.
+            _ = reference()
+            _ = timed(LiveBlockCache().blocks(for:))
+            var old: [(total: Double, worst: Double, p95: Double)] = []
+            var new: [(total: Double, worst: Double, p95: Double)] = []
+            for round in 0 ..< 3 {
+                // Alternate order to reduce systematic thermal/order bias.
+                if round.isMultiple(of: 2) {
+                    old.append(reference())
+                    new.append(timed(LiveBlockCache().blocks(for:)))
+                } else {
+                    new.append(timed(LiveBlockCache().blocks(for:)))
+                    old.append(reference())
+                }
+            }
+            let oldTotal = median(old.map(\.total))
+            let newTotal = median(new.map(\.total))
+            print(String(
+                format: "LiveBlockCache %@: bytes=%d frames=%d reference=%@ rounds=3 median total/worst/p95(ms) old=%.3f/%.3f/%.3f new=%.3f/%.3f/%.3f new/old=%.3fx",
+                benchmark.name, benchmark.snapshots.last?.utf8.count ?? 0, benchmark.snapshots.count,
+                benchmark.useOld ? "old-cache" : "whole-Unicode",
+                oldTotal, median(old.map(\.worst)), median(old.map(\.p95)),
+                newTotal, median(new.map(\.worst)), median(new.map(\.p95)),
+                newTotal / max(oldTotal, Double.leastNonzeroMagnitude),
+            ))
+        }
+        print(String(format: "LiveBlockCache benchmark matrix wall=%.3fs (target <3s, not a timing assertion)",
+                     ProcessInfo.processInfo.systemUptime - benchmarkStart))
+    }
+
+    /// Frozen pre-optimization implementation, used only for the ASCII
+    /// benchmark; Unicode and replacement correctness use splitBlocks.
+    private final class PreviousLiveBlockCache {
+        private var parsedPrefix = ""
+        private var prefixBlocks: [MarkdownText.Block] = []
+        private var scannedSource = ""
+        private var scannedFences = 0
+        private var stableOffset = 0
+
+        func blocks(for source: String) -> [MarkdownText.Block] {
+            guard let split = stableBoundary(of: source) else {
+                return MarkdownText.splitBlocks(source)
+            }
+            let prefix = source[..<split]
+            if prefix != parsedPrefix[...] {
+                prefixBlocks = MarkdownText.splitBlocks(String(prefix))
+                parsedPrefix = String(prefix)
+            }
+            let tail = String(source[split...])
+            return tail.isEmpty ? prefixBlocks : prefixBlocks + MarkdownText.splitBlocks(tail)
+        }
+
+        private func stableBoundary(of source: String) -> String.Index? {
+            if !source.hasPrefix(scannedSource) {
+                scannedSource = ""
+                scannedFences = 0
+                stableOffset = 0
+                parsedPrefix = ""
+                prefixBlocks = []
+            }
+            let suffix = source.dropFirst(scannedSource.count)
+            let scannedBytes = scannedSource.utf8.count
+            var completeBytes = 0
+            for line in suffix.split(separator: "\n", omittingEmptySubsequences: false).dropLast() {
+                let trimmed = line.drop(while: { $0 == " " || $0 == "\t" })
+                if trimmed.hasPrefix("```") {
+                    scannedFences += 1
+                }
+                completeBytes += line.utf8.count + 1
+                if line.allSatisfy({ $0 == " " || $0 == "\t" || $0 == "\r" }), scannedFences % 2 == 0 {
+                    stableOffset = scannedBytes + completeBytes
+                }
+            }
+            if completeBytes > 0 {
+                let end = source.utf8.index(source.startIndex, offsetBy: scannedBytes + completeBytes)
+                scannedSource = String(source[..<end])
+            }
+            guard stableOffset > 0 else { return nil }
+            return source.utf8.index(source.startIndex, offsetBy: stableOffset)
+        }
+    }
+
     // MARK: Live prose incremental rendering (LiveInlineCache)
 
     /// The live incremental render must produce the SAME characters
