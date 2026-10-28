@@ -113,6 +113,37 @@ func TestBuildDeclaresWorkflowAndConciseRules(t *testing.T) {
 	assert.Contains(t, text, "do not dump the full contents of files")
 }
 
+func TestFinalDeliveryContractIsAuditedAndCacheable(t *testing.T) {
+	b := NewBuilder("/ws", WithEnvProvider(staticEnvProvider{env: testEnvironment()}), noRules)
+	sections, err := b.BuildSections(t.Context())
+	require.NoError(t, err)
+	for _, instruction := range []string{
+		"keep progress notes brief",
+		"self-contained final answer",
+		"without expanding the execution history",
+		"what was actually verified",
+		"real name or path",
+		"Never use only \"already shown above\"",
+		"do not invent links or regenerate an existing resource",
+		"plan/goal bookkeeping before the final answer",
+		"eventual final answer must incorporate the completed work",
+		"not an extra summary tool or a mandatory additional model call",
+		"simple Q&A needs only a direct answer",
+	} {
+		assert.Contains(t, sections.Static, instruction)
+		assert.NotContains(t, sections.Dynamic, instruction)
+	}
+	assertRuleSourcePresent(t, sections.Refs, "loom://builtin/communication")
+	// The managed base deliberately owns editorial policy; do not silently
+	// inject built-in delivery instructions into a user-managed replacement.
+	managed := NewBuilder("/ws", WithEnvProvider(staticEnvProvider{env: testEnvironment()}), noRules,
+		WithManagedBase("custom", 1, "Managed communication policy"))
+	managedSections, err := managed.BuildSections(t.Context())
+	require.NoError(t, err)
+	assert.Contains(t, managedSections.Static, "Managed communication policy")
+	assert.NotContains(t, managedSections.Static, "self-contained final answer")
+}
+
 func TestBuildRendersEnvironmentSnapshot(t *testing.T) {
 	b := NewBuilder("/ws", WithEnvProvider(staticEnvProvider{env: testEnvironment()}), noRules)
 	text, _, err := b.Build(context.Background())

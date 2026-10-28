@@ -146,6 +146,7 @@ func (l *Loop) continueGoalIfActive() bool {
 	}
 	l.Run.AddUserMessage(domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Metadata:  map[string]string{"kind": "goal_continue"},
 		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: goalContinuationPrompt(goal)}},
 		CreatedAt: l.Run.Clock.Now(),
 	})

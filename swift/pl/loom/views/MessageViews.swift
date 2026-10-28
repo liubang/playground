@@ -172,6 +172,72 @@ extension MessageRow: Equatable {
     }
 }
 
+/// Collapsed result projection. Never invoke ToolBlock: its header, status,
+/// output and inline diff belong exclusively to the source process.
+struct DeliveryRow: View {
+    let row: TranscriptModel.DeliveryRowModel
+    var artifactLoader: ((ContentPart.Artifact) async -> (data: Data, mediaType: String?)?)?
+    let onShowProcess: (String?) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(row.items.enumerated()), id: \.offset) { _, item in
+                switch item {
+                case let .image(image):
+                    InlineImageView(mediaType: image.mediaType, data: image.data, maxDim: 360)
+                case let .artifact(artifact):
+                    artifactView(artifact)
+                case let .tool(tool):
+                    toolDelivery(tool)
+                case let .toolGroup(group):
+                    ForEach(group.tools.indices, id: \.self) { index in
+                        toolDelivery(group.tools[index])
+                    }
+                default:
+                    EmptyView()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func artifactView(_ artifact: ContentPart.Artifact) -> some View {
+        if let artifactLoader {
+            ArtifactBlockView(artifact: artifact, loader: artifactLoader)
+        } else {
+            Label("Artifact \(artifact.id) (\(formatTokenCount(artifact.size))B)", systemImage: "paperclip")
+                .font(.system(size: Theme.textXs))
+                .foregroundStyle(Theme.muted)
+        }
+    }
+
+    @ViewBuilder private func toolDelivery(_ tool: ToolRenderModel) -> some View {
+        if !tool.images.isEmpty || !tool.deliveryArtifacts.isEmpty {
+            Text("From \(tool.name)\(tool.target.map { " · \($0)" } ?? "")")
+                .font(.system(size: Theme.textXs))
+                .foregroundStyle(Theme.muted)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        ForEach(tool.images.indices, id: \.self) { index in
+            InlineImageView(mediaType: tool.images[index].mediaType, data: tool.images[index].data, maxDim: 360)
+        }
+        ForEach(tool.deliveryArtifacts, id: \.id) { artifact in
+            artifactView(artifact)
+        }
+        if row.showsReview, tool.needsReview {
+            Button {
+                onShowProcess(tool.callId)
+            } label: {
+                Label("Review changes\(tool.target.map { " · \($0)" } ?? "")", systemImage: "square.and.pencil")
+                    .font(.system(size: Theme.textXs))
+                    .foregroundStyle(Theme.muted)
+            }
+            .buttonStyle(.plain)
+            .help("View the original tool and changes in processing details")
+        }
+    }
+}
+
 // MARK: - Message actions (.msg-actions)
 
 /// The action row under a finished message: ghost copy button + short

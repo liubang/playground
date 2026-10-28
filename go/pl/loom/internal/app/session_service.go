@@ -1032,7 +1032,8 @@ type SharedSessionView struct {
 	// TurnSummaries carries the per-turn file-change projection so the
 	// public read-only transcript renders the same closing review blocks
 	// as the authenticated UI (derived from the event log — TurnSummary).
-	TurnSummaries []TurnSummary `json:"turn_summaries,omitempty"`
+	TurnSummaries []TurnSummary              `json:"turn_summaries,omitempty"`
+	TurnClosures  []runtimeevent.TurnClosure `json:"turn_closures,omitempty"`
 }
 
 // shareStore narrows the persisted-store capabilities the share flow needs.
@@ -1109,6 +1110,7 @@ func (s *SessionService) SharedView(ctx context.Context, token string) (SharedSe
 		UpdatedAt:     inspection.Session.UpdatedAt,
 		Messages:      inspection.Transcript.Messages,
 		TurnSummaries: turnSummariesFromEvents(inspection.Events),
+		TurnClosures:  turnClosuresFromEvents(inspection.Events),
 	}
 	// Title enrichment mirrors the session listing: the persisted sidecar
 	// title wins, the first user prompt is the best-effort fallback (a

@@ -266,6 +266,7 @@ export function App({ controller }: { controller: AppController }) {
                       <TranscriptSearch controller={controller.transcript} />
                       <TranscriptView
                         controller={controller.transcript}
+                        sessionId={sessionId || ''}
                         io={transcriptIO}
                         scrollerOut={controller.scrollerRef}
                         loading={sessionLoading}

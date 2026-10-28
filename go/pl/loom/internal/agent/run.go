@@ -30,6 +30,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -75,6 +76,10 @@ type Run struct {
 
 	pendingEvents    []domain.Event
 	persistedVersion int64
+	// outputTruncated is sticky within this run, unlike the consecutive
+	// maxOutputStops retry counter. A split answer cannot safely be reduced
+	// to its last response, even after subsequent complete/tool responses.
+	outputTruncated bool
 	// turnStartedAt anchors the per-prompt wall-clock observability
 	// counter (Usage.WallTime is display-only, never a budget dimension).
 	turnStartedAt time.Time
@@ -148,6 +153,7 @@ func RestoreRun(id domain.RunID, sessionID domain.SessionID, state domain.RunSta
 		Usage:            usage,
 		Limits:           limits,
 		Messages:         msgs,
+		outputTruncated:  runHasTruncatedResponse(msgs, id),
 		Version:          version,
 		Clock:            clock,
 		persistedVersion: version,
@@ -155,6 +161,19 @@ func RestoreRun(id domain.RunID, sessionID domain.SessionID, state domain.RunSta
 		// original start is unknowable from the checkpoint.
 		turnStartedAt: clock.Now(),
 	}
+}
+
+// runHasTruncatedResponse restores only this run's truncation fact. Recovery
+// creates a new run ID, so an interrupted predecessor's split answer stays
+// outside the new run's folding scope.
+func runHasTruncatedResponse(messages []domain.Message, runID domain.RunID) bool {
+	for _, msg := range messages {
+		if msg.Role == domain.RoleAssistant && msg.Metadata["run_id"] == runID.String() &&
+			msg.Metadata["stop_reason"] == string(domain.StopMaxOutput) {
+			return true
+		}
+	}
+	return false
 }
 
 // cleanSuccess reports whether a terminal outcome means the run's task was
@@ -562,7 +581,7 @@ func (r *Run) Resume() ([]domain.Event, error) {
 }
 
 // Terminate terminates the run.
-func (r *Run) Terminate(outcome domain.Outcome) ([]domain.Event, error) {
+func (r *Run) Terminate(outcome domain.Outcome, finalAnswerMessageIDs ...domain.MessageID) ([]domain.Event, error) {
 	newState, err := r.State.Terminate(outcome)
 	if err != nil {
 		return nil, err
@@ -578,7 +597,13 @@ func (r *Run) Terminate(outcome domain.Outcome) ([]domain.Event, error) {
 		evtType = domain.EventRunCancelled
 	}
 
-	evt := r.newEvent(evtType, r.State)
+	if outcome != domain.OutcomeSucceeded {
+		finalAnswerMessageIDs = nil
+	}
+	evt := r.newEvent(evtType, domain.RunTerminalPayload{
+		RunState: r.State, RunID: r.ID,
+		FinalAnswerMessageIDs: slices.Clone(finalAnswerMessageIDs),
+	})
 	r.pendingEvents = append(r.pendingEvents, evt)
 	return []domain.Event{evt}, nil
 }
@@ -728,6 +753,9 @@ func (r *Run) AddAssistantMessageWithUsage(msg domain.Message, usage *domain.Req
 
 func (r *Run) addAssistantMessage(msg domain.Message, usage *domain.RequestUsage) domain.Event {
 	r.normalizeMessage(&msg)
+	if msg.Metadata["stop_reason"] == string(domain.StopMaxOutput) {
+		r.outputTruncated = true
+	}
 	// Stamp the run/trace identity so both frontends (per-turn feedback
 	// targeting) and the feedback endpoint (run_id → trace_id lookup) can
 	// correlate this message with its observability trace after restart —
@@ -887,6 +915,12 @@ func (r *Run) IncrementTurn() {
 }
 
 func (r *Run) normalizeMessage(msg *domain.Message) {
+	if msg.Metadata == nil {
+		msg.Metadata = make(map[string]string)
+	} else {
+		msg.Metadata = cloneMetadata(msg.Metadata)
+	}
+	msg.Metadata["run_id"] = r.ID.String()
 	msg.Sequence = int64(len(r.Messages) + 1)
 	if msg.Status == "" {
 		msg.Status = domain.MessageStatusFinal
@@ -1996,7 +2030,7 @@ func (l *Loop) callModel(ctx context.Context) error {
 	l.reportContextUsage(ctx)
 
 	if len(response.ToolCalls()) == 0 {
-		return l.determineCompletion(ctx, stop)
+		return l.determineCompletion(ctx, stop, response)
 	}
 	return l.routeToolCalls(ctx)
 }
@@ -2139,6 +2173,7 @@ func (l *Loop) reconcilePlanIfUnfinished() bool {
 	l.planReconcileUsed = true
 	l.Run.AddUserMessage(domain.Message{
 		ID: domain.NewMessageID(), Role: domain.RoleUser,
+		Metadata:  map[string]string{"kind": "plan_reconcile"},
 		Parts:     []domain.ContentPart{{Kind: domain.PartText, Text: planReconcilePrompt(plan)}},
 		CreatedAt: l.Run.Clock.Now(),
 	})
@@ -2162,7 +2197,7 @@ func planReconcilePrompt(plan domain.Plan) string {
 Before ending your turn, reconcile the plan: if the remaining work is in fact complete (its deliverable is already produced in this conversation), call update_task (action "plan") to mark those steps completed with a brief evidence note — that is closing bookkeeping, not pre-marking. Otherwise keep executing the remaining steps instead of ending.`, strings.TrimRight(remaining.String(), "\n"))
 }
 
-func (l *Loop) determineCompletion(ctx context.Context, stop domain.StopReason) error {
+func (l *Loop) determineCompletion(ctx context.Context, stop domain.StopReason, responses ...domain.Message) error {
 	switch stop {
 	case domain.StopEndTurn:
 		// The budget wrap-up turn ends here: the model produced its final
@@ -2175,13 +2210,34 @@ func (l *Loop) determineCompletion(ctx context.Context, stop domain.StopReason) 
 			_, err := l.Run.TransitionTo(domain.PhasePreparing)
 			return err
 		}
+		wasWrapUp := l.Run.WrapUpPending != ""
 		if l.continueGoalIfActive() {
 			_, err := l.Run.TransitionTo(domain.PhasePreparing)
 			return err
 		}
-		l.terminate(ctx, domain.OutcomeSucceeded)
+		// Accept only this call's complete visible answer, after continuation
+		// decisions. Never search history for an earlier plausible answer.
+		var finalIDs []domain.MessageID
+		if !wasWrapUp && !l.Run.outputTruncated && l.maxOutputStops == 0 && len(responses) == 1 {
+			response := responses[0]
+			if response.Role == domain.RoleAssistant && response.Status == domain.MessageStatusFinal && !response.ID.IsZero() && len(response.ToolCalls()) == 0 {
+				for _, part := range response.Parts {
+					if part.ModelOnly {
+						continue
+					}
+					if (part.Kind == domain.PartText && strings.TrimSpace(part.Text) != "") ||
+						(part.Kind == domain.PartImage && part.Image != nil && part.Image.Data != "") ||
+						(part.Kind == domain.PartArtifact && part.Artifact != nil && !part.Artifact.ID.IsZero()) {
+						finalIDs = []domain.MessageID{response.ID}
+						break
+					}
+				}
+			}
+		}
+		l.terminate(ctx, domain.OutcomeSucceeded, finalIDs...)
 		return nil
 	case domain.StopMaxOutput:
+		l.Run.outputTruncated = true
 		l.maxOutputStops++
 		if l.Run.WrapUpPending != "" {
 			// Even the wrap-up turn overflowed the cap: accept whatever
@@ -3717,11 +3773,11 @@ func runAssistantText(messages []domain.Message, runID domain.RunID) string {
 	return ""
 }
 
-func (l *Loop) terminate(ctx context.Context, outcome domain.Outcome) {
+func (l *Loop) terminate(ctx context.Context, outcome domain.Outcome, finalIDs ...domain.MessageID) {
 	if l.Run.State.Lifecycle == domain.LifecycleTerminal {
 		return
 	}
-	if _, err := l.Run.Terminate(outcome); err != nil {
+	if _, err := l.Run.Terminate(outcome, finalIDs...); err != nil {
 		if l.Logger != nil {
 			l.Logger.Error("terminate failed", "error", err)
 		}

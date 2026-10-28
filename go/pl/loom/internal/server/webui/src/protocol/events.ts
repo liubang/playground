@@ -35,6 +35,7 @@ export interface TurnStartedPayload {
 }
 
 export interface TurnFinishedPayload {
+  closure?: import('./types').TurnClosure
   // User-visible failure summary; empty for a clean finish
   error?: string
   // Per-path projection of the turn's write-tool file mutations (deduped;
@@ -57,6 +58,7 @@ export interface TextDeltaPayload {
 }
 
 export interface ResponseCompletedPayload {
+  message_id?: string
   text?: string
 }
 
@@ -196,6 +198,7 @@ interface Envelope<K extends string, P> {
   sequence?: number
   time?: string
   run_id?: string
+  request_id?: string
   payload?: P
 }
 

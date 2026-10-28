@@ -106,6 +106,10 @@ struct TurnStartedPayload: Decodable, Sendable {
     }
 }
 
+struct TurnFinishedPayload: Decodable, Sendable {
+    let closure: TurnClosure?
+}
+
 struct RunPhaseChangedPayload: Decodable, Sendable {
     let phase: RunPhase
 

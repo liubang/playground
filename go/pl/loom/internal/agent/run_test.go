@@ -51,6 +51,181 @@ func newTestRun(limits domain.Limits) *Run {
 	return NewRun(domain.NewSessionID(), limits, clock)
 }
 
+func TestTerminalAcceptedFinalReferences(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		stop   domain.StopReason
+		status domain.MessageStatus
+		parts  []domain.ContentPart
+		wrapup string
+		want   bool
+	}{
+		{name: "accepted text", stop: domain.StopEndTurn, status: domain.MessageStatusFinal, parts: []domain.ContentPart{{Kind: domain.PartText, Text: "done"}}, want: true},
+		{name: "accepted image", stop: domain.StopEndTurn, status: domain.MessageStatusFinal, parts: []domain.ContentPart{{Kind: domain.PartImage, Image: &domain.ImageContent{Data: "image"}}}, want: true},
+		{name: "accepted artifact", stop: domain.StopEndTurn, status: domain.MessageStatusFinal, parts: []domain.ContentPart{{Kind: domain.PartArtifact, Artifact: &domain.ArtifactRef{ID: domain.NewArtifactID()}}}, want: true},
+		{name: "model only", stop: domain.StopEndTurn, status: domain.MessageStatusFinal, parts: []domain.ContentPart{{Kind: domain.PartArtifact, ModelOnly: true, Artifact: &domain.ArtifactRef{ID: domain.NewArtifactID()}}}},
+		{name: "empty", stop: domain.StopEndTurn, status: domain.MessageStatusFinal},
+		{name: "interrupted", stop: domain.StopEndTurn, status: domain.MessageStatusInterrupted, parts: []domain.ContentPart{{Kind: domain.PartText, Text: "partial"}}},
+		{name: "truncated wrapup", stop: domain.StopMaxOutput, status: domain.MessageStatusFinal, wrapup: dimensionTokens, parts: []domain.ContentPart{{Kind: domain.PartText, Text: "partial"}}},
+		{name: "goal wrapup", stop: domain.StopEndTurn, status: domain.MessageStatusFinal, wrapup: wrapUpGoalTokens, parts: []domain.ContentPart{{Kind: domain.PartText, Text: "partial"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			run := newTestRun(domain.DefaultLimits())
+			run.State.Phase = domain.PhaseCallingModel
+			run.WrapUpPending = tc.wrapup
+			// Earlier visible text must never substitute for this response.
+			run.AddAssistantMessage(domain.Message{ID: domain.NewMessageID(), Role: domain.RoleAssistant, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "earlier"}}})
+			response := domain.Message{ID: domain.NewMessageID(), Role: domain.RoleAssistant, Status: tc.status, Parts: tc.parts}
+			run.AddAssistantMessage(response)
+			loop := &Loop{Run: run}
+			if err := loop.determineCompletion(t.Context(), tc.stop, response); err != nil {
+				t.Fatal(err)
+			}
+			var terminal domain.RunTerminalPayload
+			if err := json.Unmarshal(run.PendingEvents()[len(run.PendingEvents())-1].Payload, &terminal); err != nil {
+				t.Fatal(err)
+			}
+			if terminal.RunID != run.ID || (len(terminal.FinalAnswerMessageIDs) == 1) != tc.want {
+				t.Fatalf("terminal = %+v, want reference=%v", terminal, tc.want)
+			}
+			if tc.want && terminal.FinalAnswerMessageIDs[0] != response.ID {
+				t.Fatalf("referenced a different response: %+v", terminal)
+			}
+			var legacy domain.RunState
+			if err := json.Unmarshal(run.PendingEvents()[len(run.PendingEvents())-1].Payload, &legacy); err != nil || legacy != run.State {
+				t.Fatalf("flat legacy RunState: %+v, %v", legacy, err)
+			}
+		})
+	}
+}
+
+func TestTerminalSplitAnswerKeepsBothResponsesUnfolded(t *testing.T) {
+	run := newTestRun(domain.DefaultLimits())
+	store := fakes.NewFakeStore()
+	if err := store.CreateSession(t.Context(), run.SessionID, domain.WorkspaceID{}); err != nil {
+		t.Fatal(err)
+	}
+	model := fakes.NewFakeModel(
+		fakes.ScriptEntry{Text: "delivery first half", StopReason: domain.StopMaxOutput},
+		fakes.ScriptEntry{Text: "delivery second half", StopReason: domain.StopEndTurn},
+	)
+	loop := &Loop{Run: run, Model: model, Store: store, Registry: NewToolRegistry()}
+	if err := loop.Execute(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if len(model.Calls()) != 2 || len(run.Messages) != 2 || loop.maxOutputStops != 0 {
+		t.Fatalf("calls=%d messages=%d streak=%d", len(model.Calls()), len(run.Messages), loop.maxOutputStops)
+	}
+	events, err := store.LoadEvents(t.Context(), run.SessionID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var terminal domain.RunTerminalPayload
+	if err := json.Unmarshal(events[len(events)-1].Payload, &terminal); err != nil {
+		t.Fatal(err)
+	}
+	if terminal.Outcome != domain.OutcomeSucceeded || len(terminal.FinalAnswerMessageIDs) != 0 {
+		t.Fatalf("split answer must not fold: %+v", terminal)
+	}
+	for i, msg := range run.Messages {
+		if msg.Status != domain.MessageStatusFinal || msg.Metadata["run_id"] != run.ID.String() {
+			t.Fatalf("response %d not preserved: %+v", i, msg)
+		}
+	}
+}
+
+func TestTerminalRestoredTruncationScopedToRun(t *testing.T) {
+	for _, sameRun := range []bool{true, false} {
+		t.Run(fmt.Sprintf("sameRun=%v", sameRun), func(t *testing.T) {
+			original := newTestRun(domain.DefaultLimits())
+			original.AddAssistantMessage(domain.Message{
+				ID: domain.NewMessageID(), Role: domain.RoleAssistant,
+				Parts:    []domain.ContentPart{{Kind: domain.PartText, Text: "first half"}},
+				Metadata: map[string]string{"stop_reason": string(domain.StopMaxOutput)},
+			})
+			id := original.ID
+			if !sameRun {
+				id = domain.NewRunID()
+			}
+			run := RestoreRun(id, original.SessionID, domain.RunState{Lifecycle: domain.LifecycleActive, Phase: domain.PhasePreparing}, domain.Plan{}, domain.Usage{}, original.Limits, original.Messages, 0, original.Clock)
+			loop := &Loop{Run: run, Model: fakes.NewFakeModel(fakes.ScriptEntry{Text: "second half", StopReason: domain.StopEndTurn}), Registry: NewToolRegistry()}
+			if err := loop.Execute(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			var terminal domain.RunTerminalPayload
+			events := run.PendingEvents()
+			if err := json.Unmarshal(events[len(events)-1].Payload, &terminal); err != nil {
+				t.Fatal(err)
+			}
+			if (len(terminal.FinalAnswerMessageIDs) == 0) != sameRun {
+				t.Fatalf("sameRun=%v terminal=%+v", sameRun, terminal)
+			}
+		})
+	}
+}
+
+func TestTerminalContinuationDoesNotAcceptFinal(t *testing.T) {
+	for _, plan := range []bool{true, false} {
+		run := newTestRun(domain.DefaultLimits())
+		run.State.Phase = domain.PhaseCallingModel
+		loop := &Loop{Run: run}
+		if plan {
+			run.Plan = domain.Plan{Items: []domain.PlanItem{{Goal: "pending", Status: domain.PlanItemPending}}}
+			loop.planRevisedThisRun = true
+		} else {
+			run.Goal = &domain.Goal{Status: domain.GoalStatusActive, Objective: "keep working"}
+		}
+		response := domain.Message{ID: domain.NewMessageID(), Role: domain.RoleAssistant, Status: domain.MessageStatusFinal, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "not yet accepted"}}}
+		run.AddAssistantMessage(response)
+		if err := loop.determineCompletion(t.Context(), domain.StopEndTurn, response); err != nil {
+			t.Fatal(err)
+		}
+		if run.State.Lifecycle == domain.LifecycleTerminal || run.State.Phase != domain.PhasePreparing {
+			t.Fatalf("premature terminal: %+v", run.State)
+		}
+		for _, evt := range run.PendingEvents() {
+			if evt.Type == domain.EventRunCompleted {
+				t.Fatal("continuation emitted terminal fact")
+			}
+		}
+	}
+}
+
+func TestTerminalFailureAndCancellationDropReferences(t *testing.T) {
+	for _, outcome := range []domain.Outcome{domain.OutcomeFailed, domain.OutcomeCancelled} {
+		run := newTestRun(domain.DefaultLimits())
+		events, err := run.Terminate(outcome, domain.NewMessageID())
+		if err != nil {
+			t.Fatal(err)
+		}
+		var payload domain.RunTerminalPayload
+		if err := json.Unmarshal(events[0].Payload, &payload); err != nil || len(payload.FinalAnswerMessageIDs) != 0 {
+			t.Fatalf("payload=%+v err=%v", payload, err)
+		}
+	}
+}
+
+func TestTerminalPersistFailurePropagates(t *testing.T) {
+	run := newTestRun(domain.DefaultLimits())
+	base := fakes.NewFakeStore()
+	if err := base.CreateSession(t.Context(), run.SessionID, domain.WorkspaceID{}); err != nil {
+		t.Fatal(err)
+	}
+	loop := &Loop{Run: run, Model: fakes.NewFakeModel(fakes.ScriptEntry{Text: "done", StopReason: domain.StopEndTurn}), Store: &failingStore{base: base, failOnType: domain.EventRunCompleted}, Registry: NewToolRegistry()}
+	if err := loop.Execute(t.Context()); err == nil {
+		t.Fatal("terminal persistence failure reported success")
+	}
+	events, err := base.LoadEvents(t.Context(), run.SessionID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, evt := range events {
+		if evt.Type == domain.EventRunCompleted {
+			t.Fatal("failed write became a committed success")
+		}
+	}
+}
+
 func TestNewRunStartsPreparing(t *testing.T) {
 	run := newTestRun(domain.DefaultLimits())
 	if run.State.Lifecycle != domain.LifecycleActive {

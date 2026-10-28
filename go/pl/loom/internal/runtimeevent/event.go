@@ -222,6 +222,7 @@ type ModelToolCallDeltaPayload struct {
 
 // ModelResponseCompletedPayload marks the completion of a model response.
 type ModelResponseCompletedPayload struct {
+	MessageID    domain.MessageID  `json:"message_id"`
 	RequestID    domain.EventID    `json:"request_id"`
 	StopReason   domain.StopReason `json:"stop_reason"`
 	InputTokens  int64             `json:"input_tokens"`
@@ -511,7 +512,16 @@ type TurnFileChange struct {
 // the per-path projection of the turn's file mutations (empty when the turn
 // wrote no files): frontends render it as the turn's closing review summary
 // without a second round-trip.
+// TurnClosure is derived exclusively from a persisted terminal domain event.
+// Empty references mean consumers must conservatively retain process details.
+type TurnClosure struct {
+	RunID                 domain.RunID       `json:"run_id"`
+	Outcome               domain.Outcome     `json:"outcome"`
+	FinalAnswerMessageIDs []domain.MessageID `json:"final_answer_message_ids,omitempty"`
+}
+
 type TurnFinishedPayload struct {
+	Closure *TurnClosure     `json:"closure,omitempty"`
 	Error   string           `json:"error,omitempty"`
 	Changes []TurnFileChange `json:"changes,omitempty"`
 }

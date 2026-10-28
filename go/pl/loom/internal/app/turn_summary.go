@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"unicode/utf8"
 
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -62,6 +63,80 @@ type TurnSummary struct {
 // workspace git panel, same as sessions written before this projection
 // existed.
 const turnSummariesCap = 400
+
+// closureFromEvent accepts only explicit terminal identities. Legacy state-only
+// payloads cannot establish identity and never borrow it from nearby messages.
+func closureFromEvent(evt domain.Event) (runtimeevent.TurnClosure, bool) {
+	switch evt.Type {
+	case domain.EventRunCompleted, domain.EventRunFailed, domain.EventRunCancelled:
+	default:
+		return runtimeevent.TurnClosure{}, false
+	}
+	var payload domain.RunTerminalPayload
+	if json.Unmarshal(evt.Payload, &payload) != nil || payload.RunID.IsZero() || payload.Lifecycle != domain.LifecycleTerminal {
+		return runtimeevent.TurnClosure{}, false
+	}
+	switch payload.Outcome {
+	case domain.OutcomeSucceeded, domain.OutcomeFailed, domain.OutcomeCancelled,
+		domain.OutcomeCompletedUnverified, domain.OutcomeNeedsUser, domain.OutcomeBudgetExhausted:
+	default:
+		return runtimeevent.TurnClosure{}, false
+	}
+	if (evt.Type == domain.EventRunFailed && payload.Outcome != domain.OutcomeFailed) ||
+		(evt.Type == domain.EventRunCancelled && payload.Outcome != domain.OutcomeCancelled) ||
+		(evt.Type == domain.EventRunCompleted && (payload.Outcome == domain.OutcomeFailed || payload.Outcome == domain.OutcomeCancelled)) {
+		return runtimeevent.TurnClosure{}, false
+	}
+	closure := runtimeevent.TurnClosure{RunID: payload.RunID, Outcome: payload.Outcome}
+	if payload.Outcome == domain.OutcomeSucceeded {
+		for _, id := range payload.FinalAnswerMessageIDs {
+			if id.IsZero() {
+				return closure, true
+			}
+		}
+		closure.FinalAnswerMessageIDs = slices.Clone(payload.FinalAnswerMessageIDs)
+	}
+	return closure, true
+}
+
+func appendTurnClosure(closures []runtimeevent.TurnClosure, closure runtimeevent.TurnClosure) []runtimeevent.TurnClosure {
+	for i, existing := range closures {
+		if existing.RunID == closure.RunID {
+			if existing.Outcome != closure.Outcome || !slices.Equal(existing.FinalAnswerMessageIDs, closure.FinalAnswerMessageIDs) {
+				// Conflicting committed terminals must fail closed, rather than
+				// silently preserving the first success and its fold references.
+				closures[i] = runtimeevent.TurnClosure{
+					RunID: closure.RunID, Outcome: domain.OutcomeCompletedUnverified,
+				}
+			}
+			return closures
+		}
+	}
+	closures = append(closures, closure)
+	if len(closures) > turnSummariesCap {
+		closures = slices.Clone(closures[len(closures)-turnSummariesCap:])
+	}
+	return closures
+}
+
+func turnClosuresFromEvents(events []domain.Event) []runtimeevent.TurnClosure {
+	var closures []runtimeevent.TurnClosure
+	for _, evt := range events {
+		if closure, ok := closureFromEvent(evt); ok {
+			closures = appendTurnClosure(closures, closure)
+		}
+	}
+	return closures
+}
+
+// recordCommittedClosuresLocked runs only after a successful store append.
+func (c *Controller) recordCommittedClosuresLocked(events []domain.Event) {
+	for _, evt := range events {
+		if closure, ok := closureFromEvent(evt); ok {
+			c.turnClosures = appendTurnClosure(c.turnClosures, closure)
+		}
+	}
+}
 
 // recordTurnChange folds one successful file mutation into the turn's
 // deduplicated change list: the first mutation of a path establishes it
@@ -166,10 +241,19 @@ func turnSummariesFromEvents(events []domain.Event) []TurnSummary {
 				changes = recordTurnChange(changes, change.Path, change.OldHash, change.Size)
 			}
 		case domain.EventRunCompleted:
+			if closure, ok := closureFromEvent(evt); ok {
+				runID = closure.RunID
+			}
 			flush(false, false)
 		case domain.EventRunCancelled:
+			if closure, ok := closureFromEvent(evt); ok {
+				runID = closure.RunID
+			}
 			flush(true, false)
 		case domain.EventRunFailed:
+			if closure, ok := closureFromEvent(evt); ok {
+				runID = closure.RunID
+			}
 			flush(false, true)
 		case domain.EventRunInterrupted:
 			flush(false, false)

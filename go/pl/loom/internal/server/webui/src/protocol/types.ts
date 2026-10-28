@@ -46,10 +46,11 @@ export interface MessagePart {
 }
 
 export interface Message {
+  id: string
   role?: 'user' | 'assistant' | string
   status?: 'interrupted' | string
   created_at?: string
-  metadata?: { run_id?: string }
+  metadata?: { run_id?: string; prompt_kind?: string; kind?: string }
   parts?: MessagePart[]
 }
 
@@ -115,7 +116,15 @@ export interface RevertOutcome {
   skipped?: string[]
 }
 
+export interface TurnClosure {
+  run_id: string
+  outcome: string
+  final_answer_message_ids?: string[]
+}
+
 export interface Snapshot {
+  run_id?: string
+  turn_closures?: TurnClosure[]
   state?: SessionState
   event_seq?: number
   messages?: Message[]
@@ -361,6 +370,7 @@ export interface ShareCreateResult {
 }
 
 export interface SharedView {
+  turn_closures?: TurnClosure[]
   title?: string
   session_id?: string
   updated_at?: string

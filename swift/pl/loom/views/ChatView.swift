@@ -64,7 +64,7 @@ struct ChatView: View {
 
             ZStack {
                 // Keep the transcript mounted so switching tabs preserve its scroll position.
-                TranscriptView(store: store, locateRequest: $locateRequest)
+                TranscriptView(store: store, locateRequest: $locateRequest, isReading: viewMode == .chat)
                     .opacity(viewMode == .chat ? 1 : 0)
                     .allowsHitTesting(viewMode == .chat)
                     .accessibilityHidden(viewMode != .chat)
@@ -437,6 +437,7 @@ private struct StatusPill: View {
 private struct TranscriptView: View {
     let store: SessionStore
     @Binding var locateRequest: LocateRequest?
+    var isReading = true
 
     /// Tracks the bottom sentinel's visibility: scrolling up reveals
     /// the jump-to-bottom button; returning hides it. Measured
@@ -448,6 +449,7 @@ private struct TranscriptView: View {
     /// background sizing semantics that differ across macOS
     /// releases. Global frames have no such ambiguity.
     @State private var awayFromBottom = false
+    @State private var observesProcessInput = false
     @State private var toolRevealRequest: ToolRevealRequest?
     @State private var locateSequence: UInt64 = 0
     @State private var locateTask: Task<Void, Never>?
@@ -467,6 +469,9 @@ private struct TranscriptView: View {
     /// and rubber-banding never flash it).
     private func updateAwayFromBottom() {
         awayFromBottom = sentinelMinY > scrollFrame.maxY + 8
+        if #available(macOS 15.0, *), scrollFrame.height > 0, sentinelMinY != 0 {
+            store.setTranscriptFollowingBottom(isReading && !awayFromBottom)
+        }
     }
 
     /// The user is within ~240pt of the rendered content's top edge —
@@ -496,7 +501,7 @@ private struct TranscriptView: View {
     @State private var backfilling = true
 
     private var visibleRows: ArraySlice<TranscriptModel.Row> {
-        backfilling ? store.transcript.rows.suffix(tailWindow) : store.transcript.rows[...]
+        backfilling ? store.projectedRows.suffix(tailWindow) : store.projectedRows[...]
     }
 
     var body: some View {
@@ -525,6 +530,14 @@ private struct TranscriptView: View {
 
                     ForEach(visibleRows) { row in
                         switch row {
+                        case let .process(runId, expanded):
+                            ProcessDisclosure(expanded: expanded) {
+                                let previousCount = store.projectedRows.count
+                                store.setProcessExpanded(runId: runId, expanded: !expanded)
+                                if backfilling {
+                                    tailWindow += max(0, store.projectedRows.count - previousCount)
+                                }
+                            }
                         case let .message(model):
                             MessageRow(
                                 row: model,
@@ -538,6 +551,43 @@ private struct TranscriptView: View {
                             // the draft, so unchanged rows skip body
                             // evaluation entirely.
                             .equatable()
+                            .id("chat-row-\(row.id)")
+                        case let .delivery(model):
+                            DeliveryRow(
+                                row: model,
+                                artifactLoader: { await store.artifactData($0) },
+                                onShowProcess: { callId in
+                                    guard let run = model.source.message.metadata?["run_id"] else { return }
+                                    let previousCount = store.projectedRows.count
+                                    store.setProcessExpanded(runId: run, expanded: true)
+                                    if backfilling {
+                                        tailWindow += max(0, store.projectedRows.count - previousCount)
+                                        if let index = store.projectedRows.firstIndex(where: { $0.id == model.source.message.id }),
+                                           index < store.projectedRows.count - tailWindow
+                                        {
+                                            tailWindow = store.projectedRows.count
+                                        }
+                                    }
+                                    locateTask?.cancel()
+                                    locateSequence &+= 1
+                                    let reveal = ToolRevealRequest(callId: callId, sequence: locateSequence)
+                                    store.revealTool(reveal)
+                                    toolRevealRequest = reveal
+                                    locateTask = Task { @MainActor in
+                                        await Task.yield()
+                                        guard !Task.isCancelled, toolRevealRequest == reveal else { return }
+                                        proxy.scrollTo("chat-row-\(model.source.message.id)", anchor: .center)
+                                        for delay in [80, 240] {
+                                            do {
+                                                try await Task.sleep(for: .milliseconds(delay))
+                                            } catch { return }
+                                            guard !Task.isCancelled, toolRevealRequest == reveal else { return }
+                                            proxy.scrollTo(callId.map { ToolRevealRequest.scrollId(callId: $0) }
+                                                ?? "chat-row-\(model.source.message.id)", anchor: .center)
+                                        }
+                                    }
+                                },
+                            )
                             .id("chat-row-\(row.id)")
                         case let .turnSummary(summary):
                             // .block-turn-summary: the turn's closing
@@ -562,7 +612,7 @@ private struct TranscriptView: View {
                     // receipts where the interaction happened —
                     // between the settled history and the live draft
                     // (WebUI collapseApproval / collapseQuestion).
-                    ForEach(store.resolvedReceipts) { receipt in
+                    ForEach(store.visibleResolvedReceipts) { receipt in
                         ResolvedReceiptView(receipt: receipt)
                     }
 
@@ -636,6 +686,21 @@ private struct TranscriptView: View {
             // inserted ABOVE the visible region, so the anchor's exact
             // VStack heights keep the pinned end stable while it grows.
             .defaultScrollAnchor(.bottom)
+            .modifier(ProcessReadingIntent {
+                // Explicit wheel/trackpad input, not a changing layout sentinel.
+                store.holdCurrentProcessOpen()
+            })
+            .background {
+                ProcessInputObserver(enabled: isReading && observesProcessInput) {
+                    store.holdCurrentProcessOpen()
+                }
+            }
+            .onChange(of: isReading) { _, reading in
+                if !reading {
+                    store.holdCurrentProcessOpen()
+                }
+                updateAwayFromBottom()
+            }
             .onGeometryChange(for: CGRect.self) { proxy in
                 proxy.frame(in: .global)
             } action: { frame in
@@ -665,7 +730,7 @@ private struct TranscriptView: View {
                 // history nobody scrolls through is never
                 // materialized at all (~5.7ms of layout per row).
                 while !Task.isCancelled {
-                    let count = store.transcript.rows.count
+                    let count = store.projectedRows.count
                     let settled = store.hasLoaded || store.lastError != nil
                     if tailWindow >= count, settled {
                         break
@@ -722,7 +787,13 @@ private struct TranscriptView: View {
                 locateTask = nil
                 toolRevealRequest = nil
             }
+            .onAppear {
+                observesProcessInput = true
+            }
             .onDisappear {
+                observesProcessInput = false
+                store.holdCurrentProcessOpen()
+                store.setTranscriptFollowingBottom(false)
                 locateTask?.cancel()
                 locateTask = nil
                 toolRevealRequest = nil
@@ -772,7 +843,9 @@ private struct TranscriptView: View {
         var result: [Int: String] = [:]
         var turn = 0
         for row in store.transcript.rows {
-            if case let .message(model) = row, model.message.role == .user {
+            if case let .message(model) = row, model.message.role == .user,
+               !model.message.isInternalContinuation
+            {
                 turn += 1
                 result[turn] = row.id
             }
@@ -797,11 +870,12 @@ private struct TranscriptView: View {
     ///    no longer at the bottom. (The WebUI's jump.ts polls for up
     ///    to 4s for the same class of race.)
     private func locate(_ request: LocateRequest, proxy: ScrollViewProxy) {
-        let rows = store.transcript.rows
         locateTask?.cancel()
         locateSequence &+= 1
         let reveal = ToolRevealRequest(callId: request.callId, sequence: locateSequence)
+        store.revealTool(reveal)
         toolRevealRequest = reveal
+        let rows = store.projectedRows
         var targetId: String?
         var targetRowId: String?
         var anchor: UnitPoint = .center
@@ -850,6 +924,129 @@ private struct TranscriptView: View {
         )
         .frame(height: 28)
         .allowsHitTesting(false)
+    }
+}
+
+private struct ProcessDisclosure: View {
+    let expanded: Bool
+    let toggle: () -> Void
+    @State private var hovered = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        Button(action: toggle) {
+            HStack(spacing: 5) {
+                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                Text(expanded ? "Hide processing details" : "View processing details")
+            }
+            .font(.system(size: Theme.textXs))
+            .foregroundStyle(hovered || focused ? Theme.fg : Theme.muted)
+            .padding(.horizontal, 6)
+            .frame(minHeight: 28)
+            .contentShape(Rectangle())
+            .background(hovered ? Theme.bg2 : Color.clear, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
+            .overlay(RoundedRectangle(cornerRadius: Theme.radiusSm).strokeBorder(focused ? Theme.muted : Color.clear))
+        }
+        .buttonStyle(.plain)
+        .focused($focused)
+        .onHover { hovered = $0 }
+        .help(expanded ? "Hide this turn's process" : "Show this turn's process")
+        .accessibilityLabel(expanded ? "Hide processing details" : "View processing details")
+        .accessibilityHint("Toggle this turn's process")
+    }
+}
+
+/// Observe input before a drag selection can outlive the running turn. This
+/// background view neither receives clicks nor changes the first responder.
+@MainActor
+private struct ProcessInputObserver: NSViewRepresentable {
+    let enabled: Bool
+    let interact: @MainActor () -> Void
+
+    func makeNSView(context _: Context) -> ProcessInputEventView {
+        let view = ProcessInputEventView()
+        view.update(enabled: enabled, interact: interact)
+        return view
+    }
+
+    func updateNSView(_ nsView: ProcessInputEventView, context _: Context) {
+        nsView.update(enabled: enabled, interact: interact)
+    }
+
+    static func dismantleNSView(_ nsView: ProcessInputEventView, coordinator _: ()) {
+        nsView.update(enabled: false, interact: nil)
+    }
+}
+
+@MainActor
+private final class ProcessInputEventView: NSView {
+    private var monitor: Any?
+    private var enabled = false
+    private var interact: (@MainActor () -> Void)?
+
+    override var acceptsFirstResponder: Bool {
+        false
+    }
+
+    override func hitTest(_: NSPoint) -> NSView? {
+        nil
+    }
+
+    func update(enabled: Bool, interact: (@MainActor () -> Void)?) {
+        self.enabled = enabled
+        self.interact = enabled ? interact : nil
+        updateMonitor()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        updateMonitor()
+    }
+
+    private func updateMonitor() {
+        guard enabled, window != nil else {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+            return
+        }
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { [weak self] event in
+            // AppKit delivers local monitors synchronously on the main thread;
+            // do not defer the hold until after text selection has started.
+            MainActor.assumeIsolated {
+                self?.observe(event)
+            }
+            return event
+        }
+    }
+
+    private func observe(_ event: NSEvent) {
+        guard enabled, let window, event.window === window,
+              !isHiddenOrHasHiddenAncestor else { return }
+        // Keyboard selection can use a field editor outside this NSView's
+        // ancestry. Conservatively protect the whole same window for keyDown.
+        guard event.type == .keyDown || bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+        interact?()
+    }
+}
+
+/// Scroll phases report user input; geometry alone also changes during layout.
+/// On older systems without phases, automatic folding stays disabled.
+private struct ProcessReadingIntent: ViewModifier {
+    let interact: () -> Void
+
+    func body(content: Content) -> some View {
+        if #available(macOS 15.0, *) {
+            content.onScrollPhaseChange { _, phase in
+                if phase == .tracking || phase == .interacting {
+                    interact()
+                }
+            }
+        } else {
+            content
+        }
     }
 }
 

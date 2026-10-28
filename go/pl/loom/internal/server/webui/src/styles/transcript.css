@@ -1,3 +1,43 @@
+/* Flat process disclosure; uses the existing theme palette. */
+.process-toggle {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.process-toggle:hover {
+  color: var(--fg);
+}
+.process-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+
+.delivery-caption {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.delivery-caption > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tool-delivery > .block {
+  margin-bottom: 0;
+}
+
 /* transcript */
 .transcript {
   overflow-y: auto;

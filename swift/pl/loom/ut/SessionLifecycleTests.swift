@@ -182,11 +182,14 @@ final class SessionLifecycleTests: XCTestCase {
         )
     }
 
-    private func event(_ sequence: UInt64, _ kind: String, _ payload: String = "{}") -> SSEFrame {
-        SSEFrame(content: .event(
+    private func event(
+        _ sequence: UInt64, _ kind: String, _ payload: String = "{}", runId: String? = nil,
+    ) -> SSEFrame {
+        let run = runId.map { ",\"run_id\":\"\($0)\"" } ?? ""
+        return SSEFrame(content: .event(
             id: sequence, event: kind,
             data: """
-            {"version":1,"sequence":\(sequence),"session_id":"s","kind":"\(kind)","durable":true,"payload":\(payload)}
+            {"version":1,"sequence":\(sequence),"session_id":"s","kind":"\(kind)","durable":true,"payload":\(payload)\(run)}
             """,
         ))
     }
@@ -202,6 +205,577 @@ final class SessionLifecycleTests: XCTestCase {
         {"state":"\(state)","session_id":"s","model_name":"test","turn_count":2,"event_seq":\(sequence),
         "messages":[{"id":"a1","role":"assistant","status":"final","parts":[{"kind":"text","text":"canonical"}]}\(user)]}
         """.utf8)
+    }
+
+    private func processSnapshot(state: String, sequence: Int, closure: Bool, runId: String? = nil) -> Data {
+        let run = runId.map { ",\"run_id\":\"\($0)\"" } ?? ""
+        return Data("""
+        {"state":"\(state)","session_id":"s","model_name":"test","turn_count":1,"event_seq":\(sequence)\(run),
+        "messages":[
+        {"id":"work","role":"assistant","status":"final","metadata":{"run_id":"r"},"parts":[{"kind":"text","text":"working"}]},
+        {"id":"final","role":"assistant","status":"final","metadata":{"run_id":"r"},"parts":[{"kind":"text","text":"answer"}]}]
+        \(closure ? ",\"turn_closures\":[{\"run_id\":\"r\",\"outcome\":\"succeeded\",\"final_answer_message_ids\":[\"final\"]}]" : "")}
+        """.utf8)
+    }
+
+    private func receiptSnapshot(sequence: Int, closures: String) -> Data {
+        Data("""
+        {"state":"idle","session_id":"s","model_name":"test","turn_count":2,"event_seq":\(sequence),
+        "messages":[
+        {"id":"work","role":"assistant","status":"final","metadata":{"run_id":"r"},"parts":[{"kind":"text","text":"working"}]},
+        {"id":"final","role":"assistant","status":"final","metadata":{"run_id":"r"},"parts":[{"kind":"text","text":"answer"}]},
+        {"id":"work2","role":"assistant","status":"final","metadata":{"run_id":"r2"},"parts":[{"kind":"text","text":"working again"}]},
+        {"id":"final2","role":"assistant","status":"final","metadata":{"run_id":"r2"},"parts":[{"kind":"text","text":"another answer"}]}],
+        "turn_closures":[\(closures)]}
+        """.utf8)
+    }
+
+    func testResolvedReceiptsFoldOnlyAfterTrustedCompletionAndRestoreUnchanged() async throws {
+        let (api, session) = try makeAPI()
+        defer { session.invalidateAndCancel() }
+        let frames = LifecycleFrames()
+        let store = makeStore(api, frames: frames)
+        defer { store.stop() }
+        LifecycleURLProtocol.respond(body: processSnapshot(state: "running", sequence: 1, closure: false))
+        store.start()
+        try await waitFor { frames.attachments.count == 1 }
+        store.setTranscriptFollowingBottom(true)
+        frames.yield(event(2, "approval.resolved", #"{"approval_id":"allowed","decision":"allow","actor":"reviewer"}"#, runId: "r"))
+        frames.yield(event(3, "question.answered", #"{"question_id":"answered","skipped":false}"#, runId: "r"))
+        frames.yield(event(4, "runtime.warning", #"{"message":"keep this warning"}"#, runId: "r"))
+        try await waitFor { store.resolvedReceipts.count == 2 && store.notices.count == 1 }
+        let originals = store.resolvedReceipts
+        XCTAssertTrue(store.isBusy)
+        XCTAssertTrue(store.transcript.processes.isEmpty)
+        XCTAssertEqual(originals.map(\.id), ["allowed", "answered"])
+        XCTAssertEqual(originals.map(\.runId), ["r", "r"])
+        XCTAssertEqual(originals.map(\.kind), [
+            .approval(allowed: true, actor: "reviewer"), .question(skipped: false, summary: nil),
+        ])
+        XCTAssertEqual(store.visibleResolvedReceipts, originals)
+
+        // A later echo must not rewrite the original id, outcome, or run ownership.
+        frames.yield(event(5, "approval.resolved", #"{"approval_id":"allowed","decision":"deny"}"#, runId: "r2"))
+        LifecycleURLProtocol.respond(body: processSnapshot(state: "idle", sequence: 6, closure: true))
+        frames.yield(event(6, "turn.finished", runId: "r"))
+        try await waitFor { store.transcript.processes["r"] != nil }
+        XCTAssertFalse(store.processState.expandedRuns.contains("r"))
+        XCTAssertTrue(store.visibleResolvedReceipts.isEmpty)
+        XCTAssertEqual(store.resolvedReceipts, originals)
+        XCTAssertEqual(store.notices, ["keep this warning"])
+
+        store.setProcessExpanded(runId: "r", expanded: true)
+        XCTAssertEqual(store.visibleResolvedReceipts, originals)
+        await store.refresh()
+        XCTAssertEqual(store.resolvedReceipts, originals)
+        XCTAssertEqual(store.visibleResolvedReceipts, originals)
+        store.setProcessExpanded(runId: "r", expanded: false)
+        XCTAssertTrue(store.visibleResolvedReceipts.isEmpty)
+        XCTAssertEqual(store.resolvedReceipts, originals)
+    }
+
+    func testDeniedSkippedUnownedAndOtherRunReceiptsStayConservative() async throws {
+        let (api, session) = try makeAPI()
+        defer { session.invalidateAndCancel() }
+        let frames = LifecycleFrames()
+        let store = makeStore(api, frames: frames)
+        defer { store.stop() }
+        LifecycleURLProtocol.respond(body: processSnapshot(state: "running", sequence: 1, closure: false))
+        store.start()
+        try await waitFor { frames.attachments.count == 1 }
+        store.setTranscriptFollowingBottom(true)
+        frames.yield(event(2, "approval.resolved", #"{"approval_id":"denied","decision":"deny"}"#, runId: "r"))
+        frames.yield(event(3, "question.answered", #"{"question_id":"skipped","skipped":true}"#, runId: "r"))
+        frames.yield(event(4, "approval.resolved", #"{"approval_id":"unowned","decision":"allow"}"#))
+        frames.yield(event(5, "question.answered", #"{"question_id":"unowned-answer","skipped":false}"#))
+        frames.yield(event(6, "approval.resolved", #"{"approval_id":"other-run","decision":"allow"}"#, runId: "r2"))
+        frames.yield(event(7, "question.answered", #"{"question_id":"this-run","skipped":false}"#, runId: "r"))
+        try await waitFor { store.resolvedReceipts.count == 6 }
+        let originals = store.resolvedReceipts
+        XCTAssertNil(originals[2].runId)
+        XCTAssertNil(originals[3].runId)
+        XCTAssertEqual(store.visibleResolvedReceipts, originals)
+
+        let firstClosure = #"{"run_id":"r","outcome":"succeeded","final_answer_message_ids":["final"]}"#
+        LifecycleURLProtocol.respond(body: receiptSnapshot(sequence: 8, closures: firstClosure))
+        frames.yield(event(8, "turn.finished", runId: "r"))
+        try await waitFor { store.transcript.processes["r"] != nil }
+        XCTAssertNil(store.transcript.processes["r2"])
+        XCTAssertEqual(store.visibleResolvedReceipts, Array(originals.prefix(5)))
+        store.setProcessExpanded(runId: "r", expanded: true)
+        XCTAssertEqual(store.visibleResolvedReceipts, originals)
+        store.setProcessExpanded(runId: "r", expanded: false)
+
+        let secondClosure = #"{"run_id":"r2","outcome":"succeeded","final_answer_message_ids":["final2"]}"#
+        LifecycleURLProtocol.respond(body: receiptSnapshot(sequence: 8, closures: firstClosure + "," + secondClosure))
+        await store.refresh()
+        XCTAssertNotNil(store.transcript.processes["r2"])
+        XCTAssertEqual(store.visibleResolvedReceipts, Array(originals.prefix(4)))
+        store.setProcessExpanded(runId: "r2", expanded: true)
+        XCTAssertEqual(store.visibleResolvedReceipts, Array(originals.prefix(5)))
+        XCTAssertFalse(store.processState.expandedRuns.contains("r"))
+        store.setProcessExpanded(runId: "r", expanded: true)
+        XCTAssertEqual(store.visibleResolvedReceipts, originals)
+        XCTAssertEqual(store.resolvedReceipts, originals)
+    }
+
+    func testInvalidOrFailedClosureCannotHideLocalReceiptsOnSnapshotRefresh() async throws {
+        let (api, session) = try makeAPI()
+        defer { session.invalidateAndCancel() }
+        let frames = LifecycleFrames()
+        let store = makeStore(api, frames: frames)
+        defer { store.stop() }
+        store.start()
+        try await waitFor { frames.attachments.count == 1 }
+        frames.yield(event(2, "approval.resolved", #"{"approval_id":"allowed","decision":"allow"}"#, runId: "r"))
+        frames.yield(event(3, "question.answered", #"{"question_id":"answered","skipped":false}"#, runId: "r"))
+        try await waitFor { store.resolvedReceipts.count == 2 }
+        let originals = store.resolvedReceipts
+        let valid = #"{"run_id":"r","outcome":"succeeded","final_answer_message_ids":["final"]}"#
+        LifecycleURLProtocol.respond(body: receiptSnapshot(sequence: 3, closures: valid))
+        await store.refresh()
+        XCTAssertNotNil(store.transcript.processes["r"])
+        XCTAssertTrue(store.visibleResolvedReceipts.isEmpty)
+
+        let invalidClosures = [
+            "",
+            #"{"run_id":"r","outcome":"failed","final_answer_message_ids":["final"]}"#,
+            #"{"run_id":"r","outcome":"cancelled","final_answer_message_ids":["final"]}"#,
+            #"{"run_id":"r","outcome":"succeeded","final_answer_message_ids":["missing"]}"#,
+            #"{"run_id":"r","outcome":"succeeded","final_answer_message_ids":["final2"]}"#,
+            #"{"run_id":"r","outcome":"succeeded","final_answer_message_ids":[]}"#,
+            valid + "," + valid,
+        ]
+        for closures in invalidClosures {
+            LifecycleURLProtocol.respond(body: receiptSnapshot(sequence: 3, closures: closures))
+            await store.refresh()
+            XCTAssertNil(store.transcript.processes["r"], closures)
+            XCTAssertEqual(store.visibleResolvedReceipts, originals, closures)
+            XCTAssertEqual(store.resolvedReceipts, originals, closures)
+        }
+    }
+
+    func testStoreClosureTransitionRepeatedRevealAndSessionIsolation() async throws {
+        let (api, session) = try makeAPI()
+        defer { session.invalidateAndCancel() }
+        let store = SessionStore(sessionId: "s", api: api)
+        defer { store.stop() }
+        LifecycleURLProtocol.respond(body: processSnapshot(state: "running", sequence: 1, closure: false))
+        await store.refresh()
+        store.setTranscriptFollowingBottom(true)
+        LifecycleURLProtocol.respond(body: processSnapshot(state: "idle", sequence: 2, closure: true))
+        await store.refresh()
+        XCTAssertEqual(store.turnClosures.count, 1)
+        XCTAssertEqual(store.projectedRows.map(\.id), ["process-r", "final"])
+        store.setProcessExpanded(runId: "r", expanded: true)
+        store.pause()
+        await store.refresh()
+        XCTAssertEqual(store.projectedRows.map(\.id), ["process-r", "work", "final"])
+        let other = SessionStore(sessionId: "other", api: api)
+        other.setProcessExpanded(runId: "r", expanded: false)
+        XCTAssertTrue(store.processState.expandedRuns.contains("r"))
+        XCTAssertFalse(other.processState.expandedRuns.contains("r"))
+        other.stop()
+    }
+
+    func testPreviousRunStartEnvelopeBindsOnlyRealProgressAndTransfersSelectionHold() async throws {
+        for (startRun, firstProgress) in [("r", "model.request_started"), ("r", "tool.progress"),
+                                          ("", "model.request_started")]
+        {
+            LifecycleURLProtocol.reset()
+            let (api, session) = try makeAPI()
+            defer { session.invalidateAndCancel() }
+            let frames = LifecycleFrames()
+            let store = makeStore(api, frames: frames)
+            defer { store.stop() }
+            LifecycleURLProtocol.respond(body: processSnapshot(state: "idle", sequence: 1, closure: true))
+            store.start()
+            try await waitFor { frames.attachments.count == 1 }
+            store.setTranscriptFollowingBottom(true)
+            frames.yield(event(2, "turn.started", #"{"prompt":"next","turn_index":2}"#, runId: startRun))
+            try await waitFor { store.draft?.turnIndex == 2 }
+            XCTAssertNil(store.activeRunId)
+            XCTAssertFalse(store.processState.observedRuns.contains("r"))
+            store.holdCurrentProcessOpen()
+            XCTAssertTrue(store.processState.holdOpen)
+            // A high-sequence historical delta must neither bind nor mutate the draft.
+            frames.yield(event(3, "model.text_delta", #"{"request_id":"old","delta":"stale"}"#, runId: "r"))
+            frames.yield(event(4, firstProgress, #"{"request_id":"new"}"#, runId: "r2"))
+            try await waitFor { store.activeRunId == "r2" }
+            XCTAssertTrue(store.draft?.isEmpty == true)
+            XCTAssertTrue(store.processState.observedRuns.contains("r2"))
+            XCTAssertFalse(store.processState.observedRuns.contains("r"))
+            XCTAssertTrue(store.processState.holdOpen)
+            let closures = #"{"run_id":"r","outcome":"succeeded","final_answer_message_ids":["final"]},{"run_id":"r2","outcome":"succeeded","final_answer_message_ids":["final2"]}"#
+            LifecycleURLProtocol.respond(body: receiptSnapshot(sequence: 5, closures: closures))
+            frames.yield(event(5, "turn.finished", runId: "r2"))
+            try await waitFor { store.draft == nil && store.transcript.processes["r2"] != nil }
+            XCTAssertNil(store.activeRunId)
+            XCTAssertFalse(store.isBusy)
+            XCTAssertTrue(store.processState.expandedRuns.contains("r2"))
+            XCTAssertFalse(store.processState.expandedRuns.contains("r"))
+        }
+    }
+
+    func testClosedCurrentRunningSnapshotAcceptsProgressAndNormalFinish() async throws {
+        for previouslyFinished in [false, true] {
+            for outcome in ["succeeded", "failed"] {
+                LifecycleURLProtocol.reset()
+                let (api, session) = try makeAPI()
+                defer { session.invalidateAndCancel() }
+                let frames = LifecycleFrames()
+                let store = makeStore(api, frames: frames)
+                defer { store.stop() }
+                LifecycleURLProtocol.respond(body: processSnapshot(
+                    state: "running", sequence: 1, closure: true, runId: "r",
+                ))
+                store.start()
+                try await waitFor { frames.attachments.count == 1 }
+                let original = #"{"closure":{"run_id":"r","outcome":"succeeded","final_answer_message_ids":["final"]}}"#
+                if previouslyFinished {
+                    // Populate finishedRuns through an actual live finish, then
+                    // reconcile a busy projection of the same authoritative run.
+                    LifecycleURLProtocol.respond(body: processSnapshot(state: "idle", sequence: 2, closure: true))
+                    frames.yield(event(2, "turn.finished", original, runId: "r"))
+                    try await waitFor { !store.isBusy && LifecycleURLProtocol.snapshotHits == 2 && store.draft == nil }
+                    LifecycleURLProtocol.respond(body: processSnapshot(
+                        state: "running", sequence: 3, closure: true, runId: "r",
+                    ))
+                    await store.refresh()
+                }
+                XCTAssertTrue(store.isBusy)
+                XCTAssertEqual(store.activeRunId, "r")
+                XCTAssertEqual(store.turnClosures.count, 1)
+                store.setTranscriptFollowingBottom(true)
+                store.holdCurrentProcessOpen()
+                let generation = store.activityGeneration
+                frames.yield(event(4, "model.request_started", #"{"request_id":"current"}"#, runId: "r"))
+                frames.yield(event(5, "model.text_delta", #"{"request_id":"current","delta":"tail"}"#, runId: "r"))
+                frames.yield(event(6, "tool.progress", #"{"call_id":"current-tool"}"#, runId: "r"))
+                frames.yield(event(7, "runtime.warning", #"{"message":"progress barrier"}"#))
+                try await waitFor { store.notices.contains("progress barrier") }
+                XCTAssertEqual(store.activityGeneration, generation + 1)
+                XCTAssertTrue(store.processState.holdOpen)
+                XCTAssertTrue(store.processState.observedRuns.contains("r"))
+                XCTAssertEqual(store.activeRunId, "r")
+                guard case let .text(text) = store.draft?.segments.first else {
+                    return XCTFail("current closed run's progress must remain live")
+                }
+                XCTAssertTrue(text.live)
+                XCTAssertEqual(text.text, "tail")
+
+                // Hold reconciliation to observe the finish itself, not an idle
+                // snapshot masking a rejected event or an unsealed draft.
+                let finishHit = LifecycleURLProtocol.snapshotHits + 1
+                LifecycleURLProtocol.hold([finishHit])
+                let finish = """
+                {"closure":{"run_id":"r","outcome":"\(outcome)","final_answer_message_ids":["final"]}}
+                """
+                frames.yield(event(8, "turn.finished", finish, runId: "r"))
+                try await waitFor { LifecycleURLProtocol.snapshotHits == finishHit }
+                XCTAssertFalse(store.isBusy)
+                XCTAssertNil(store.activeRunId)
+                XCTAssertEqual(store.activityGeneration, generation + 2)
+                guard case let .text(sealed) = store.draft?.segments.first else {
+                    return XCTFail("finish must seal the draft before reconciliation")
+                }
+                XCTAssertFalse(sealed.live)
+                XCTAssertEqual(sealed.text, "tail")
+                LifecycleURLProtocol.release(finishHit, body: processSnapshot(state: "idle", sequence: 8, closure: true))
+                try await waitFor { store.draft == nil }
+                XCTAssertEqual(store.turnClosures.count, outcome == "failed" ? 2 : 1)
+                XCTAssertEqual(store.transcript.processes["r"] == nil, outcome == "failed")
+
+                // Duplicate finish must not reconcile again; conflicting evidence
+                // from either finish path must survive a canonical snapshot.
+                let conflict = #"{"closure":{"run_id":"r","outcome":"failed","final_answer_message_ids":["final"]}}"#
+                let finishedGeneration = store.activityGeneration
+                frames.yield(event(9, "turn.finished", finish, runId: "r"))
+                frames.yield(event(10, "turn.finished", conflict, runId: "r"))
+                frames.yield(event(11, "runtime.warning", #"{"message":"finish barrier"}"#))
+                try await waitFor { store.notices.contains("finish barrier") }
+                XCTAssertFalse(store.isBusy)
+                XCTAssertNil(store.activeRunId)
+                XCTAssertNil(store.draft)
+                XCTAssertEqual(store.activityGeneration, finishedGeneration)
+                XCTAssertEqual(LifecycleURLProtocol.snapshotHits, finishHit)
+                XCTAssertEqual(store.turnClosures.count, 2)
+                XCTAssertNil(store.transcript.processes["r"])
+                LifecycleURLProtocol.respond(body: processSnapshot(state: "idle", sequence: 11, closure: true))
+                await store.refresh()
+                XCTAssertEqual(store.turnClosures.count, 2)
+                XCTAssertNil(store.transcript.processes["r"])
+            }
+        }
+    }
+
+    func testOldSnapshotClosureFinishReplayPreservesKnownAndUnknownActivity() async throws {
+        for identity in ["unknown", "progress", "snapshot"] {
+            let knownRun = identity != "unknown"
+            LifecycleURLProtocol.reset()
+            let (api, session) = try makeAPI()
+            defer { session.invalidateAndCancel() }
+            let frames = LifecycleFrames()
+            let store = makeStore(api, frames: frames)
+            defer { store.stop() }
+            if identity == "snapshot" {
+                LifecycleURLProtocol.respond(body: Data("""
+                {"state":"running","session_id":"s","run_id":"r2","event_seq":1,"model_name":"fake","turn_count":2,
+                "messages":[
+                {"id":"work","role":"assistant","status":"final","metadata":{"run_id":"r"},"parts":[{"kind":"text","text":"old"}]},
+                {"id":"final","role":"assistant","status":"final","metadata":{"run_id":"r"},"parts":[{"kind":"text","text":"answer"}]}],
+                "turn_closures":[{"run_id":"r","outcome":"succeeded","final_answer_message_ids":["final"]}]}
+                """.utf8))
+            } else {
+                LifecycleURLProtocol.respond(body: processSnapshot(state: "idle", sequence: 1, closure: true))
+            }
+            store.start()
+            try await waitFor { frames.attachments.count == 1 }
+            if identity != "snapshot" {
+                frames.yield(event(2, "turn.started", #"{"prompt":"next"}"#, runId: "r"))
+            }
+            frames.yield(event(3, "model.text_delta", #"{"request_id":"new","delta":"fresh"}"#, runId: knownRun ? "r2" : nil))
+            try await waitFor { store.streamRevision == 1 }
+            store.holdCurrentProcessOpen()
+            let reading = store.processState
+            let generation = store.activityGeneration
+            let original = #"{"closure":{"run_id":"r","outcome":"succeeded","final_answer_message_ids":["final"]}}"#
+            frames.yield(event(4, "turn.finished", original, runId: "r"))
+            frames.yield(event(5, "turn.finished", original, runId: "r"))
+            frames.yield(event(6, "runtime.warning", #"{"message":"barrier"}"#))
+            try await waitFor { store.notices.contains("barrier") }
+            XCTAssertTrue(store.isBusy)
+            XCTAssertEqual(store.activeRunId, knownRun ? "r2" : nil)
+            XCTAssertEqual(store.processState, reading)
+            XCTAssertEqual(store.activityGeneration, generation)
+            XCTAssertEqual(store.turnClosures.count, 1)
+            XCTAssertEqual(LifecycleURLProtocol.snapshotHits, 1)
+            XCTAssertEqual(store.draft?.segments.count, 1)
+            guard case let .text(text) = store.draft?.segments.first else {
+                return XCTFail("expected live new draft")
+            }
+            XCTAssertTrue(text.live)
+            XCTAssertEqual(text.text, "fresh")
+        }
+    }
+
+    func testPreviousUnclosedEnvelopeAndMismatchedFinishCannotCloseNextTurn() async throws {
+        let (api, session) = try makeAPI()
+        defer { session.invalidateAndCancel() }
+        let frames = LifecycleFrames()
+        let store = makeStore(api, frames: frames)
+        defer { store.stop() }
+        LifecycleURLProtocol.respond(body: processSnapshot(state: "idle", sequence: 1, closure: false))
+        store.start()
+        try await waitFor { frames.attachments.count == 1 }
+        frames.yield(event(2, "turn.started", #"{"prompt":"next"}"#, runId: "r"))
+        frames.yield(event(3, "turn.finished", runId: "r"))
+        frames.yield(event(4, "model.request_started", #"{"request_id":"new"}"#, runId: "r2"))
+        frames.yield(event(5, "model.text_delta", #"{"request_id":"new","delta":"fresh"}"#, runId: "r2"))
+        // This terminal arrives while the new text is still buffered.
+        frames.yield(event(6, "turn.finished", runId: "unrelated"))
+        frames.yield(event(7, "runtime.warning", #"{"message":"barrier"}"#))
+        try await waitFor { store.notices.contains("barrier") }
+        XCTAssertTrue(store.isBusy)
+        XCTAssertEqual(store.activeRunId, "r2")
+        XCTAssertEqual(LifecycleURLProtocol.snapshotHits, 1)
+        guard case let .text(text) = store.draft?.segments.first else {
+            return XCTFail("expected live draft")
+        }
+        XCTAssertTrue(text.live)
+        XCTAssertEqual(text.text, "fresh")
+    }
+
+    func testConflictingOldFinishKeepsEvidenceVisibleWithoutClosingNewDraft() async throws {
+        let (api, session) = try makeAPI()
+        defer { session.invalidateAndCancel() }
+        let frames = LifecycleFrames()
+        let store = makeStore(api, frames: frames)
+        defer { store.stop() }
+        let oldClosure = #"{"run_id":"r","outcome":"succeeded","final_answer_message_ids":["final"]}"#
+        LifecycleURLProtocol.respond(body: receiptSnapshot(sequence: 1, closures: oldClosure))
+        store.start()
+        try await waitFor { frames.attachments.count == 1 }
+        frames.yield(event(2, "approval.resolved", #"{"approval_id":"old","decision":"allow"}"#, runId: "r"))
+        try await waitFor { store.resolvedReceipts.count == 1 }
+        XCTAssertTrue(store.visibleResolvedReceipts.isEmpty)
+        frames.yield(event(3, "turn.started", #"{"prompt":"new"}"#, runId: "r"))
+        frames.yield(event(4, "model.text_delta", #"{"request_id":"new","delta":"live"}"#, runId: "r2"))
+        try await waitFor { store.streamRevision == 1 }
+        let reading = store.processState
+        let conflict = #"{"closure":{"run_id":"r","outcome":"failed","final_answer_message_ids":["final"]}}"#
+        frames.yield(event(5, "turn.finished", conflict, runId: "r"))
+        frames.yield(event(6, "turn.finished", conflict, runId: "r"))
+        frames.yield(event(7, "runtime.warning", #"{"message":"barrier"}"#))
+        try await waitFor { store.notices.contains("barrier") }
+        XCTAssertNil(store.transcript.processes["r"])
+        XCTAssertEqual(store.turnClosures.count, 2)
+        XCTAssertTrue(store.projectedRows.contains { $0.id == "work" })
+        XCTAssertEqual(store.processState, reading)
+        XCTAssertEqual(store.activeRunId, "r2")
+        XCTAssertTrue(store.isBusy)
+        XCTAssertEqual(LifecycleURLProtocol.snapshotHits, 1)
+        guard case let .text(text) = store.draft?.segments.first else {
+            return XCTFail("expected unsealed new draft")
+        }
+        XCTAssertTrue(text.live)
+        // An ordinary later snapshot must not discard the conflict and hide history.
+        LifecycleURLProtocol.respond(body: receiptSnapshot(sequence: 7, closures: oldClosure))
+        await store.refresh()
+        XCTAssertNil(store.transcript.processes["r"])
+        XCTAssertEqual(store.turnClosures.count, 2)
+    }
+
+    func testMissedTurnStartedSnapshotOwnsRunBeforeAssistantAndProtectsReading() async throws {
+        for protection in ["away", "input", "none"] {
+            let (api, session) = try makeAPI()
+            defer { session.invalidateAndCancel() }
+            let store = SessionStore(sessionId: "s", api: api)
+            defer { store.stop() }
+            LifecycleURLProtocol.respond(body: processSnapshot(state: "running", sequence: 1, closure: false))
+            await store.refresh()
+            XCTAssertEqual(store.activeRunId, "r")
+            store.setTranscriptFollowingBottom(true)
+            LifecycleURLProtocol.respond(body: processSnapshot(state: "idle", sequence: 2, closure: true))
+            await store.refresh()
+            XCTAssertNil(store.activeRunId)
+            XCTAssertFalse(store.processState.expandedRuns.contains("r"))
+
+            // No turn.started and no assistant from r2: only completed r history.
+            LifecycleURLProtocol.respond(body: Data("""
+            {"state":"running","session_id":"s","run_id":"r2","model_name":"test","turn_count":2,"event_seq":3,
+            "messages":[
+            {"id":"work","role":"assistant","status":"final","metadata":{"run_id":"r"},"parts":[{"kind":"text","text":"working"}]},
+            {"id":"final","role":"assistant","status":"final","metadata":{"run_id":"r"},"parts":[{"kind":"text","text":"answer"}]}],
+            "turn_closures":[{"run_id":"r","outcome":"succeeded","final_answer_message_ids":["final"]}]}
+            """.utf8))
+            await store.refresh()
+            XCTAssertEqual(store.activeRunId, "r2")
+            XCTAssertTrue(store.processState.observedRuns.contains("r2"))
+            XCTAssertFalse(store.messages.contains { $0.metadata?["run_id"] == "r2" })
+            if protection == "input" {
+                store.holdCurrentProcessOpen()
+            } else if protection == "away" {
+                store.setTranscriptFollowingBottom(false)
+            }
+
+            LifecycleURLProtocol.respond(body: receiptSnapshot(sequence: 4, closures:
+                #"{"run_id":"r","outcome":"succeeded","final_answer_message_ids":["final"]},{"run_id":"r2","outcome":"succeeded","final_answer_message_ids":["final2"]}"#))
+            await store.refresh()
+            XCTAssertNil(store.activeRunId)
+            XCTAssertEqual(store.processState.expandedRuns.contains("r2"), protection != "none")
+            XCTAssertFalse(store.processState.expandedRuns.contains("r"))
+            XCTAssertEqual(store.projectedRows.contains { $0.id == "work2" }, protection != "none")
+            store.setTranscriptFollowingBottom(true)
+            await store.refresh()
+            XCTAssertEqual(store.processState.expandedRuns.contains("r2"), protection != "none")
+        }
+    }
+
+    func testLegacySnapshotDoesNotObserveClosedHistoryAndClearsTerminalIdentity() async throws {
+        let (api, session) = try makeAPI()
+        defer { session.invalidateAndCancel() }
+        let store = SessionStore(sessionId: "s", api: api)
+        defer { store.stop() }
+        LifecycleURLProtocol.respond(body: processSnapshot(state: "running", sequence: 1, closure: false))
+        await store.refresh()
+        XCTAssertEqual(store.activeRunId, "r")
+        // A legacy busy snapshot now closes r but has no identity for the next run.
+        LifecycleURLProtocol.respond(body: processSnapshot(state: "running", sequence: 2, closure: true))
+        await store.refresh()
+        XCTAssertNil(store.activeRunId)
+        let cold = SessionStore(sessionId: "cold", api: api)
+        defer { cold.stop() }
+        await cold.refresh()
+        XCTAssertNil(cold.activeRunId)
+        XCTAssertFalse(cold.processState.observedRuns.contains("r"))
+
+        // Missing run_id can still recover an unclosed assistant run.
+        LifecycleURLProtocol.respond(body: processSnapshot(state: "running", sequence: 3, closure: false))
+        await store.refresh()
+        XCTAssertEqual(store.activeRunId, "r")
+        for state in ["idle", "closed", "fatal"] {
+            LifecycleURLProtocol.respond(body: Data("""
+            {"state":"\(state)","session_id":"s","run_id":"r","model_name":"test","turn_count":1,"event_seq":4}
+            """.utf8))
+            await store.refresh()
+            XCTAssertNil(store.activeRunId, state)
+        }
+    }
+
+    func testConfirmedHistoryColdLoadCollapsesButManualExpansionSurvivesRefresh() async throws {
+        let (api, session) = try makeAPI()
+        defer { session.invalidateAndCancel() }
+        let store = SessionStore(sessionId: "s", api: api)
+        defer { store.stop() }
+        LifecycleURLProtocol.respond(body: processSnapshot(state: "idle", sequence: 1, closure: true))
+        await store.refresh()
+        XCTAssertEqual(store.projectedRows.map(\.id), ["process-r", "final"])
+        store.setProcessExpanded(runId: "r", expanded: true)
+        store.pause()
+        await store.refresh()
+        XCTAssertEqual(store.projectedRows.map(\.id), ["process-r", "work", "final"])
+        let reopened = SessionStore(sessionId: "s", api: api)
+        defer { reopened.stop() }
+        await reopened.refresh()
+        XCTAssertEqual(reopened.projectedRows.map(\.id), ["process-r", "final"])
+    }
+
+    func testSwitchWhileBusyKeepsCompletedProcessOpen() async throws {
+        let (api, session) = try makeAPI()
+        defer { session.invalidateAndCancel() }
+        let store = SessionStore(sessionId: "s", api: api)
+        defer { store.stop() }
+        LifecycleURLProtocol.respond(body: processSnapshot(state: "running", sequence: 1, closure: false))
+        await store.refresh()
+        store.setTranscriptFollowingBottom(true)
+        store.pause()
+        LifecycleURLProtocol.respond(body: processSnapshot(state: "idle", sequence: 2, closure: true))
+        await store.refresh()
+        store.setTranscriptFollowingBottom(true)
+        await store.refresh()
+        XCTAssertTrue(store.processState.expandedRuns.contains("r"))
+    }
+
+    func testStoreInputStartDuringBusyPreventsFoldWithoutInputEnd() async throws {
+        let (api, session) = try makeAPI()
+        defer { session.invalidateAndCancel() }
+        let store = SessionStore(sessionId: "s", api: api)
+        defer { store.stop() }
+        LifecycleURLProtocol.respond(body: processSnapshot(state: "running", sequence: 1, closure: false))
+        await store.refresh()
+        store.setTranscriptFollowingBottom(true)
+        // The background monitor holds at mouseDown/keyDown. There need not
+        // be a tap's onEnded (e.g. the user is still dragging a selection).
+        store.holdCurrentProcessOpen()
+        LifecycleURLProtocol.respond(body: processSnapshot(state: "idle", sequence: 2, closure: true))
+        await store.refresh()
+        XCTAssertTrue(store.processState.expandedRuns.contains("r"))
+        XCTAssertEqual(store.projectedRows.map(\.id), ["process-r", "work", "final"])
+        // Layout/following updates and duplicate snapshots must not undo the
+        // input-start hold while the selection is still in progress.
+        store.setTranscriptFollowingBottom(true)
+        await store.refresh()
+        XCTAssertEqual(store.projectedRows.map(\.id), ["process-r", "work", "final"])
+        // The hold is not a permanent expansion policy or a disabled toggle.
+        store.setProcessExpanded(runId: "r", expanded: false)
+        XCTAssertEqual(store.projectedRows.map(\.id), ["process-r", "final"])
+    }
+
+    func testRepeatedToolRevealForcesProcessOpenAfterManualCollapse() async throws {
+        let (api, session) = try makeAPI()
+        defer { session.invalidateAndCancel() }
+        let store = SessionStore(sessionId: "s", api: api)
+        defer { store.stop() }
+        LifecycleURLProtocol.respond(body: Data(#"{"state":"idle","session_id":"s","model_name":"m","turn_count":1,"event_seq":1,"turn_closures":[{"run_id":"r","outcome":"succeeded","final_answer_message_ids":["final"]}],"messages":[{"id":"tools","role":"assistant","status":"final","metadata":{"run_id":"r"},"parts":[{"kind":"tool_call","tool_call":{"id":"c","name":"read_file"}},{"kind":"tool_result","tool_result":{"call_id":"c","status":"success","content":[{"kind":"text","text":"ok"}]}}]},{"id":"final","role":"assistant","status":"final","metadata":{"run_id":"r"},"parts":[{"kind":"text","text":"done"}]}]}"#.utf8))
+        await store.refresh()
+        for sequence: UInt64 in [1, 2] {
+            store.setProcessExpanded(runId: "r", expanded: false)
+            XCTAssertFalse(store.projectedRows.contains { $0.id == "tools" })
+            store.revealTool(ToolRevealRequest(callId: "c", sequence: sequence))
+            XCTAssertTrue(store.projectedRows.contains { $0.id == "tools" })
+            XCTAssertEqual(store.transcript.toolLocation(callId: "c")?.scrollId, "chat-tool-c")
+        }
     }
 
     func testInitialSnapshotFailuresNeverAttachWithoutBaseline() async throws {

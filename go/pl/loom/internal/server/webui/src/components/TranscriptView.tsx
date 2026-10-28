@@ -40,6 +40,10 @@ import {
   lowerBound,
   projectRenderItems,
   readingAnchorTop,
+  readProcessPreferences,
+  writeProcessPreference,
+  shouldHoldProcessOpen,
+  revealedProcessRuns,
   type RenderItem,
 } from '../lib/toolGroups'
 import { fmtDuration } from '../lib/format'
@@ -322,6 +326,7 @@ export function TranscriptView({
   scrollerOut,
   loading,
   active = true,
+  sessionId = '',
   children,
 }: {
   controller: TranscriptController
@@ -335,6 +340,7 @@ export function TranscriptView({
   loading?: boolean
   // Unknown activity (e.g. share snapshots) is conservative: keep the last turn visible.
   active?: boolean
+  sessionId?: string
   children?: ReactNode
 }) {
   const blocks = useStore(controller.store, (s) => s.blocks)
@@ -342,14 +348,151 @@ export function TranscriptView({
   const [expandedGroups, setExpandedGroups] = useState<ReadonlyMap<string, boolean>>(new Map())
   const [revealedIds, setRevealedIds] = useState<ReadonlySet<string>>(new Set())
   const [anchorTarget, setAnchorTarget] = useState<string | null>(null)
-  const items = useMemo(() => {
-    const excluded = new Set(revealedIds)
-    // Search targets stay singleton rows, so the existing block-id flash and
-    // navigation semantics work for every hit, including collapsed tools.
-    for (const id of search?.matches ?? []) excluded.add(id)
-    return projectRenderItems(blocks, active, excluded)
-  }, [blocks, active, revealedIds, search?.matches])
+  const pendingAnchor = useRef<string | null>(null)
+  const anchorScrollTop = useRef<number | null>(null)
+  const requestAnchor = (id: string) => {
+    if (pendingAnchor.current === id) return
+    pendingAnchor.current = id
+    anchorScrollTop.current = null
+    setAnchorTarget(id)
+  }
+  const cancelAnchor = () => {
+    if (!pendingAnchor.current) return
+    pendingAnchor.current = null
+    anchorScrollTop.current = null
+    setAnchorTarget(null)
+  }
+  useLayoutEffect(() => {
+    cancelAnchor()
+  }, [controller, sessionId])
+  const closures = useStore(controller.store, (s) => s.closures)
+  const activeRunIds = useStore(controller.store, (s) => s.activeRunIds)
+  const unknownActivity = useStore(controller.store, (s) => s.unknownActivity)
+  const deferredClosureRunIds = useStore(controller.store, (s) => s.deferredClosureRunIds)
+  const readingClosureRunIds = useStore(controller.store, (s) => s.readingClosureRunIds)
   const following = useStore(controller.store, (s) => s.following)
+  const [processTick, setProcessTick] = useState(0)
+  // Hold-open decisions survive resync and session switching, but are not
+  // persisted: only explicit disclosure preferences go to localStorage.
+  const processSessions = useRef(
+    new Map<
+      string,
+      {
+        preferences: Map<string, boolean>
+        seen: Set<string>
+        held: Set<string>
+        interacted: Set<string>
+      }
+    >(),
+  )
+  const processSessionKey = sessionId || 'anonymous'
+  let processState = processSessions.current.get(processSessionKey)
+  if (!processState) {
+    processState = {
+      preferences: readProcessPreferences(sessionId),
+      seen: new Set(),
+      held: new Set(),
+      interacted: new Set(),
+    }
+    processSessions.current.set(processSessionKey, processState)
+    if (processSessions.current.size > 20) {
+      const oldest = processSessions.current.keys().next().value
+      if (oldest !== undefined) processSessions.current.delete(oldest)
+    }
+  }
+  const currentProcessState = processState
+  const items = useMemo(() => {
+    const searchRuns = revealedProcessRuns(blocks, new Set(search?.matches ?? []))
+    // Make the arrival decision once, even if final references are not yet
+    // resolvable. Returning to the bottom later never revokes a reading hold.
+    for (const runId of readingClosureRunIds) currentProcessState.held.add(runId)
+    for (const closure of closures) {
+      if (currentProcessState.seen.has(closure.run_id)) continue
+      currentProcessState.seen.add(closure.run_id)
+      if (
+        readingClosureRunIds.includes(closure.run_id) ||
+        shouldHoldProcessOpen(
+          controller.store.get().following,
+          typeof window !== 'undefined' &&
+            !!window.getSelection() &&
+            !window.getSelection()!.isCollapsed,
+          currentProcessState.interacted.has(closure.run_id),
+          !!search?.query,
+        )
+      )
+        currentProcessState.held.add(closure.run_id)
+    }
+    for (const runId of revealedProcessRuns(blocks, revealedIds)) currentProcessState.held.add(runId)
+    const expandedRunIds = new Set(currentProcessState.held)
+    for (const [runId, open] of currentProcessState.preferences) {
+      if (open) expandedRunIds.add(runId)
+      else if (!currentProcessState.held.has(runId)) expandedRunIds.delete(runId)
+    }
+    // Search is a projection-only expansion, never a persisted reading hold.
+    for (const runId of searchRuns) expandedRunIds.add(runId)
+    const excluded = new Set([...revealedIds, ...(search?.matches ?? [])])
+    return projectRenderItems(blocks, active, excluded, {
+      closures,
+      activeRunIds: new Set([...activeRunIds, ...deferredClosureRunIds]),
+      unknownActivity,
+      expandedRunIds,
+    })
+  }, [
+    blocks,
+    active,
+    revealedIds,
+    search?.matches,
+    search?.query,
+    closures,
+    activeRunIds,
+    unknownActivity,
+    deferredClosureRunIds,
+    readingClosureRunIds,
+    controller,
+    currentProcessState,
+    processTick,
+  ])
+  const toggleProcess = (runId: string, expanded: boolean) => {
+    controller.setFollowing(false)
+    currentProcessState.preferences.set(runId, expanded)
+    currentProcessState.held.delete(runId)
+    if (expanded) controller.holdProcessRuns([runId])
+    else controller.releaseProcessHold(runId)
+    if (!expanded)
+      setRevealedIds(
+        (prev) =>
+          new Set([...prev].filter((id) => !blocks.some((b) => b.id === id && b.runId === runId))),
+      )
+    writeProcessPreference(sessionId, runId, expanded)
+    setProcessTick((n) => n + 1)
+  }
+  const markProcessInteraction = () => {
+    const ids = [...activeRunIds, ...deferredClosureRunIds]
+    for (const id of ids) currentProcessState.interacted.add(id)
+    controller.holdProcessRuns(ids)
+  }
+  useEffect(() => {
+    const mark = () => {
+      // Capture runs before click handlers request a new anchor: the opening
+      // click cancels only an older seek, never its own newly requested seek.
+      cancelAnchor()
+      const state = controller.store.get()
+      const ids = [...state.activeRunIds, ...state.deferredClosureRunIds]
+      for (const id of ids) currentProcessState.interacted.add(id)
+      controller.holdProcessRuns(ids)
+    }
+    document.addEventListener('pointerdown', mark, true)
+    document.addEventListener('keydown', mark, true)
+    document.addEventListener('wheel', mark, { capture: true, passive: true })
+    return () => {
+      document.removeEventListener('pointerdown', mark, true)
+      document.removeEventListener('keydown', mark, true)
+      document.removeEventListener('wheel', mark, true)
+    }
+  }, [controller, currentProcessState])
+  useLayoutEffect(() => {
+    controller.holdProcessRuns([...currentProcessState.held])
+  }, [items, controller, currentProcessState])
   const followSeq = useStore(controller.store, (s) => s.followSeq)
   const scrollerRef = useRef<HTMLDivElement>(null)
   // Ids that have entered the render window at least once (fadein gate — see
@@ -382,7 +525,11 @@ export function TranscriptView({
     (item: RenderItem) =>
       item.kind === 'block'
         ? item.id
-        : `${item.id}:${item.tools.map((b) => `${b.id}.${b.v}`).join(',')}:${expandedGroups.get(item.firstCallId) ? 'open' : 'closed'}`,
+        : item.kind === 'delivery-tool'
+          ? `${item.id}:${item.tool.v}:${item.review ? 'review' : 'media'}`
+          : item.kind === 'process-head'
+          ? `${item.id}:${item.members.map((b) => `${b.id}.${b.v}`).join(',')}:${item.hidden ? 'closed' : 'open'}`
+          : `${item.id}:${item.tools.map((b) => `${b.id}.${b.v}`).join(',')}:${expandedGroups.get(item.firstCallId) ? 'open' : 'closed'}`,
     [expandedGroups],
   )
   const heightOf = useCallback(
@@ -390,6 +537,12 @@ export function TranscriptView({
       if (item.kind === 'block') return blockHeightOf(item.block)
       const measured = heightsRef.current.get(layoutKey(item))
       if (measured != null) return measured
+      if (item.kind === 'process-head') return 28
+      if (item.kind === 'delivery-tool') {
+        const completion = item.tool.completion
+        const mediaCount = completion?.images?.length || completion?.artifacts?.length || 0
+        return 36 + mediaCount * 340 + (item.review ? 28 : 0)
+      }
       return expandedGroups.get(item.firstCallId)
         ? 44 + item.tools.reduce((sum, b) => sum + blockHeightOf(b), 0)
         : 44
@@ -417,6 +570,10 @@ export function TranscriptView({
     }
     return { items, offsets, heights, total }
   }, [items, measureTick, heightOf])
+  // A seek samples current virtual geometry without restarting its retry budget
+  // on every ResizeObserver measurement or projection update.
+  const seekGeometry = useRef(geometry)
+  seekGeometry.current = geometry
   const previousLayoutRef = useRef<{
     geometry: typeof geometry
     firstBlockId?: string
@@ -504,7 +661,7 @@ export function TranscriptView({
       seen.clear()
       setExpandedGroups((prev) => (prev.size ? new Map() : prev))
       setRevealedIds((prev) => (prev.size ? new Set() : prev))
-      setAnchorTarget(null)
+      cancelAnchor()
       return
     }
     const callIds = new Set(
@@ -515,7 +672,7 @@ export function TranscriptView({
       return new Map([...prev].filter(([id]) => callIds.has(id)))
     })
     const blockIds = new Set(blocks.map((b) => b.id))
-    if (anchorTarget && !blockIds.has(anchorTarget)) setAnchorTarget(null)
+    if (anchorTarget && !blockIds.has(anchorTarget)) cancelAnchor()
     setRevealedIds((prev) => {
       if ([...prev].every((id) => blockIds.has(id))) return prev
       return new Set([...prev].filter((id) => blockIds.has(id)))
@@ -596,28 +753,73 @@ export function TranscriptView({
       }
       if (!target) return
       controller.setFollowing(false)
-      setRevealedIds((prev) => (prev.has(target.id) ? prev : new Set([...prev, target.id])))
-      setAnchorTarget(target.id)
+      setRevealedIds((prev) => new Set([...prev, target.id]))
+      if (target.runId) currentProcessState.held.add(target.runId)
+      setProcessTick((n) => n + 1)
+      requestAnchor(target.id)
     }
     el.addEventListener('loom-reveal-anchor', reveal)
     return () => el.removeEventListener('loom-reveal-anchor', reveal)
-  }, [blocks, controller])
+  }, [blocks, controller, currentProcessState])
 
   useLayoutEffect(() => {
     if (!anchorTarget) return
-    const el = scrollerRef.current
-    if (!el || el.clientHeight === 0) return
-    let offset = 24 // transcript-inner top padding
-    for (const item of items) {
-      if (item.kind === 'block' && item.id === anchorTarget) {
-        el.scrollTop = Math.max(0, offset - 80)
-        setViewport({ top: el.scrollTop, height: el.clientHeight })
-        setAnchorTarget(null)
-        break
-      }
-      offset += heightOf(item) + BLOCK_GAP_PX
+    const id = anchorTarget
+    let tries = 0
+    let corrections = 0
+    let settled = 0
+    let timer = 0
+    const finish = () => {
+      if (pendingAnchor.current !== id) return
+      pendingAnchor.current = null
+      anchorScrollTop.current = null
+      setAnchorTarget(null)
     }
-  }, [anchorTarget, items, heightOf, viewport.height])
+    const seek = () => {
+      if (pendingAnchor.current !== id) return
+      const el = scrollerRef.current
+      if (el && el.clientHeight > 0) {
+        const target = el.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(id)}"]`)
+        let desired: number | undefined
+        if (target && target.offsetParent !== null) {
+          // Correct estimates only after the original process row is mounted.
+          // Actual rects include current padding and all measured predecessors.
+          desired = el.scrollTop + target.getBoundingClientRect().top -
+            el.getBoundingClientRect().top - el.clientTop - 80
+        } else {
+          const current = seekGeometry.current
+          const index = current.items.findIndex((item) => item.kind === 'block' && item.id === id)
+          if (index >= 0) {
+            const inner = el.querySelector('.transcript-inner')
+            const inset = inner ? parseFloat(getComputedStyle(inner).paddingTop) || 0 : 24
+            desired = current.offsets[index] + inset - 80
+          }
+        }
+        if (desired != null) {
+          const top = Math.max(0, Math.min(desired, el.scrollHeight - el.clientHeight))
+          if (Math.abs(el.scrollTop - top) > 1) {
+            anchorScrollTop.current = top
+            el.scrollTop = top
+            anchorScrollTop.current = el.scrollTop
+            readingTopRef.current = el.scrollTop
+            setViewport({ top: el.scrollTop, height: el.clientHeight })
+            settled = 0
+            if (target) corrections++
+          } else if (target) settled++
+          if (target && (settled >= 2 || corrections >= 3)) {
+            finish()
+            return
+          }
+        }
+      }
+      // Same bounded polling window as seekToAnchor; unlike that external
+      // helper, this local correction is cancellable and never smooth-scrolls.
+      if (++tries < 40) timer = window.setTimeout(seek, 100)
+      else finish()
+    }
+    seek()
+    return () => window.clearTimeout(timer)
+  }, [anchorTarget, controller, sessionId])
 
   // A projection/disclosure change can shrink earlier rows without resizing the
   // last singleton. Keep a following reader pinned even in that case; never
@@ -743,7 +945,8 @@ export function TranscriptView({
     restoredTopRef.current = null
     // Shrinking history can clamp an up-scroll anchor near the bottom. That
     // programmatic restore is not permission to resume streaming follow.
-    if (restoredTop != null && Math.abs(el.scrollTop - restoredTop) < 1) return
+    if (pendingAnchor.current ||
+      (restoredTop != null && Math.abs(el.scrollTop - restoredTop) < 1)) return
     const gap = el.scrollHeight - el.scrollTop - el.clientHeight
     controller.setFollowing(gap < FOLLOW_THRESHOLD_PX)
   })
@@ -757,7 +960,15 @@ export function TranscriptView({
       id="transcript"
       className={cls}
       ref={scrollerRef}
+      onPointerDownCapture={markProcessInteraction}
+      onKeyDownCapture={markProcessInteraction}
+      onWheelCapture={markProcessInteraction}
       onScroll={(event) => {
+        // Our own estimate/correction scroll is expected. Any other scroll
+        // intent cancels the pending seek synchronously, before a timer can fire.
+        if (pendingAnchor.current &&
+          (anchorScrollTop.current == null ||
+            Math.abs(event.currentTarget.scrollTop - anchorScrollTop.current) > 1)) cancelAnchor()
         // Capture top synchronously; the layout may change before the rAF flush.
         readingTopRef.current = event.currentTarget.scrollTop
         if (previousLayoutRef.current) previousLayoutRef.current.top = readingTopRef.current
@@ -784,6 +995,30 @@ export function TranscriptView({
           >
             {b.kind === 'block' ? (
               <BlockView block={b.block} io={io} />
+            ) : b.kind === 'delivery-tool' ? (
+              <ToolBlock
+                {...b.tool}
+                presentation="delivery"
+                review={b.review}
+                onShowProcess={() => {
+                  toggleProcess(b.runId, true)
+                  requestAnchor(b.tool.id)
+                }}
+              />
+            ) : b.kind === 'process-head' ? (
+              <button
+                type="button"
+                className="process-toggle"
+                aria-expanded={!b.hidden}
+                aria-label={b.hidden ? 'View processing details' : 'Hide processing details'}
+                onClick={() => toggleProcess(b.runId, b.hidden)}
+              >
+                <span aria-hidden="true">{b.hidden ? '▸' : '▾'}</span>
+                {b.hidden ? 'View processing details' : 'Hide processing details'}
+                {b.members.some((member) => member.kind === 'tool') && (
+                  <span>· {b.members.filter((member) => member.kind === 'tool').length} tool calls</span>
+                )}
+              </button>
             ) : (
               <ToolGroupView
                 item={b}

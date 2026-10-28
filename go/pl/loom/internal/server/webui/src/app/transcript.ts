@@ -26,9 +26,27 @@ import type {
   Snapshot,
   ToolResult,
   TurnSummary,
+  TurnClosure,
 } from '../protocol/types'
 import { diffForToolCall } from '../lib/diff'
+import {
+  continuesSnapshotRun,
+  hasCompleteFinalReferences,
+  snapshotBodyComplete,
+  snapshotReadingHolds,
+} from '../lib/toolGroups'
 import { Store } from '../store/store'
+
+function sameClosure(a: TurnClosure, b: TurnClosure): boolean {
+  const left = a.final_answer_message_ids || []
+  const right = b.final_answer_message_ids || []
+  return (
+    a.run_id === b.run_id &&
+    a.outcome === b.outcome &&
+    left.length === right.length &&
+    left.every((id, index) => id === right[index])
+  )
+}
 
 // --- block model ---
 
@@ -60,6 +78,12 @@ export interface AssistantActionContext {
 interface Base {
   id: string
   v: number // change version: the comparison basis for React memo
+  sourceMessageId?: string
+  sourceRole?: string
+  sourcePromptKind?: string
+  sourceRequestId?: string
+  runId?: string
+  sourceBodyComplete?: boolean
 }
 
 // Distributive Omit: Omit each union member individually (plain Omit would
@@ -125,6 +149,11 @@ export interface TranscriptSearchState {
 
 export interface TranscriptState {
   blocks: BlockModel[]
+  closures: TurnClosure[]
+  activeRunIds: string[]
+  deferredClosureRunIds: string[]
+  readingClosureRunIds: string[]
+  unknownActivity: boolean
   // Scroll-follow intent: the view layer uses this to decide whether to snap
   // to bottom after render.
   // forceFollow forces a snap for new blocks (not cancelled by user scrolling
@@ -166,12 +195,28 @@ const STREAM_RENDER_MIN_INTERVAL_MS = 60
 export class TranscriptController {
   readonly store = new Store<TranscriptState>({
     blocks: [],
+    closures: [],
+    activeRunIds: [],
+    deferredClosureRunIds: [],
+    readingClosureRunIds: [],
+    unknownActivity: false,
     following: true,
     followSeq: 0,
     search: null,
   })
 
   private io: TranscriptIO
+  private sourceContext: {
+    sourceMessageId?: string
+    sourceRole?: string
+    sourcePromptKind?: string
+    sourceRequestId?: string
+    runId?: string
+    sourceBodyComplete?: boolean
+  } = {}
+  private responseBlocks = new Set<string>()
+  private canonicalResponses = new Set<string>()
+  private finishedRuns = new Set<string>()
   private streamId: string | null = null // current stream block id
   private streamBuf = ''
   private streamScheduled = false
@@ -247,10 +292,28 @@ export class TranscriptController {
     })
   }
 
+  holdProcessRuns(runIds: readonly string[]) {
+    const state = this.store.get()
+    const next = [...new Set([...state.readingClosureRunIds, ...runIds])]
+    if (next.length === state.readingClosureRunIds.length) return
+    this.store.update((s) => {
+      s.readingClosureRunIds = next
+    })
+  }
+
+  releaseProcessHold(runId: string) {
+    this.store.update((s) => {
+      s.readingClosureRunIds = s.readingClosureRunIds.filter((id) => id !== runId)
+    })
+  }
+
   // --- block operations ---
 
   private append(block: DistributiveOmit<BlockModel, 'id' | 'v'>): string {
     const id = 'b' + nextBlockId++
+    block = { ...this.sourceContext, ...block }
+    if (!this.batchedBlocks && ['assistant', 'stream', 'reasoning', 'tool'].includes(block.kind))
+      this.responseBlocks.add(id)
     if (this.batchedBlocks) {
       this.batchedBlocks = [...this.batchedBlocks, { ...block, id, v: 0 } as BlockModel]
     } else {
@@ -280,6 +343,10 @@ export class TranscriptController {
   }
 
   clear() {
+    this.sourceContext = {}
+    this.responseBlocks.clear()
+    this.canonicalResponses.clear()
+    this.finishedRuns.clear()
     this.streamId = null
     this.streamBuf = ''
     this.streamScheduled = false
@@ -304,6 +371,11 @@ export class TranscriptController {
     this.turnErrorShown = false
     this.store.update((s) => {
       s.blocks = []
+      s.closures = []
+      s.activeRunIds = []
+      s.deferredClosureRunIds = []
+      s.readingClosureRunIds = []
+      s.unknownActivity = false
       s.following = true
       s.search = null // session switch/clear: search closes with the session
     })
@@ -386,7 +458,14 @@ export class TranscriptController {
   // to bottom. Returns whether scroll was preserved — the view layer restores
   // scrollTop accordingly.
   applySnapshot(snap: Snapshot, { preserveScroll = false } = {}): { preserved: boolean } {
-    const wasFollowing = this.store.get().following
+    const previous = { ...this.store.get() }
+    const wasFollowing = previous.following
+    const previousHolds = preserveScroll ? previous.readingClosureRunIds : []
+    const previouslyDeferred = preserveScroll ? previous.deferredClosureRunIds : []
+    const selected =
+      typeof window !== 'undefined' &&
+      !!window.getSelection() &&
+      !window.getSelection()!.isCollapsed
     this.clear()
     // Staged rebuild: the whole snapshot's blocks pile up in a local array and commit in
     // one final store.update (previously one update+emit per block — a 1K-message snapshot
@@ -400,6 +479,25 @@ export class TranscriptController {
       if (staged) {
         this.store.update((s) => {
           s.blocks = staged
+          s.closures = snap.turn_closures || []
+          s.readingClosureRunIds = snapshotReadingHolds(
+            s.closures,
+            previous.closures,
+            previousHolds,
+            previouslyDeferred,
+            preserveScroll,
+            wasFollowing,
+            selected,
+          )
+          const running = ['running', 'awaiting_approval', 'cancelling', 'booting'].includes(
+            snap.state || '',
+          )
+          s.activeRunIds = running && this.turnRunID ? [this.turnRunID] : []
+          for (const closure of s.closures) {
+            if (!running || closure.run_id !== this.turnRunID)
+              this.finishedRuns.add(closure.run_id)
+          }
+          s.unknownActivity = (running && !this.turnRunID) || !!snap.pending_requests?.length
           s.following = true
         })
       }
@@ -443,6 +541,8 @@ export class TranscriptController {
       emittedSummaries.add(runId)
       this.append({
         kind: 'turn_summary',
+        sourceMessageId: undefined,
+        sourceBodyComplete: undefined,
         runId,
         cancelled: ts.cancelled,
         failed: ts.failed,
@@ -468,7 +568,16 @@ export class TranscriptController {
       lastAssistantId = null
     }
 
-    for (const m of snap.messages || []) {
+    const messages = snap.messages || []
+    for (const [messageIndex, m] of messages.entries()) {
+      if (m.id && m.role === 'assistant') this.canonicalResponses.add(m.id)
+      this.sourceContext = {
+        sourceMessageId: m.id || undefined,
+        sourceRole: m.role,
+        sourcePromptKind: m.metadata?.kind,
+        runId: m.metadata?.run_id || undefined,
+        sourceBodyComplete: snapshotBodyComplete(m),
+      }
       let textRun: string[] = []
       // Image attachments on user messages: collected and rendered into the
       // bubble together with the text (images above text), not as standalone
@@ -481,12 +590,20 @@ export class TranscriptController {
         const images = userImages
         textRun = []
         userImages = []
-        if (m.role === 'user') {
-          closeTurn()
-          // Turn boundary: close out the previous turn's file summary before
-          // opening the next bubble (no-op when the run wrote no files).
-          emitTurnSummary(lastRunId)
+        if (
+          m.role === 'user' &&
+          ['goal_continue', 'plan_reconcile'].includes(m.metadata?.kind || '')
+        ) {
+          this.append({ kind: 'notice', text })
+        } else if (m.role === 'user') {
+          if (!continuesSnapshotRun(messages, messageIndex, lastRunId)) {
+            closeTurn()
+            emitTurnSummary(lastRunId)
+          }
           this.append({ kind: 'user', text, createdAt, images })
+        } else if (m.role !== 'assistant') {
+          // System/developer/unknown roles are visible context, never process.
+          this.append({ kind: 'notice', text })
         } else {
           // Feedback target: the agent loop has stamped run_id metadata when
           // persisting the message
@@ -507,6 +624,14 @@ export class TranscriptController {
           }
           lastTs = createdAt
         }
+      }
+      if (m.role === 'assistant' && m.metadata?.run_id) {
+        const runId = m.metadata.run_id
+        if (lastRunId && lastRunId !== runId) {
+          closeTurn()
+          emitTurnSummary(lastRunId)
+        }
+        lastRunId = runId
       }
       for (const p of m.parts || []) {
         switch (p.kind) {
@@ -593,6 +718,7 @@ export class TranscriptController {
       }
       flushText()
     }
+    this.sourceContext = {}
     for (const pr of snap.pending_requests || []) {
       if (pr.kind === 'approval' && pr.approval) this.addApprovalCard(pr.approval)
       else if (pr.kind === 'question' && pr.question) this.addQuestionCard(pr.question)
@@ -611,12 +737,28 @@ export class TranscriptController {
     // The snapshot may cut mid-turn: an in-flight turn gets no action row
     // (left to the turn-terminal event; state hands off to the live path); a
     // finished turn is closed out here with its action row.
-    const running =
-      snap.state === 'running' || snap.state === 'awaiting_approval' || snap.state === 'cancelling'
+    const running = ['running', 'awaiting_approval', 'cancelling', 'booting'].includes(
+      snap.state || '',
+    )
     if (running) {
-      this.turnAssistantId = lastAssistantId
-      this.turnAssistantTs = lastTs
-      this.turnRunID = lastRunId
+      // The envelope owns the current run even before its first assistant exists.
+      // Legacy history is only usable when its latest assistant run is not closed
+      // and no later user prompt establishes a different/unknown turn.
+      let lastAssistantIndex = messages.length - 1
+      while (lastAssistantIndex >= 0 && messages[lastAssistantIndex].role !== 'assistant')
+        lastAssistantIndex--
+      const closed = (snap.turn_closures || []).some((c) => c.run_id === lastRunId)
+      const laterPrompt = messages.slice(lastAssistantIndex + 1).some(
+        (m) => m.role === 'user' && m.metadata?.run_id !== lastRunId,
+      )
+      this.turnRunID = snap.run_id || (!closed && !laterPrompt ? lastRunId : '')
+      if (this.turnRunID && lastRunId === this.turnRunID) {
+        this.turnAssistantId = lastAssistantId
+        this.turnAssistantTs = lastTs
+      } else {
+        closeTurn()
+        emitTurnSummary(lastRunId)
+      }
       void lastAssistantText
     } else {
       closeTurn()
@@ -624,10 +766,83 @@ export class TranscriptController {
     }
   }
 
+  private clearReplayedResponseDraft(evt: RuntimeEvent) {
+    // run_id alone cannot distinguish model requests. Unknown ownership must
+    // leave a potentially newer draft intact, even when text happens to match.
+    if (!evt.request_id || !evt.run_id) return
+    const belongs = (id: string | null) => {
+      const b = id ? this.blocksNow().find((block) => block.id === id) : undefined
+      return (
+        !!b && !b.sourceMessageId && b.runId === evt.run_id && b.sourceRequestId === evt.request_id
+      )
+    }
+    const discardedStream = belongs(this.streamId) ? this.streamId : null
+    if (discardedStream) {
+      this.discardStream()
+      this.responseBlocks.delete(discardedStream)
+      if (this.turnAssistantId === discardedStream) this.turnAssistantId = null
+    }
+    if (belongs(this.reasoningId)) {
+      const id = this.reasoningId!
+      this.reasoningId = null
+      this.reasoningBuf = ''
+      this.reasoningStartTs = ''
+      this.removeBlock(id)
+      this.responseBlocks.delete(id)
+    }
+    if (belongs(this.thinkingId)) this.hideThinking()
+  }
+
   // --- SSE event dispatch (§5; unknown kinds ignored) ---
 
   handleEvent(evt: RuntimeEvent) {
     const p = (evt.payload || {}) as Record<string, unknown>
+    if (evt.kind === 'turn.finished' && evt.run_id && this.finishedRuns.has(evt.run_id)) {
+      const closure = p.closure as TurnClosure | undefined
+      if (
+        closure?.run_id === evt.run_id &&
+        !this.store.get().closures.some((existing) => sameClosure(existing, closure))
+      ) {
+        // Preserve conflicting facts, never last-wins. Replayed lifecycle effects
+        // must not finalize a newer run's draft, add reviews or change reading intent.
+        this.store.update((s) => {
+          s.closures = [...s.closures, closure]
+        })
+      }
+      return
+    }
+    // A canonical snapshot can precede the broker watermark. Return before
+    // touching run/follow intent or a newer request's draft on completed replay.
+    if (
+      evt.kind === 'model.response_completed' &&
+      typeof p.message_id === 'string' &&
+      p.message_id &&
+      this.canonicalResponses.has(p.message_id)
+    ) {
+      this.clearReplayedResponseDraft(evt)
+      return
+    }
+    this.sourceContext = {
+      runId: evt.kind === 'turn.started' ? undefined : evt.run_id || undefined,
+      sourceRequestId: evt.request_id || undefined,
+    }
+    if (
+      evt.kind === 'turn.started' ||
+      (evt.run_id &&
+        [
+          'model.text_delta',
+          'model.reasoning_delta',
+          'tool.prepared',
+          'approval.requested',
+          'question.asked',
+        ].includes(evt.kind))
+    ) {
+      this.store.update((s) => {
+        s.unknownActivity = evt.kind === 'turn.started'
+        if (evt.run_id && evt.kind !== 'turn.started' && !s.activeRunIds.includes(evt.run_id))
+          s.activeRunIds = [...s.activeRunIds, evt.run_id]
+      })
+    }
     // run_id follow policy: turn.started's envelope run_id is untrustworthy
     // (at publish time the new run doesn't exist yet — zero value on the first
     // turn, the previous turn's id afterwards); all other events come from the
@@ -641,6 +856,7 @@ export class TranscriptController {
     switch (evt.kind) {
       case 'turn.started': {
         this.hideThinking()
+        this.responseBlocks.clear()
         // New turn: if the previous turn's reasoning leaked its live state due
         // to reconnect/lost events (flicker leak), seal it here — the live flag
         // must never survive across turns.
@@ -666,6 +882,7 @@ export class TranscriptController {
         break
       }
       case 'turn.finished': {
+        const wasReading = !this.store.get().following
         this.hideThinking()
         this.finalizeStream()
         this.finalizeReasoning(evt.time || '')
@@ -701,6 +918,22 @@ export class TranscriptController {
           }
           this.turnCancelled = false
         }
+        this.store.update((s) => {
+          s.activeRunIds = s.activeRunIds.filter((id) => id !== evt.run_id)
+          s.unknownActivity = false
+          const closure = p.closure as TurnClosure | undefined
+          if (closure?.run_id && closure.run_id === evt.run_id) {
+            if (wasReading)
+              s.readingClosureRunIds = [...new Set([...s.readingClosureRunIds, closure.run_id])]
+            if (!hasCompleteFinalReferences(s.blocks, closure))
+              s.deferredClosureRunIds = [...new Set([...s.deferredClosureRunIds, closure.run_id])]
+            // Identical references are a legal snapshot/live overlap; retain
+            // distinct conflicting facts for the conservative projection validator.
+            if (!s.closures.some((existing) => sameClosure(existing, closure)))
+              s.closures = [...s.closures, closure]
+          }
+        })
+        if (evt.run_id) this.finishedRuns.add(evt.run_id)
         break
       }
       case 'model.text_delta':
@@ -734,6 +967,19 @@ export class TranscriptController {
           this.finalizeStream()
         }
         this.finalizeReasoning(evt.time || '')
+        if (typeof p.message_id === 'string' && p.message_id && evt.run_id) {
+          for (const id of this.responseBlocks) {
+            const block = this.blocksNow().find((b) => b.id === id)
+            if (block && block.runId === evt.run_id && !block.sourceMessageId)
+              this.patchBlock(id, {
+                sourceMessageId: p.message_id,
+                sourceBodyComplete: block.kind === 'assistant' || block.kind === 'stream',
+              })
+          }
+        }
+        if (typeof p.message_id === 'string' && p.message_id)
+          this.canonicalResponses.add(p.message_id)
+        this.responseBlocks.clear()
         break
       case 'model.request_failed': {
         this.hideThinking()
@@ -781,6 +1027,10 @@ export class TranscriptController {
         break
       }
       case 'tool.started':
+        if (evt.run_id && typeof p.call_id === 'string') {
+          const id = this.tools.get(p.call_id)
+          if (id) this.patchBlock(id, { runId: evt.run_id })
+        }
         break // block was created at prepared; running is the default state
       case 'tool.completed': {
         const payload = p as unknown as ToolCompletedPayload
@@ -792,6 +1042,8 @@ export class TranscriptController {
           const blocks = this.blocksNow()
           const i = blocks.findIndex((b) => b.id === id)
           const cur = i >= 0 ? blocks[i] : null
+          if (cur && evt.run_id && cur.runId !== evt.run_id)
+            this.patchBlock(id, { runId: evt.run_id })
           if (cur && cur.kind === 'tool' && !cur.completion) {
             this.patchBlock(id, { completion: payload as ToolCompletion })
           }
@@ -1037,7 +1289,8 @@ export class TranscriptController {
     const streamId = this.streamId
     if (!streamId) return this.append(block)
     const id = 'b' + nextBlockId++
-    const nb = { ...block, id, v: 0 } as BlockModel
+    const nb = { ...this.sourceContext, ...block, id, v: 0 } as BlockModel
+    this.responseBlocks.add(id)
     const blocks = this.blocksNow()
     const idx = blocks.findIndex((b) => b.id === streamId)
     this.setBlocks(idx < 0 ? [...blocks, nb] : [...blocks.slice(0, idx), nb, ...blocks.slice(idx)])

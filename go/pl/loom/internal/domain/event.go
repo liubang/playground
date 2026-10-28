@@ -102,6 +102,14 @@ func (t EventType) Informational() bool {
 	return false
 }
 
+// RunTerminalPayload is the committed terminal fact. RunState remains flat
+// for compatibility with older event readers; references never duplicate text.
+type RunTerminalPayload struct {
+	RunState
+	RunID                 RunID       `json:"run_id"`
+	FinalAnswerMessageIDs []MessageID `json:"final_answer_message_ids,omitempty"`
+}
+
 // MessageEventPayload is the canonical payload envelope for transcript events.
 type MessageEventPayload struct {
 	Message Message `json:"message"`

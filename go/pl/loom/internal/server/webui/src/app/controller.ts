@@ -1088,6 +1088,9 @@ export class AppController {
     // After detach, anything left in the catch-up queue predates the old
     // session/snapshot; the new snapshot covers it — safe to drop.
     this.eventQueue.length = 0
+    // Do not let the new session identity observe the old session's closures,
+    // holds or blocks while its snapshot request is in flight.
+    if (!isResync) this.transcript.clear()
     this.store.set({ sessionId: id, landingVisible: false, sessionLoading: true })
     this.restoreComposerDraft(id)
     this.collapseSidebarIfNarrow()

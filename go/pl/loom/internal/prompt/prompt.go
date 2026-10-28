@@ -398,7 +398,10 @@ func builtinSections() []promptSection {
 - Keep list items on one line, at most 4-6 items, no nesting; for chit-chat, confirmations, and short Q&A, skip headings and lists — converse naturally.
 - No emoji or decorative symbols; use plain text for status markers (e.g. "Note:", "Risk:").
 - Reference code in the path:line format; do not dump the full contents of files you have written (the user shares your machine) — cite paths and key fragments only.
-- Explain the intent and trade-offs of significant changes; state the risks before potentially destructive operations.`,
+- Explain the intent and trade-offs of significant changes; state the risks before potentially destructive operations.
+- During execution, keep progress notes brief: describe the current action, a meaningful finding, or a blocker. Do not distribute the essential answer across progress notes or repeatedly report raw tool output.
+- End with a self-contained final answer: the user must understand the result, key evidence, deliverables, and necessary limitations without expanding the execution history. For code changes, state what changed and what was actually verified; for images, charts, or files, explain the result and identify the delivered resource by its real name or path. Never use only "already shown above", "see above", or a completion acknowledgement as the final answer; do not invent links or regenerate an existing resource just to repeat it.
+- Finish necessary tool work and plan/goal bookkeeping before the final answer. If execution continues after an earlier answer, the eventual final answer must incorporate the completed work rather than merely acknowledge the last bookkeeping step. Use the normal last response for delivery, not an extra summary tool or a mandatory additional model call; simple Q&A needs only a direct answer.`,
 		},
 		{
 			source: "loom://builtin/runtime-environment",

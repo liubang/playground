@@ -132,6 +132,23 @@ final class ProtocolDecodingTests: XCTestCase {
         try LoomJSON.decoder.decode(T.self, from: Data(json.utf8))
     }
 
+    func testOptionalTurnClosureContract() throws {
+        let legacy = try decode(Snapshot.self, #"{"state":"idle","session_id":"s","model_name":"m","turn_count":1,"event_seq":1}"#)
+        XCTAssertNil(legacy.turnClosures)
+        let snapshot = try decode(Snapshot.self, #"{"state":"idle","session_id":"s","model_name":"m","turn_count":1,"event_seq":1,"turn_closures":[{}, {"run_id":"r","outcome":"succeeded","final_answer_message_ids":["a"]}]}"#)
+        XCTAssertEqual(snapshot.turnClosures, [TurnClosure(), TurnClosure(runId: "r", outcome: "succeeded", finalAnswerMessageIds: ["a"])])
+        let missing = try decode(TurnClosure.self, #"{"run_id":"r"}"#)
+        XCTAssertNil(missing.outcome)
+        XCTAssertNil(missing.finalAnswerMessageIds)
+    }
+
+    func testSnapshotAuthoritativeRunIdentityIsOptional() throws {
+        let legacy = try decode(Snapshot.self, #"{"state":"running","session_id":"s","model_name":"m","turn_count":1,"event_seq":1}"#)
+        XCTAssertNil(legacy.runId)
+        let current = try decode(Snapshot.self, #"{"state":"running","session_id":"s","run_id":"current","model_name":"m","turn_count":1,"event_seq":2}"#)
+        XCTAssertEqual(current.runId, "current")
+    }
+
     func testRuntimeEventEnvelope() throws {
         let event = try decode(RuntimeEvent.self, """
         {

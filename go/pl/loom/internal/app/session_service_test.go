@@ -20,6 +20,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"os"
@@ -273,6 +274,72 @@ func TestSessionServiceCreateAndSingleton(t *testing.T) {
 	}
 	if again != h {
 		t.Fatalf("ResumeSession(live) returned a different handle")
+	}
+}
+
+func TestReadonlyTurnClosureSnapshotReplayAndShare(t *testing.T) {
+	svc, _ := newTestService(t, fakes.NewFakeModel(fakes.ScriptEntry{Text: "readonly answer", StopReason: domain.StopEndTurn}))
+	ctx := t.Context()
+	h, err := svc.CreateSession(ctx, domain.WorkspaceID{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.SubmitPrompt(ctx, h.ID, "question", nil, "closure", false); err != nil {
+		t.Fatal(err)
+	}
+	waitForIdle(t, h.Controller)
+	snapshot, err := svc.Snapshot(ctx, h.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.TurnClosures) != 1 || len(snapshot.TurnSummaries) != 0 {
+		t.Fatalf("readonly closures=%+v summaries=%+v", snapshot.TurnClosures, snapshot.TurnSummaries)
+	}
+	closure := snapshot.TurnClosures[0]
+	if closure.Outcome != domain.OutcomeSucceeded || len(closure.FinalAnswerMessageIDs) != 1 {
+		t.Fatalf("closure=%+v", closure)
+	}
+	found := false
+	for _, msg := range snapshot.Messages {
+		if msg.ID == closure.FinalAnswerMessageIDs[0] {
+			found = msg.Metadata["run_id"] == closure.RunID.String()
+		}
+	}
+	if !found {
+		t.Fatal("final identity missing from snapshot")
+	}
+	token, err := svc.ShareSession(ctx, h.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared, err := svc.SharedView(ctx, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	live, _ := json.Marshal(snapshot.TurnClosures)
+	share, _ := json.Marshal(shared.TurnClosures)
+	if string(live) != string(share) {
+		t.Fatalf("snapshot=%s share=%s", live, share)
+	}
+	inspection, err := h.Controller.bootstrap.Store.InspectSession(ctx, h.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, _ := json.Marshal(turnClosuresFromEvents(inspection.Events))
+	if string(live) != string(replay) {
+		t.Fatalf("snapshot=%s replay=%s", live, replay)
+	}
+	// Rebuild the controller through the same path used after reconnect.
+	if err := h.Controller.ResumeSession(ctx, h.ID); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := svc.Snapshot(ctx, h.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resume, _ := json.Marshal(restored.TurnClosures)
+	if string(live) != string(resume) {
+		t.Fatalf("snapshot=%s resume=%s", live, resume)
 	}
 }
 

@@ -29,6 +29,161 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/session"
 )
 
+type terminalRejectingStore struct{ *fakes.FakeStore }
+
+func (s terminalRejectingStore) AppendEventsAndCheckpoint(ctx context.Context, id domain.SessionID, version int64, events []domain.Event, checkpoint domain.Checkpoint) error {
+	for _, evt := range events {
+		if evt.Type == domain.EventRunCompleted {
+			return fmt.Errorf("terminal disk failure")
+		}
+	}
+	return s.FakeStore.AppendEventsAndCheckpoint(ctx, id, version, events, checkpoint)
+}
+
+func TestCommittedTurnClosureProjectionAndFailure(t *testing.T) {
+	for _, reject := range []bool{false, true} {
+		t.Run(fmt.Sprintf("reject=%v", reject), func(t *testing.T) {
+			base := fakes.NewFakeStore()
+			var store domain.SessionStore = base
+			if reject {
+				store = terminalRejectingStore{base}
+			}
+			broker := runtimeevent.NewBroker()
+			controller := NewController(ControllerConfig{Bootstrap: testBootstrap(store, nil), Broker: broker, Approver: NewChannelApprover(), Clock: domain.RealClock{}})
+			run := agent.NewRun(domain.NewSessionID(), domain.DefaultLimits(), domain.RealClock{})
+			if err := store.CreateSession(t.Context(), run.SessionID, domain.WorkspaceID{}); err != nil {
+				t.Fatal(err)
+			}
+			controller.sessionID, controller.runID, controller.activeTurn = run.SessionID, run.ID, 1
+			msg := domain.Message{ID: domain.NewMessageID(), Role: domain.RoleAssistant, Status: domain.MessageStatusFinal, Parts: []domain.ContentPart{{Kind: domain.PartText, Text: "answer"}}}
+			run.AddAssistantMessage(msg)
+			if _, err := run.Terminate(domain.OutcomeSucceeded, msg.ID); err != nil {
+				t.Fatal(err)
+			}
+			events := run.PendingEvents()
+			checkpoint := domain.Checkpoint{SessionID: run.SessionID, Sequence: int64(len(events)), State: run.State, Messages: run.Messages}
+			ps := &publishingStore{inner: store, broker: broker, controller: controller, runID: run.ID}
+			ch, unsubscribe := broker.Subscribe()
+			defer unsubscribe()
+			err := ps.AppendEventsAndCheckpoint(t.Context(), run.SessionID, 0, events, checkpoint)
+			if (err != nil) != reject {
+				t.Fatalf("append err=%v reject=%v", err, reject)
+			}
+			controller.onTurnFinished(1, 1, err)
+			if reject {
+				if len(controller.turnClosures) != 0 {
+					t.Fatal("uncommitted success closure")
+				}
+				select {
+				case evt := <-ch:
+					if evt.Kind != runtimeevent.KindTurnFinished {
+						t.Fatalf("published uncommitted event: %+v", evt)
+					}
+					var finished runtimeevent.TurnFinishedPayload
+					if err := json.Unmarshal(evt.Payload, &finished); err != nil || finished.Closure != nil || finished.Error == "" {
+						t.Fatalf("finished=%+v err=%v", finished, err)
+					}
+				default:
+					t.Fatal("missing failure finish")
+				}
+				return
+			}
+			committed, err := base.LoadEvents(t.Context(), run.SessionID, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			live, _ := json.Marshal(controller.turnClosures)
+			replayed, _ := json.Marshal(turnClosuresFromEvents(committed))
+			if string(live) != string(replayed) || len(controller.messages) != 1 || len(controller.turnClosures) != 1 {
+				t.Fatalf("live=%s replay=%s messages=%d", live, replayed, len(controller.messages))
+			}
+			for {
+				select {
+				case evt := <-ch:
+					if evt.Kind == runtimeevent.KindModelResponseCompleted {
+						var p runtimeevent.ModelResponseCompletedPayload
+						if err := json.Unmarshal(evt.Payload, &p); err != nil || p.MessageID != msg.ID {
+							t.Fatalf("response=%+v err=%v", p, err)
+						}
+					}
+					if evt.Kind == runtimeevent.KindTurnFinished {
+						var p runtimeevent.TurnFinishedPayload
+						if err := json.Unmarshal(evt.Payload, &p); err != nil || p.Closure == nil || p.Closure.RunID != run.ID || len(p.Closure.FinalAnswerMessageIDs) != 1 {
+							t.Fatalf("finish=%+v err=%v", p, err)
+						}
+						return
+					}
+				default:
+					t.Fatal("missing committed finish")
+				}
+			}
+		})
+	}
+}
+
+func TestTurnClosureConflictingTerminalsFailClosed(t *testing.T) {
+	runID := domain.NewRunID()
+	first := runtimeevent.TurnClosure{RunID: runID, Outcome: domain.OutcomeSucceeded, FinalAnswerMessageIDs: []domain.MessageID{domain.NewMessageID()}}
+	for _, conflicting := range []runtimeevent.TurnClosure{
+		{RunID: runID, Outcome: domain.OutcomeSucceeded, FinalAnswerMessageIDs: []domain.MessageID{domain.NewMessageID()}},
+		{RunID: runID, Outcome: domain.OutcomeFailed},
+	} {
+		var events []domain.Event
+		for _, closure := range []runtimeevent.TurnClosure{first, first, conflicting, first} {
+			payload, err := json.Marshal(domain.RunTerminalPayload{
+				RunState: domain.RunState{Lifecycle: domain.LifecycleTerminal, Outcome: closure.Outcome},
+				RunID:    runID, FinalAnswerMessageIDs: closure.FinalAnswerMessageIDs,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			typ := domain.EventRunCompleted
+			if closure.Outcome == domain.OutcomeFailed {
+				typ = domain.EventRunFailed
+			}
+			events = append(events, domain.Event{Type: typ, Payload: payload})
+		}
+		identical := turnClosuresFromEvents(events[:2])
+		if len(identical) != 1 || identical[0].Outcome != domain.OutcomeSucceeded || !slices.Equal(identical[0].FinalAnswerMessageIDs, first.FinalAnswerMessageIDs) {
+			t.Fatalf("identical replay changed closure: %+v", identical)
+		}
+		replayed := turnClosuresFromEvents(events)
+		if len(replayed) != 1 || replayed[0].Outcome != domain.OutcomeCompletedUnverified || len(replayed[0].FinalAnswerMessageIDs) != 0 {
+			t.Fatalf("conflicting terminals retained fold references: %+v", replayed)
+		}
+		controller := &Controller{}
+		for _, evt := range events {
+			controller.recordCommittedClosuresLocked([]domain.Event{evt})
+		}
+		liveJSON, _ := json.Marshal(controller.turnClosures)
+		replayJSON, _ := json.Marshal(replayed)
+		if string(liveJSON) != string(replayJSON) {
+			t.Fatalf("live=%s replay=%s", liveJSON, replayJSON)
+		}
+	}
+}
+
+func TestTurnClosureLegacyInvalidAndBounded(t *testing.T) {
+	terminal := domain.RunState{Lifecycle: domain.LifecycleTerminal, Outcome: domain.OutcomeSucceeded}
+	legacy, _ := json.Marshal(terminal)
+	if got := turnClosuresFromEvents([]domain.Event{{Type: domain.EventRunCompleted, Payload: legacy}}); len(got) != 0 {
+		t.Fatalf("legacy inferred closure: %+v", got)
+	}
+	invalid, _ := json.Marshal(domain.RunTerminalPayload{RunState: terminal, RunID: domain.NewRunID(), FinalAnswerMessageIDs: []domain.MessageID{{}}})
+	closure, ok := closureFromEvent(domain.Event{Type: domain.EventRunCompleted, Payload: invalid})
+	if !ok || len(closure.FinalAnswerMessageIDs) != 0 {
+		t.Fatalf("invalid references: %+v", closure)
+	}
+	var events []domain.Event
+	for range turnSummariesCap + 5 {
+		p, _ := json.Marshal(domain.RunTerminalPayload{RunState: terminal, RunID: domain.NewRunID()})
+		events = append(events, domain.Event{Type: domain.EventRunCompleted, Payload: p})
+	}
+	if got := turnClosuresFromEvents(events); len(got) != turnSummariesCap {
+		t.Fatalf("cap=%d", len(got))
+	}
+}
+
 // testResolvedConfig builds a resolved config with a single "test" provider
 // backed by the given (fake) model and two selectable models, so /model
 // switching has somewhere to go.

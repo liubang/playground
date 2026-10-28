@@ -312,6 +312,12 @@ struct Message: Decodable, Sendable, Identifiable, Equatable {
     /// hand-built messages in tests stay source-compatible.
     var metadata: [String: String]?
 
+    /// Synthetic user messages are process instructions, not new user turns.
+    /// Metadata is decoded intact, including both run_id and kind.
+    var isInternalContinuation: Bool {
+        role == .user && (metadata?["kind"] == "plan_reconcile" || metadata?["kind"] == "goal_continue")
+    }
+
     enum CodingKeys: String, CodingKey {
         case id, role, status, parts, metadata
         case createdAt = "created_at"
@@ -449,6 +455,19 @@ struct TurnFileChange: Decodable, Sendable, Equatable {
 /// .turn_summaries; server-derived from the file.changed ledger, cap
 /// 400): which files the turn's write tools touched. run_cmd writes
 /// (sed/tee) bypass the ledger by design.
+/// Explicit terminal contract; absent or unknown fields never imply success.
+struct TurnClosure: Decodable, Sendable, Equatable {
+    var runId: String? = nil
+    var outcome: String? = nil
+    var finalAnswerMessageIds: [String]? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case runId = "run_id"
+        case outcome
+        case finalAnswerMessageIds = "final_answer_message_ids"
+    }
+}
+
 struct TurnSummary: Decodable, Sendable, Equatable {
     let runId: String?
     let turn: Int?
@@ -594,6 +613,7 @@ struct PendingRequest: Decodable, Sendable, Identifiable {
 struct Snapshot: Decodable, Sendable {
     let state: SessionState
     let sessionId: String
+    var runId: String? = nil
     let modelName: String
     let providerName: String?
     /// The session's reasoning dial (WebUI reasoning_effort / _overridden):
@@ -613,6 +633,7 @@ struct Snapshot: Decodable, Sendable {
     /// closing review card (WebUI .block-turn-summary), keyed to the
     /// turn via run_id (assistant messages carry it in metadata).
     let turnSummaries: [TurnSummary]?
+    var turnClosures: [TurnClosure]? = nil
     let pendingRequests: [PendingRequest]?
     let pendingSteers: [String]?
     let lastError: SnapshotError?
@@ -632,6 +653,7 @@ struct Snapshot: Decodable, Sendable {
     enum CodingKeys: String, CodingKey {
         case state
         case sessionId = "session_id"
+        case runId = "run_id"
         case modelName = "model_name"
         case providerName = "provider_name"
         case reasoningEffort = "reasoning_effort"
@@ -642,6 +664,7 @@ struct Snapshot: Decodable, Sendable {
         case turnCount = "turn_count"
         case usage, messages
         case turnSummaries = "turn_summaries"
+        case turnClosures = "turn_closures"
         case pendingRequests = "pending_requests"
         case pendingSteers = "pending_steers"
         case lastError = "last_error"

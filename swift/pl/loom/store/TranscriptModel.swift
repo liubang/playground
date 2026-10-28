@@ -34,6 +34,84 @@ func currentModelReference(provider: String, model: String, defaultRef: String?)
     return provider.isEmpty ? model : "\(provider)/\(model)"
 }
 
+/// Owned by one warm SessionStore, not a view. Confirmed historical runs
+/// default to collapsed; observed live runs respect sticky reading protection.
+struct TurnProcessState: Equatable {
+    var followingBottom = false
+    var holdOpen = false
+    private(set) var observedRuns: Set<String> = []
+    private var heldRuns: Set<String> = []
+    private var currentRun: String?
+    private(set) var expandedRuns: Set<String> = []
+    private var decisions: [String: Bool] = [:]
+    private var runOrder: [String] = []
+    static let maximumRuns = 400
+    var retainedRunCount: Int {
+        runOrder.count
+    }
+
+    private mutating func retain(_ run: String) {
+        runOrder.removeAll { $0 == run }
+        runOrder.append(run)
+        while runOrder.count > Self.maximumRuns {
+            let evicted = runOrder.removeFirst()
+            decisions.removeValue(forKey: evicted)
+            expandedRuns.remove(evicted)
+            observedRuns.remove(evicted)
+            heldRuns.remove(evicted)
+        }
+    }
+
+    mutating func beginRun(_ run: String?) {
+        if holdOpen, let currentRun {
+            heldRuns.insert(currentRun)
+        }
+        currentRun = run
+        holdOpen = !followingBottom
+        if let run {
+            retain(run)
+            observedRuns.insert(run)
+        }
+    }
+
+    mutating func observeRun(_ run: String) {
+        if currentRun != run {
+            if holdOpen, let currentRun {
+                heldRuns.insert(currentRun)
+            }
+            currentRun = run
+        }
+        retain(run)
+        observedRuns.insert(run)
+    }
+
+    mutating func endRun() {
+        if holdOpen, let currentRun {
+            heldRuns.insert(currentRun)
+        }
+        currentRun = nil
+        holdOpen = false
+    }
+
+    mutating func setExpanded(runId: String, expanded: Bool) {
+        retain(runId)
+        decisions[runId] = expanded
+        if expanded {
+            expandedRuns.insert(runId)
+        } else {
+            expandedRuns.remove(runId)
+        }
+    }
+
+    mutating func reconcile(eligibleRuns: Set<String>) {
+        for run in eligibleRuns.sorted() where decisions[run] == nil {
+            let protected = heldRuns.contains(run) || (holdOpen && (currentRun == nil || currentRun == run))
+            let keepLiveOpen = observedRuns.contains(run) && (!followingBottom || protected)
+            setExpanded(runId: run, expanded: keepLiveOpen)
+        }
+    }
+}
+
 // MARK: - Transcript model (derived render data, built on state change)
 
 /// Everything the transcript view needs, derived from the authoritative
@@ -51,12 +129,18 @@ struct TranscriptModel: Equatable {
     /// card has no message of its own; it is keyed by run_id).
     enum Row: Identifiable, Equatable {
         case message(MessageRowModel)
+        case delivery(DeliveryRowModel)
         case turnSummary(TurnSummary)
+        case process(runId: String, expanded: Bool)
 
         var id: String {
             switch self {
             case let .message(model):
                 model.message.id
+            case let .delivery(model):
+                "delivery-\(model.source.message.id)"
+            case let .process(runId, _):
+                "process-\(runId)"
             case let .turnSummary(summary):
                 "tsm-\(summary.runId ?? "turn\(summary.turn ?? 0)")"
             }
@@ -82,6 +166,25 @@ struct TranscriptModel: Equatable {
         }
     }
 
+    /// A result-only reference to the original row, never a rewritten message.
+    /// Tool media is already normalized (inline precedence / model-only / command streams).
+    struct DeliveryRowModel: Equatable {
+        let source: MessageRowModel
+        let isFinal: Bool
+        let showsReview: Bool
+
+        var items: [Item] {
+            source.items.filter { item in
+                switch item {
+                case .image, .artifact: !isFinal
+                case let .tool(tool): tool.hasDelivery(showsReview: showsReview)
+                case let .toolGroup(group): group.tools.contains { $0.hasDelivery(showsReview: showsReview) }
+                default: false
+                }
+            }
+        }
+    }
+
     /// One render unit inside an assistant row (tool_call + tool_result
     /// already merged, tool render model precomputed).
     enum Item: Equatable {
@@ -96,10 +199,93 @@ struct TranscriptModel: Equatable {
     static let empty = TranscriptModel(rows: [])
 
     let rows: [Row]
+    var processes: [String: Set<String>] = [:]
+
+    private static func isProcessItem(_ item: Item, isFinal: Bool) -> Bool {
+        switch item {
+        case .reasoning, .tool, .toolGroup: true
+        case .markdown, .image, .artifact: !isFinal
+        }
+    }
+
+    /// Visibility is a separate flat projection: hidden rows do not consume the
+    /// first-paint/backfill window, and expanded rows keep their source IDs/order.
+    func projectedRows(expandedRuns: Set<String>) -> [Row] {
+        var output: [Row] = []
+        var emitted: Set<String> = []
+        var anchors: [String: String] = [:]
+        var deliveries: [String: [Row]] = [:]
+        var summaries: [String: Row] = [:]
+        for row in rows {
+            if case let .turnSummary(summary) = row, let run = summary.runId,
+               processes[run] != nil, !expandedRuns.contains(run), !(summary.changes ?? []).isEmpty
+            {
+                summaries[run] = row
+            }
+            if case let .message(model) = row, let run = model.message.metadata?["run_id"],
+               let finals = processes[run], finals.contains(model.message.id)
+            {
+                anchors[run] = row.id
+            }
+        }
+        for row in rows {
+            guard case let .message(model) = row, model.message.role == .assistant,
+                  let run = model.message.metadata?["run_id"], let finals = processes[run],
+                  !expandedRuns.contains(run)
+            else { continue }
+            let delivery = DeliveryRowModel(source: model, isFinal: finals.contains(model.message.id),
+                                            showsReview: summaries[run] == nil)
+            if !delivery.items.isEmpty {
+                deliveries[run, default: []].append(.delivery(delivery))
+            }
+        }
+        for row in rows {
+            if case let .turnSummary(summary) = row, let run = summary.runId, summaries[run] != nil {
+                continue
+            }
+            guard case let .message(model) = row,
+                  model.message.role == .assistant || model.message.isInternalContinuation,
+                  let run = model.message.metadata?["run_id"],
+                  let finals = processes[run]
+            else { output.append(row); continue }
+            if model.message.isInternalContinuation {
+                if emitted.insert(run).inserted {
+                    output.append(.process(runId: run, expanded: expandedRuns.contains(run)))
+                }
+                if expandedRuns.contains(run) {
+                    output.append(row)
+                }
+                continue
+            }
+            let isFinal = finals.contains(model.message.id)
+            let hasProcess = model.items.contains { Self.isProcessItem($0, isFinal: isFinal) }
+            if hasProcess, emitted.insert(run).inserted {
+                output.append(.process(runId: run, expanded: expandedRuns.contains(run)))
+            }
+            if expandedRuns.contains(run) {
+                output.append(row)
+            } else {
+                let items = model.items.filter { !Self.isProcessItem($0, isFinal: isFinal) }
+                if !items.isEmpty {
+                    output.append(.message(MessageRowModel(
+                        message: model.message, items: items, showActions: isFinal && model.showActions,
+                    )))
+                }
+                if anchors[run] == row.id {
+                    output.append(contentsOf: deliveries[run] ?? [])
+                    if let summary = summaries[run] {
+                        output.append(summary)
+                    }
+                }
+            }
+        }
+        return output
+    }
 
     struct ToolLocation: Equatable {
         let rowId: String
         let scrollId: String
+        var processRunId: String?
     }
 
     func toolLocation(callId: String) -> ToolLocation? {
@@ -109,7 +295,13 @@ struct TranscriptModel: Equatable {
             }
             return false
         }) else { return nil }
-        return ToolLocation(rowId: row.id, scrollId: ToolRevealRequest.scrollId(callId: callId))
+        var run: String?
+        if case let .message(model) = row, let id = model.message.metadata?["run_id"],
+           processes[id] != nil
+        {
+            run = id
+        }
+        return ToolLocation(rowId: row.id, scrollId: ToolRevealRequest.scrollId(callId: callId), processRunId: run)
     }
 
     /// Builds the model from the authoritative history. `midTurn` is
@@ -120,19 +312,75 @@ struct TranscriptModel: Equatable {
     /// appended at its turn boundary.
     static func build(
         messages: [Message], midTurn: Bool, turnSummaries: [TurnSummary] = [],
+        turnClosures: [TurnClosure] = [], activeRunId: String? = nil,
     ) -> TranscriptModel {
-        // Cross-message call_id → result map (the WebUI's histTools):
-        // tool results arrive in their own assistant messages and patch
-        // the block created for the matching call.
-        var toolResults: [String: ContentPart.ToolResult] = [:]
+        // Folding requires strict same-run evidence. Display prefers same-run
+        // results but preserves legacy last-by-call-ID pairing for recovery and
+        // untagged history; recovery may stamp the result with a new run ID.
+        let byRun = Dictionary(grouping: messages.filter { $0.role == .assistant }, by: { $0.metadata?["run_id"] })
+        var resultsByRun: [String?: [String: [ContentPart.ToolResult]]] = [:]
+        var globalResults: [String: ContentPart.ToolResult] = [:]
         for message in messages where message.role == .assistant {
+            let run = message.metadata?["run_id"]
             for part in message.parts {
                 if case let .toolResult(result) = part {
-                    toolResults[result.callId] = result
+                    resultsByRun[run, default: [:]][result.callId, default: []].append(result)
+                    globalResults[result.callId] = result
                 }
             }
         }
-
+        let pairedResults = resultsByRun.mapValues { results in results.compactMapValues { $0.last } }
+        // Never infer a final answer from prose, position, or a user/steer boundary.
+        var processes: [String: Set<String>] = [:]
+        let byId = Dictionary(grouping: messages, by: \.id)
+        let continuationRuns = Set(messages.filter(\.isInternalContinuation).compactMap { $0.metadata?["run_id"] })
+        let conservativeActiveRun = activeRunId ?? messages.last(where: {
+            $0.role == .assistant && $0.metadata?["run_id"] != nil
+        })?.metadata?["run_id"]
+        for closure in turnClosures {
+            guard let run = closure.runId, !run.isEmpty,
+                  closure.outcome == "succeeded",
+                  !(midTurn && (conservativeActiveRun == nil || conservativeActiveRun == run)),
+                  let ids = closure.finalAnswerMessageIds, !ids.isEmpty,
+                  Set(ids).count == ids.count,
+                  ids.allSatisfy({ id in
+                      guard let matches = byId[id], matches.count == 1, let message = matches.first
+                      else { return false }
+                      return message.role == .assistant && message.status == .final
+                          && message.metadata?["run_id"] == run
+                          && message.parts.contains { part in
+                              switch part {
+                              case let .text(text): !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                              case .image: true
+                              case let .artifact(artifact): !artifact.modelOnly
+                              default: false
+                              }
+                          }
+                  }),
+                  !(byRun[run] ?? []).contains(where: { $0.status != .final }),
+                  toolsAreComplete(messages: byRun[run] ?? [], results: resultsByRun[run] ?? [:])
+            else { continue }
+            let finals = Set(ids)
+            let hasProcess = continuationRuns.contains(run)
+                || (byRun[run] ?? []).contains { message in
+                    message.parts.contains { part in
+                        switch part {
+                        case .reasoning, .toolCall: true
+                        case .toolResult, .unknown: false
+                        default: !finals.contains(message.id)
+                        }
+                    }
+                }
+            if hasProcess {
+                processes[run] = finals
+            }
+        }
+        // Conflicting/duplicate terminal records are not trustworthy.
+        for (run, records) in Dictionary(grouping: turnClosures, by: { $0.runId ?? "" })
+            where records.count > 1
+        {
+            processes.removeValue(forKey: run)
+        }
         // WebUI closeTurn: the action row attaches to the LAST text
         // segment of a finished turn — settled at the next user message,
         // and at the transcript tail only when no turn is in flight.
@@ -141,6 +389,9 @@ struct TranscriptModel: Equatable {
         for message in messages {
             switch message.role {
             case .user:
+                if message.isInternalContinuation {
+                    continue
+                }
                 if let candidate {
                     actionIds.insert(candidate)
                 }
@@ -172,6 +423,17 @@ struct TranscriptModel: Equatable {
 
         var rows: [Row] = []
         rows.reserveCapacity(messages.count + summariesByRun.count)
+        var renderableProcessRuns: Set<String> = []
+        // Preserve the immediate next assistant's run (including nil metadata)
+        // without repeatedly scanning suffixes containing only user/system rows.
+        var nextAssistantRuns = [String?](repeating: nil, count: messages.count)
+        var nextAssistantRun: String?
+        for index in messages.indices.reversed() {
+            nextAssistantRuns[index] = nextAssistantRun
+            if messages[index].role == .assistant {
+                nextAssistantRun = messages[index].metadata?["run_id"]
+            }
+        }
 
         func emitSummary() {
             guard !lastRunId.isEmpty, !emitted.contains(lastRunId),
@@ -183,14 +445,20 @@ struct TranscriptModel: Equatable {
 
         // Persisted final segments in the active turn remain individually visible,
         // just like DraftView. Without a user boundary treat all history as active.
-        let activeTurnStart = midTurn ? (messages.lastIndex { $0.role == .user } ?? 0) : messages.count
+        let activeTurnStart = midTurn ? (messages.lastIndex { $0.role == .user && !$0.isInternalContinuation } ?? 0) : messages.count
         for (index, message) in messages.enumerated() {
             switch message.role {
             case .user:
                 // Turn boundary: close out the previous turn's file
                 // summary before opening the next bubble (no-op when
                 // the run wrote no files).
-                emitSummary()
+                let nextRun = nextAssistantRuns[index]
+                if !message.isInternalContinuation, lastRunId.isEmpty || nextRun != lastRunId {
+                    emitSummary()
+                }
+                if message.isInternalContinuation, let run = message.metadata?["run_id"], processes[run] != nil {
+                    renderableProcessRuns.insert(run)
+                }
                 rows.append(.message(MessageRowModel(message: message, items: [], showActions: false)))
             case .assistant:
                 // The agent loop stamps run_id metadata when persisting
@@ -202,14 +470,22 @@ struct TranscriptModel: Equatable {
                     }
                 }
                 let items = assistantItems(
-                    of: message, toolResults: toolResults,
-                    groupTools: index < activeTurnStart && message.status == .final
+                    of: message,
+                    toolResults: pairedResults[message.metadata?["run_id"]] ?? [:],
+                    fallbackToolResults: globalResults,
+                    groupTools: processes[message.metadata?["run_id"] ?? ""] == nil
+                        && index < activeTurnStart && message.status == .final
                         && !actionIds.contains(message.id),
                 )
                 // Pure tool_result carriers fold into their call's block
                 // and leave no row of their own (WebUI parity).
                 if items.isEmpty {
                     continue
+                }
+                if let run = message.metadata?["run_id"], let finals = processes[run],
+                   items.contains(where: { isProcessItem($0, isFinal: finals.contains(message.id)) })
+                {
+                    renderableProcessRuns.insert(run)
                 }
                 rows.append(.message(MessageRowModel(
                     message: message,
@@ -221,7 +497,31 @@ struct TranscriptModel: Equatable {
             }
         }
         emitSummary()
-        return TranscriptModel(rows: rows)
+        // Require actual renderable process content, not whitespace/model-only parts.
+        processes = processes.filter { renderableProcessRuns.contains($0.key) }
+        return TranscriptModel(rows: rows, processes: processes)
+    }
+
+    /// Any missing, ambiguous or non-success result blocks folding the entire
+    /// run, including earlier errors subsequently recovered by another call.
+    private static func toolsAreComplete(
+        messages: [Message], results: [String: [ContentPart.ToolResult]],
+    ) -> Bool {
+        var callIds: Set<String> = []
+        for message in messages {
+            for part in message.parts {
+                if case let .toolCall(call) = part {
+                    guard !call.id.isEmpty, callIds.insert(call.id).inserted,
+                          let matches = results[call.id], matches.count == 1,
+                          matches[0].status == "success", matches[0].error == nil
+                    else { return false }
+                }
+            }
+        }
+        return results.allSatisfy { id, matches in
+            callIds.contains(id) && matches.count == 1
+                && matches[0].status == "success" && matches[0].error == nil
+        }
     }
 
     /// A bounded, lossless projection within one source message. Row identity,
@@ -259,6 +559,7 @@ struct TranscriptModel: Equatable {
     private static func assistantItems(
         of message: Message,
         toolResults: [String: ContentPart.ToolResult],
+        fallbackToolResults: [String: ContentPart.ToolResult],
         groupTools: Bool,
     ) -> [Item] {
         var items: [Item] = []
@@ -283,7 +584,7 @@ struct TranscriptModel: Equatable {
                 items.append(.reasoning(reasoning))
             case let .toolCall(call):
                 pendingTools.append(.tool(ToolRenderModel(
-                    item: ToolBlockItem(call: call, result: toolResults[call.id]),
+                    item: ToolBlockItem(call: call, result: toolResults[call.id] ?? fallbackToolResults[call.id]),
                 )))
             case .toolResult:
                 // Consumed by the pairing map; an orphaned result (no
@@ -399,6 +700,25 @@ struct ToolRenderModel: Equatable {
         "web_fetch", "web_search", "kb_search", "kb_read", "read_skill",
     ]
 
+    /// No diff derivation here: unsupported/oversized/absent diffs still offer source review.
+    var needsReview: Bool {
+        diff != nil || ["write", "edit", "apply_patch", "multi_edit", "MultiEdit", "write_file"].contains(name)
+    }
+
+    /// Automatic command logs stay in process. A clipped live JSON preview
+    /// cannot identify its stream refs, so defer ambiguous text-only artifacts
+    /// until the authoritative snapshot arrives without altering the source.
+    var deliveryArtifacts: [ContentPart.Artifact] {
+        if name == "run_cmd", !commandOutputFormatted {
+            return artifacts.filter { $0.mediaType != nil && $0.mediaType != "text/plain" }
+        }
+        return artifacts
+    }
+
+    func hasDelivery(showsReview: Bool) -> Bool {
+        !images.isEmpty || !deliveryArtifacts.isEmpty || (showsReview && needsReview)
+    }
+
     var canGroupReadOnlySuccess: Bool {
         explicitPlainSuccess && Self.readOnlyNames.contains(name)
             && callId?.isEmpty == false && status == .success && errorMessage == nil
@@ -442,8 +762,13 @@ struct ToolRenderModel: Equatable {
             output = full.count > 600 ? String(full.prefix(600)) + "\n…" : full
         }
         images = Self.resultImages(of: item)
-        artifacts = Self.resultArtifacts(of: item, images: images)
+        artifacts = Self.resultArtifacts(of: item)
+        // Command stream refs must be extracted before inline media suppresses
+        // the remaining visual artifacts. Both paths reuse the original refs.
         mergeCommandOutput()
+        if !images.isEmpty {
+            artifacts.removeAll()
+        }
         diff = Self.diffText(of: item)
         explicitPlainSuccess = item.result?.status == "success" && item.result?.error == nil
             && !(item.result?.content ?? []).contains { part in
@@ -550,14 +875,11 @@ struct ToolRenderModel: Equatable {
         }
     }
 
-    /// Artifact references inside the result content — only rendered
-    /// when the result carries no inline images (WebUI precedence).
-    /// model_only artifacts (view_image) are for the model only: the
-    /// WebUI's histCompletion filters them out, and so do we.
-    private static func resultArtifacts(
-        of item: ToolBlockItem, images: [ContentPart.ImageContent],
-    ) -> [ContentPart.Artifact] {
-        guard images.isEmpty, let content = item.result?.content else { return [] }
+    /// Collect display-bound refs before command stream extraction; inline
+    /// image precedence applies only to the remaining visual artifacts.
+    /// model_only artifacts never enter either display channel.
+    private static func resultArtifacts(of item: ToolBlockItem) -> [ContentPart.Artifact] {
+        guard let content = item.result?.content else { return [] }
         return content.compactMap { part in
             if case let .artifact(artifact) = part, !artifact.modelOnly {
                 return artifact

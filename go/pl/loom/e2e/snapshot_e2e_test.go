@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -30,6 +31,7 @@ import (
 	"github.com/liubang/playground/go/pl/loom/e2e/harness"
 	"github.com/liubang/playground/go/pl/loom/internal/client"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
+	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 )
 
 // snapshot_e2e_test.go is the snapshot suite runner
@@ -174,11 +176,110 @@ func runSnapshotScenario(t *testing.T, dir string, mode string) {
 		ArtifactDir: env.ArtifactDir,
 		Home:        env.Home,
 	}
-	eventsGolden := harness.NormalizeEvents(normCtx, env.TapEvents())
-	transcriptGolden := harness.NormalizeTranscripts(normCtx, inspectAllSessions(t, env, c))
+	events := env.TapEvents()
+	inspections := inspectAllSessions(t, env, c)
+	assertSnapshotClosureSources(t, events, inspections)
+	eventsGolden := harness.NormalizeEvents(normCtx, events)
+	transcriptGolden := harness.NormalizeTranscripts(normCtx, inspections)
 
 	assertGolden(t, dir, "events.expected.jsonl", eventsGolden, mode == "replay")
 	assertGolden(t, dir, "transcript.expected.json", transcriptGolden, mode == "replay")
+}
+
+// assertSnapshotClosureSources checks raw identities before normalization (the
+// event and transcript goldens assign independent ID ordinals). Run this in
+// refresh mode too: rewriting a golden must not accept broken source attribution.
+func assertSnapshotClosureSources(t *testing.T, events []runtimeevent.RuntimeEvent, inspections []domain.SessionInspection) {
+	t.Helper()
+	type runKey struct {
+		session domain.SessionID
+		run     domain.RunID
+	}
+	terminals := make(map[runKey]domain.RunTerminalPayload)
+	responses := make(map[domain.MessageID]domain.Message)
+	responseSessions := make(map[domain.MessageID]domain.SessionID)
+	for _, insp := range inspections {
+		messages := make(map[domain.MessageID]domain.Message)
+		for _, msg := range insp.Transcript.Messages {
+			messages[msg.ID] = msg
+		}
+		for _, evt := range insp.Events {
+			switch evt.Type {
+			case domain.EventModelResponseCompleted:
+				var payload domain.ResponseCompletedPayload
+				if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+					t.Fatalf("decode canonical response: %v", err)
+				}
+				responses[payload.Message.ID] = payload.Message
+				responseSessions[payload.Message.ID] = insp.Session.ID
+			case domain.EventRunCompleted, domain.EventRunFailed, domain.EventRunCancelled:
+				var terminal domain.RunTerminalPayload
+				if err := json.Unmarshal(evt.Payload, &terminal); err != nil {
+					t.Fatalf("decode canonical terminal: %v", err)
+				}
+				if terminal.RunID.IsZero() || terminal.Lifecycle != domain.LifecycleTerminal {
+					t.Fatalf("terminal %s has no committed run identity: %+v", evt.ID, terminal)
+				}
+				terminals[runKey{insp.Session.ID, terminal.RunID}] = terminal
+				if terminal.Outcome != domain.OutcomeSucceeded {
+					if len(terminal.FinalAnswerMessageIDs) != 0 {
+						t.Fatalf("non-successful run %s references final answers", terminal.RunID)
+					}
+					continue
+				}
+				if len(terminal.FinalAnswerMessageIDs) == 0 {
+					t.Fatalf("successful snapshot run %s has no final answer references", terminal.RunID)
+				}
+				for _, id := range terminal.FinalAnswerMessageIDs {
+					msg, ok := responses[id]
+					if !ok || responseSessions[id] != insp.Session.ID || msg.Role != domain.RoleAssistant || msg.Status != domain.MessageStatusFinal ||
+						msg.Metadata["run_id"] != terminal.RunID.String() || msg.Sequence >= evt.Sequence {
+						t.Fatalf("final answer %s is not a preceding canonical response of run %s", id, terminal.RunID)
+					}
+					if len(msg.TextParts()) == 0 || len(msg.ToolCalls()) != 0 {
+						t.Fatalf("final answer %s is not a text-only assistant answer", id)
+					}
+					persisted, ok := messages[id]
+					if !ok || persisted.Metadata["run_id"] != terminal.RunID.String() || !slices.Equal(persisted.TextParts(), msg.TextParts()) {
+						t.Fatalf("final answer %s is not preserved in its session transcript", id)
+					}
+				}
+			}
+		}
+	}
+	finished := 0
+	for _, evt := range events {
+		switch evt.Kind {
+		case runtimeevent.KindModelResponseCompleted:
+			var payload runtimeevent.ModelResponseCompletedPayload
+			if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+				t.Fatalf("decode runtime response: %v", err)
+			}
+			msg, ok := responses[payload.MessageID]
+			if !ok || responseSessions[payload.MessageID] != evt.SessionID ||
+				msg.Metadata["run_id"] != evt.RunID.String() || strings.Join(msg.TextParts(), "") != payload.Text ||
+				payload.HasToolCalls != (len(msg.ToolCalls()) != 0) {
+				t.Fatalf("runtime response %s does not match its canonical message", payload.MessageID)
+			}
+		case runtimeevent.KindTurnFinished:
+			var payload runtimeevent.TurnFinishedPayload
+			if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+				t.Fatalf("decode turn.finished: %v", err)
+			}
+			finished++
+			if payload.Closure == nil || payload.Closure.RunID != evt.RunID {
+				t.Fatalf("turn.finished has no matching closure: %+v", evt)
+			}
+			terminal, ok := terminals[runKey{evt.SessionID, evt.RunID}]
+			if !ok || payload.Closure.Outcome != terminal.Outcome ||
+				!slices.Equal(payload.Closure.FinalAnswerMessageIDs, terminal.FinalAnswerMessageIDs) {
+				t.Fatalf("turn.finished closure differs from its committed terminal: %+v", payload.Closure)
+			}
+		}
+	}
+	if finished == 0 {
+		t.Fatal("snapshot has no turn.finished closure to verify")
+	}
 }
 
 // inspectAllSessions collects the persisted inspection of every session

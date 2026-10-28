@@ -208,6 +208,7 @@ func (c *Controller) handleRewind(cmd controllerCommand) {
 	// and rebuild from the surviving events (derived state — TurnSummary).
 	c.turnChanges = nil
 	c.turnSummaries = turnSummariesFromEvents(inspection.Events)
+	c.turnClosures = turnClosuresFromEvents(inspection.Events)
 	c.lastUsage = run.Usage
 	c.resumedRun = run
 	c.resumed = true

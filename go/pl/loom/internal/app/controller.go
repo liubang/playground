@@ -107,7 +107,8 @@ type Snapshot struct {
 	// closing "本轮变更" blocks from the snapshot alone. Derived state:
 	// rebuilt from the event log on resume, appended live on each
 	// turn.finished; oldest entries fall off past turnSummariesCap.
-	TurnSummaries []TurnSummary `json:"turn_summaries,omitempty"`
+	TurnSummaries []TurnSummary              `json:"turn_summaries,omitempty"`
+	TurnClosures  []runtimeevent.TurnClosure `json:"turn_closures,omitempty"`
 	// Delegated marks a sub-agent child session: read-only for frontends —
 	// prompts are rejected; approvals/questions stay resolvable.
 	Delegated bool `json:"delegated,omitempty"`
@@ -221,6 +222,7 @@ type Controller struct {
 	// consumes it at the turn boundary into the turnSummaries projection.
 	turnChanges   []runtimeevent.TurnFileChange
 	turnSummaries []TurnSummary
+	turnClosures  []runtimeevent.TurnClosure
 	questioner    *ChannelQuestioner
 	// runtime holds the per-session mutable state (cells, questioner,
 	// registry overlay). It is the controller's ONLY source of session
@@ -1667,6 +1669,7 @@ func (c *Controller) flushRunEvents(ctx context.Context, run *agent.Run) error {
 	c.RecordUsage(run.Usage)
 	c.mu.Lock()
 	c.messages = append([]domain.Message(nil), run.Messages...)
+	c.recordCommittedClosuresLocked(events)
 	c.mu.Unlock()
 	return nil
 }
@@ -1690,6 +1693,13 @@ func (c *Controller) onTurnFinished(turnID uint64, turn int, err error) {
 		return
 	}
 	sessionID, runID := c.sessionID, c.runID
+	var closure *runtimeevent.TurnClosure
+	for _, committed := range c.turnClosures {
+		if committed.RunID == runID {
+			closure = new(committed)
+			break
+		}
+	}
 	delegated := c.delegated
 	c.turnCtx = nil
 	c.cancelTurn = nil
@@ -1713,15 +1723,13 @@ func (c *Controller) onTurnFinished(turnID uint64, turn int, err error) {
 	// wants to review (and possibly revert).
 	cancelled := errors.Is(err, context.Canceled)
 	changes := c.finishTurnChanges(runID, turn, cancelled, err != nil && !cancelled)
-	var payload any
+	payload := runtimeevent.TurnFinishedPayload{Closure: closure, Changes: changes}
 	switch {
 	case err != nil && !cancelled:
 		// Surface turn failures the domain log could not represent (for example
 		// a persistence error before the loop emitted any run-failed event).
 		// Cancellation is a user action already carried by run.cancelled.
-		payload = runtimeevent.TurnFinishedPayload{Error: err.Error(), Changes: changes}
-	case len(changes) > 0:
-		payload = runtimeevent.TurnFinishedPayload{Changes: changes}
+		payload.Error = err.Error()
 	}
 	c.enqueueMemoryJob(sessionID, delegated)
 	c.publishDurable(sessionID, runID, turn, runtimeevent.KindTurnFinished, payload)
@@ -1873,6 +1881,9 @@ func (c *Controller) handleNewSession(cmd controllerCommand) {
 	c.runID = domain.RunID{}
 	c.turnCounter = 0
 	c.messages = nil
+	c.turnClosures = nil
+	c.turnSummaries = nil
+	c.turnChanges = nil
 	c.lastError = nil
 	c.plan = domain.Plan{}
 	c.hasPlan = false
@@ -2055,6 +2066,7 @@ func (c *Controller) handleResumeSession(cmd controllerCommand) {
 	// projection is derived state — see TurnSummary).
 	c.turnChanges = nil
 	c.turnSummaries = turnSummariesFromEvents(inspection.Events)
+	c.turnClosures = turnClosuresFromEvents(inspection.Events)
 	c.lastUsage = run.Usage
 	// Seed the plan projection from the checkpoint: the plan survives prompt
 	// boundaries like the goal does, and no EventPlanRevised is re-emitted
@@ -2170,6 +2182,7 @@ func (c *Controller) handleRequestSnapshot(cmd controllerCommand) {
 		PendingFollowups:    c.followupCellPeek(),
 		LastError:           c.lastError,
 		TurnSummaries:       append([]TurnSummary(nil), c.turnSummaries...),
+		TurnClosures:        append([]runtimeevent.TurnClosure(nil), c.turnClosures...),
 		EventSeq:            c.appliedSeq,
 		Timestamp:           c.clock.Now(),
 	}
@@ -2433,6 +2446,9 @@ func (s *publishingStore) AppendEvents(ctx context.Context, sessionID domain.Ses
 	if err := s.inner.AppendEvents(ctx, sessionID, expectedVersion, events); err != nil {
 		return err
 	}
+	s.controller.mu.Lock()
+	s.controller.recordCommittedClosuresLocked(events)
+	s.controller.mu.Unlock()
 	s.publishForEvents(sessionID, events)
 	return nil
 }
@@ -2441,13 +2457,15 @@ func (s *publishingStore) AppendEventsAndCheckpoint(ctx context.Context, session
 	if err := s.inner.AppendEventsAndCheckpoint(ctx, sessionID, expectedVersion, events, checkpoint); err != nil {
 		return err
 	}
-	s.publishForEvents(sessionID, events)
+	// Apply the committed snapshot before publishing any new watermark.
 	// Keep the controller snapshot projection aligned with the durable checkpoint.
 	s.controller.mu.Lock()
 	s.controller.messages = append([]domain.Message(nil), checkpoint.Messages...)
 	s.controller.lastUsage = checkpoint.Usage
+	s.controller.recordCommittedClosuresLocked(events)
 	s.controller.noteProjectionLocked()
 	s.controller.mu.Unlock()
+	s.publishForEvents(sessionID, events)
 	return nil
 }
 
@@ -2517,6 +2535,7 @@ func (s *publishingStore) publishForEvent(sessionID domain.SessionID, ev domain.
 				}
 			}
 			completed := runtimeevent.ModelResponseCompletedPayload{
+				MessageID:    payload.Message.ID,
 				RequestID:    requestID,
 				StopReason:   stopReason,
 				HasToolCalls: hasToolCalls,

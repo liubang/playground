@@ -294,6 +294,7 @@ struct ResolvedReceipt: Equatable, Identifiable, Sendable {
     /// broadcast echo race; first writer wins).
     let id: String
     let kind: Kind
+    let runId: String?
 }
 
 // MARK: - Session store
@@ -355,6 +356,40 @@ final class SessionStore {
     /// per edit call. (Previously these were ChatView computed
     /// properties re-derived on every streaming frame.)
     private(set) var transcript: TranscriptModel = .empty
+    private(set) var turnClosures: [TurnClosure] = []
+    private(set) var processState = TurnProcessState()
+    private(set) var projectedRows: [TranscriptModel.Row] = []
+    private(set) var activeRunId: String?
+    /// turn.started names the preceding run, never the newly created one.
+    private var previousStartRunId: String?
+    private var finishedRuns: [String] = []
+    /// Retain conflicting terminal evidence across snapshot refreshes.
+    private var conflictingClosures: [TurnClosure] = []
+
+    func setTranscriptFollowingBottom(_ following: Bool) {
+        processState.followingBottom = following
+    }
+
+    /// Called only on explicit input, never on streaming/layout geometry alone.
+    func holdCurrentProcessOpen() {
+        if isBusy || draft != nil || activeRunId != nil {
+            processState.holdOpen = true
+        }
+    }
+
+    func setProcessExpanded(runId: String, expanded: Bool) {
+        processState.setExpanded(runId: runId, expanded: expanded)
+        projectedRows = transcript.projectedRows(expandedRuns: processState.expandedRuns)
+    }
+
+    func revealTool(_ request: ToolRevealRequest) {
+        holdCurrentProcessOpen()
+        guard let callId = request.callId,
+              let run = transcript.toolLocation(callId: callId)?.processRunId
+        else { return }
+        setProcessExpanded(runId: run, expanded: true)
+    }
+
     /// Batch canonical snapshots and turn-start render inputs into one build.
     private var applyingSnapshot = false
     /// Composer input, kept in the store so it survives session
@@ -378,6 +413,21 @@ final class SessionStore {
     /// block) takes over the narrative. A cold open rebuilds nothing,
     /// exactly like the WebUI's live-only notice blocks.
     private(set) var resolvedReceipts: [ResolvedReceipt] = []
+
+    /// Only trusted, collapsed successful processes absorb their successful receipts.
+    /// Keep the originals intact so expansion restores their identity and content.
+    var visibleResolvedReceipts: [ResolvedReceipt] {
+        resolvedReceipts.filter { receipt in
+            guard let runId = receipt.runId, transcript.processes[runId] != nil,
+                  !processState.expandedRuns.contains(runId)
+            else { return true }
+            switch receipt.kind {
+            case let .approval(allowed, _): return !allowed
+            case let .question(skipped, _): return skipped
+            }
+        }
+    }
+
     /// Locally-initiated resolutions awaiting their broadcast echo:
     /// the resolved/answered EVENT is the single receipt writer (it
     /// reaches every client, this one included), and these tell the
@@ -494,7 +544,10 @@ final class SessionStore {
     private func rebuildTranscript() {
         transcript = TranscriptModel.build(
             messages: messages, midTurn: isBusy, turnSummaries: turnSummaries,
+            turnClosures: turnClosures, activeRunId: activeRunId,
         )
+        processState.reconcile(eligibleRuns: Set(transcript.processes.keys))
+        projectedRows = transcript.projectedRows(expandedRuns: processState.expandedRuns)
     }
 
     var occupancyFraction: Double? {
@@ -575,6 +628,8 @@ final class SessionStore {
     /// hold N streams for the rest of the app's lifetime.
     func pause() {
         guard !stopped else { return }
+        processState.followingBottom = false
+        holdCurrentProcessOpen()
         loopEpoch += 1
         loopTask?.cancel()
         loopTask = nil
@@ -1046,7 +1101,32 @@ final class SessionStore {
         // the "default" label while the session actually ran the seeded dial.
         reasoningEffort = snap.reasoningEffort.flatMap { $0.isEmpty ? nil : $0 } ?? "default"
         turnSummaries = snap.turnSummaries ?? []
+        turnClosures = snap.turnClosures ?? []
+        let snapshotRuns = Set(turnClosures.compactMap(\.runId))
+        conflictingClosures = conflictingClosures.filter { $0.runId.map(snapshotRuns.contains) ?? false }
+        for conflict in conflictingClosures where !turnClosures.contains(conflict) {
+            turnClosures.append(conflict)
+        }
         messages = snap.messages ?? []
+        if isBusy {
+            // The current run may have no assistant history yet (missed turn.started).
+            // Legacy snapshots may only borrow an identity not already closed.
+            let closedRuns = Set(turnClosures.compactMap(\.runId))
+            let legacyRun = [activeRunId, messages.last(where: { $0.role == .assistant })?.metadata?["run_id"]]
+                .compactMap(\.self).first { !$0.isEmpty && !closedRuns.contains($0) && $0 != previousStartRunId }
+            activeRunId = snap.runId.flatMap { $0.isEmpty ? nil : $0 } ?? legacyRun
+            if let activeRunId {
+                processState.observeRun(activeRunId)
+            } else {
+                let held = processState.holdOpen
+                processState.beginRun(nil)
+                processState.holdOpen = held || !processState.followingBottom
+            }
+        } else {
+            previousStartRunId = nil
+            activeRunId = nil
+            processState.endRun()
+        }
         applyingSnapshot = false
         rebuildTranscript()
         draft = nil
@@ -1419,7 +1499,69 @@ final class SessionStore {
         streamRevision += 1
     }
 
+    /// Keep conflicting evidence through the next canonical snapshot, whether
+    /// the closure arrived on a normal finish or a historical replay.
+    @discardableResult
+    private func retainTurnClosure(_ closure: TurnClosure) -> Bool {
+        guard !turnClosures.contains(closure) else { return false }
+        let previous = turnClosures.filter { $0.runId == closure.runId }
+        if !previous.isEmpty {
+            for evidence in previous + [closure] where !conflictingClosures.contains(evidence) {
+                conflictingClosures.append(evidence)
+            }
+        }
+        turnClosures.append(closure)
+        return true
+    }
+
     private func apply(_ event: RuntimeEvent) {
+        let run = event.runId.flatMap { $0.isEmpty ? nil : $0 }
+        let alreadyFinished = run.map { id in
+            // Durable closure projection precedes lifecycle completion. A busy
+            // snapshot's authoritative current run still needs progress and finish,
+            // even if an earlier finish or snapshot already supplied its closure.
+            !(isBusy && activeRunId == id)
+                && (finishedRuns.contains(id) || turnClosures.contains { $0.runId == id })
+        } ?? false
+        if event.kind == .turnFinished {
+            // Snapshot/live overlap must not seal or reconcile another turn's draft.
+            if alreadyFinished {
+                if let run,
+                   let closure = tryDecode(TurnFinishedPayload.self, from: event)?.closure,
+                   closure.runId == run, retainTurnClosure(closure)
+                {
+                    rebuildTranscript()
+                }
+                return
+            }
+            if let activeRunId, let run, activeRunId != run {
+                return
+            }
+            if activeRunId == nil, isBusy, run == previousStartRunId, run != nil {
+                return
+            }
+        }
+        switch event.kind {
+        case .modelRequestStarted, .modelTextDelta, .modelReasoningDelta, .modelToolCallDelta,
+             .modelResponseCompleted, .modelRequestFailed, .modelRequestRetrying,
+             .toolPrepared, .toolStarted, .toolCompleted, .toolProgress, .runPhaseChanged:
+            if let run {
+                guard !alreadyFinished, run != previousStartRunId,
+                      activeRunId == nil || activeRunId == run else { return }
+                if isBusy {
+                    activeRunId = run
+                    processState.observeRun(run)
+                }
+            }
+        case .runCancelled, .runCancelRequested:
+            if alreadyFinished || (run != nil && activeRunId != nil && run != activeRunId)
+                || (run != nil && run == previousStartRunId)
+            {
+                return
+            }
+        default:
+            break
+        }
         switch event.kind {
         case .modelTextDelta, .modelReasoningDelta, .modelToolCallDelta:
             break // buffered below; applied at display cadence
@@ -1439,6 +1581,9 @@ final class SessionStore {
         switch event.kind {
         case .turnStarted:
             let payload = tryDecode(TurnStartedPayload.self, from: event)
+            previousStartRunId = run
+            activeRunId = nil
+            processState.beginRun(nil)
             turnFeedback = nil
             dismissedTurnFailure = nil
             applyingSnapshot = true
@@ -1562,6 +1707,7 @@ final class SessionStore {
                 addReceipt(ResolvedReceipt(
                     id: payload.approvalId,
                     kind: .approval(allowed: payload.decision == "allow", actor: actor),
+                    runId: event.runId,
                 ))
                 if pendingApprovals.isEmpty, state == .awaitingApproval {
                     state = .running
@@ -1588,6 +1734,7 @@ final class SessionStore {
                 addReceipt(ResolvedReceipt(
                     id: payload.questionId,
                     kind: .question(skipped: payload.skipped ?? false, summary: summary),
+                    runId: event.runId,
                 ))
             }
 
@@ -1684,6 +1831,21 @@ final class SessionStore {
             // Only this final boundary warrants a snapshot; do not spawn a task
             // that can finish after a newer turn.started and erase its draft.
             draft?.sealAll()
+            if let run {
+                if let closure = tryDecode(TurnFinishedPayload.self, from: event)?.closure,
+                   closure.runId == run
+                {
+                    retainTurnClosure(closure)
+                }
+                finishedRuns.removeAll { $0 == run }
+                finishedRuns.append(run)
+                if finishedRuns.count > TurnProcessState.maximumRuns {
+                    finishedRuns.removeFirst()
+                }
+            }
+            previousStartRunId = nil
+            activeRunId = nil
+            processState.endRun()
             state = .idle
             turnRefreshRequested = true
             reconcileNeeded = true

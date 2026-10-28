@@ -128,6 +128,7 @@ function ShareApp() {
       setView(v)
       document.title = `${v.title || 'shared session'} · loom`
       transcript.applySnapshot({
+        turn_closures: v.turn_closures || [],
         turn_summaries: v.turn_summaries || [],
         messages: v.messages || [],
         state: 'closed',
@@ -211,6 +212,7 @@ function ShareApp() {
           <BlocksIOContext.Provider value={blocksIO}>
             <TranscriptView
               controller={transcript}
+              sessionId={view?.session_id || ''}
               active={false}
               io={{}}
               className="share-transcript"

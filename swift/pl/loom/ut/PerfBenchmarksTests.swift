@@ -507,6 +507,68 @@ final class PerfBenchmarksTests: XCTestCase {
         XCTAssertEqual(matches, rows.count * Self.frames)
     }
 
+    /// Compare closure-boundary work with the same history without closure
+    /// projection. This baseline is the current legacy-compatible path, not
+    /// an emulation of the pre-closure implementation. Report timings rather
+    /// than enforcing machine/load-dependent wall-clock thresholds.
+    func testBenchClosureBoundaryCosts() {
+        for turns in [100, 1000] {
+            var messages: [Message] = []
+            var closures: [TurnClosure] = []
+            for index in 0 ..< turns {
+                let run = "bench-run-\(index)"
+                messages.append(Message(
+                    id: "bench-user-\(index)", role: .user, status: .final,
+                    parts: [.text("question")], createdAt: nil,
+                ))
+                messages.append(Message(
+                    id: "bench-process-\(index)", role: .assistant, status: .final,
+                    parts: [.text("working")], createdAt: nil, metadata: ["run_id": run],
+                ))
+                messages.append(Message(
+                    id: "bench-final-\(index)", role: .assistant, status: .final,
+                    parts: [.text("answer")], createdAt: nil, metadata: ["run_id": run],
+                ))
+                closures.append(TurnClosure(
+                    runId: run, outcome: "succeeded", finalAnswerMessageIds: ["bench-final-\(index)"],
+                ))
+            }
+            var model = TranscriptModel.empty
+            let samples = 10
+            let baseline = timed {
+                for _ in 0 ..< samples {
+                    model = TranscriptModel.build(messages: messages, midTurn: false)
+                }
+            } / Double(samples)
+            let boundary = timed {
+                for _ in 0 ..< samples {
+                    model = TranscriptModel.build(messages: messages, midTurn: false, turnClosures: closures)
+                }
+            } / Double(samples)
+            XCTAssertEqual(model.processes.count, turns)
+            var projected: [TranscriptModel.Row] = []
+            let projection = timed {
+                for _ in 0 ..< samples {
+                    projected = model.projectedRows(expandedRuns: [])
+                }
+            } / Double(samples)
+            XCTAssertEqual(projected.count, turns * 3)
+            var state = TurnProcessState()
+            let eligible = Set(model.processes.keys)
+            state.reconcile(eligibleRuns: eligible)
+            let warmState = timed {
+                for _ in 0 ..< samples {
+                    state.reconcile(eligibleRuns: eligible)
+                }
+            } / Double(samples)
+            XCTAssertLessThanOrEqual(state.retainedRunCount, TurnProcessState.maximumRuns)
+            print(String(
+                format: "LOOM-BENCH closure-boundary(%d runs): baseline=%.3fms build=%.3fms projection=%.3fms warm-state=%.3fms",
+                turns, baseline, boundary, projection, warmState,
+            ))
+        }
+    }
+
     /// syntheticHistory scaled up: user prompt + assistant text/tool
     /// call + assistant tool result per turn.
     private static func largeHistory(turns: Int) -> [Message] {
@@ -751,7 +813,8 @@ final class PerfBenchmarksTests: XCTestCase {
                     ForEach(rows) { row in
                         switch row {
                         case let .message(rowModel): MessageRow(row: rowModel)
-                        case .turnSummary: EmptyView()
+                        case let .delivery(delivery): DeliveryRow(row: delivery, onShowProcess: { _ in })
+                        case .turnSummary, .process: EmptyView()
                         }
                     }
                 })

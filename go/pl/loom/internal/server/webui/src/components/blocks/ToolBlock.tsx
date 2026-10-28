@@ -4,7 +4,7 @@
 
 import { memo, useMemo, useState } from 'react'
 import type { ToolCompletion } from '../../app/transcript'
-import { combinedToolTime, type ToolModel } from '../../lib/toolGroups'
+import { combinedToolTime, runCmdResult, toolDelivery, type ToolModel } from '../../lib/toolGroups'
 import { fmtDuration, copyText } from '../../lib/format'
 import { diffForToolCall } from '../../lib/diff'
 import { Icon, type IconName } from '../../lib/icons'
@@ -93,60 +93,9 @@ export interface ToolBlockProps {
   completion?: ToolCompletion
   // fetchToolOutput: for copying the full output (the live path's preview is bounded)
   fetchToolOutput?: () => Promise<string>
-}
-
-// Only a complete command result can be formatted. Live previews are slices of the
-// OUTER JSON, not slices of stdout: never guess at fields in a cut-off object.
-function runCmdResult(text: string): {
-  text: string
-  truncated: boolean
-  attachments: { name: 'stdout' | 'stderr'; id: string }[]
-} | null {
-  try {
-    const value: unknown = JSON.parse(text)
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-    const r = value as Record<string, unknown>
-    if (typeof r.stdout !== 'string' || typeof r.stderr !== 'string') return null
-    const lines: string[] = []
-    for (const name of ['stdout', 'stderr'] as const) {
-      const body = r[name]
-      if (body) {
-        const clipped = r[`${name}_preview_truncated`] === true
-        lines.push(`${name}${clipped ? ' (preview truncated)' : ''}:\n${body}`)
-      }
-    }
-    const status: string[] = []
-    if (typeof r.exit_code === 'number') status.push(`exit code: ${r.exit_code}`)
-    if (typeof r.signal === 'string' && r.signal) status.push(`signal: ${r.signal}`)
-    if (r.timed_out === true) status.push('timed out')
-    if (r.cancelled === true) status.push('cancelled')
-    if (status.length) lines.push(status.join(' · '))
-    if (typeof r.note === 'string' && r.note) lines.push(`note: ${r.note}`)
-    const attachments: { name: 'stdout' | 'stderr'; id: string }[] = []
-    for (const name of ['stdout', 'stderr'] as const) {
-      const ref = r[`${name}_artifact`]
-      if (ref && typeof ref === 'object' && !Array.isArray(ref)) {
-        const a = ref as Record<string, unknown>
-        if (
-          typeof a.id === 'string' &&
-          a.id &&
-          (a.media_type == null || a.media_type === 'text/plain')
-        ) {
-          attachments.push({ name, id: a.id })
-        }
-      }
-    }
-    return {
-      text: lines.join('\n\n') || '(no stdout/stderr)',
-      truncated:
-        r.truncated === true ||
-        r.stdout_preview_truncated === true ||
-        r.stderr_preview_truncated === true,
-      attachments,
-    }
-  } catch {
-    return null
-  }
+  presentation?: 'process' | 'delivery'
+  review?: boolean
+  onShowProcess?: () => void
 }
 
 export const ToolBlock = memo(function ToolBlock({
@@ -158,6 +107,9 @@ export const ToolBlock = memo(function ToolBlock({
   diffSuppressed,
   completion,
   fetchToolOutput,
+  presentation = 'process',
+  review = false,
+  onShowProcess,
 }: ToolBlockProps) {
   const [targetExpanded, setTargetExpanded] = useState(false)
   const { revealFile } = useBlocksIO()
@@ -170,8 +122,9 @@ export const ToolBlock = memo(function ToolBlock({
   // diffArgs reference, so the LCS is not recomputed after scrolling away
   const diffText = useMemo(
     () =>
-      diff ?? (diffArgs ? diffForToolCall(diffArgs.name, diffArgs.args) || undefined : undefined),
-    [diff, diffArgs],
+      presentation === 'delivery' ? undefined :
+        diff ?? (diffArgs ? diffForToolCall(diffArgs.name, diffArgs.args) || undefined : undefined),
+    [diff, diffArgs, presentation],
   )
 
   let statusEl
@@ -205,24 +158,32 @@ export const ToolBlock = memo(function ToolBlock({
     return completion?.preview || '' // fall back to copying the excerpt when the server is unreachable
   }
 
-  const command =
-    toolName === 'run_cmd' && (completion?.full_text || completion?.preview)
-      ? runCmdResult(completion.full_text || completion.preview || '')
-      : null
+  const { command, attachments, images, media, deliveryMedia } = useMemo(
+    () => toolDelivery({ toolName, completion }), [toolName, completion],
+  )
   const commandPreview =
     command?.text && command.text.length > 600 ? command.text.slice(0, 600) + '\n…' : command?.text
-  const artifacts = completion?.artifacts || []
-  // Merge only text artifacts referenced by a complete JSON result. Keep the
-  // actual completion ref (including its size/type); never manufacture one.
-  const attachments =
-    command?.attachments.flatMap(({ name, id }) => {
-      const artifact = artifacts.find(
-        (a) => a.id === id && (a.media_type == null || a.media_type === 'text/plain'),
-      )
-      return artifact ? [{ name, artifact }] : []
-    }) || []
-  const mergedIds = new Set(attachments.map(({ artifact }) => artifact.id))
   const [icon, verb] = toolMeta(toolName)
+  const mediaEl = images.length > 0
+    ? images.map((img, i) => <InlineImage key={i} mediaType={img.media_type} data={img.data} />)
+    : (presentation === 'delivery' ? deliveryMedia : media).map((art) => (
+        <ArtifactBlock key={art.id} artifact={art} />
+      ))
+  if (presentation === 'delivery') {
+    return (
+      <div className="block tool-delivery">
+        <div className="delivery-caption">
+          <span title={target}>{`From ${verb}${target ? ` · ${target}` : ''}`}</span>
+          {review && onShowProcess && (
+            <button type="button" className="process-toggle" onClick={onShowProcess}>
+              Review in processing details
+            </button>
+          )}
+        </div>
+        {mediaEl}
+      </div>
+    )
+  }
   return (
     <div className="block block-tool" data-call-id={callId || undefined}>
       <div className="tool-head">
@@ -286,14 +247,7 @@ export const ToolBlock = memo(function ToolBlock({
           only when there are no inline images. An artifact is not necessarily an
           image (run_cmd's stdout artifact is text) — ArtifactBlock dispatches by
           media type. */}
-      {completion &&
-        ((completion.images || []).length > 0
-          ? (completion.images || []).map((img, i) => (
-              <InlineImage key={i} mediaType={img.media_type} data={img.data} />
-            ))
-          : artifacts
-              .filter((art) => !mergedIds.has(art.id))
-              .map((art) => <ArtifactBlock key={art.id} artifact={art} />))}
+      {mediaEl}
       {diffText && !diffSuppressed && <DiffView diffText={diffText} />}
     </div>
   )
