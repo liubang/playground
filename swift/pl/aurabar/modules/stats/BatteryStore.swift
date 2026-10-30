@@ -1,4 +1,5 @@
 import AppKit
+import CoreGraphics
 import Foundation
 import IOKit
 import IOKit.ps
@@ -88,6 +89,102 @@ enum BatterySampler {
     }
 }
 
+/// Separate assertions let a locked/inactive session release display
+/// sleep prevention without ever dropping the idle-system-sleep assertion.
+/// Activity operations are injectable so tests never change machine power policy.
+@MainActor
+final class BatterySleepPrevention {
+    struct SessionState: Equatable {
+        var screenLocked: Bool
+        var isActive: Bool
+
+        static func current() -> Self {
+            guard let session = CGSessionCopyCurrentDictionary() as? [String: Any] else {
+                // No usable session: do not keep a login/lock screen lit.
+                return Self(screenLocked: true, isActive: false)
+            }
+            return Self(
+                // This WindowServer key and the distributed lock/unlock
+                // notifications are not exposed as named SDK constants.
+                screenLocked: session["CGSSessionScreenIsLocked"] as? Bool ?? false,
+                isActive: session[kCGSessionOnConsoleKey as String] as? Bool ?? false,
+            )
+        }
+    }
+
+    private var enabled = false
+    private var sessionState: SessionState
+    private let beginActivity: (ProcessInfo.ActivityOptions, String) -> NSObjectProtocol
+    private let endActivity: (NSObjectProtocol) -> Void
+    private var systemActivity: NSObjectProtocol?
+    private var displayActivity: NSObjectProtocol?
+
+    init(
+        sessionState: SessionState,
+        beginActivity: @escaping (ProcessInfo.ActivityOptions, String) -> NSObjectProtocol = {
+            ProcessInfo.processInfo.beginActivity(options: $0, reason: $1)
+        },
+        endActivity: @escaping (NSObjectProtocol) -> Void = {
+            ProcessInfo.processInfo.endActivity($0)
+        },
+    ) {
+        self.sessionState = sessionState
+        self.beginActivity = beginActivity
+        self.endActivity = endActivity
+    }
+
+    func setEnabled(_ enabled: Bool) {
+        self.enabled = enabled
+        updateActivities()
+    }
+
+    func setScreenLocked(_ locked: Bool) {
+        sessionState.screenLocked = locked
+        updateActivities()
+    }
+
+    func setSessionActive(_ active: Bool) {
+        sessionState.isActive = active
+        updateActivities()
+    }
+
+    func updateSessionState(_ state: SessionState) {
+        sessionState = state
+        updateActivities()
+    }
+
+    deinit {
+        if let displayActivity {
+            endActivity(displayActivity)
+        }
+        if let systemActivity {
+            endActivity(systemActivity)
+        }
+    }
+
+    private func updateActivities() {
+        if enabled, systemActivity == nil {
+            // Plain userInitiated includes idleSystemSleepDisabled.
+            // AppNapDisabler must keep using the allowing-idle-sleep variant.
+            systemActivity = beginActivity(.userInitiated, "AuraBar 防止系统自动休眠")
+        }
+
+        if enabled, sessionState.isActive, !sessionState.screenLocked {
+            if displayActivity == nil {
+                displayActivity = beginActivity(.idleDisplaySleepDisabled, "AuraBar 未锁屏时保持常亮")
+            }
+        } else if let activity = displayActivity {
+            endActivity(activity)
+            displayActivity = nil
+        }
+
+        if !enabled, let activity = systemActivity {
+            endActivity(activity)
+            systemActivity = nil
+        }
+    }
+}
+
 /// Owns the battery module's state. Refreshes are event-driven via the
 /// IOPowerSources run loop source (AC attach/detach, capacity ticks and
 /// charging-state changes all fire it — that's how the system menu bar
@@ -105,23 +202,21 @@ final class BatteryStore: ObservableObject {
     /// UserDefaults key persisting the sleep-prevention toggle.
     static let preventSleepKey = "AuraBar.battery.preventSleep"
 
-    /// When true, idle system sleep and display sleep are prevented via a
-    /// ProcessInfo activity. Persisted across launches and (re)acquired
-    /// at startup when still on.
+    /// When true, idle system sleep is always prevented; display sleep is
+    /// prevented only while the session is active and unlocked. Persisted
+    /// across launches and (re)acquired at startup when still on.
     @Published var preventSleep: Bool {
         didSet {
             guard preventSleep != oldValue else { return }
             UserDefaults.standard.set(preventSleep, forKey: Self.preventSleepKey)
-            if preventSleep {
-                startSleepPrevention()
-            } else {
-                stopSleepPrevention()
-            }
+            sleepPrevention.setEnabled(preventSleep)
         }
     }
 
     private var powerSourceRunLoopSource: CFRunLoopSource?
-    private var sleepActivity: NSObjectProtocol?
+    private let sleepPrevention: BatterySleepPrevention
+    private var sessionObservers: [NSObjectProtocol] = []
+    private var workspaceObservers: [NSObjectProtocol] = []
 
     /// Refreshes only matter while the module is visible (status item
     /// inserted or popover open). The 30s fallback timer follows this;
@@ -150,9 +245,14 @@ final class BatteryStore: ObservableObject {
 
     init() {
         preventSleep = UserDefaults.standard.bool(forKey: Self.preventSleepKey)
-        if preventSleep {
-            startSleepPrevention()
-        }
+        sleepPrevention = BatterySleepPrevention(
+            sessionState: .init(screenLocked: true, isActive: false),
+        )
+        // Subscribe before sampling so a lock during startup cannot be lost
+        // between the snapshot and notification registration.
+        observeSessionChanges()
+        sleepPrevention.updateSessionState(.current())
+        sleepPrevention.setEnabled(preventSleep)
         // One upfront read regardless of visibility: AppRegistry's
         // hasBattery check (and the popover's empty state) need it.
         refresh()
@@ -160,21 +260,29 @@ final class BatteryStore: ObservableObject {
         // Sleep may span a power-state change whose notification never
         // replays on wake — refresh immediately so the label catches up
         // without waiting for the next timer tick.
-        NSWorkspace.shared.notificationCenter.addObserver(
+        let wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,
             object: nil,
             queue: .main,
         ) { [weak self] _ in
             Task { @MainActor in
-                guard let self, self.samplingActive else { return }
-                self.refresh()
+                guard let self else { return }
+                // Power policy must update even when battery sampling is hidden.
+                self.sleepPrevention.updateSessionState(.current())
+                if self.samplingActive {
+                    self.refresh()
+                }
             }
         }
+        workspaceObservers.append(wakeObserver)
     }
 
     deinit {
-        if let activity = sleepActivity {
-            ProcessInfo.processInfo.endActivity(activity)
+        for observer in sessionObservers {
+            DistributedNotificationCenter.default().removeObserver(observer)
+        }
+        for observer in workspaceObservers {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
         if let source = powerSourceRunLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
@@ -203,24 +311,47 @@ final class BatteryStore: ObservableObject {
         info = BatterySampler.info()
     }
 
-    /// Acquires the ProcessInfo activity keeping the machine awake, the
-    /// caffeinate -d equivalent: `.userInitiated` asserts against idle
-    /// system sleep (the plain variant includes idleSystemSleepDisabled),
-    /// and the display-sleep option keeps the screen on too. This is why
-    /// AppNapDisabler must use `.userInitiatedAllowingIdleSystemSleep` —
-    /// otherwise the app would pin the machine awake unconditionally and
-    /// this toggle would be a no-op.
-    private func startSleepPrevention() {
-        guard sleepActivity == nil else { return }
-        sleepActivity = ProcessInfo.processInfo.beginActivity(
-            options: [.userInitiated, .idleDisplaySleepDisabled],
-            reason: "AuraBar 防休眠",
-        )
-    }
+    /// Locking is not the same as display sleep or session deactivation.
+    /// Listen for both locks and fast user switching; none of these observers
+    /// depend on the module's visibility or its sampling timer.
+    private func observeSessionChanges() {
+        let distributed = DistributedNotificationCenter.default()
+        for (name, locked) in [
+            ("com.apple.screenIsLocked", true),
+            ("com.apple.screenIsUnlocked", false),
+        ] {
+            let observer = distributed.addObserver(
+                forName: Notification.Name(name),
+                object: nil,
+                queue: .main,
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    self?.sleepPrevention.setScreenLocked(locked)
+                }
+            }
+            sessionObservers.append(observer)
+        }
 
-    private func stopSleepPrevention() {
-        guard let activity = sleepActivity else { return }
-        ProcessInfo.processInfo.endActivity(activity)
-        sleepActivity = nil
+        let workspace = NSWorkspace.shared.notificationCenter
+        let resignObserver = workspace.addObserver(
+            forName: NSWorkspace.sessionDidResignActiveNotification,
+            object: nil,
+            queue: .main,
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.sleepPrevention.setSessionActive(false)
+            }
+        }
+        let activeObserver = workspace.addObserver(
+            forName: NSWorkspace.sessionDidBecomeActiveNotification,
+            object: nil,
+            queue: .main,
+        ) { [weak self] _ in
+            Task { @MainActor in
+                // An active session can still be locked: resample both flags.
+                self?.sleepPrevention.updateSessionState(.current())
+            }
+        }
+        workspaceObservers.append(contentsOf: [resignObserver, activeObserver])
     }
 }

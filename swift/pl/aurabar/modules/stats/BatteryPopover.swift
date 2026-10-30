@@ -137,8 +137,8 @@ struct BatteryPopover: View, StatsPopoverContent {
                 Text("防休眠")
                     .font(.callout)
                 Text(store.preventSleep
-                    ? "已开启 · 系统不会自动休眠，屏幕保持常亮"
-                    : "阻止系统休眠并保持屏幕常亮")
+                    ? "已开启 · 未锁屏常亮，锁屏可熄屏"
+                    : "防止系统自动休眠，锁屏后允许熄屏")
                     .font(.caption2)
                     .foregroundStyle(theme.textSecondary)
                     .contentTransition(.numericText())

@@ -24,3 +24,11 @@ swift_test(
     target_compatible_with = ["@platforms//os:macos"],
     deps = [":testable_lib"],
 )
+
+# Mock activities only: tests must not pin the test host awake or launch the app.
+swift_test(
+    name = "battery_sleep_tests",
+    srcs = glob(["stats/*.swift"]),
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = [":testable_lib"],
+)
