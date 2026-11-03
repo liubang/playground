@@ -32,6 +32,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liubang/playground/go/pl/loom/internal/agent"
 	"github.com/liubang/playground/go/pl/loom/internal/artifact"
 	"github.com/liubang/playground/go/pl/loom/internal/config"
 	"github.com/liubang/playground/go/pl/loom/internal/domain"
@@ -39,7 +40,141 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/prompt"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/subagent"
 )
+
+func newWebSearchTestProcess(t *testing.T, enabled, subagents bool) *ProcessRuntime {
+	t.Helper()
+	cfg := testResolvedConfig(nil)
+	cfg.Storage.BaseDir = t.TempDir()
+	cfg.WebSearch.Enabled = enabled
+	cfg.Subagent.Enabled = subagents
+	if err := os.MkdirAll(cfg.Storage.SessionsDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	proc, err := NewProcessRuntime(t.Context(), cfg, ProcessRuntimeConfig{
+		ArtifactDir: filepath.Join(t.TempDir(), "artifacts"),
+		Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proc.Close)
+	return proc
+}
+
+func TestToolRegistriesWebSearchGate(t *testing.T) {
+	t.Setenv("LOOM_WEB_SEARCH_PROVIDER", "invalid-provider")
+	proc := newWebSearchTestProcess(t, false, false)
+	b, err := NewWorkspaceBootstrap(t.Context(), proc, BootstrapConfig{WorkspaceRoot: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(b.Close)
+
+	assemblies := []struct {
+		name  string
+		build func(bool) (*agent.ToolRegistry, error)
+	}{
+		{"main", func(enabled bool) (*agent.ToolRegistry, error) {
+			r := agent.NewToolRegistry()
+			return r, registerBuiltinTools(r, b.Validator, b.Runner, proc.Artifact, proc.Resolved().Limits.MaxToolOutputBytes, b.GoalCell, b.PlanCell, proc.Questioner, b.FileStateBook, b.SessionManager, proc.Resolved().Image, enabled)
+		}},
+		{"researcher", func(enabled bool) (*agent.ToolRegistry, error) {
+			return buildSubagentRegistry(b.Validator, b.Runner, proc.Artifact, b.FileStateBook, enabled)
+		}},
+		{"coder", func(enabled bool) (*agent.ToolRegistry, error) {
+			return buildCoderRegistry(b.Validator, b.Runner, proc.Artifact, b.FileStateBook, int(proc.Resolved().Limits.MaxToolOutputBytes), enabled)
+		}},
+	}
+	for _, assembly := range assemblies {
+		for _, enabled := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/enabled=%v", assembly.name, enabled), func(t *testing.T) {
+				provider := "invalid-provider"
+				if enabled {
+					provider = "duckduckgo"
+				}
+				t.Setenv("LOOM_WEB_SEARCH_PROVIDER", provider)
+				r, err := assembly.build(enabled)
+				if err != nil {
+					t.Fatalf("assembly error = %v", err)
+				}
+				tool, ok := r.Lookup("web_search")
+				if ok != enabled || (ok && tool.Definition().Source != domain.ToolSourceBuiltin) {
+					t.Fatalf("builtin web_search registration = %v, want %v", ok, enabled)
+				}
+				if _, ok := r.Lookup("web_fetch"); !ok {
+					t.Fatal("web_fetch must remain available regardless of web search")
+				}
+			})
+		}
+	}
+}
+
+func TestWorkspaceBootstrapWebSearchGate(t *testing.T) {
+	for _, tc := range []struct {
+		name, provider, wantErr string
+		enabled                 bool
+	}{
+		{"default disabled", "", "", false},
+		{"enabled keyless", "", "", true},
+		{"disabled invalid provider", "invalid-provider", "", false},
+		{"enabled invalid provider", "invalid-provider", "unsupported LOOM_WEB_SEARCH_PROVIDER", true},
+	} {
+		for _, subagents := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/subagents=%v", tc.name, subagents), func(t *testing.T) {
+				t.Setenv("LOOM_WEB_SEARCH_PROVIDER", tc.provider)
+				t.Setenv("BRAVE_SEARCH_API_KEY", "")
+				t.Setenv("TAVILY_API_KEY", "")
+				proc := newWebSearchTestProcess(t, tc.enabled, subagents)
+				b, err := NewWorkspaceBootstrap(t.Context(), proc, BootstrapConfig{WorkspaceRoot: t.TempDir()})
+				if tc.wantErr != "" {
+					if b != nil || err == nil || !strings.Contains(err.Error(), "register tools: web_search:") || !strings.Contains(err.Error(), tc.wantErr) {
+						t.Fatalf("bootstrap = %v, error = %v, want %s", b, err, tc.wantErr)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(b.Close)
+				check := func(t *testing.T, registry *agent.ToolRegistry, builder agent.PromptBuilder) {
+					t.Helper()
+					tool, ok := registry.Lookup("web_search")
+					if ok != tc.enabled || (ok && tool.Definition().Source != domain.ToolSourceBuiltin) {
+						t.Fatalf("builtin web_search registration = %v, want %v", ok, tc.enabled)
+					}
+					if _, ok := registry.Lookup("web_fetch"); !ok {
+						t.Fatal("web_fetch must remain available regardless of web search")
+					}
+					text, _, err := builder.Build(t.Context())
+					if err != nil {
+						t.Fatal(err)
+					}
+					if advertised := strings.Contains(text, "web_search"); advertised != tc.enabled {
+						t.Fatalf("prompt advertises web_search = %v, want %v", advertised, tc.enabled)
+					}
+				}
+				check(t, b.Registry, b.CurrentPrompt())
+				if !subagents {
+					if b.SubagentFactory != nil || b.SubagentManager != nil {
+						t.Fatal("subagents unexpectedly assembled")
+					}
+					return
+				}
+				if b.SubagentFactory == nil || b.SubagentManager == nil {
+					t.Fatal("subagents not assembled")
+				}
+				check(t, b.SubagentFactory.Registry, b.SubagentFactory.Prompt)
+				for _, role := range []subagent.Role{subagent.RoleResearcher, subagent.RoleCoder} {
+					t.Run(string(role), func(t *testing.T) {
+						check(t, b.SubagentManager.RoleRegistry(role), b.SubagentManager.RolePrompt(role))
+					})
+				}
+			})
+		}
+	}
+}
 
 type memoryTestPrompt struct {
 	sections prompt.Sections

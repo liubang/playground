@@ -53,6 +53,11 @@ type ProcessRuntime struct {
 	// Readers must go through Resolved() and not retain the pointer
 	// beyond a single unit of work (turn construction, policy reload).
 	resolved atomic.Pointer[config.ResolvedConfig]
+	// webSearchEnabled is frozen from the startup configuration. Every
+	// workspace, including those assembled after a hot reload, uses this
+	// value until a new ProcessRuntime is created. Bare test runtimes
+	// default to disabled.
+	webSearchEnabled bool
 	// Current is the configured default model (config file / launch flag).
 	// Reads of the effective selection must go through CurrentModel: a
 	// manual switch updates the runtime-current value (and persists it),
@@ -432,6 +437,7 @@ func NewProcessRuntime(ctx context.Context, resolved *config.ResolvedConfig, cfg
 	}
 
 	p := &ProcessRuntime{
+		webSearchEnabled:   resolved.WebSearch.Enabled,
 		Current:            resolved.Default,
 		Store:              store,
 		Artifact:           artStore,

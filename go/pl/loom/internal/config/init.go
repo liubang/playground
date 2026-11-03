@@ -285,6 +285,10 @@ providers:
 #   size: ""                      # 1024x1024 等；空 = auto
 #   quality: ""                   # low | medium | high；空 = auto
 
+# 网页搜索（web_search，默认关闭；修改后需重启）：
+# web_search:
+#   enabled: false                # 开启后沿用 LOOM_WEB_SEARCH_PROVIDER 与搜索 API key；无 key 时使用 DDG（可能被反爬拦截）
+
 # 无头浏览器（默认启用，本地启动 Chrome）：
 # browser:
 #   enabled: true                 # 默认 true

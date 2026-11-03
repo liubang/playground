@@ -124,6 +124,7 @@ type ResolvedConfig struct {
 	Sessions      ResolvedSessions
 	Image         ResolvedImage
 	Browser       ResolvedBrowser
+	WebSearch     ResolvedWebSearch
 	KnowledgeBase ResolvedKnowledgeBase
 	MCP           ResolvedMCP
 	// Workspaces are the pre-registered project workspaces (docs/WORKSPACE_DESIGN.md §10).
@@ -136,6 +137,11 @@ type ResolvedConfig struct {
 type ResolvedWorkspace struct {
 	Name string
 	Root string
+}
+
+// ResolvedWebSearch is the opt-in web_search tool configuration.
+type ResolvedWebSearch struct {
+	Enabled bool
 }
 
 // ResolvedShare is the share section with defaults applied.
@@ -787,6 +793,7 @@ func resolve(f *File, baseDir string, lookup EnvLookup) (*ResolvedConfig, error)
 		return nil, err
 	}
 	out.Browser = browser
+	out.WebSearch = ResolvedWebSearch{Enabled: f.WebSearch.Enabled != nil && *f.WebSearch.Enabled}
 
 	// MCP servers: validate config-level constraints; runtime startup
 	// (process spawning, tool discovery) happens in bootstrap.go.

@@ -208,6 +208,39 @@ func TestLoadRelativeHomeResolvesAgainstCwd(t *testing.T) {
 	}
 }
 
+func TestLoadWebSearchDefaultsAndOverrides(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		yaml string
+		want *bool
+	}{
+		{"missing", "", nil},
+		{"empty", "web_search: {}\n", nil},
+		{"null", "web_search: null\n", nil},
+		{"nil enabled", "web_search: {enabled: null}\n", nil},
+		{"false", "web_search: {enabled: false}\n", new(false)},
+		{"true", "web_search: {enabled: true}\n", new(true)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, err := ParseFile([]byte(tc.yaml))
+			if err != nil {
+				t.Fatalf("ParseFile() error = %v", err)
+			}
+			if !reflect.DeepEqual(f.WebSearch.Enabled, tc.want) {
+				t.Fatalf("web_search.enabled = %v, want %v", f.WebSearch.Enabled, tc.want)
+			}
+			cfg, err := Load(writeConfig(t, tc.yaml), LoadOptions{}, noEnv)
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			want := tc.want != nil && *tc.want
+			if cfg.WebSearch.Enabled != want {
+				t.Fatalf("resolved web_search.enabled = %v, want %v", cfg.WebSearch.Enabled, want)
+			}
+		})
+	}
+}
+
 func TestResolveToolsPathExtra(t *testing.T) {
 	// Absent: empty extras.
 	cfg := loadFile(t, `
@@ -509,6 +542,9 @@ func TestLoadValidationErrors(t *testing.T) {
 		wantErr string
 	}{
 		{"unknown field", "providers: []\nnosuchkey: 1", "nosuchkey"},
+		{"bad web_search section type", "web_search: true", "cannot unmarshal"},
+		{"bad web_search enabled type", "web_search: {enabled: 1}", "cannot unmarshal"},
+		{"unknown web_search field", "web_search: {enable: true}", "enable"},
 		{"duplicate provider", "providers:\n  - {name: x, base_url: 'https://a.com', api_key: k, models: [{name: m}]}\n  - {name: x, base_url: 'https://b.com', api_key: k, models: [{name: m}]}", "duplicate provider"},
 		{"bad type", "providers:\n  - {name: x, type: gemini, base_url: 'https://a.com', api_key: k, models: [{name: m}]}", "unsupported type"},
 		{"bad anthropic wire_api", "providers:\n  - {name: x, type: anthropic, base_url: 'https://a.com', api_key: k, wire_api: chat, models: [{name: m}]}", "messages"},
@@ -593,6 +629,9 @@ func TestLoadMissingFile(t *testing.T) {
 	}
 	if len(cfg.Providers) != 0 {
 		t.Fatalf("offline providers = %d, want 0", len(cfg.Providers))
+	}
+	if cfg.WebSearch.Enabled {
+		t.Fatal("web_search must default to disabled with a missing file")
 	}
 }
 
@@ -1180,6 +1219,9 @@ func TestTemplateCoversSchemaSections(t *testing.T) {
 		ScreenshotQual: 80, ViewportW: 1280, ViewportH: 720,
 	}); cfg.Browser != want {
 		t.Fatalf("browser defaults = %+v, want %+v", cfg.Browser, want)
+	}
+	if cfg.WebSearch.Enabled {
+		t.Fatalf("web_search must stay disabled by default: %+v", cfg.WebSearch)
 	}
 	if cfg.KnowledgeBase.Enabled {
 		t.Fatalf("knowledge_base must stay disabled when unconfigured: %+v", cfg.KnowledgeBase)

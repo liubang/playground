@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -530,6 +531,68 @@ func TestBuildSectionsDelegationOptIn(t *testing.T) {
 	assert.Contains(t, secs.Static, "# Delegation")
 	assert.Contains(t, secs.Static, "delegate_task")
 	assert.Contains(t, secs.Static, "wait_subagent")
+}
+
+func TestBuildSectionsWebSearchOptIn(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("enabled=%v", enabled), func(t *testing.T) {
+			opts := []Option{WithEnvProvider(staticEnvProvider{env: testEnvironment()}), noRules}
+			if enabled {
+				opts = append(opts, WithWebSearch())
+			}
+			b := NewBuilder("/ws", opts...)
+			sections, err := b.BuildSections(t.Context())
+			require.NoError(t, err)
+			assert.NotContains(t, sections.Dynamic, "web_search")
+			if enabled {
+				for _, guidance := range []string{
+					"# Web Search",
+					"web_search locates web sources by keyword",
+					"current or temporally unstable information",
+					"web_fetch the most relevant URLs",
+				} {
+					assert.Contains(t, sections.Static, guidance)
+					assert.NotContains(t, sections.Dynamic, guidance)
+				}
+				assertRuleSourcePresent(t, sections.Refs, "loom://builtin/web-search")
+			} else {
+				assert.NotContains(t, sections.Static, "web_search")
+				assert.False(t, slices.ContainsFunc(sections.Refs, func(ref domain.ContextRuleRef) bool {
+					return ref.Source == "loom://builtin/web-search"
+				}))
+			}
+			again, err := b.BuildSections(t.Context())
+			require.NoError(t, err)
+			assert.Equal(t, sections.Static, again.Static)
+			assert.Equal(t, sections.Refs, again.Refs)
+		})
+	}
+}
+
+func TestBuildSectionsManagedBaseOwnsWebSearchGuidance(t *testing.T) {
+	const policy = "Managed web_search policy: use only approved sources."
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("enabled=%v", enabled), func(t *testing.T) {
+			opts := []Option{
+				WithEnvProvider(staticEnvProvider{env: testEnvironment()}),
+				noRules,
+				WithManagedBase("custom", 1, policy),
+			}
+			if enabled {
+				opts = append(opts, WithWebSearch())
+			}
+			sections, err := NewBuilder("/ws", opts...).BuildSections(t.Context())
+			require.NoError(t, err)
+			assert.Contains(t, sections.Static, policy)
+			assert.NotContains(t, sections.Static, "# Web Search")
+			assert.NotContains(t, sections.Static, "web_search locates web sources by keyword")
+			assert.NotContains(t, sections.Dynamic, "web_search")
+			assertRuleSourcePresent(t, sections.Refs, "langfuse://prompts/custom?v=1")
+			assert.False(t, slices.ContainsFunc(sections.Refs, func(ref domain.ContextRuleRef) bool {
+				return ref.Source == "loom://builtin/web-search"
+			}))
+		})
+	}
 }
 
 func TestFamilyPatch(t *testing.T) {

@@ -270,7 +270,7 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 			sessionManager.Close()
 		}
 	}()
-	if err := registerBuiltinTools(registry, validator, runner, proc.Artifact, resolved.Limits.MaxToolOutputBytes, goalCell, planCell, proc.Questioner, book, sessionManager, resolved.Image, runCmdOpts...); err != nil {
+	if err := registerBuiltinTools(registry, validator, runner, proc.Artifact, resolved.Limits.MaxToolOutputBytes, goalCell, planCell, proc.Questioner, book, sessionManager, resolved.Image, proc.webSearchEnabled, runCmdOpts...); err != nil {
 		return nil, fmt.Errorf("register tools: %w", err)
 	}
 
@@ -387,7 +387,7 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 				return nil, fmt.Errorf("sub-agent assembly: %w", err)
 			}
 		}
-		researcherRegistry, err := buildSubagentRegistry(validator, runner, proc.Artifact, book)
+		researcherRegistry, err := buildSubagentRegistry(validator, runner, proc.Artifact, book, proc.webSearchEnabled)
 		if err != nil {
 			return nil, fmt.Errorf("build sub-agent registry: %w", err)
 		}
@@ -413,6 +413,9 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 			prompt.WithExtraInstructions(subagent.ResearcherInstructions),
 			prompt.WithRulesProvider(prompt.NewFileRulesProvider(cfg.WorkspaceRoot, resolved.Storage.LoomMDPath())),
 		}
+		if hasBuiltinWebSearch(researcherRegistry) {
+			researcherOpts = append(researcherOpts, prompt.WithWebSearch())
+		}
 		if cfg.PromptEnv != nil {
 			researcherOpts = append(researcherOpts, prompt.WithEnvProvider(cfg.PromptEnv))
 		}
@@ -423,7 +426,7 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 			Risk:     domain.R1,
 		}
 
-		coderRegistry, err := buildCoderRegistry(validator, runner, proc.Artifact, book, int(resolved.Limits.MaxToolOutputBytes), runCmdOpts...)
+		coderRegistry, err := buildCoderRegistry(validator, runner, proc.Artifact, book, int(resolved.Limits.MaxToolOutputBytes), proc.webSearchEnabled, runCmdOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("build coder registry: %w", err)
 		}
@@ -435,6 +438,9 @@ func NewWorkspaceBootstrap(ctx context.Context, proc *ProcessRuntime, cfg Bootst
 		coderOpts := []prompt.Option{
 			prompt.WithExtraInstructions(subagent.CoderInstructions),
 			prompt.WithRulesProvider(prompt.NewFileRulesProvider(cfg.WorkspaceRoot, resolved.Storage.LoomMDPath())),
+		}
+		if hasBuiltinWebSearch(coderRegistry) {
+			coderOpts = append(coderOpts, prompt.WithWebSearch())
 		}
 		if cfg.PromptEnv != nil {
 			coderOpts = append(coderOpts, prompt.WithEnvProvider(cfg.PromptEnv))
@@ -565,6 +571,12 @@ func (b *Bootstrap) buildPrompt(ctx context.Context, resolved *config.ResolvedCo
 	promptOpts := []prompt.Option{
 		prompt.WithExtraInstructions(resolved.Prompt.Extra),
 		prompt.WithRulesProvider(prompt.NewFileRulesProvider(b.WorkspaceRoot, resolved.Storage.LoomMDPath())),
+	}
+	// Tool registration is frozen at assembly. A config toggle requires a
+	// restart, so prompt reloads must reflect the actual built-in tool, not
+	// the newly resolved setting or a same-named MCP tool.
+	if hasBuiltinWebSearch(b.Registry) {
+		promptOpts = append(promptOpts, prompt.WithWebSearch())
 	}
 	if b.promptEnv != nil {
 		promptOpts = append(promptOpts, prompt.WithEnvProvider(b.promptEnv))
@@ -813,15 +825,28 @@ func registerToolFactories(registry *agent.ToolRegistry, tools []toolFactory) er
 // channel delegated runs (researcher/coder) do not own — so it is registered
 // only on the main agent (registerBuiltinTools). view_image stays in the
 // shared set and is filtered per model at request time (SupportsImages).
-func readOnlyToolFactories(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook) []toolFactory {
-	return []toolFactory{
+func readOnlyToolFactories(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook, webSearchEnabled bool) []toolFactory {
+	tools := []toolFactory{
 		{"read_file", func() (domain.Tool, error) { return builtin.NewReadFileTool(validator, book) }},
 		{"grep", func() (domain.Tool, error) { return builtin.NewSearchTool(validator, runner) }},
 		{"glob", func() (domain.Tool, error) { return builtin.NewGlobTool(validator, runner) }},
 		{"view_image", func() (domain.Tool, error) { return builtin.NewViewImageTool(validator, artStore) }},
 		{"web_fetch", func() (domain.Tool, error) { return webfetch.NewWebFetchTool(validator, artStore) }},
-		{"web_search", func() (domain.Tool, error) { return websearch.NewWebSearchTool() }},
 	}
+	// Do not construct a disabled tool: even explicit invalid provider
+	// environment settings must be ignored until web search is enabled.
+	if webSearchEnabled {
+		tools = append(tools, toolFactory{"web_search", func() (domain.Tool, error) { return websearch.NewWebSearchTool() }})
+	}
+	return tools
+}
+
+func hasBuiltinWebSearch(registry *agent.ToolRegistry) bool {
+	if registry == nil {
+		return false
+	}
+	tool, ok := registry.Lookup("web_search")
+	return ok && tool.Definition().Source == domain.ToolSourceBuiltin
 }
 
 // registerMemoryTools registers the unified memory tool (list, read,
@@ -861,9 +886,9 @@ func registerKBTools(registry *agent.ToolRegistry, kb config.ResolvedKnowledgeBa
 	return nil
 }
 
-func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell, questioner domain.Questioner, book *workspace.FileStateBook, sessionManager *exsession.Manager, imageCfg config.ResolvedImage, runCmdOpts ...command.RunCmdToolOption) error {
+func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, maxOutputBytes int64, goalCell *agent.GoalCell, planCell *agent.PlanCell, questioner domain.Questioner, book *workspace.FileStateBook, sessionManager *exsession.Manager, imageCfg config.ResolvedImage, webSearchEnabled bool, runCmdOpts ...command.RunCmdToolOption) error {
 	tools := append(
-		readOnlyToolFactories(validator, runner, artStore, book),
+		readOnlyToolFactories(validator, runner, artStore, book, webSearchEnabled),
 		toolFactory{"edit", func() (domain.Tool, error) { return edit.NewEditTool(validator, book) }},
 		toolFactory{"write", func() (domain.Tool, error) { return edit.NewWriteTool(validator) }},
 	)
@@ -938,9 +963,9 @@ func registerBuiltinTools(registry *agent.ToolRegistry, validator *workspace.Pat
 // update_task (parent-run state), ask_user (no one to
 // answer), and delegate_task itself — recursion depth stays 1 by
 // construction.
-func buildSubagentRegistry(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook) (*agent.ToolRegistry, error) {
+func buildSubagentRegistry(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook, webSearchEnabled bool) (*agent.ToolRegistry, error) {
 	registry := agent.NewToolRegistry()
-	if err := registerToolFactories(registry, readOnlyToolFactories(validator, runner, artStore, book)); err != nil {
+	if err := registerToolFactories(registry, readOnlyToolFactories(validator, runner, artStore, book, webSearchEnabled)); err != nil {
 		return nil, err
 	}
 	return registry, nil
@@ -952,11 +977,11 @@ func buildSubagentRegistry(validator *workspace.PathValidator, runner *process.R
 // design: update_task (parent-run state), ask_user (no one
 // to answer), exec_session (interactive sessions), and
 // delegate_task itself (no recursion).
-func buildCoderRegistry(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook, maxOutputBytes int, runCmdOpts ...command.RunCmdToolOption) (*agent.ToolRegistry, error) {
+func buildCoderRegistry(validator *workspace.PathValidator, runner *process.Runner, artStore domain.ArtifactStore, book *workspace.FileStateBook, maxOutputBytes int, webSearchEnabled bool, runCmdOpts ...command.RunCmdToolOption) (*agent.ToolRegistry, error) {
 	// Start from the researcher (read-only) set and add the writable tools.
 	registry := agent.NewToolRegistry()
 	tools := append(
-		readOnlyToolFactories(validator, runner, artStore, book),
+		readOnlyToolFactories(validator, runner, artStore, book, webSearchEnabled),
 		toolFactory{"edit", func() (domain.Tool, error) { return edit.NewEditTool(validator, book) }},
 		toolFactory{"write", func() (domain.Tool, error) { return edit.NewWriteTool(validator) }},
 	)

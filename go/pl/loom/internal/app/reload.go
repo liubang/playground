@@ -155,6 +155,10 @@ func classifyConfigChanges(prev, next *config.ResolvedConfig) ConfigApplyReport 
 	if !reflect.DeepEqual(prev.Image, next.Image) {
 		r.Restart = append(r.Restart, "image")
 	}
+	// Tool registration is frozen at assembly, including sub-agent registries.
+	if prev.WebSearch != next.WebSearch {
+		r.Restart = append(r.Restart, "web_search")
+	}
 	// Browser tool registration and Chrome path are frozen at assembly;
 	// all knobs (idle TTL, viewport, timeout, quality) are baked into the
 	// tool instance. Changing any of them requires a restart.

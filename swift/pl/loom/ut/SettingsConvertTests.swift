@@ -944,6 +944,72 @@ final class SettingsConvertTests: XCTestCase {
         }
     }
 
+    func testWebSearchSpecUsesTopLevelOptionalDefaultOff() throws {
+        let spec = try XCTUnwrap(globalFieldSpecs().first { $0.key == "web_search.enabled" })
+        XCTAssertEqual(spec.type, .tristate)
+        XCTAssertEqual(spec.def, "关")
+        XCTAssertFalse(spec.required)
+        XCTAssertTrue("\(spec.label ?? "") \(spec.hint ?? "")".contains("重启"))
+        XCTAssertTrue(knownTopKeys.contains("web_search"))
+    }
+
+    @MainActor
+    func testWebSearchAbsentFalseTrueDraftConversionAndSerialization() throws {
+        let spec = try XCTUnwrap(globalFieldSpecs().first { $0.key == "web_search.enabled" })
+        let cases: [(JSONValue?, ControlState)] = [
+            (nil, .text("")), (.bool(false), .text("false")), (.bool(true), .text("true")),
+        ]
+        for (value, state) in cases {
+            var config: [String: JSONValue] = [:]
+            if let value {
+                setPath(&config, spec.key, value)
+            }
+            let draft = SettingsStore.buildDraft(from: config)
+            XCTAssertEqual(draft.globals[spec.key], state)
+            XCTAssertEqual(fillValue(spec, getPath(config, spec.key)), state)
+            XCTAssertNil(invalidInput(spec, state))
+            let collected = collect(spec, state)
+            XCTAssertEqual(collected, config)
+            let data = try JSONEncoder().encode(JSONValue.object(collected))
+            let serialized = try LoomJSON.decoder.decode(JSONValue.self, from: data)
+            XCTAssertEqual(serialized["web_search"]?["enabled"], value)
+            XCTAssertNil(serialized["tools"])
+            if value == nil {
+                XCTAssertTrue(collected.isEmpty, "Inherited/default off must not write false")
+            }
+        }
+    }
+
+    @MainActor
+    func testWebSearchSaveWritesTopLevelBooleansAndResetRemovesOverride() async throws {
+        let requests = SettingsRequests()
+        defer { requests.close() }
+        let store = await loadedStore(requests)
+        XCTAssertEqual(store.draft.globals["web_search.enabled"], .text(""))
+        let cases: [(String, JSONValue?)] = [
+            ("", nil), ("false", .bool(false)), ("true", .bool(true)), ("", nil),
+        ]
+        for (offset, entry) in cases.enumerated() {
+            let (state, value) = entry
+            store.setGlobal("web_search.enabled", .text(state))
+            XCTAssertTrue(store.dirty)
+            let arrival = requests.expect("PUT")
+            let save = Task { await store.save() }
+            await fulfillment(of: [arrival], timeout: 2)
+            let submitted = try putBody(requests, offset + 1)
+            XCTAssertEqual(submitted["config"]?["web_search"]?["enabled"], value)
+            XCTAssertNil(submitted["config"]?["tools"]?["web_search"])
+            if value == nil {
+                XCTAssertNil(submitted["config"]?["web_search"])
+            }
+            requests.reply(offset + 1, #"{"revision":"next"}"#)
+            await save.value
+            XCTAssertFalse(store.msgIsError)
+            XCTAssertFalse(store.dirty)
+            XCTAssertEqual(getPath(store.origCfg, "web_search.enabled"), value)
+        }
+    }
+
     // MARK: Round trip
 
     func testRoundTrip() {

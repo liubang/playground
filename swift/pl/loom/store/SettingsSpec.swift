@@ -544,6 +544,14 @@ let settingsTabs: [TabSpec] = [
             FieldSpec("logging.max_file_mb", label: "单个日志文件上限（MiB）", ph: "2048", type: .number),
             FieldSpec("logging.max_total_mb", label: "日志总大小上限（MiB）", ph: "10240", type: .number),
         ]),
+        ("网页搜索（可选）", [
+            FieldSpec(
+                "web_search.enabled", label: "启用网页搜索（默认关，需重启）",
+                hint: "启用后沿用环境变量选择的 Brave/Tavily/DDG 后端；DDG 可能因反爬失败。修改需重启 loom 生效。",
+                type: .tristate,
+                def: "关",
+            ),
+        ]),
         ("浏览器", [
             FieldSpec(
                 "browser.enabled", label: "启用浏览器工具",
@@ -644,7 +652,7 @@ let preservePaths = ["ui.keymap", "skills.disabled"]
 let knownTopKeys: Set<String> = [
     "default", "providers", "limits", "context", "runaway", "prompt", "skills",
     "rules", "approval", "tracing", "share", "logging", "ui", "subagent",
-    "memory", "sessions", "image", "browser", "knowledge_base", "mcp_servers",
+    "memory", "sessions", "image", "browser", "web_search", "knowledge_base", "mcp_servers",
     "workspaces",
 ]
 

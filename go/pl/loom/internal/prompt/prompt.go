@@ -90,6 +90,7 @@ type Builder struct {
 	clock         domain.Clock
 	managed       *managedBase
 	delegation    bool
+	webSearch     bool
 	// overviewMu guards the frozen workspace overview: the overview is
 	// captured once per builder — one builder instance is shared by the
 	// loop and by read-only projections (EstimateOverheadTokens can call
@@ -142,6 +143,11 @@ func WithSkillsProvider(p SkillsProvider) Option {
 // conditional pattern as the skills catalog.
 func WithDelegation() Option {
 	return func(b *Builder) { b.delegation = true }
+}
+
+// WithWebSearch adds search guidance only when the built-in tool is registered.
+func WithWebSearch() Option {
+	return func(b *Builder) { b.webSearch = true }
 }
 
 // WithClock overrides the clock used for the environment snapshot.
@@ -233,6 +239,13 @@ func (b *Builder) BuildSections(ctx context.Context) (Sections, error) {
 			body: `- delegate_task offloads a self-contained subtask to a sub-agent with its own isolated context: use it proactively for multi-file exploration or fact gathering, broad web/library research, and independent review — work whose intermediate output would flood this conversation. The sub-agent's raw searches and page reads stay OUT of your context; only its structured conclusion comes back.
 - When a request mixes research with your own edits, run them concurrently: delegate the research with async=true, do your part, then wait_subagent for the conclusion.
 - Act on the sub-agent's conclusion yourself (synthesize, decide, apply); do not re-do its legwork. It sees no conversation history, so the task must be fully self-contained.`,
+		})
+	}
+	if b.webSearch {
+		static = append(static, promptSection{
+			source: "loom://builtin/web-search",
+			title:  "Web Search",
+			body:   "- web_search locates web sources by keyword: use it for current or temporally unstable information (news, prices, library versions, current docs), then web_fetch the most relevant URLs to read them.",
 		})
 	}
 	if b.managed != nil {
@@ -412,7 +425,6 @@ func builtinSections() []promptSection {
 			// Keep in sync with internal/process/sandbox_*.go; these facts
 			// must never be discoverable only through trial and error.
 			body: `- Use web_fetch for network information: it accesses the internet directly (bypassing the sandbox) and can fetch web pages, documents, and public data (including public information like weather and exchange rates); it is not an exception to "the sandbox has no network". To download a file (PDF, archive, image, dataset), pass save_to so the raw body lands on disk instead of flooding the context.
-- web_search locates web sources by keyword: use it for current or temporally unstable information (news, prices, library versions, current docs), then web_fetch the most relevant URLs to read them.
 - run_cmd and exec_session execute 'sh -c' command strings inside an isolated sandbox: outbound network and DNS are unreachable, but loopback networking works — you may listen on localhost ports and access them locally (e.g. start a dev server to verify); writes are limited to the workspace and the system temp dir (credential paths are unreadable).
 - When a task-critical command fails (or hangs until the timeout) because the sandbox denied OUTBOUND NETWORK or DNS (SSO/OAuth, HTTP APIs, package downloads), PREFER retrying the same command with needs_network=true: after a lightweight approval it runs INSIDE the sandbox with outbound network granted (credentials stay unreadable), and the user can remember it as a scoped rule.
 - When a command or session needs to open a GUI APPLICATION (macOS 'open' a URL/app, Apple Events — LaunchServices/NSOSStatusErrorDomain errors), retry with needs_gui_open=true: after a lightweight approval it runs INSIDE the sandbox with GUI-open granted. Use the same flag to proactively show the user a web page (open <url>).

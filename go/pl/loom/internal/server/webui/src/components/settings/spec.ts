@@ -794,6 +794,18 @@ export const TABS: TabSpec[] = [
         ],
       ],
       [
+        '网页搜索（可选）',
+        [
+          {
+            key: 'web_search.enabled',
+            label: '启用网页搜索（默认关，需重启）',
+            type: 'tristate',
+            def: '关',
+            hint: '启用后沿用环境变量选择的 Brave/Tavily/DDG 后端；DDG 可能因反爬失败。修改需重启 loom 生效。',
+          },
+        ],
+      ],
+      [
         '浏览器',
         [
           {

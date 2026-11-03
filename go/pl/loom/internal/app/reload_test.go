@@ -20,9 +20,11 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,7 +35,212 @@ import (
 	"github.com/liubang/playground/go/pl/loom/internal/permission"
 	"github.com/liubang/playground/go/pl/loom/internal/runtimeevent"
 	"github.com/liubang/playground/go/pl/loom/internal/session"
+	"github.com/liubang/playground/go/pl/loom/internal/tool/subagent"
 )
+
+func TestApplyConfigWebSearchKeepsAllWorkspacesAtStartupValue(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("startup_enabled=%v", enabled), func(t *testing.T) {
+			t.Setenv("LOOM_WEB_SEARCH_PROVIDER", "duckduckgo")
+			proc := newWebSearchTestProcess(t, enabled, true)
+			reg, err := NewWorkspaceRegistry(proc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(reg.Close)
+			first, err := reg.RegisterDefault(t.Context(), t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			broker := runtimeevent.NewBroker()
+			t.Cleanup(broker.Close)
+			svc := NewSessionService(proc, reg, broker, SessionServiceConfig{})
+			t.Cleanup(func() { _ = svc.Shutdown(t.Context()) })
+
+			check := func(b *Bootstrap, want bool, extra string) {
+				t.Helper()
+				checkRole := func(registry *agent.ToolRegistry, builder agent.PromptBuilder) {
+					t.Helper()
+					tool, ok := registry.Lookup("web_search")
+					if ok != want || (ok && tool.Definition().Source != domain.ToolSourceBuiltin) {
+						t.Fatalf("workspace %s builtin web_search = %v, want %v", b.WorkspaceID, ok, want)
+					}
+					text, _, err := builder.Build(t.Context())
+					if err != nil {
+						t.Fatal(err)
+					}
+					if strings.Contains(text, "web_search") != want {
+						t.Fatalf("workspace %s prompt does not match builtin availability %v", b.WorkspaceID, want)
+					}
+				}
+				checkRole(b.Registry, b.CurrentPrompt())
+				text, _, err := b.CurrentPrompt().Build(t.Context())
+				if err != nil || !strings.Contains(text, extra) {
+					t.Fatalf("main prompt missing live instructions %q: %v", extra, err)
+				}
+				if b.SubagentFactory == nil || b.SubagentManager == nil {
+					t.Fatal("subagents not assembled")
+				}
+				checkRole(b.SubagentFactory.Registry, b.SubagentFactory.Prompt)
+				for _, role := range []subagent.Role{subagent.RoleResearcher, subagent.RoleCoder} {
+					checkRole(b.SubagentManager.RoleRegistry(role), b.SubagentManager.RolePrompt(role))
+				}
+			}
+			check(first, enabled, "")
+			next := new(*proc.Resolved())
+			next.WebSearch.Enabled = !enabled
+			next.Prompt.Extra = "multi-workspace reloaded instructions"
+			report := svc.ApplyConfig(t.Context(), next)
+			if !slices.Contains(report.Restart, "web_search") || !slices.Contains(report.Immediate, "prompt") {
+				t.Fatalf("reload report = %+v, want restart web_search and immediate prompt", report)
+			}
+			if proc.Resolved() != next || proc.webSearchEnabled != enabled {
+				t.Fatal("live config must change without changing the startup-frozen flag")
+			}
+			check(first, enabled, next.Prompt.Extra)
+			second, err := reg.Register(t.Context(), t.TempDir(), "after reload")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if second == first || second.ProcessRuntime != proc {
+				t.Fatal("expected a distinct workspace sharing the same process runtime")
+			}
+			check(second, enabled, next.Prompt.Extra)
+			resolvedFirst, err := reg.Resolve(t.Context(), first.WorkspaceID)
+			if err != nil || resolvedFirst != first {
+				t.Fatalf("existing workspace was replaced: %v", err)
+			}
+			check(resolvedFirst, enabled, next.Prompt.Extra)
+
+			// A newly constructed process captures the changed setting; all
+			// its workspaces use it, including researcher and coder registries.
+			fresh, err := NewProcessRuntime(t.Context(), next, ProcessRuntimeConfig{
+				ArtifactDir: filepath.Join(t.TempDir(), "artifacts"), Logger: proc.Logger,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(fresh.Close)
+			if fresh.webSearchEnabled != next.WebSearch.Enabled {
+				t.Fatal("new process did not capture the changed web search setting")
+			}
+			restarted, err := NewWorkspaceBootstrap(t.Context(), fresh, BootstrapConfig{WorkspaceRoot: t.TempDir()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(restarted.Close)
+			check(restarted, !enabled, next.Prompt.Extra)
+			check(first, enabled, next.Prompt.Extra)
+			check(second, enabled, next.Prompt.Extra)
+		})
+	}
+}
+
+func TestApplyConfigWebSearchPromptKeepsRegisteredTools(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		enabled bool
+		mcp     bool
+	}{
+		{"disabled", false, false},
+		{"enabled", true, false},
+		{"disabled with same-named MCP", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("LOOM_WEB_SEARCH_PROVIDER", "duckduckgo")
+			proc := newWebSearchTestProcess(t, tc.enabled, false)
+			b, err := NewWorkspaceBootstrap(t.Context(), proc, BootstrapConfig{WorkspaceRoot: t.TempDir()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(b.Close)
+			if tc.mcp {
+				tool := fakes.NewFakeTool(domain.ToolDefinition{
+					Name: "web_search", Source: domain.ToolSourceMCP,
+					InputSchema: json.RawMessage(`{"type":"object"}`),
+				}, domain.ToolResult{})
+				if err := b.Registry.Register(tool); err != nil {
+					t.Fatal(err)
+				}
+			}
+			registered := b.Registry.List()
+			broker := runtimeevent.NewBroker()
+			t.Cleanup(broker.Close)
+			svc := NewSingletonWorkspaceService(b, broker, SessionServiceConfig{})
+			t.Cleanup(func() { _ = svc.Shutdown(t.Context()) })
+
+			for _, configured := range []bool{!tc.enabled, tc.enabled} {
+				previous := b.CurrentPrompt()
+				next := new(*proc.Resolved())
+				next.WebSearch.Enabled = configured
+				next.Prompt.Extra = fmt.Sprintf("reloaded instructions configured=%v", configured)
+				report := svc.ApplyConfig(t.Context(), next)
+				if !slices.Contains(report.Immediate, "prompt") || previous == b.CurrentPrompt() {
+					t.Fatal("config apply did not rebuild the main prompt")
+				}
+				if !slices.EqualFunc(registered, b.Registry.List(), func(a, b domain.ToolDefinition) bool {
+					return a.Name == b.Name && a.Source == b.Source
+				}) {
+					t.Fatal("config apply changed tool registrations before restart")
+				}
+				text, _, err := b.CurrentPrompt().Build(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(text, next.Prompt.Extra) {
+					t.Fatal("reloaded instructions missing")
+				}
+				if advertised := strings.Contains(text, "web_search"); advertised != tc.enabled {
+					t.Fatalf("prompt advertises web_search = %v, want registered builtin %v (configured %v, MCP %v)", advertised, tc.enabled, configured, tc.mcp)
+				}
+			}
+		})
+	}
+}
+
+func TestRebuildPromptWebSearchIgnoresNonBuiltinTools(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		toolName string
+		source   domain.ToolSource
+		registry bool
+	}{
+		{name: "nil registry"},
+		{name: "empty registry", registry: true},
+		{name: "same-named MCP", toolName: "web_search", source: domain.ToolSourceMCP, registry: true},
+		{name: "unattributed tool", toolName: "web_search", registry: true},
+		{name: "prefixed MCP", toolName: "mcp__search__web_search", source: domain.ToolSourceMCP, registry: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			proc := &ProcessRuntime{Logger: slog.Default()}
+			cfg := testResolvedConfig(nil)
+			cfg.Storage.BaseDir = t.TempDir()
+			cfg.WebSearch.Enabled = true
+			proc.SwapResolved(cfg)
+			b := &Bootstrap{ProcessRuntime: proc, WorkspaceRoot: t.TempDir()}
+			if tc.registry {
+				b.Registry = agent.NewToolRegistry()
+			}
+			if tc.toolName != "" {
+				tool := fakes.NewFakeTool(domain.ToolDefinition{
+					Name: tc.toolName, Source: tc.source,
+					InputSchema: json.RawMessage(`{"type":"object"}`),
+				}, domain.ToolResult{})
+				if err := b.Registry.Register(tool); err != nil {
+					t.Fatal(err)
+				}
+			}
+			b.RebuildPrompt(t.Context())
+			text, _, err := b.CurrentPrompt().Build(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(text, "web_search") {
+				t.Fatal("prompt advertises builtin web_search without a registered builtin")
+			}
+		})
+	}
+}
 
 func TestClassifyConfigChanges(t *testing.T) {
 	base := testResolvedConfig(fakes.NewFakeModel())

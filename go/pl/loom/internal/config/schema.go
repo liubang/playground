@@ -46,24 +46,25 @@ type File struct {
 	// Providers is the only required section: at least one entry.
 	Providers []Provider `yaml:"providers"`
 
-	Limits   Limits   `yaml:"limits,omitempty"`
-	Context  Context  `yaml:"context,omitempty"`
-	Runaway  Runaway  `yaml:"runaway,omitempty"`
-	Prompt   Prompt   `yaml:"prompt,omitempty"`
-	Skills   Skills   `yaml:"skills,omitempty"`
-	Tools    Tools    `yaml:"tools,omitempty"`
-	Rules    Rules    `yaml:"rules,omitempty"`
-	Approval Approval `yaml:"approval,omitempty"`
-	Sandbox  Sandbox  `yaml:"sandbox,omitempty"`
-	Tracing  Tracing  `yaml:"tracing,omitempty"`
-	Share    Share    `yaml:"share,omitempty"`
-	Logging  Logging  `yaml:"logging,omitempty"`
-	UI       UI       `yaml:"ui,omitempty"`
-	Subagent Subagent `yaml:"subagent,omitempty"`
-	Memory   Memory   `yaml:"memory,omitempty"`
-	Sessions Sessions `yaml:"sessions,omitempty"`
-	Image    Image    `yaml:"image,omitempty"`
-	Browser  Browser  `yaml:"browser,omitempty"`
+	Limits    Limits    `yaml:"limits,omitempty"`
+	Context   Context   `yaml:"context,omitempty"`
+	Runaway   Runaway   `yaml:"runaway,omitempty"`
+	Prompt    Prompt    `yaml:"prompt,omitempty"`
+	Skills    Skills    `yaml:"skills,omitempty"`
+	Tools     Tools     `yaml:"tools,omitempty"`
+	Rules     Rules     `yaml:"rules,omitempty"`
+	Approval  Approval  `yaml:"approval,omitempty"`
+	Sandbox   Sandbox   `yaml:"sandbox,omitempty"`
+	Tracing   Tracing   `yaml:"tracing,omitempty"`
+	Share     Share     `yaml:"share,omitempty"`
+	Logging   Logging   `yaml:"logging,omitempty"`
+	UI        UI        `yaml:"ui,omitempty"`
+	Subagent  Subagent  `yaml:"subagent,omitempty"`
+	Memory    Memory    `yaml:"memory,omitempty"`
+	Sessions  Sessions  `yaml:"sessions,omitempty"`
+	Image     Image     `yaml:"image,omitempty"`
+	Browser   Browser   `yaml:"browser,omitempty"`
+	WebSearch WebSearch `yaml:"web_search,omitempty"`
 	// KnowledgeBase configures the minisearch-backed knowledge base tools
 	// (kb_search/kb_read). The section is opt-in: absent means disabled,
 	// and an unconfigured deployment never advertises the tools to the
@@ -449,6 +450,12 @@ type Sessions struct {
 	// A cheap/fast model is recommended — the sidecar runs once per
 	// session, after the first turn.
 	TitleModel string `yaml:"title_model,omitempty"`
+}
+
+// WebSearch gates the built-in web_search tool. Absent or false means
+// disabled; provider selection happens only when the tool is enabled.
+type WebSearch struct {
+	Enabled *bool `yaml:"enabled,omitempty"`
 }
 
 // Browser configures the headless Chrome browser tool. Enabled is

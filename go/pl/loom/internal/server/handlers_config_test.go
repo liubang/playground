@@ -24,6 +24,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -121,6 +123,95 @@ func TestPutThenGetConfig(t *testing.T) {
 	apiKey := providers[0].(map[string]any)["api_key"]
 	if apiKey != config.SecretMask {
 		t.Fatalf("api_key = %v, want the secret mask", apiKey)
+	}
+}
+
+func TestConfigWebSearchRoundTrip(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), config.FileName)
+	ts := newConfigTestServer(t, cfgPath)
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(validConfigBody), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	var revision string
+	var previous bool
+	for _, tc := range []struct {
+		name    string
+		enabled *bool
+	}{
+		{"absent", nil},
+		{"false", new(false)},
+		{"true", new(true)},
+		{"unchanged true", new(true)},
+		{"disable", new(false)},
+		{"re-enable", new(true)},
+		{"reset default", nil},
+		{"unchanged default", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			delete(cfg, "web_search")
+			if tc.enabled != nil {
+				cfg["web_search"] = map[string]any{"enabled": *tc.enabled}
+			}
+			payload, err := json.Marshal(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			status, put := putConfig(t, ts, revision, string(payload))
+			if status != http.StatusOK {
+				t.Fatalf("PUT status = %d (%v)", status, put)
+			}
+			revision, _ = put["revision"].(string)
+			if revision == "" {
+				t.Fatalf("PUT response missing revision: %v", put)
+			}
+			want := tc.enabled != nil && *tc.enabled
+			applied, ok := put["applied"].(map[string]any)
+			if !ok {
+				t.Fatalf("PUT response missing applied report: %v", put)
+			}
+			restart, _ := applied["restart"].([]any)
+			if slices.Contains(restart, "web_search") != (want != previous) {
+				t.Fatalf("restart = %v, want web_search iff enabled toggles (%v -> %v)", restart, previous, want)
+			}
+			for _, category := range []string{"immediate", "next_turn"} {
+				sections, _ := applied[category].([]any)
+				if slices.Contains(sections, "web_search") {
+					t.Fatalf("%s = %v, web_search requires restart", category, sections)
+				}
+			}
+			previous = want
+
+			status, got := doJSON(t, ts.Client(), http.MethodGet, ts.URL+"/v1/config", "")
+			if status != http.StatusOK || got["revision"] != revision || got["exists"] != true {
+				t.Fatalf("GET status = %d, body = %v, want existing config with revision %q", status, got, revision)
+			}
+			fetched, ok := got["config"].(map[string]any)
+			if !ok {
+				t.Fatalf("GET config = %v, want object", got["config"])
+			}
+			if !reflect.DeepEqual(fetched["web_search"], cfg["web_search"]) {
+				t.Fatalf("GET web_search = %v, want %v", fetched["web_search"], cfg["web_search"])
+			}
+			raw, err := os.ReadFile(cfgPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stored, err := config.ParseFile(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(stored.WebSearch.Enabled, tc.enabled) {
+				t.Fatalf("stored web_search.enabled = %v, want %v", stored.WebSearch.Enabled, tc.enabled)
+			}
+			resolved, err := config.Load(filepath.Dir(cfgPath), config.LoadOptions{RequireProviders: true}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resolved.WebSearch.Enabled != want {
+				t.Fatalf("resolved web_search.enabled = %v, want %v", resolved.WebSearch.Enabled, want)
+			}
+		})
 	}
 }
 

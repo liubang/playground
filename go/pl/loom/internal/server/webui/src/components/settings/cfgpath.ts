@@ -43,6 +43,7 @@ export const KNOWN_TOP_KEYS = new Set([
   'sessions',
   'image',
   'browser',
+  'web_search',
   'knowledge_base',
   'mcp_servers',
   'workspaces',
