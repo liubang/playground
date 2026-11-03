@@ -368,15 +368,15 @@ struct ComposerView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.onAccent)
                     .frame(width: 32, height: 32)
-                    .background(Theme.error, in: RoundedRectangle(cornerRadius: Theme.radiusSm))
+                    .background(Theme.error, in: Circle())
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.escape, modifiers: [])
             .help("Stop the current turn (⎋)")
             .accessibilityLabel("Stop the current turn")
         } else {
-            // Quiet-but-present: the disabled button keeps its rounded-square
-            // shape — a bg2 surface one notch above the composer's bg1,
+            // Quiet-but-present: the disabled button keeps its circular
+            // shape — a bg2 disc one notch above the composer's bg1,
             // muted glyph — so the primary action stays discoverable
             // without competing with the gauge. Typing enables its primary fill.
             Button(action: send) {
@@ -386,7 +386,7 @@ struct ComposerView: View {
                     .frame(width: 32, height: 32)
                     .background(
                         canSend ? (sendHovered ? Theme.primaryHover : Theme.primary) : Theme.bg2,
-                        in: RoundedRectangle(cornerRadius: Theme.radiusSm),
+                        in: Circle(),
                     )
             }
             .buttonStyle(.plain)
