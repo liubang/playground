@@ -11,6 +11,7 @@ final class SettingsWindowController: NSObject {
 
     private var window: NSWindow?
     private var grid: NSGridView?
+    private var launchAtLoginCheckbox: NSButton?
     private var pathLabel: NSTextField?
     private var autoSaveCheckbox: NSButton?
     private var borderShadowCheckbox: NSButton?
@@ -95,6 +96,16 @@ final class SettingsWindowController: NSObject {
         pathRow.orientation = .horizontal
         pathRow.alignment = .firstBaseline
         pathRow.spacing = 8
+
+        // Launch at login toggle. State is read from SMAppService, not
+        // UserDefaults, so it stays truthful even if the user toggles
+        // the login item in System Settings.
+        let launchAtLogin = NSButton(
+            checkboxWithTitle: "开机自动启动（登录时运行 AuraShot）",
+            target: self,
+            action: #selector(toggleLaunchAtLogin(_:)),
+        )
+        launchAtLoginCheckbox = launchAtLogin
 
         // Auto-save toggle.
         let autoSave = NSButton(
@@ -193,7 +204,10 @@ final class SettingsWindowController: NSObject {
             grid.row(at: row).topPadding = topPadding
         }
 
-        addSection("截图", topPadding: 0)
+        addSection("通用", topPadding: 0)
+        addRow([NSGridCell.emptyContentView, launchAtLogin])
+
+        addSection("截图", topPadding: 10)
         addRow([label("截图快捷键"), captureRecorder])
         addRow([label("OCR 快捷键"), ocrRecorder])
         hotkeyWarningRow = grid.row(at: addRow([NSGridCell.emptyContentView, hotkeyWarning]))
@@ -247,6 +261,7 @@ final class SettingsWindowController: NSObject {
 
     private func reloadValues() {
         let settings = Settings.shared
+        launchAtLoginCheckbox?.state = LaunchAtLogin.isEnabled ? .on : .off
         pathLabel?.stringValue = settings.saveDirectory.path
         autoSaveCheckbox?.state = settings.autoSave ? .on : .off
         borderShadowCheckbox?.state = settings.borderShadow ? .on : .off
@@ -357,6 +372,25 @@ final class SettingsWindowController: NSObject {
             guard response == .OK, let url = panel.url else { return }
             Settings.shared.saveDirectory = url
             self?.pathLabel?.stringValue = url.path
+        }
+    }
+
+    @objc private func toggleLaunchAtLogin(_ sender: NSButton) {
+        do {
+            try LaunchAtLogin.setEnabled(sender.state == .on)
+        } catch {
+            // Roll the checkbox back so it never claims a state the
+            // system didn't accept (e.g. disallowed by a profile).
+            sender.state = LaunchAtLogin.isEnabled ? .on : .off
+            let alert = NSAlert()
+            alert.messageText = "开机启动设置失败"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            if let window {
+                alert.beginSheetModal(for: window)
+            } else {
+                alert.runModal()
+            }
         }
     }
 
