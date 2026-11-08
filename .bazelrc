@@ -57,6 +57,17 @@ build:llvm --cxxopt=-Wno-error=unused-but-set-parameter
 
 # default linux: auto-detected toolchain (gcc + lld)
 
+# Swift/macOS apps (swift/pl/{aurabar,aurashot,loom}) are macOS-only. rules_apple
+# attaches apple_rule_transition to the bundling rules themselves, so the target
+# is analyzed in a macOS platform config where its own
+# target_compatible_with=[@platforms//os:macos] always matches — Bazel therefore
+# never skips it as incompatible on a Linux host and dies in toolchain
+# resolution ("No matching toolchains found for types:
+# @@bazel_tools//tools/cpp:toolchain_type"). Mark those packages non-existent on
+# Linux so `bazel build/test //...` works there; macOS is unaffected.
+build:linux --deleted_packages=swift/pl/aurabar,swift/pl/aurabar/ut,swift/pl/aurashot,swift/pl/aurashot/ut,swift/pl/loom,swift/pl/loom/ut
+test:linux --deleted_packages=swift/pl/aurabar,swift/pl/aurabar/ut,swift/pl/aurashot,swift/pl/aurashot/ut,swift/pl/loom,swift/pl/loom/ut
+
 # default macos
 build:macos --action_env=CC=/opt/homebrew/opt/llvm/bin/clang
 build:macos --cxxopt=-stdlib=libc++
