@@ -310,21 +310,27 @@ void serialization() {
 void roaring64() {
     title("64 位位图");
 
+    // 字面量必须显式写成 uint64_t：Linux LP64 下 uint64_t 是 unsigned long，
+    // 1ULL 是 unsigned long long，add(uint32_t)/add(uint64_t) 两个重载都要做
+    // 整型转换（同级），调用会是 ambiguous（macOS 上 uint64_t 恰为 unsigned long long 才没暴露）。
+    constexpr uint64_t bit32 = uint64_t{1} << 32;
+    constexpr uint64_t bit40 = uint64_t{1} << 40;
+
     // Roaring64Map 内部是 map<uint32 高位, Roaring 低位>
     Roaring64Map map_ids;
-    map_ids.add(1ULL);
-    map_ids.add(1ULL << 32);
-    map_ids.add((1ULL << 32) + 42);
-    map_ids.addRangeClosed(100ULL, 103ULL);
+    map_ids.add(uint64_t{1});
+    map_ids.add(bit32);
+    map_ids.add(bit32 + 42);
+    map_ids.addRangeClosed(uint64_t{100}, uint64_t{103});
     map_ids.add(UINT64_MAX);
     std::cout << "Roaring64Map: cardinality = " << map_ids.cardinality()
-              << ", contains(2^32 + 42) = " << map_ids.contains((1ULL << 32) + 42)
+              << ", contains(2^32 + 42) = " << map_ids.contains(bit32 + 42)
               << ", minimum = " << map_ids.minimum() << ", maximum = " << map_ids.maximum() << "\n";
 
-    Roaring64Map map_copy = Roaring64Map::bitmapOfList({5ULL, 6ULL});
+    Roaring64Map map_copy = Roaring64Map::bitmapOfList({uint64_t{5}, uint64_t{6}});
     std::cout << "Roaring64Map ops: and = " << map_ids.and_cardinality(map_copy)
-              << ", rank(1 << 32) = " << map_ids.rank(1ULL << 32)
-              << ", getIndex(1) = " << map_ids.getIndex(1ULL) << "\n";
+              << ", rank(1 << 32) = " << map_ids.rank(bit32)
+              << ", getIndex(1) = " << map_ids.getIndex(uint64_t{1}) << "\n";
 
     const std::vector<uint64_t> map_values = toVector(map_ids);
     std::cout << "Roaring64Map toUint64Array: " << map_values.size() << " values, {";
@@ -342,12 +348,12 @@ void roaring64() {
     // Roaring64 是基于 ART 的实现，比 Roaring64Map 更快更省内存，
     // 但两者序列化格式不同，不能互相读取
     Roaring64 art;
-    art.add(1ULL);
-    art.add((1ULL << 40) + 7);
+    art.add(uint64_t{1});
+    art.add(bit40 + 7);
     art.add(UINT64_MAX);
     art.runOptimize();
     std::cout << "Roaring64: cardinality = " << art.cardinality()
-              << ", contains(2^40 + 7) = " << art.contains((1ULL << 40) + 7)
+              << ", contains(2^40 + 7) = " << art.contains(bit40 + 7)
               << ", minimum = " << art.minimum() << ", maximum = " << art.maximum() << "\n";
 
     std::vector<uint64_t> values(art.cardinality());
