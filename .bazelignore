@@ -1,1 +1,3 @@
 ./python/.venv/
+# Hermes 容器运行时数据目录（docker volume，属主为容器内 uid，宿主不可读）
+./docker/hermes/data/
