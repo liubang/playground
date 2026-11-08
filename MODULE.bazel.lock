@@ -1651,7 +1651,7 @@
     "@@rules_proto_grpc_java+//:module_extensions.bzl%download_plugins": {
       "general": {
         "bzlTransitiveDigest": "teyVQFklxa/pPYXLKtoOGR74nq2W6ca1kM8doXXAOnA=",
-        "usagesDigest": "QLMlNNEIKA7pTDNTyvjS58dkCcrTTmUgPwGYxofkFyk=",
+        "usagesDigest": "S/fY5kaTaW45a8z/QjAxNKq+dneRJnEjVRO7asI+Z1Q=",
         "recordedInputs": [
           "REPO_MAPPING:rules_proto_grpc_java+,bazel_tools bazel_tools"
         ],
