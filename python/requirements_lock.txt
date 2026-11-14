@@ -27,7 +27,7 @@ fake-http-header==0.3.5
 fake-useragent==2.2.0
 filelock==3.20.3
 frozenlist==1.7.0
-fsspec==2025.7.0
+fsspec==2026.6.0
 greenlet==3.2.3
 h11==0.16.0
 h2==4.3.0
