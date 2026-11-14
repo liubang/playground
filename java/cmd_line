@@ -1,0 +1,1 @@
+genhtml --branch-coverage --ignore-errors negative --output coverage-java /tmp/coverage_filtered.dat
